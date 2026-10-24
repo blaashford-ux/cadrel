@@ -4,6 +4,7 @@
  * Writes <out.pdf> and <out.pdf>.json with { pages, gutter, warnings, passes }.
  */
 import { app } from 'electron';
+import { createRequire } from 'node:module';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { assembleBook } from '../../src/shared/export/assemble';
@@ -24,7 +25,7 @@ app.whenReady().then(async () => {
     const log: string[] = [];
     const r = await buildPrintPdf(
       assembled.build,
-      { fontsDir: path.join(root, 'assets', 'fonts'), pagedJsPath: path.join(root, 'node_modules', 'pagedjs', 'dist', 'paged.polyfill.js') },
+      { fontsDir: path.join(root, 'assets', 'fonts'), pagedJsPath: path.join(path.dirname(createRequire(path.join(root, 'package.json')).resolve('pagedjs')), '..', 'dist', 'paged.polyfill.js') },
       (p) => {
         maxPass = Math.max(maxPass, p.pass ?? 0);
         if (p.stage !== 'laying-out') log.push(`${Date.now() - started}ms ${p.stage} pass ${p.pass ?? '-'}`);

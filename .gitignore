@@ -4,5 +4,5 @@ node_modules/
 .dev.vars
 dist-electron/
 release/
-assets/vendor/
+**/assets/vendor/
 *.log
