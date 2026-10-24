@@ -1,0 +1,53 @@
+electronVersion: 44.9.0 # electron-builder cannot read a ^range; keep equal to the installed electron
+appId: app.bookscout.desktop
+productName: BookScout
+copyright: BookScout
+directories:
+  output: release
+  buildResources: build
+# Everything the app runs is bundled into dist/ by scripts/build.mjs; only native or large modules stay as real files.
+files:
+  - dist/**
+  - package.json
+  - "!**/*.map"
+  # onnxruntime-node ships binaries for every platform; keep only the one being built
+  - "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**"
+  - "!node_modules/onnxruntime-node/bin/napi-v3/linux/**"
+  - "!node_modules/onnxruntime-web/**"
+  - "!node_modules/@huggingface/transformers/dist/*.web.*"
+asar: true
+asarUnpack:
+  # native libraries and worker scripts must be real files on disk
+  - node_modules/sqlite-vec*/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/onnxruntime-node/**
+  - node_modules/tesseract.js/**
+  - node_modules/tesseract.js-core/**
+  - node_modules/@tesseract.js-data/**
+extraResources:
+  - from: build/icon.png
+    to: icon.png
+  - from: ../market-extension/manifest.json
+    to: extension/manifest.json
+  - from: ../market-extension/src
+    to: extension/src
+  - from: dist/bookscout-extension.zip
+    to: bookscout-extension.zip
+npmRebuild: false
+nodeGypRebuild: false
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  artifactName: BookScout-Setup-${version}.${ext}
+linux:
+  target: dir
+  executableName: bookscout
+  category: Office

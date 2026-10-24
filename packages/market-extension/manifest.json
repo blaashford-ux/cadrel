@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "BookScout",
+  "version": "0.6.3",
+  "description": "Send Amazon book and bestseller pages to the BookScout desktop app on this computer.",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "contextMenus",
+    "scripting",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.amazon.com/*",
+    "https://m.media-amazon.com/*",
+    "https://images-na.ssl-images-amazon.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "BookScout",
+    "default_popup": "src/popup.html"
+  },
+  "commands": {
+    "capture-sample-page": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Save the sample page on screen to BookScout"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>BookScout</title>
+<style>
+  body { font: 13px system-ui, sans-serif; width: 300px; margin: 12px; }
+  label { display: block; margin: 8px 0 2px; }
+  input { width: 100%; box-sizing: border-box; padding: 4px; }
+  button { margin-top: 8px; padding: 5px 10px; }
+  #status { margin-top: 10px; min-height: 1.4em; }
+  .ok { color: #1e7a3c; } .bad { color: #b3261e; }
+</style>
+<button id="send" style="width:100%">Send this page to BookScout</button>
+<div style="margin-top:8px">Free sample (Read Sample / Look Inside)</div>
+<button id="sample-start" style="width:100%">Start sample capture</button>
+<button id="sample-now">Save this page now</button> <button id="sample-finish">Finish</button>
+<label for="code">Pairing code (Settings in the BookScout app)</label>
+<input id="code" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="6 digits">
+<button id="pair">Pair</button>
+<details style="margin-top:8px"><summary>Enter a token by hand</summary>
+<label for="token">Pairing token</label>
+<input id="token" type="password" autocomplete="off">
+<label for="port">Port</label>
+<input id="port" type="number" min="1024" max="65535">
+<button id="save">Save and test</button>
+</details>
+<div id="status" role="status"></div>
+<script type="module" src="popup.js"></script>

@@ -1,0 +1,18 @@
+# Security notes
+
+What the app exposes and how each surface is limited.
+
+| Surface | Controls |
+|---|---|
+| Ingest server (extension → app) | Listens on `127.0.0.1` only. Bearer token (256-bit, compared in constant time) for every call except pairing. `Host` must be `127.0.0.1`/`localhost` (blocks DNS rebinding). `Origin` must be absent or `chrome-extension://…` (any web page is refused); can be pinned to one extension id. Page URLs must be `https://amazon.com` or `www.amazon.com`. 48 MB body cap; JSON only; image magic-byte check; ASIN and session ids validated before touching the file system. Rejected while the library is being rebuilt (503). |
+| Pairing code | 6 digits, one active code, single use, 2-minute expiry, compared in constant time; five wrong tries in a minute lock pairing for a minute. Same Host/Origin rules. |
+| Token file | Created with owner-only permissions (`%APPDATA%\BookScout\token`; Windows user profiles are private by default). Regenerating invalidates the extension until re-paired. |
+| Renderer | Sandboxed, context isolation on, no Node, strict CSP (`default-src 'self'`), navigation and new windows blocked. The preload exposes a fixed list of calls; the main process re-validates every identifier and path it receives (ASIN, session, absolute file paths, enumerated states). `openExternal` only opens `https://www.amazon.com/…`. |
+| Captured pages | Personal data is scrubbed before anything is written (names, address, country, session and client ids, tokens); reviewer names are not stored. Tests fail if a session-id-shaped value reaches a fixture. |
+| Imported KDP reports | Your sales and Kindle Unlimited reports are read in the app, a copy is kept under `sales/` in the library, and the books they name go into My Books (also mirrored to `user/user-data.json`). Nothing is uploaded; the only readers are programs running as you, like the rest of the library. Report text (titles, authors) is shown as plain text and never executed. |
+| Untrusted text | Everything from Amazon (titles, blurbs, reviews, author bios) is treated as data: MCP results label it as quoted third-party text and the server instructions tell the model not to follow instructions inside it; CSV exports neutralise spreadsheet formulas. |
+| Files you add | Type chosen by extension; size capped at 120 MB; PDFs are read with pdf.js with script evaluation disabled; EPUB/DOCX are unzipped in memory and parsed as text, never executed. |
+| MCP server | Local stdio process started by your AI app; read-only tools plus `add_tag` / `add_note`, `exclude_from_category` / `restore_to_category` and `remove_book` (marked as not read-only so clients can ask first; `remove_book` deletes a captured book from the library and disk and needs `confirm: true`). |
+| Network | The app contacts the network only when you ask: the optional model download from huggingface.co, update checks and downloads from github.com (About page), when you press *Sync last 7 days* under Community sources, arctic-shift.photon-reddit.com (subreddit names and a date range are sent; no account or key), and, when you press *Look up* on the Keywords tab, the autocomplete services you left switched on in Settings: completion.amazon.com, suggestqueries.google.com and api.bing.com (the phrase you typed, with one letter appended; no account, cookies or identifiers are sent, and the requests are spaced 400 ms apart). Google Trends and Amazon search pages are only ever opened in your browser, never fetched by the app. The extension talks only to `127.0.0.1`. |
+
+Residual risks: any program running as you can read your library and token (it is your data on your disk); the installer is unsigned; Amazon's terms of service (see the user guide).

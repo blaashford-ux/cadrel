@@ -1,0 +1,23 @@
+{
+  "extends": "../../tsconfig.market.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noImplicitAny": false,
+    "noUncheckedIndexedAccess": false,
+    "types": [
+      "node",
+      "chrome"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "strict": true
+  },
+  "include": [
+    "src",
+    "test"
+  ]
+}
