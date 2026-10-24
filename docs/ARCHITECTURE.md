@@ -96,6 +96,8 @@ Domain code (`kernel`: rules, permissions, workflow) is **runtime-neutral TypeSc
 | **Durable Object** (only if needed) | live presence and push notifications ("your lock was removed", "new version"); locks themselves do not need it |
 | **Cloudflare Access / tokens** | sign-in for staff; invite tokens for guests (decide in the spike) |
 
+**Deployment** goes through GitHub Actions in the same dev/main flow as the app: a merge to `dev` deploys the `cadrel-api-dev` Worker with its own D1 and R2 (`cadrel-dev-*`), a merge to `main` deploys `cadrel-api` (`cadrel-*`). Cadrel's resources are separate from the account's existing projects.
+
 To confirm in the M2 spike before committing: D1 database size and row limits, Worker request-body limit (why large files go straight to R2), signed-URL flow from Electron, and lock atomicity under concurrent check-outs. Cloudflare tooling is not yet connected to my session, so none of this has been run against the account.
 
 ### Shared captures
@@ -146,14 +148,7 @@ This separation is a standing requirement: credit is not ownership, contribution
 
 ## 4. Permissions
 
-`can(actor, action, resource) → allow | deny` is one pure function in the kernel, tested as a matrix.
-
-- **Roles** are bundles of capabilities (`manuscript.write`, `edit.pass.run`, `asset.approve`, `finance.read`, …). Built-in: Studio director, Series lead, Author, Editor, Art director, Designer, Marketing manager, Analyst, Finance, Guest. A person can hold several.
-- **Scope** limits where a role applies: studio, IP, series, or one book.
-- **Guests** (freelance proofreader, illustrator, sensitivity reader, beta reader) get grants on specific records only and see nothing studio-wide.
-- **Confidential projects** are hidden from anyone without an explicit grant, including studio-wide roles.
-- **Sensitive data** (contracts, revenue shares, costs, profit) needs its own capability; a Series lead does not get it by default.
-- **Approvals are configurable** per project and decision type, so minor choices do not need a ceremony.
+Role-based, scoped, additive and fully explainable, configurable by administrators from first launch, with sensible default roles. The full design (capabilities, roles, scopes, confidential projects, security policy, default role matrix, guardrails) is in [PERMISSIONS.md](PERMISSIONS.md). In short: `can(actor, capability, resource)` is one pure function, run on the server for every request and mirrored in the app for the interface; the Owner bootstraps the studio and everything after is configuration.
 
 ## 5. Modules: how packages join the suite
 

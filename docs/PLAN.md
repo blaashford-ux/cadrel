@@ -1,6 +1,6 @@
 # Cadrel plan
 
-Status: plan, no product code yet. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); versioning in [VERSIONING.md](VERSIONING.md).
+Status: plan, no product code yet. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
 
 ## 1. What Cadrel is
 
@@ -64,6 +64,7 @@ Merge and harmonise. No new features; behaviour of both apps is unchanged and th
 
 ### M1: Shared records (0.3.0)
 - `kernel`, `store`, `service`: studio, people, roles, IP, series, books, editions, projects, stages and gates, tasks, deadlines, approvals, decisions, audit log; the credit / contribution / rights / revenue-share tables exist (no screens).
+- Permission engine and **role editor** per [PERMISSIONS.md](PERMISSIONS.md): Owner bootstrap, default roles, teams, scoped assignments, confidential projects, Explain access, guardrails; matrix and property tests.
 - Permission engine with the actor model, in-process transport, matrix tests. `kernel` is runtime-neutral (no `node:` imports) and `store` is async, so the same code runs in Electron and in a Worker.
 - **Local vault**: working folder, file states, check-out / check-in / undo / get-latest against a local vault, with the same rules the server will enforce; workflows as data (states, transitions, conditions, actions); data cards; references and where-used.
 - Catalogue module; "adopt MDEdit project as a book"; `edition.asin` joins Market and Sales data (`own_book`).
@@ -74,7 +75,7 @@ Merge and harmonise. No new features; behaviour of both apps is unchanged and th
 ### M2: The team vault on Cloudflare (0.4.0)
 Where it becomes a studio tool.
 - Worker API with D1 (records, versions, locks, workflow state, audit) and R2 (file contents); migrations shared with the desktop cache.
-- Cloud vault in the app: sign-in, invites, role and scope assignment, guests with narrow grants, confidential projects.
+- Cloud vault in the app: Create studio with a setup code (you become Owner), sign-in, invitations, security policy, teams, guests with narrow expiring grants, confidential projects; all permission checks enforced in the Worker.
 - **Check-out locking, check-in versions, undo check-out, get latest, and admin force** with data-loss confirmation, orphaned-copy handling, audit and notification.
 - Offline: work on checked-out files without a connection, check in on reconnect; a clear status when the server is unreachable.
 - **Shared captures**: scrubbed raw pages and covers sync to R2; each client rebuilds its own index.
@@ -149,8 +150,17 @@ I have assumed a default for each so work is not blocked; tell me where you disa
 | 6 | Assistant | Each person's own Claude through MCP first; an in-app assistant panel later if wanted. |
 | 7 | Do `MDEdit` and `bookscout` stay alive? | Archived once M0 ships; fixes after that go in Cadrel. |
 | 8 | Product name for modules and Cadrel installer | Suite is "Cadrel"; modules use the plain names in section 2. |
-| 9 | Who may force a lock? | A named `vault.force` capability, held by studio admins only. |
+| 9 | Who may force a lock? | **Decided:** you start as Owner; administrators configure roles. `vault.force` is held by Owner and Admin by default and can be granted to any role. |
+| 10 | Default roles | Owner, Admin, Director, Series Lead, Author, Editor, Art Director, Artist, Marketing, Analyst, Finance, Guest, with the matrix in PERMISSIONS.md. Tell me which to drop, rename or change. |
 
-## 6. Next step
+## 6. The Cloudflare account (checked)
+
+Read-only look through the connector:
+- Existing: three D1 databases (`eidolon-db`, `storyforge-db`, `author_portal_db`), seven R2 buckets and seven Workers for your other projects. Cadrel gets its own `cadrel-*` and `cadrel-dev-*` resources and touches none of them.
+- The connected tool is the old Workers Bindings server, which Cloudflare marks deprecated. It can create and query D1 and R2 but **cannot deploy a Worker**, and this sandbox cannot reach `api.cloudflare.com`.
+- So Workers are deployed from **GitHub Actions** on merge (dev and main), which needs two repository secrets in `blaashford-ux/cadrel`: a Cloudflare API token scoped to Workers, D1 and R2 on this account, and the account id. Add them in GitHub (Settings → Secrets and variables → Actions); do not paste them in chat.
+- Limits from the docs, relevant to the design: a Worker request body is capped at 100 MB on Free and Pro and 200 MB on Business (hence file transfers go straight to R2 by signed URL, and R2 multipart handles anything large); since 1 September 2026 D1 queries on the Workers **Free** plan fail once the daily row-read or row-write limit is reached, so confirm which plan the account is on before the studio relies on it.
+
+## 7. Next step
 
 Start M0 on a branch off `dev`: skeleton and CI first (workspaces, shared toolchain, a shell that opens), then import `manuscript` / `export` (pure, most tested), then `market` / `sales`, then the two UIs as modules, then Home and Dashboard. Raise `VERSION` to 0.2.0 on the `dev` → `main` PR.
