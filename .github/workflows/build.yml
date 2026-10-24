@@ -1,0 +1,33 @@
+name: build
+
+# Runs on every pull request into dev or main and is reused by release.yml.
+# The finished files are attached to the run as the "cadrel-build" artifact:
+# Actions tab -> the run -> Artifacts, to download a build before merging.
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags, so the version can be compared with past releases
+      - name: Check VERSION
+        run: |
+          # a PR into main (or a push to it) is a release, so it must carry a new version
+          if [ "${{ github.base_ref || github.ref_name }}" = "main" ]; then scripts/check-version.sh --newer; else scripts/check-version.sh; fi
+      - name: Build
+        run: scripts/build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cadrel-build
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,43 @@
+name: release
+
+# Merging builds and publishes a GitHub release:
+#   push to main -> release  vX.Y.Z           (X.Y.Z from the VERSION file)
+#   push to dev  -> pre-release vX.Y.Z-dev.N  (N = this workflow's run number)
+# The files are also on the run page as the "cadrel-build" artifact.
+on:
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and its tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cadrel-build
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(scripts/check-version.sh)"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            tag="v${version}"; flags=(--latest)
+          else
+            tag="v${version}-dev.${GITHUB_RUN_NUMBER}"; flags=(--prerelease)
+          fi
+          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "cadrel ${tag#v}" --generate-notes "${flags[@]}"
