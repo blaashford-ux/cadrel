@@ -87,11 +87,21 @@ describe('the Cadrel MCP bundle over stdio', () => {
     }
   }, 60_000);
 
-  it('refuses to start, and says why, when there is neither', () => {
-    const r = run(['--root', path.join(tmp, 'nowhere')]);
-    expect(r.status).toBe(2);
-    expect(r.stderr).toMatch(/Nothing to serve/);
-  });
+  it('with neither folder it still serves the studio’s projects and notes, from the studio file it is given', async () => {
+    const studio = path.join(tmp, 'only-studio', 'studio.json');
+    const client = await connect(['--root', path.join(tmp, 'nowhere'), '--library', path.join(tmp, 'no-library'), '--studio', studio]);
+    try {
+      const tools = await names(client);
+      expect(tools).toContain('studio_projects');
+      expect(tools).not.toContain('read_chapter');
+      const made = (await client.callTool({ name: 'studio_create_project', arguments: { name: 'Dragon Rider', kind: 'Series' } })) as { content: { text: string }[] };
+      expect(JSON.parse(made.content[0]!.text)).toMatchObject({ name: 'Dragon Rider', kind: 'Series' });
+      // and it is on disk where the app will look
+      expect(JSON.parse(fs.readFileSync(studio, 'utf8')).tree.projects).toHaveLength(1);
+    } finally {
+      await client.close();
+    }
+  }, 60_000);
 
   it('--print-handshake answers `initialize` without opening anything, for the Claude Desktop launcher', () => {
     const r = run(['--root', projects, '--library', library, '--print-handshake']);

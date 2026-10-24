@@ -12,7 +12,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "@cadrel/kernel": "*",
+    "@cadrel/studio": "*"
   },
   "devDependencies": {
     "@cadrel/market-library": "*",

@@ -20,6 +20,8 @@ import type { ServerOptions as WriteOptions } from '@cadrel/write/mcp/server';
 import { resolveLibraryRoot } from '@cadrel/market-mcp/src/config.js';
 import { capabilitiesOf, composeInstructions, createCadrelServer, SERVER_NAME, type McpModule } from './server.js';
 import { writeModule } from './modules/write.js';
+import { studioModule } from './modules/studio.js';
+import { Studio, studioFile } from '@cadrel/studio';
 
 const VERSION = process.env.CADREL_VERSION || '0.0.0';
 
@@ -34,6 +36,10 @@ function flag(name: string): string | undefined {
 const say = (m: string) => process.stderr.write(`${m}\n`);
 
 type Found<T> = { ok: true; value: T } | { ok: false; reason: string };
+
+/** The projects and notes: always there, because they need nothing but their own file. */
+const studio = new Studio(studioFile(process.argv.slice(2), process.env));
+const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 
 /** Write: the folder that holds the projects, by MDEdit's own rules (--root, MDEDIT_ROOT, MDEdit's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {
@@ -74,6 +80,7 @@ async function main(): Promise<void> {
       'Cadrel MCP server\n' +
         '  --root <folder>     the folder that holds your writing projects (default: the Root Folder set in Cadrel/MDEdit)\n' +
         '  --library <folder>  the market research library (default: the one the app last used)\n' +
+        '  --studio <file>     the studio file (projects and notes; default: the one Cadrel keeps)\n' +
         '  --agent <name>      how the AI is named in the Notes panel (default: taken from the connecting app)\n' +
         '  --http              listen on 127.0.0.1 instead of stdio: MCP at /mcp, REST at /api, API description at /openapi.json\n' +
         '  --port <n>          port for --http (default 47831)\n' +
@@ -90,7 +97,7 @@ async function main(): Promise<void> {
   // extension's launcher so Claude gets its answer at once while this process is still starting.
   if (process.argv.includes('--print-handshake')) {
     const market = await findMarket(false);
-    const modules = [...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])];
+    const modules = [studioFor(write), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])];
     process.stdout.write(
       JSON.stringify({ serverInfo: { name: SERVER_NAME, version: VERSION }, capabilities: capabilitiesOf(modules), instructions: composeInstructions(modules), protocolVersions: SUPPORTED_PROTOCOL_VERSIONS })
     );
@@ -107,7 +114,7 @@ async function main(): Promise<void> {
       ...write.value.options,
       token,
       port: Number(flag('port') ?? 47831),
-      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
+      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write), writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
     });
     say(`Cadrel AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)`);
     say(`Projects folder: ${write.value.root} (${write.value.source})${market?.ok ? `; market library: ${market.value.root}` : ''}`);
@@ -118,11 +125,7 @@ async function main(): Promise<void> {
   const market = await findMarket(true);
   if (!write.ok) say(`Writing tools left out: ${write.reason}.`);
   if (!market.ok) say(`Market tools left out: ${market.reason}.`);
-  if (!write.ok && !market.ok) {
-    say('Nothing to serve. Set up a projects folder or a market library in Cadrel first.');
-    process.exit(2);
-  }
-  const server = createCadrelServer({ version: VERSION, modules: [...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
+  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
   await server.connect(new StdioServerTransport());
   say(`Cadrel MCP server ready.${write.ok ? ` Projects folder: ${write.value.root} (${write.value.source}).` : ''}${market.ok ? ` Market library: ${market.value.root}.` : ''}`);
   process.on('SIGINT', () => {
