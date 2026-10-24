@@ -14,12 +14,16 @@ import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/sr
 import { isModule, isPage, type ModuleId, type Overview, type Page } from '../shared/api';
 import { moduleBounds } from './layout';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
+import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
+// `Cadrel.exe --smoke-test=<file>` runs a headless self-test of the installed app and exits (see smoke.ts).
+const smokeArg = process.argv.find((a) => a.startsWith('--smoke-test='));
 
 app.setName('Cadrel');
+if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.cadrel');
 if (process.env.CADREL_USER_DATA) app.setPath('userData', process.env.CADREL_USER_DATA);
 
 // Existing MDEdit and BookScout users keep their settings: each module keeps its original data folder. (BookScout's
@@ -214,7 +218,7 @@ function registerShellIpc(): void {
 
 // ---- startup ------------------------------------------------------------------------------------
 
-if (!TEST && !app.requestSingleInstanceLock()) {
+if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', (_e, argv, cwd) => {
@@ -231,6 +235,10 @@ if (!TEST && !app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
+    if (smokeArg) {
+      app.exit(await runShellSmoke(smokeArg.slice('--smoke-test='.length), here));
+      return;
+    }
     Menu.setApplicationMenu(null); // the default menu has View > Reload, which would silently discard unsaved edits
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
@@ -283,5 +291,6 @@ app.on('before-quit', () => {
 });
 
 app.on('window-all-closed', () => {
+  if (smokeArg) return; // the smoke test's hidden PDF windows come and go; it exits the app itself
   void Promise.all([market?.stop(), write?.flush(), settings?.flush()]).finally(() => app.quit());
 });

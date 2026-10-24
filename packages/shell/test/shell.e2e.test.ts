@@ -17,7 +17,9 @@ const electronBin = (() => {
     return '';
   }
 })();
-const have = electronBin !== '' && fs.existsSync(electronBin) && (!!process.env.DISPLAY || !fs.existsSync('/usr/bin/xvfb-run'));
+// Set to the packaged app's executable (see `npm run pack`) to run this whole suite against the installed layout.
+const PACKAGED = process.env.CADREL_PACKAGED_BIN;
+const have = (PACKAGED ? fs.existsSync(PACKAGED) : electronBin !== '' && fs.existsSync(electronBin)) && (!!process.env.DISPLAY || !fs.existsSync('/usr/bin/xvfb-run'));
 const PORT = 48321;
 
 let tmp: string;
@@ -27,8 +29,8 @@ const running: ElectronApplication[] = [];
 
 async function launch(): Promise<{ app: ElectronApplication; shell: Page }> {
   const app = await electron.launch({
-    executablePath: electronBin,
-    args: ['--no-sandbox', PKG],
+    executablePath: PACKAGED ?? electronBin,
+    args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
     env: { ...process.env, CADREL_TEST: '1', BOOKSCOUT_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
   });
   running.push(app);
@@ -61,7 +63,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   beforeAll(async () => {
     // In CI a missing Electron or display is a failure, not a reason to skip the only test of the whole shell.
     if (process.env.CI && !have) throw new Error('CI needs Electron and a display for the shell e2e tests');
-    if (!fs.existsSync(path.join(PKG, 'dist', 'main.mjs'))) execFileSync('node', ['scripts/build.mjs'], { cwd: PKG, stdio: 'ignore' });
+    if (!PACKAGED && !fs.existsSync(path.join(PKG, 'dist', 'main.mjs'))) execFileSync('node', ['scripts/build.mjs'], { cwd: PKG, stdio: 'ignore' });
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-e2e-'));
     home = path.join(tmp, 'home');
     userData = path.join(tmp, 'userdata');

@@ -3,7 +3,7 @@ name: release
 # Merging builds and publishes a GitHub release:
 #   push to main -> release  vX.Y.Z           (X.Y.Z from the VERSION file)
 #   push to dev  -> pre-release vX.Y.Z-dev.N  (N = this workflow's run number)
-# The files are also on the run page as the "cadrel-build" artifact.
+# The installer is also on the run page as the "Cadrel-windows-installer" artifact.
 # The studio server (Cloudflare Worker) is deployed in the same run: dev -> cadrel-api-dev, main -> cadrel-api, after
 # applying D1 migrations. It needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; without them
 # the deploy is skipped with a warning and the release still publishes.
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: cadrel-build
+          name: Cadrel-windows-installer
           path: dist
       - name: Publish
         env:
@@ -43,7 +43,29 @@ jobs:
           else
             tag="v${version}-dev.${GITHUB_RUN_NUMBER}"; flags=(--prerelease)
           fi
-          gh release create "$tag" dist/* --target "$GITHUB_SHA" --title "cadrel ${tag#v}" --generate-notes "${flags[@]}"
+          cd dist
+          installer="$(ls Cadrel-Setup-*.exe | head -n1)"
+          sha256sum "$installer" > SHA256SUMS.txt
+          cat > ../notes.md <<NOTES
+          ## Install (Windows 10 / 11)
+
+          1. Download **${installer}** below and run it.
+          2. Windows SmartScreen may say *"Windows protected your PC"* because this installer is not code-signed yet.
+             Click **More info → Run anyway**.
+          3. Choose an install folder (no administrator rights needed) and finish the wizard.
+
+          Your settings stay in your user profile and are kept if you uninstall.
+
+          **Verify the download (optional):** in PowerShell, \`Get-FileHash .\\${installer} -Algorithm SHA256\` should match \`SHA256SUMS.txt\`:
+
+          \`\`\`
+          $(cat SHA256SUMS.txt)
+          \`\`\`
+
+          ## What's changed
+          NOTES
+          sed -i 's/^          //' ../notes.md
+          gh release create "$tag" "$installer" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel ${tag#v}" --notes-file ../notes.md --generate-notes "${flags[@]}"
 
   deploy-worker:
     needs: build

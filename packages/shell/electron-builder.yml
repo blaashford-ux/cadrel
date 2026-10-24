@@ -1,0 +1,66 @@
+electronVersion: 44.9.3 # electron-builder cannot read a ^range; test/packaging.test.ts fails if this drifts from the installed electron
+appId: com.blaashford.cadrel
+productName: Cadrel
+copyright: Copyright © 2026 blaashford-ux
+directories:
+  output: release
+  buildResources: build
+# Everything the app runs is bundled into dist/ by scripts/build.mjs; only native or large modules stay as real files.
+files:
+  - dist/**
+  - package.json
+  - "!dist/resources/**"
+  - "!**/*.map"
+  # pdf.js's optional canvas renderer (61 MB): text extraction does not use it, and it could not be loaded from the asar anyway
+  - "!node_modules/@napi-rs/**"
+  # onnxruntime-node ships binaries for every platform; keep only the one being built
+  - "!node_modules/onnxruntime-node/bin/napi-v3/darwin/**"
+  - "!node_modules/onnxruntime-node/bin/napi-v3/linux/**"
+  - "!node_modules/onnxruntime-web/**"
+  - "!node_modules/@huggingface/transformers/dist/*.web.*"
+asar: true
+asarUnpack:
+  # native libraries and worker scripts must be real files on disk
+  - node_modules/sqlite-vec*/**
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/onnxruntime-node/**
+  - node_modules/tesseract.js/**
+  - node_modules/tesseract.js-core/**
+  - node_modules/@tesseract.js-data/**
+extraResources:
+  # outside the asar: Explorer can open the extension folder, and users sideload the zip
+  - from: dist/assets/icon.png
+    to: icon.png
+  - from: dist/resources/extension
+    to: extension
+  - from: dist/resources/bookscout-extension.zip
+    to: bookscout-extension.zip
+npmRebuild: false
+nodeGypRebuild: false
+fileAssociations:
+  - ext: [md, markdown]
+    name: Markdown document
+    description: Markdown document
+    role: Editor
+    icon: build/icon.ico
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Cadrel
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  deleteAppDataOnUninstall: false
+  artifactName: Cadrel-Setup-${version}.${ext}
+linux:
+  target: dir
+  executableName: cadrel
+  category: Office
