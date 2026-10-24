@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, nativeTheme, type BrowserWindowConstructorOptions } from 'electron';
+import { BrowserWindow, ipcMain, nativeTheme, type BrowserWindowConstructorOptions, type WebContents } from 'electron';
 import type { WindowInfo } from '../src/shared/api';
 import { describeMenu, invokeMenuItem } from './menu';
 
@@ -34,10 +34,10 @@ export function windowInfo(win: BrowserWindow | null): WindowInfo {
 }
 
 /** Keeps the renderer told about maximise/fullscreen, and the OS buttons and background in step with the theme. */
-export function watchWindow(win: BrowserWindow): void {
+export function watchWindow(win: BrowserWindow, getContents: () => WebContents | null = () => win.webContents): void {
   win.setMenuBarVisibility(false); // our menu bar replaces the native one; accelerators keep working
   const send = () => {
-    if (!win.isDestroyed()) win.webContents.send('window:state', windowInfo(win));
+    if (!win.isDestroyed()) getContents()?.send('window:state', windowInfo(win));
   };
   win.on('maximize', send);
   win.on('unmaximize', send);
@@ -52,7 +52,7 @@ export function watchWindow(win: BrowserWindow): void {
   win.on('closed', () => nativeTheme.removeListener('updated', retheme));
 }
 
-export function registerWindowChrome(getWindow: () => BrowserWindow | null): void {
+export function registerWindowChrome(getWindow: () => BrowserWindow | null, getContents: () => WebContents | null = () => getWindow()?.webContents ?? null): void {
   ipcMain.handle('window:info', () => windowInfo(getWindow()));
   ipcMain.on('window:control', (_e, action: string) => {
     const win = getWindow();
@@ -63,6 +63,6 @@ export function registerWindowChrome(getWindow: () => BrowserWindow | null): voi
   });
   ipcMain.handle('menu:describe', () => describeMenu());
   ipcMain.on('menu:click', (_e, id: unknown) => {
-    if (typeof id === 'string') invokeMenuItem(id, getWindow());
+    if (typeof id === 'string') invokeMenuItem(id, getWindow(), getContents());
   });
 }

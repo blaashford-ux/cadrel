@@ -64,6 +64,8 @@ export interface ServiceOptions {
   secrets?: { available(): boolean; encrypt(s: string): Buffer; decrypt(b: Buffer): string };
   /** Runs a downloaded installer and closes the app. Not set where updating in place is unsupported. */
   launchInstaller?: (file: string) => void | Promise<void>;
+  /** When set, BookScout does not check its own releases and shows this instead (a host app updates as a whole). */
+  updatesDisabledReason?: string;
   /** Opens a release page in the browser. */
   openRelease?: (url: string) => void | Promise<void>;
   /** Test hook: stands in for the network. */
@@ -210,6 +212,10 @@ export class AppService {
 
   /** Ask GitHub for the latest release. Never throws: problems are in the returned state. */
   async checkForUpdates(): Promise<UpdateState> {
+    if (this.opts.updatesDisabledReason) {
+      this.update = { phase: 'error', info: null, progress: null, error: this.opts.updatesDisabledReason };
+      return this.updateState();
+    }
     if (this.update.phase === 'checking' || this.update.phase === 'downloading' || this.update.phase === 'launching') return this.updateState();
     this.update = { phase: 'checking', info: this.update.info, progress: null, error: null };
     try {

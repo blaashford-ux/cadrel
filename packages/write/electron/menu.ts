@@ -1,10 +1,21 @@
-import { app, BrowserWindow, dialog, Menu, type MenuItem, type MenuItemConstructorOptions } from 'electron';
+import { app, BrowserWindow, dialog, Menu, type MenuItem, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import type { MenuAction, MenuNode, ThemeSource } from '../src/shared/api';
 
 interface ThemeHooks {
   get(): ThemeSource;
   set(theme: ThemeSource): void;
 }
+
+/** Where the menu's actions go. Write's renderer may be a view inside a bigger window, so none of this assumes a focused window. */
+interface MenuHost {
+  getContents(): WebContents | null;
+  getWindow(): BrowserWindow | null;
+  /** Standalone Write also owns the application menu; inside the shell the shell does, and this menu is only drawn in Write's own view. */
+  asApplicationMenu: boolean;
+}
+
+/** The menu this module owns (drawn by the in-window menu bar). */
+let current: Menu | null = null;
 
 /**
  * Replaces Electron's default menu. The default has View > Reload (Ctrl+R / Ctrl+Shift+R),
@@ -13,9 +24,9 @@ interface ThemeHooks {
  * Shortcuts are shown as label hints ("\t") rather than registered accelerators: the renderer
  * already handles them, and a second registration would fire twice.
  */
-export function installMenu(theme: ThemeHooks): void {
+export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
   const send = (action: MenuAction) => () => {
-    BrowserWindow.getFocusedWindow()?.webContents.send('menu:action', action);
+    menuHost.getContents()?.send('menu:action', action);
   };
   const themeItem = (label: string, value: ThemeSource): MenuItemConstructorOptions => ({
     label,
@@ -116,14 +127,15 @@ export function installMenu(theme: ThemeHooks): void {
               ].join('\n'),
               buttons: ['OK']
             };
-            const win = BrowserWindow.getFocusedWindow();
+            const win = menuHost.getWindow() ?? BrowserWindow.getFocusedWindow();
             void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
           }
         }
       ]
     }
   ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(withIds(template)));
+  current = Menu.buildFromTemplate(withIds(template));
+  if (menuHost.asApplicationMenu) Menu.setApplicationMenu(current);
 }
 
 /** Gives every item a stable id ("m0", "m0.3", …) so the in-window menu can ask for it to be run. */
@@ -172,13 +184,13 @@ function describe(items: readonly MenuItem[]): MenuNode[] {
 
 /** The application menu as plain data. */
 export function describeMenu(): MenuNode[] {
-  const menu = Menu.getApplicationMenu();
+  const menu = current ?? Menu.getApplicationMenu();
   return menu ? describe(menu.items) : [];
 }
 
 /** Runs a menu item by id (roles included), as if it had been chosen in a native menu. */
-export function invokeMenuItem(id: string, win: BrowserWindow | null): void {
-  const item = Menu.getApplicationMenu()?.getMenuItemById(id);
+export function invokeMenuItem(id: string, win: BrowserWindow | null, contents: WebContents | null = win?.webContents ?? null): void {
+  const item = (current ?? Menu.getApplicationMenu())?.getMenuItemById(id);
   if (!item || !item.enabled || item.type === 'separator' || item.submenu) return;
-  item.click(undefined as never, win ?? undefined, win?.webContents);
+  item.click(undefined as never, win ?? undefined, contents ?? undefined);
 }
