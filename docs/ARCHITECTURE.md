@@ -1,12 +1,13 @@
 # Cadrel architecture
 
-Cadrel is a Windows desktop suite for running a book studio: one app, one installer, one set of shared records, with each discipline (writing, editing, art, launch, market research, sales, business) as a **module** inside it. It is built from [MDEdit](https://github.com/blaashford-ux/MDEdit) and [BookScout](https://github.com/blaashford-ux/bookscout), harmonised, plus new modules. The scope and build order are in [PLAN.md](PLAN.md).
+Cadrel is a **desktop-first Windows application** for running a book studio: one app, one installer, one set of shared records, with each discipline (writing, editing, art, launch, market research, sales, business) as a **module** inside it. It is built from [MDEdit](https://github.com/blaashford-ux/MDEdit) and [BookScout](https://github.com/blaashford-ux/bookscout), harmonised, plus new modules. The scope and build order are in [PLAN.md](PLAN.md).
 
 ## 1. Stack (unchanged from MDEdit and BookScout)
 
 | Layer | Choice | Note |
 |---|---|---|
-| Shell | Electron + React 18 + Vite 5 + TypeScript | Windows installer via electron-builder (NSIS) |
+| Shell | Electron + React 18 + Vite 5 + TypeScript | Windows only; installer via electron-builder (NSIS) |
+| Studio server | Cloudflare Workers (TypeScript) + **D1** (SQLite) + **R2** (files) | the vault; see 2 |
 | Repo | npm workspaces monorepo, `@cadrel/*` packages, ESM | BookScout's layout |
 | Tests | vitest everywhere, real-Electron integration tests, fake-API pattern for renderer tests | both apps already do this |
 | Structured data | SQLite through built-in `node:sqlite` (FTS5, `sqlite-vec` extension) | no native module to rebuild |
@@ -16,7 +17,7 @@ Cadrel is a Windows desktop suite for running a book studio: one app, one instal
 | Export | EPUB, DOCX (`docx`), print PDF (Paged.js in Electron) | MDEdit |
 | Capture | Chrome MV3 extension posting to a loopback server | BookScout |
 
-New backend code (studio server) is also Node + TypeScript so that domain code is shared, not rewritten.
+The server is TypeScript too, and D1 is SQLite, so the desktop's local database and the server's database share one SQL dialect, one migration set and the same domain code.
 
 ### Harmonisation items (checked against the two repos)
 
@@ -32,30 +33,78 @@ These differ today and must be settled in M0:
 | Chrome | custom title bar, menu bar, dialogs, tokens, dark mode | views, charts | one design system, `@cadrel/ui`, from both |
 | App services | settings, drafts, single instance, file association | logging, updater, token | shared shell services |
 
-## 2. Topology: one codebase, two transports
+## 2. Desktop first, with a vault (the PDM model)
 
-The decision that is expensive to retrofit: **every read and write goes through a `StudioService` that takes an `actor` (who is asking) and checks permission.** Modules never touch the database directly.
+Cadrel is a normal desktop app working on **real files in real folders**, the way SolidWorks PDM does. A server **vault** holds the master copy of every controlled file, its version history and its metadata; each person has a **local working folder** (a cache of the vault). The server decides who may change what.
 
 ```
-Renderer (React modules)
-      │  typed API (transport interface)
-      ▼
- ┌─ in-process transport ──────────┐      ┌─ network transport (M2) ─────────┐
- │ Electron main hosts the service │  or  │ HTTPS + WebSocket to Studio server│
- └────────────┬────────────────────┘      └────────────────┬──────────────────┘
-              ▼                                            ▼
-        StudioService  →  kernel (rules, permissions)  →  store (SQLite + blobs)
+ Desktop app (Electron)                                  Cloudflare
+ ┌──────────────────────────────┐   HTTPS   ┌────────────────────────────────────┐
+ │ Modules (React)              │◄─────────►│ Worker (API, permissions, workflow)  │
+ │ StudioService (local)        │           │   D1: records, versions, locks,      │
+ │ Local SQLite cache + index   │           │       workflow state, audit          │
+ │ Working folder (plain files) │──direct──►│   R2: file contents (content-addressed)│
+ └──────────────────────────────┘ signed URL└────────────────────────────────────┘
 ```
 
-- **Local studio (M0–M1):** the service runs inside the app. One person, one machine, behaves like MDEdit and BookScout today. This is also how the app runs offline for market research.
-- **Studio server (M2):** the same service packages run as a small Node process the studio hosts (a VM or a machine in the office). Clients connect to it. SQLite on the server is sufficient for a studio of tens of people (one writer, WAL, backed up with Litestream-style replication); the `store` interface keeps Postgres possible if that ever stops being true.
-- **No real-time co-editing.** Manuscripts use **check-out / check-in** at chapter level: the author works in a local working copy (a normal folder of Markdown, as in MDEdit), checks in a new version, and the editor works on a named version. This matches how editorial passes work (a pass is against a specific version) and avoids CRDT complexity. Revisit only if users ask.
-- **Market data is not collaborative-write.** The BookScout library (raw pages, covers, derived index) lives on the analyst's machine and is published to the studio as read-only snapshots and aggregates; the studio server stores the results other roles need (comps, category reports, sales), not the raw archive.
-- **Sync folders:** SQLite databases and the working root must not live in OneDrive/Dropbox (MDEdit's rule: default root is `%USERPROFILE%\Cadrel`, not Documents). The app warns, as MDEdit does.
+### Check-in / check-out (the rules)
+
+| State | What it means locally | What the server holds |
+|---|---|---|
+| **Not local** | file is in the vault, not downloaded | file + versions |
+| **Latest (read-only)** | local copy matches the newest version; the file is read-only on disk | no lock |
+| **Checked out by me** | writable; edit with Cadrel or any external tool (Photoshop, Word) | a lock: who, which machine, since, which version it was taken from |
+| **Checked out by someone else** | read-only; shows who has it and since when; can be viewed, not changed | their lock |
+| **Local copy out of date** | a newer version exists; **Get latest** | newer version |
+
+- **Check out** is a server decision made atomically: it succeeds only if nobody holds the lock (a conditional update in D1). It needs a connection. Working offline means checking out first, then editing on the plane.
+- **Check in** uploads the file to R2 (direct to storage by signed URL, not through the Worker), writes a new version with a comment, releases the lock, makes the local file read-only again.
+- **Undo check-out** discards local changes, releases the lock, and restores the vault version.
+- **Get latest** refreshes read-only local copies; files nobody is editing are never silently overwritten.
+- **Admin force** (`vault.force` capability): an administrator can release someone else's lock. The holder's uncommitted work is **not** in the vault, so it is **lost to the vault**: the holder's file becomes an orphan flagged "lock removed by <admin> on <date>", kept on their disk and never deleted, and can be saved as a new file or merged by hand. The admin must confirm, the action is audited, and the holder is notified. This is the only way to break a lock.
+- **Permissions and workflow can make files read-only in some states** (as PDM does): once an edit pass or a cover is *Approved*, further changes need a transition that someone with the right capability performs.
+
+### Workflow = lifecycle
+
+A PDM workflow is **states, transitions, conditions and actions**. Cadrel's book lifecycle (concept → story → manuscript → creative → launch → published) and each document's review states (draft → in review → approved) are workflows of this kind:
+
+- A **transition** has who may perform it, conditions (the brief exists, the edit pass is approved), and actions (notify the next role, unlock the next stage, create tasks from a template).
+- Workflows are **data**, editable by the studio, not code, so each project type can have its own.
+- Each file or record sits in exactly one state of its workflow; the state decides what is read-only and who sees it.
+
+### Metadata and references
+
+- **Data cards**: typed metadata on a file or record (book, edition, pen name, brief kind, licence, trim size) editable in the app, searchable, and used by Preflight and Catalogue.
+- **References and where-used**: a file can reference others (a cover references its source PSD and fonts; an EPUB references its manuscript version and cover). "Where used" answers *which listing, ad and banner use the old cover* without any manual register. A reference is to a specific version or "latest", and updating it is proposed, never automatic.
+
+### Layers on the desktop (so the server can change)
+
+The renderer talks to a `StudioService` through a transport interface. Two implementations exist:
+
+- **Local vault** (M0–M1): service, SQLite and working folders on one machine; no server. This is what runs before Cloudflare is connected and is what the tests use.
+- **Cloud vault** (M2): same service API, backed by the Worker. The local SQLite becomes a cache and search index.
+
+Domain code (`kernel`: rules, permissions, workflow) is **runtime-neutral TypeScript** with no `node:` imports so it runs in Electron and in a Worker unchanged. The `store` interface is **async** so `node:sqlite` and D1 both implement it.
+
+### Cloudflare components
+
+| Piece | Role |
+|---|---|
+| **Worker** | API, authentication, permission checks, workflow transitions, issues signed R2 URLs, serves the update feed |
+| **D1** | records, versions, locks, workflow state, audit log (same SQLite schema as the desktop cache; migrations shared) |
+| **R2** | file contents, content-addressed (hash), including manuscripts, assets, captures, installers |
+| **Durable Object** (only if needed) | live presence and push notifications ("your lock was removed", "new version"); locks themselves do not need it |
+| **Cloudflare Access / tokens** | sign-in for staff; invite tokens for guests (decide in the spike) |
+
+To confirm in the M2 spike before committing: D1 database size and row limits, Worker request-body limit (why large files go straight to R2), signed-URL flow from Electron, and lock atomicity under concurrent check-outs. Cloudflare tooling is not yet connected to my session, so none of this has been run against the account.
+
+### Shared captures
+
+Captures are **append-only, content-addressed files**, so they sync with no locking: the capturing machine uploads the raw page and cover to R2 after the existing scrub step, other machines download them, and each machine rebuilds its own derived index and embeddings locally (BookScout's existing `rebuild()`), so research stays fast and works offline. The scrub step is a hard requirement of sharing: captures come from a logged-in browser and must be stripped of the capturer's name, address and session ids before anything leaves the machine; its plant-and-assert tests move with the code.
 
 ### Compatibility rule
 
-Client and server both carry a schema version. A client refuses to talk to a newer server and offers the update; the server hosts the update feed so the team stays on one version. (Neither app has code signing or a team update channel today; both are needed before a second person installs it, see PLAN risks.)
+Client and server carry a schema version. A client refuses to talk to a newer server and is offered the update, which the server hosts in R2 so the team stays on one version. The installer must be code-signed before a second person installs it.
 
 ## 3. Core records (kernel)
 
@@ -70,11 +119,15 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `series`, `work` (a title across formats), `book` (a work's place in a series), `edition(book, format, asin, isbn, price, dates)`.
 - BookScout already has `work`, `book(asin)`, `own_book(asin)`: `edition.asin` is the join to market and sales data. This is the "connected book record".
 
+**Vault**
+- `vault_file(path, workflow, state, current_version)`, `file_version(hash, size, author, comment, n)`, `checkout(file, person, machine, since, base_version)`, `reference(parent, child, version | latest)`, `datacard_value(file | record, field, value)`.
+- `workflow`, `state`, `transition(from, to, who, conditions, actions)`.
+
 **Production**
-- `project(book | series | initiative, lifecycle, status)`, `stage`, `gate(criteria)`, `deliverable(owner, due)`, `task`, `dependency`.
+- `project(book | series | initiative, workflow)` (stages and gates are workflow states and transitions), `deliverable(owner, due)`, `task`, `dependency`.
 - `brief(kind, project, body, version)`: manuscript, edit, cover, blurb, campaign.
 - `approval(subject, version, decider, outcome, conditions)` and `decision(context, subject, outcome, follow-ups)` (the ledger).
-- `document` + `document_version(hash, parent, author, note)` for manuscripts; `asset` + `asset_version` for art; blobs are content-addressed files.
+- manuscripts and art are vault files with versions (above); `asset` adds purpose, channel, licence and approval on top of a vault file.
 - `comment` anchored to a document passage or an asset region, with `resolution`.
 
 **Editorial** (M3): `edit_pass(kind: developmental | line | copy | proof, version, editor, state)`, `query(anchor, author response)`, `change_decision(accept | reject | defer, reason)`.
@@ -129,9 +182,10 @@ interface ModuleManifest {
 | Package | Contents | From |
 |---|---|---|
 | `kernel` | records, lifecycle and gate rules, permissions, audit | new |
-| `store` | `node:sqlite`, migrations, blob store, change log | new, BookScout's migration approach |
+| `store` | async SQL interface, `node:sqlite` and D1 implementations, migrations, change log | new, BookScout's migration approach |
 | `service` | `StudioService`, actor context, transports | new |
-| `server`, `client` | studio server, network transport, offline queue | new (M2) |
+| `vault` | working-folder manager, check-out / check-in, file status, sync with the Worker | new (M1 local, M2 cloud) |
+| `worker` | Cloudflare Worker, D1 and R2 bindings, migrations, update feed | new (M2) |
 | `ui` | design tokens, title/menu bar, dialogs, tree, tabs, charts, dark mode | MDEdit chrome + BookScout charts |
 | `shell` | Electron main/preload/renderer, nav, Home, Dashboard, settings, updater | both |
 | `manuscript` | chapter engine, words, tree, find, progress | MDEdit `src/shared` |
@@ -152,14 +206,14 @@ Both repos are copied in at a pinned commit (recorded in `docs/PROVENANCE.md`), 
 
 ```
 %USERPROFILE%\Cadrel\
-  studio.db                  records (source of truth for structured studio data)
-  blobs\                     content-addressed files (versions, assets)
-  workspaces\<book>\         working copies a person edits (plain Markdown folders, MDEdit style)
-  market\                    BookScout library (raw pages append-only, derived index rebuildable)
+  vault\<studio>\             the working folder: real files, laid out by book
+    <Series>\<Book>\Manuscript\*.md, Art\*.psd, Launch\*, ...
+  .cadrel\                    local cache: studio.db, downloaded blobs, orphaned locks
+  market\                     BookScout library (raw pages append-only; synced; index rebuilt locally)
   exports\
 ```
 
-Split of truth: **studio records and versions are authoritative in `studio.db` + `blobs`**; **market and sales indexes stay derived-and-rebuildable from their files**, as in BookScout. A working copy is a checkout, not the master.
+The vault folder is an ordinary folder: Explorer, Photoshop and Word open its files. Read-only attributes show lock state. It must not be inside OneDrive or Dropbox (the app warns, as MDEdit does). The MDEdit project template becomes the book folder template.
 
 ## 7. The assistant (MCP)
 

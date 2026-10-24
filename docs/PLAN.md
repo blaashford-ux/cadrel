@@ -4,7 +4,7 @@ Status: plan, no product code yet. Architecture and stack are in [ARCHITECTURE.m
 
 ## 1. What Cadrel is
 
-A book **studio's** working environment. The studio develops original series with house authors, in-house editors, artists and marketers, and each person does their work in Cadrel (specialist tools such as Photoshop stay outside; Cadrel links, versions and hands off their files). It starts from two apps that already exist:
+A book **studio's** working environment, built as a **desktop-first** Windows application that works on real local files and synchronises them through a server vault, the way SolidWorks PDM does. The studio develops original series with house authors, in-house editors, artists and marketers, and each person does their work in Cadrel (specialist tools such as Photoshop stay outside; Cadrel links, versions and hands off their files). It starts from two apps that already exist:
 
 - **MDEdit** → writing, chapters, goals and progress, EPUB / print PDF / DOCX export.
 - **BookScout** → Amazon market research, text analysis, KDP sales and royalty analytics, MCP.
@@ -23,14 +23,15 @@ The suite is a shell with **Home** (my work) and **Dashboard** (the studio), wit
 
 - **It is too wide to build in the order it was written.** Six areas and about thirty features would produce a lot of half-finished screens. The plan builds the *team workspace and the editorial loop* first, because writing and editing is what the studio does every day, then adds departments in the order work flows through a book.
 - **The studio is the first customer.** No generic multi-tenant product work. The data model carries `studio_id` and permissions from day one (cheap now, expensive later), but there is one studio, and features are judged by whether the studio uses them.
-- **Multi-user is the hard part, so it comes second, not last.** Role dashboards are meaningless with one user. M1 builds shared records behind a permission-checked service; M2 puts that service on a server. Everything after is written against the service and works for a team from its first day.
-- **No real-time co-editing.** Chapter check-out / check-in with named versions fits editorial passes and avoids sync-engine risk.
-- **Amazon data needs a policy before it is shared.** BookScout was built as personal research with no redistribution. A studio sharing captured pages and covers across a company is a different use. The plan shares *derived* results (comps, category reports, sales) and keeps raw captures on the analyst's machine, and flags the terms question for a decision (section 5).
+- **Multi-user is the hard part, so it comes second, not last.** Role dashboards are meaningless with one user. M1 builds shared records and the vault model behind a permission-checked service; M2 connects it to Cloudflare. Everything after is written against the service and works for a team from its first day.
+- **The PDM vault model replaces my earlier check-out idea.** Real files in a local working folder; the server (Cloudflare Workers, D1, R2) owns versions and locks; check-out locks exclusively; an administrator can force a lock off, losing the holder's uncommitted work (kept on their disk as an orphan, never deleted). Workflow states and transitions drive stage gates and read-only states, as in PDM. No real-time co-editing.
+- **Captures are shared.** They are the public page source, so raw captures sync through R2 like any other file (no locking, append-only), after the existing personal-data scrub step, which stays mandatory because captures come from a logged-in browser.
 
 ## 2. Modules
 
 | Module | Job | Built from |
 |---|---|---|
+| **Vault** | working folder, check-out / check-in, versions, locks, where-used, data cards, workflows | new (PDM model) |
 | **Home** | each person's tasks, approvals, queries, recent work | new |
 | **Dashboard** | portfolio pipeline, calendar and capacity, risks, finance and market snapshots (gated) | new |
 | **Catalogue** | IP, series, books, editions, metadata, the connected book record | new + BookScout `work` / `book` |
@@ -58,23 +59,28 @@ Merge and harmonise. No new features; behaviour of both apps is unchanged and th
 - `@cadrel/ui` design system from MDEdit chrome and BookScout charts; shell with left-rail navigation.
 - **Home** and **Dashboard** exist with real but modest content: projects and word-goal progress from Write, capture counts and last-captured from Market.
 - Replace the placeholder `scripts/build.sh`: typecheck, unit tests, Windows installer, packaged-app smoke test (both apps' existing ones), installer as the downloadable artifact.
+- **Cloudflare spike** (runs alongside, needs the account connected): a Worker with D1 and R2; atomic check-out under concurrent requests; signed-URL upload and download from Electron; sign-in from the desktop; record the real limits (D1 size, request body, costs). Output: `docs/spikes/cloudflare.md` with a go / adjust verdict.
 - **Exit:** one installer; Write and Market work exactly as before inside the shell; all imported tests pass in CI; a user with existing MDEdit and BookScout data opens it and finds it.
 
 ### M1: Shared records (0.3.0)
 - `kernel`, `store`, `service`: studio, people, roles, IP, series, books, editions, projects, stages and gates, tasks, deadlines, approvals, decisions, audit log; the credit / contribution / rights / revenue-share tables exist (no screens).
-- Permission engine with the actor model, in-process transport, matrix tests.
+- Permission engine with the actor model, in-process transport, matrix tests. `kernel` is runtime-neutral (no `node:` imports) and `store` is async, so the same code runs in Electron and in a Worker.
+- **Local vault**: working folder, file states, check-out / check-in / undo / get-latest against a local vault, with the same rules the server will enforce; workflows as data (states, transitions, conditions, actions); data cards; references and where-used.
 - Catalogue module; "adopt MDEdit project as a book"; `edition.asin` joins Market and Sales data (`own_book`).
 - Lifecycle with configurable stages and gates; calendar; Home and Dashboard on real records.
 - MCP server skeleton, actor-scoped, with first Catalogue and Dashboard tools.
 - **Exit:** create a series of three books, assign people and deadlines, see the pipeline and calendar, and see the same book's manuscript progress and KDP earnings on its record.
 
-### M2: The team (0.4.0)
+### M2: The team vault on Cloudflare (0.4.0)
 Where it becomes a studio tool.
-- Studio server and network transport; accounts, invites, role and scope assignment, guests with narrow grants, confidential projects.
-- Blob store; manuscript **check-out / check-in** with named versions; offline behaviour (work locally, check in on reconnect).
+- Worker API with D1 (records, versions, locks, workflow state, audit) and R2 (file contents); migrations shared with the desktop cache.
+- Cloud vault in the app: sign-in, invites, role and scope assignment, guests with narrow grants, confidential projects.
+- **Check-out locking, check-in versions, undo check-out, get latest, and admin force** with data-loss confirmation, orphaned-copy handling, audit and notification.
+- Offline: work on checked-out files without a connection, check in on reconnect; a clear status when the server is unreachable.
+- **Shared captures**: scrubbed raw pages and covers sync to R2; each client rebuilds its own index.
 - Role dashboards: Author, Editor, Studio director first.
-- Backups, schema-version compatibility check, update feed served by the server, **code-signed installer**.
-- **Exit:** author and editor on two machines; author checks a chapter in, editor sees that version; a freelance guest sees exactly one book and nothing else.
+- Backups (D1 export, R2 replication), schema-version compatibility check, update feed from R2, **code-signed installer**.
+- **Exit:** author and editor on two machines; the author checks a chapter out, the editor sees the lock and who holds it, the author checks in, the editor gets the new version; an admin force-releases a lock and the holder's changes are kept as an orphan copy; a freelance guest sees exactly one book and nothing else.
 
 ### M3: Editorial (0.5.0)
 - Creative briefs (manuscript and edit).
@@ -94,7 +100,6 @@ Where it becomes a studio tool.
 - Asset register with versions, approval state, licence and rights, and **usage tracking** ("which listing, ad and banner use the old cover?"); replacement is proposed, never automatic.
 - Cover and campaign briefs; concepts against a brief; feedback pinned to the design; file linking and previews for Photoshop sources.
 - Preflight: EPUB validity and navigation, front and back matter, name and series consistency, cover dimensions and resolution, retailer metadata requirements; results graded error / warning / suggestion.
-- **macOS build** before the art team is onboarded (artists commonly use Macs); the new code avoids Windows-only assumptions from M0.
 - **Exit:** a cover goes brief → concepts → approval → used in Preflight and visible to Launch.
 
 ### M6: Launch and market (0.8.0)
@@ -120,12 +125,14 @@ Cross-module assistant on top of the MCP tools already shipped by earlier module
 |---|---|
 | Merging two codebases with different conventions stalls everything | M0 changes no behaviour; import tests with the code; one package at a time |
 | Scope: this is a very large product | Studio is the only customer; milestones end in a usable release; modules are cut by use, not by the list |
-| Multi-user complexity (sync, conflicts, offline) | Service boundary from M1; check-out / check-in, no real-time co-edit; SQLite single writer on the server |
+| Multi-user complexity (sync, conflicts, offline) | PDM-style exclusive locks so conflicts cannot happen; no real-time co-edit; atomic check-out proven in the Cloudflare spike |
+| Cloudflare limits or cost surprise (D1 size, request size, R2 operations) | Spike records real numbers before M2; large files go direct to R2; `store` interface keeps the database swappable |
+| Force-released lock destroys work | Never deletes local files: holder's copy becomes a flagged orphan; admin confirmation, audit entry, notification |
+| Raw captures contain the capturer's personal data | Scrub step is mandatory before upload; plant-and-assert tests stay in CI |
 | Retrofit cost of permissions and rights | `studio_id`, actor and the four rights tables exist before any workflow is built |
-| Unsigned installer and no team update channel | Signing and server-hosted updates are M2 exit criteria |
-| Amazon terms and data sharing | Share derived data only; decision recorded before M6 (section 5) |
+| Unsigned installer and no team update channel | Signing and updates from R2 are M2 exit criteria |
 | Manuscripts leaving the machine via hosted AI | Per-project switch to disable assistant access; read tools permission-checked |
-| Native pieces (`sharp`, `sqlite-vec`, OCR) across platforms | Packaged-app smoke test in CI per platform; macOS added at M5 |
+| Native pieces (`sharp`, `sqlite-vec`, OCR) in the installer | Packaged-app smoke test in CI on Windows, as both apps do today |
 | Electron / `pdfjs-dist` upgrade breaks PDF export | M0 keeps MDEdit's real-Electron PDF and epubcheck tests as gates |
 
 ## 5. Decisions I need from you
@@ -135,13 +142,14 @@ I have assumed a default for each so work is not blocked; tell me where you disa
 | # | Question | Assumed default |
 |---|---|---|
 | 1 | Are authors employees, contractors, or both? | **Both.** Membership has a kind; contractors and guests get scoped access. Affects M2 permissions and M7 agreements. |
-| 2 | Where does the studio server run? | A VM or office machine you host; Cadrel gives you a single-process server with backups. A hosted service is a later business decision. |
+| 2 | Where does the studio server run? | **Decided: Cloudflare (Workers, D1, R2) on your account.** The connector is not authorised in this session yet, so the spike is blocked until it is. |
 | 3 | Team size at launch | Up to about 25 people, one studio. |
-| 4 | Platforms | Windows first as today; macOS build at M5 for the art team. |
-| 5 | Sharing BookScout captures across the studio | Share derived results only; raw captures stay on the analyst's machine. Needs your call on Amazon's terms for a company. |
+| 4 | Platforms | **Decided: Windows only.** No macOS build. |
+| 5 | Sharing BookScout captures across the studio | **Decided: share them** (public page source), scrubbed of personal data first. |
 | 6 | Assistant | Each person's own Claude through MCP first; an in-app assistant panel later if wanted. |
 | 7 | Do `MDEdit` and `bookscout` stay alive? | Archived once M0 ships; fixes after that go in Cadrel. |
 | 8 | Product name for modules and Cadrel installer | Suite is "Cadrel"; modules use the plain names in section 2. |
+| 9 | Who may force a lock? | A named `vault.force` capability, held by studio admins only. |
 
 ## 6. Next step
 
