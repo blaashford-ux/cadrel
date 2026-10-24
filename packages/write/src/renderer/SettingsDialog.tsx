@@ -38,6 +38,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
   // Theme colours: shown on the page as they are changed, and put back to the saved ones if the dialog closes without saving.
   const [theme, setTheme] = useState<ThemeCustom | undefined>(undefined);
   const [themeInitial, setThemeInitial] = useState('');
+  const [themeManaged, setThemeManaged] = useState(false);
   const savedTheme = useRef<ThemeCustom | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -49,6 +50,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
       if (!live) return;
       savedTheme.current = p.themeCustom;
       setTheme(p.themeCustom);
+      setThemeManaged(p.themeManaged === true);
       setThemeInitial(JSON.stringify(p.themeCustom ?? null));
     });
     window.mdedit
@@ -191,7 +193,12 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
         <div className="dialog-body">
           {error && <div className="banner error">{error}</div>}
 
-          {tab === 'appearance' && <AppearanceForm custom={theme} onChange={changeTheme} />}
+          {tab === 'appearance' &&
+            (themeManaged ? (
+              <p className="muted">Colours are set for all of Cadrel in Cadrel’s Settings (the gear at the bottom of the left rail), so Write, Market and Home always match.</p>
+            ) : (
+              <AppearanceForm custom={theme} onChange={changeTheme} />
+            ))}
 
           {tab === 'chapters' && (
             <section>

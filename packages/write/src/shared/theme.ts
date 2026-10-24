@@ -22,8 +22,9 @@ export const THEME_LABELS: Record<ThemeKey, { label: string; hint: string }> = {
 
 /** How the app ships. */
 export const DEFAULT_THEMES: Record<Scheme, ThemeColors> = {
-  light: { shell: '#ece9f8', bg: '#fcfbff', fg: '#1f1a38', accent: '#0e7490', gold: '#b7791f' },
-  dark: { shell: '#1a1430', bg: '#221b3e', fg: '#ece9f9', accent: '#51c6e0', gold: '#f2c14e' }
+  // Cadrel: the icon's own slate and stone. Light is warm paper under slate ink; dark is the icon's deep slate with stone for the accent.
+  light: { shell: '#e8e4da', bg: '#faf8f3', fg: '#172a36', accent: '#344553', gold: '#9c6b2f' },
+  dark: { shell: '#0d1a23', bg: '#142531', fg: '#f1ede4', accent: '#d1c7b8', gold: '#e3b45f' }
 };
 
 export const PRESETS: { id: string; name: string; scheme: Scheme; colors: ThemeColors }[] = [

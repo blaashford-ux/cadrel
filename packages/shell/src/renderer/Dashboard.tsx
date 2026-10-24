@@ -1,10 +1,14 @@
-import type { MarketCategoryRow, Overview, Page, WriteProjectRow } from '../shared/api';
+import { kindLabel, outline } from '@cadrel/kernel';
+import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, percent, STATUS_LABEL, wordsLabel } from './format';
+import { ago, formatWords, percent, STATUS_LABEL } from './format';
+import { factsFor } from './projectFacts';
 
 interface Props {
   overview: Overview | null;
+  studio: StudioState | null;
   onGo: (p: Page) => void;
+  onProject: (id: string) => void;
 }
 
 function ProjectsTable({ rows, now }: { rows: WriteProjectRow[]; now: number }) {
@@ -73,7 +77,7 @@ function CategoriesTable({ rows }: { rows: MarketCategoryRow[] }) {
   );
 }
 
-export function Dashboard({ overview, onGo }: Props) {
+export function Dashboard({ overview, studio, onGo, onProject }: Props) {
   const now = Date.now();
   if (!overview) return <p className="muted">Loading…</p>;
   const { write, market } = overview;
@@ -82,6 +86,45 @@ export function Dashboard({ overview, onGo }: Props) {
 
   return (
     <div className="dashboard">
+      <section className="card wide" aria-labelledby="d-projects">
+        <div className="card-head">
+          <h3 id="d-projects">Projects</h3>
+          <button type="button" className="link" onClick={() => onGo('projects')}>Manage projects</button>
+        </div>
+        {!studio && <p className="muted">Loading…</p>}
+        {studio && studio.tree.projects.length === 0 && <p className="muted">No projects yet. Create one on the Projects page and link your manuscripts and market research to it.</p>}
+        {studio && studio.tree.projects.length > 0 && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th scope="col">Project</th>
+                <th scope="col" className="num">Words</th>
+                <th scope="col">Goal</th>
+                <th scope="col" className="num">Open notes</th>
+                <th scope="col">Last edited</th>
+              </tr>
+            </thead>
+            <tbody>
+              {outline(studio.tree).map(({ project: p, depth }) => {
+                const f = factsFor(studio.tree, overview, p.id);
+                const pct = percent(f.words, f.goalWords);
+                return (
+                  <tr key={p.id}>
+                    <th scope="row" style={{ paddingLeft: 10 + depth * 20 }}>
+                      <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button> <span className="chip">{kindLabel(studio.tree, p)}</span>
+                    </th>
+                    <td className="num">{formatWords(f.words)}</td>
+                    <td>{pct === null ? <span className="muted">no goal</span> : `${pct}%`}</td>
+                    <td className="num">{studio.openByProject[p.id] ?? 0}</td>
+                    <td>{ago(f.lastEdited, now)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
       <section className="card wide" aria-labelledby="d-write">
         <div className="card-head">
           <h3 id="d-write">Writing</h3>

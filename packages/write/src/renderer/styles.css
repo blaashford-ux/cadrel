@@ -1,68 +1,68 @@
 /*
  * MDEdit look: borderless, tonal, rounded. The palette comes from the app icon —
- *   deep indigo (#251d43)  ·  cyan (#51c6e0)  ·  gold (#fee567 → #f2c14e)
+ *   slate (#344553 → #142531)  ·  stone (#d1c7b8 → #a99f90)  ·  paper (#faf8f3)
  * Regions are told apart by tone and soft shadow, never by lines.
  */
 :root {
   color-scheme: light dark;
-  /* light: pale lavender paper, indigo ink, deep teal accent */
-  --shell: #ece9f8;          /* window background behind the cards */
-  --bg: #fcfbff;             /* the editor card */
-  --panel: #f3f1fb;          /* raised-but-quiet surfaces */
-  --raised: #e8e4f6;         /* inputs, buttons */
-  --hover: #dfdaf2;
-  --selected: rgba(14, 116, 144, 0.13);
-  --fg: #1f1a38;
-  --muted: #6b6589;
-  --faint: #a29dbf;
-  --accent: #0e7490;
+  /* light: warm paper, slate ink and accent */
+  --shell: #e8e4da;          /* window background behind the cards */
+  --bg: #faf8f3;             /* the editor card */
+  --panel: #f1f0eb;          /* raised-but-quiet surfaces */
+  --raised: #e6e5e2;         /* inputs, buttons */
+  --hover: #dadbd9;
+  --selected: rgba(52, 69, 83, 0.13);
+  --fg: #172a36;
+  --muted: #69747a;
+  --faint: #9fa6a7;
+  --accent: #344553;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(14, 116, 144, 0.12);
-  --gold: #b7791f;
-  --gold-soft: rgba(183, 121, 31, 0.14);
+  --accent-soft: rgba(52, 69, 83, 0.12);
+  --gold: #9c6b2f;
+  --gold-soft: rgba(156, 107, 47, 0.14);
   --danger: #c53030;
   --success: #2f855a;
-  --focus: #0e7490;
-  --warn-bg: rgba(183, 121, 31, 0.14);
-  --info-bg: rgba(14, 116, 144, 0.11);
+  --focus: #344553;
+  --warn-bg: rgba(156, 107, 47, 0.14);
+  --info-bg: rgba(52, 69, 83, 0.11);
   --error-bg: rgba(197, 48, 48, 0.11);
-  --dirty: #b7791f;
+  --dirty: #9c6b2f;
   --button-bg: var(--raised);
-  --shadow-card: 0 1px 2px rgba(37, 29, 67, 0.06), 0 8px 28px rgba(37, 29, 67, 0.08);
-  --shadow-pop: 0 12px 40px rgba(37, 29, 67, 0.28);
-  --scrim: rgba(37, 29, 67, 0.38);
+  --shadow-card: 0 1px 2px rgba(23, 42, 54, 0.06), 0 8px 28px rgba(23, 42, 54, 0.08);
+  --shadow-pop: 0 12px 40px rgba(23, 42, 54, 0.28);
+  --scrim: rgba(23, 42, 54, 0.38);
   --radius: 10px;
   --radius-lg: 16px;
-  --brand: linear-gradient(100deg, #0e7490 0%, #b7791f 100%);
+  --brand: linear-gradient(100deg, #344553 0%, #9c6b2f 100%);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    /* dark: the icon's own indigo, cyan and gold */
-    --shell: #1a1430;
-    --bg: #221b3e;
-    --panel: #2a2249;
-    --raised: #332a58;
-    --hover: #3d3368;
-    --selected: rgba(81, 198, 224, 0.17);
-    --fg: #ece9f9;
-    --muted: #a09ac4;
-    --faint: #6f6a99;
-    --accent: #51c6e0;
-    --accent-ink: #0d1b2e;
-    --accent-soft: rgba(81, 198, 224, 0.14);
-    --gold: #f2c14e;
-    --gold-soft: rgba(242, 193, 78, 0.15);
+    /* dark: the icon's deep slate with stone for the accent */
+    --shell: #0d1a23;
+    --bg: #142531;
+    --panel: #1d2d38;
+    --raised: #283741;
+    --hover: #33414a;
+    --selected: rgba(209, 199, 184, 0.17);
+    --fg: #f1ede4;
+    --muted: #a1a5a4;
+    --faint: #6c7579;
+    --accent: #d1c7b8;
+    --accent-ink: #0d1117;
+    --accent-soft: rgba(209, 199, 184, 0.14);
+    --gold: #e3b45f;
+    --gold-soft: rgba(227, 180, 95, 0.15);
     --danger: #ff7b7b;
     --success: #6bd49b;
-    --focus: #51c6e0;
-    --warn-bg: rgba(242, 193, 78, 0.14);
-    --info-bg: rgba(81, 198, 224, 0.13);
+    --focus: #d1c7b8;
+    --warn-bg: rgba(227, 180, 95, 0.14);
+    --info-bg: rgba(209, 199, 184, 0.13);
     --error-bg: rgba(255, 123, 123, 0.14);
-    --dirty: #f2c14e;
-    --shadow-card: 0 1px 2px rgba(6, 3, 20, 0.4), 0 10px 32px rgba(6, 3, 20, 0.35);
-    --shadow-pop: 0 14px 48px rgba(6, 3, 20, 0.6);
-    --scrim: rgba(10, 6, 28, 0.6);
-    --brand: linear-gradient(100deg, #51c6e0 0%, #fee567 100%);
+    --dirty: #e3b45f;
+    --shadow-card: 0 1px 2px rgba(2, 8, 12, 0.4), 0 10px 32px rgba(2, 8, 12, 0.35);
+    --shadow-pop: 0 14px 48px rgba(2, 8, 12, 0.6);
+    --scrim: rgba(2, 8, 12, 0.6);
+    --brand: linear-gradient(100deg, #d1c7b8 0%, #e3b45f 100%);
   }
 }
 
@@ -71,7 +71,7 @@ html, body, #root { height: 100%; margin: 0; }
 body { font: 14px/1.45 system-ui, 'Segoe UI Variable Text', 'Segoe UI', sans-serif; color: var(--fg); background: var(--shell); -webkit-font-smoothing: antialiased; }
 body.resizing { cursor: col-resize; user-select: none; }
 [hidden] { display: none !important; }
-::selection { background: rgba(81, 198, 224, 0.35); }
+::selection { background: var(--accent-soft); }
 .icon { flex: none; vertical-align: -3px; }
 
 /* ---- scrollbars: thin, rounded, quiet ---- */

@@ -30,7 +30,7 @@ import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore } from './settings';
-import { sanitizeThemeCustom } from '../src/shared/theme';
+import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
 import { pickInBrowser } from './pickerBrowser';
 import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
@@ -58,6 +58,11 @@ export interface WriteHost {
    * Default: Write's own server and the MDEdit brand.
    */
   mcp?: { file: string; kitServer?: () => Promise<Uint8Array>; brand?: KitBrand };
+  /**
+   * When set, the host owns appearance (the Cadrel shell does): the light/dark choice and the custom colours are read from
+   * and written to it instead of Write's own settings, and Settings → Appearance points there.
+   */
+  theme?: { get(): { source: ThemeSource; custom?: ThemeCustom }; set(change: { source?: ThemeSource; custom?: ThemeCustom | null }): void };
   /** When set, MDEdit's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
 }
@@ -246,6 +251,7 @@ const isMarkdown = (p: string) => /\.(md|markdown)$/i.test(p);
 let dirtyFiles: string[] = [];
 
 function setTheme(theme: ThemeSource): void {
+  if (host.theme) return host.theme.set({ source: theme });
   nativeTheme.themeSource = theme;
   settings.update((s) => {
     s.theme = theme;
@@ -484,7 +490,13 @@ function registerIpc(): void {
     });
     return next;
   });
-  handle('prefs:get', () => settings.get().prefs ?? {});
+  handle('prefs:get', () => {
+    const prefs = settings.get().prefs ?? {};
+    if (!host.theme) return prefs;
+    const { themeCustom: _own, ...rest } = prefs;
+    const custom = host.theme.get().custom;
+    return { ...rest, ...(custom ? { themeCustom: custom } : {}), themeManaged: true };
+  });
   ipcMain.on('prefs:set', (_e, patch: Partial<Prefs>) => {
     if (typeof patch?.sidebarWidth === 'number' && Number.isFinite(patch.sidebarWidth)) {
       settings.update((s) => {
@@ -493,6 +505,7 @@ function registerIpc(): void {
     }
     if (patch && 'themeCustom' in patch) {
       const themeCustom = sanitizeThemeCustom(patch.themeCustom);
+      if (host.theme) return void host.theme.set({ custom: themeCustom ?? null });
       settings.update((s) => {
         const { themeCustom: _old, ...rest } = s.prefs ?? {};
         s.prefs = themeCustom ? { ...rest, themeCustom } : rest;
@@ -599,6 +612,8 @@ export interface WriteModule {
   requestClose(): Promise<boolean>;
   /** Wires up what belongs to Write's page: F1 opens Help, and coming back to the window syncs. */
   attach(contents: WebContents, win: BrowserWindow): void;
+  /** The host changed the colours: tell the page and recolour the window chrome. */
+  themeChanged(custom: ThemeCustom | undefined): void;
   /** The sync service, if Google Drive sync was ever started (for a final pass on quit). */
   syncService(): SyncService | null;
   /** A downloaded installer to run once the app has exited, if the user chose to update. */
@@ -629,14 +644,14 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
   aiRemote = new AiRemote({ file: path.join(dataDir, 'ai-remote.json'), fs: nodeFs, root: () => projectsRoot(), version: app.getVersion() });
   await settings.load();
   drafts = new DraftStore(path.join(dataDir, 'drafts'));
-  nativeTheme.themeSource = settings.get().theme ?? 'system';
-  setChromeTheme(settings.get().prefs?.themeCustom);
+  nativeTheme.themeSource = h.theme ? h.theme.get().source : settings.get().theme ?? 'system';
+  setChromeTheme(h.theme ? h.theme.get().custom : settings.get().prefs?.themeCustom);
 
   registerIpc();
   void aiRemote.load(); // comes back up only if the user left it on
   registerWindowChrome(() => host.getWindow(), () => host.getContents());
   installMenu(
-    { get: () => settings.get().theme ?? 'system', set: setTheme },
+    { get: () => (host.theme ? host.theme.get().source : settings.get().theme ?? 'system'), set: setTheme },
     { getContents: () => host.getContents(), asApplicationMenu: host.standalone }
   );
   void ensureSync().then((svc) => svc.syncNow()); // does nothing unless Google Drive is connected
@@ -645,6 +660,11 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     hasUnsaved: () => dirtyFiles.length > 0,
     listProjects: () => projects.listProjects(projectsRoot()),
     requestClose,
+    themeChanged(custom) {
+      setChromeTheme(custom);
+      const c = host.getContents();
+      if (c && !c.isDestroyed()) c.send('theme:custom', custom);
+    },
     attach(contents, win) {
       contents.on('before-input-event', (e, input) => {
         if (input.type === 'keyDown' && input.key === 'F1' && !input.control && !input.alt && !input.shift) {

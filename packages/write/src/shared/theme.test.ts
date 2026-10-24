@@ -19,7 +19,7 @@ describe('themeVars', () => {
   it('sets every colour variable the app uses from the base colours', () => {
     const v = themeVars(DEFAULT_THEMES.light, 'light');
     for (const k of ['--shell', '--bg', '--panel', '--raised', '--hover', '--fg', '--muted', '--faint', '--accent', '--accent-ink', '--gold', '--selected', '--brand']) expect(v[k], k).toBeTruthy();
-    expect(v['--shell']).toBe('#ece9f8');
+    expect(v['--shell']).toBe('#e8e4da');
   });
   it('derives surfaces close to the shipped palette', () => {
     // The shipped light --raised is #e8e4f6; a derived one should be within a few steps of it.

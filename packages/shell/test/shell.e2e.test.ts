@@ -83,7 +83,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').allInnerTexts()).toEqual(['Home', 'Dashboard', 'Write', 'Market']);
+    expect(await shell.locator('.rail-btn').allInnerTexts()).toEqual(['Home', 'Projects', 'Notes', 'Dashboard', 'Write', 'Market', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -204,6 +204,109 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(JSON.parse(strFromU8(unzipSync(fs.readFileSync(built.file))['manifest.json']!))).toMatchObject({ name: 'cadrel' });
     await app.close();
   }, 120_000);
+
+  it('Projects: a series with a book under it, a manuscript linked, a note on it; all of it survives a restart', async () => {
+    const first = await launch();
+    const { app, shell } = first;
+    // A manuscript made in Write, to link.
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.evaluate(async () => {
+      const api = (window as any).mdedit;
+      const cfg = await api.getProjectsConfig();
+      await api.createProject('Dragon Rider 1', cfg.templates[0].id);
+    });
+
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByText('Start with a project').waitFor();
+    await shell.getByRole('button', { name: 'New project' }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('Dragon Rider');
+    await shell.getByRole('dialog').getByPlaceholder(/Series, Book/).fill('Series');
+    await shell.getByRole('button', { name: 'Create' }).click();
+    await shell.getByRole('heading', { level: 2, name: 'Dragon Rider' }).waitFor();
+
+    await shell.getByRole('button', { name: 'Add subproject' }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('Book 1');
+    await shell.getByRole('dialog').getByPlaceholder(/Series, Book/).fill('Book');
+    await shell.getByRole('button', { name: 'Create' }).click();
+    await shell.getByRole('heading', { level: 2, name: 'Book 1' }).waitFor();
+    expect(await shell.locator('.tree-row').allInnerTexts()).toEqual(['Dragon Rider', 'Book 1']);
+    expect(await shell.locator('.crumbs').innerText()).toContain('Dragon Rider');
+
+    // A duplicate name is refused with a message, not a crash.
+    await shell.locator('.tree-row', { hasText: 'Dragon Rider' }).first().click();
+    await shell.getByRole('button', { name: 'Add subproject' }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('book 1');
+    await shell.getByRole('button', { name: 'Create' }).click();
+    await shell.getByRole('alert').getByText(/already exists/).waitFor();
+    await shell.getByRole('button', { name: 'Cancel' }).click();
+
+    // Link the manuscript to the book, and the book's words roll up (the template manuscript is short, so just check the link and the picker).
+    await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
+    await shell.getByLabel('Link to this project').selectOption('write:Dragon Rider 1');
+    await shell.getByRole('button', { name: 'Link', exact: true }).click();
+    await shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
+
+    // A note on the book appears on the series (its subprojects count) and on the Notes page.
+    await shell.getByLabel('New note').fill('Check the dragon\'s age against book 2.');
+    await shell.getByRole('button', { name: 'Add note' }).click();
+    await shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await shell.locator('.tree-row', { hasText: 'Dragon Rider' }).first().locator('.count').waitFor();
+    await shell.getByRole('button', { name: 'Notes', exact: true }).click();
+    await shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await app.close();
+
+    const second = await launch();
+    await second.shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await second.shell.locator('.tree-row', { hasText: 'Book 1' }).waitFor();
+    await second.shell.locator('.tree-row', { hasText: 'Book 1' }).click();
+    await second.shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
+    await second.shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await second.app.close();
+  }, 150_000);
+
+  it('Settings: one appearance setting recolours Home, Write and Market together', async () => {
+    const { app, shell } = await launch();
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByText('Welcome to MDEdit').waitFor();
+    await shell.getByRole('button', { name: 'Market', exact: true }).click();
+    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    const css = (page: Page, v: string) => page.evaluate((name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim().toLowerCase(), v);
+    const dark = (page: Page) => page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches);
+
+    // Playwright pins pages to a light colour scheme; let the app's own setting decide.
+    for (const p of [shell, write, market]) await p.emulateMedia({ colorScheme: null });
+    await shell.getByRole('button', { name: 'Settings', exact: true }).click();
+    await shell.getByRole('radio', { name: 'Light' }).click();
+    await waitFor(async () => !(await dark(shell)) && !(await dark(write)) && !(await dark(market)), 'every page to be light');
+    // Cadrel's own light palette reaches all three: paper for the page (Write's --bg) and the window tone behind it (Market's --bg).
+    expect(await css(shell, '--bg')).toBe('#faf8f3');
+    expect(await css(write, '--bg')).toBe('#faf8f3');
+    expect(await css(market, '--bg')).toBe('#e8e4da');
+
+    await shell.getByRole('radio', { name: 'Dark' }).click();
+    await waitFor(async () => (await dark(shell)) && (await dark(write)) && (await dark(market)), `every page to be dark (${[await dark(shell), await dark(write), await dark(market)]})`);
+    expect(await css(shell, '--bg')).toBe('#142531');
+    expect(await css(market, '--accent')).toBe('#d1c7b8');
+
+    // A changed accent colour reaches all of them.
+    // (the form opened on the light theme, since the page was light when it was drawn)
+    await shell.getByRole('tab', { name: /Dark theme/ }).click();
+    const accent = shell.getByLabel('Accent hex value');
+    await accent.fill('#2a7f62');
+    await waitFor(async () => (await css(write, '--accent')) === '#2a7f62' && (await css(market, '--accent')) === '#2a7f62' && (await css(shell, '--accent')) === '#2a7f62', `the accent to reach every page (${[await css(shell, '--accent'), await css(write, '--accent'), await css(market, '--accent')]})`);
+    // Write's own Settings says where the colours are set, instead of offering a second place.
+    await app.close();
+
+    // And it is still dark with that accent after a restart.
+    const again = await launch();
+    await again.shell.emulateMedia({ colorScheme: null });
+    await waitFor(async () => (await dark(again.shell)) && (await css(again.shell, '--accent')) === '#2a7f62', 'the choice to be remembered');
+    await again.app.close();
+  }, 150_000);
 
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();

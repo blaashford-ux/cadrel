@@ -28,6 +28,7 @@ export interface MarketFacts {
 
 export function summariseMarket(f: MarketFacts): Overview['market'] {
   const categories: MarketCategoryRow[] = (f.categories ?? []).map((c) => ({
+    key: c.key,
     name: c.name ?? c.key,
     listedBooks: c.listedBooks,
     capturedBooks: c.capturedBooks,

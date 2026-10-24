@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { UpdateProgress } from '../src/shared/update';
+import type { ThemeCustom } from '../src/shared/theme';
 import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
 const api: MdeditApi = {
@@ -72,6 +73,11 @@ const api: MdeditApi = {
   openOutput: (p) => ipcRenderer.invoke('export:open', p),
   saveReport: (kind, name, html) => ipcRenderer.invoke('report:save', kind, name, html),
   takeLaunchFiles: () => ipcRenderer.invoke('app:takeLaunchFiles'),
+  onThemeCustom: (cb) => {
+    const h = (_e: unknown, custom: ThemeCustom | undefined) => cb(custom);
+    ipcRenderer.on('theme:custom', h);
+    return () => ipcRenderer.removeListener('theme:custom', h);
+  },
   onLaunchFiles: (cb) => {
     const handler = () => cb();
     ipcRenderer.on('app:launchFiles', handler);

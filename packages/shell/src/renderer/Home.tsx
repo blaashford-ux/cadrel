@@ -1,22 +1,60 @@
-import type { Overview, Page } from '../shared/api';
+import { childrenOf, kindLabel } from '@cadrel/kernel';
+import type { Overview, Page, StudioState } from '../shared/api';
 import { captureState } from './capture';
-import { ago, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
+import { ago, formatWords, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
+import { factsFor } from './projectFacts';
 
 interface Props {
   overview: Overview | null;
+  studio: StudioState | null;
   onGo: (p: Page) => void;
+  onProject: (id: string) => void;
 }
 
-export function Home({ overview, onGo }: Props) {
+export function Home({ overview, studio, onGo, onProject }: Props) {
   const now = Date.now();
   const recent = overview?.write.projects.find((p) => !p.archived);
   const pct = recent ? percent(recent.words, recent.goalWords) : null;
   const m = overview?.market;
+  const top = studio ? childrenOf(studio.tree, null).filter((p) => p.status !== 'archived') : [];
 
   return (
     <div className="home">
       <h2 className="hello">{greeting(new Date().getHours())}</h2>
       <p className="muted">Here is where your studio stands.</p>
+
+      <section className="card" aria-labelledby="h-projects">
+        <div className="card-head">
+          <h3 id="h-projects">Your projects</h3>
+          <button type="button" className="link" onClick={() => onGo('projects')}>All projects</button>
+        </div>
+        {!studio && <p className="muted">Loading…</p>}
+        {studio && top.length === 0 && (
+          <>
+            <p className="muted">Projects are how Cadrel is organised: usually a series, with each book a subproject. Manuscripts, market research and notes hang from them.</p>
+            <button type="button" className="primary" onClick={() => onGo('projects')}>Create your first project</button>
+          </>
+        )}
+        {studio && top.length > 0 && (
+          <ul className="project-list">
+            {top.map((p) => {
+              const f = factsFor(studio.tree, overview, p.id);
+              const subs = childrenOf(studio.tree, p.id).filter((s) => s.status !== 'archived');
+              const open = studio.openByProject[p.id] ?? 0;
+              return (
+                <li key={p.id}>
+                  <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button>
+                  <span className="chip">{kindLabel(studio.tree, p)}</span>
+                  <span className="muted small">
+                    {subs.length ? `${subs.length} subproject${subs.length === 1 ? '' : 's'} · ` : ''}
+                    {formatWords(f.words)} words{open ? ` · ${open} open note${open === 1 ? '' : 's'}` : ''}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <section className="card" aria-labelledby="h-write">
         <h3 id="h-write">Continue writing</h3>

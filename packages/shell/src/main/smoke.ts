@@ -7,6 +7,7 @@ import { runSmokeTest } from '@cadrel/write/electron/smokeTest';
 import { setAssetsDir } from '@cadrel/write/electron/export/deps';
 import { extractBuffer } from '@cadrel/market-text';
 import { createMarketModule } from '@cadrel/market-desktop/src/main/module.js';
+import { Studio } from '@cadrel/studio';
 import { samplePdf } from './pdf';
 
 /**
@@ -82,10 +83,16 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
     await fs.mkdir(path.join(books, 'Smoke', '.mdedit'), { recursive: true });
     await fs.writeFile(path.join(books, 'Smoke', '.mdedit', 'project.json'), '{"status":"drafting"}');
     await fs.writeFile(path.join(books, 'Smoke', 'Book.md'), '# One\n\nShe walked slowly to the door.\n');
-    const s = await mcpSession(path.join(here, 'mcp.mjs'), ['--root', books, '--library', library]);
+    // A project the app makes is one the AI server sees: both read the same studio file.
+    const studioFile = path.join(tmp, 'studio.json');
+    const svc = new Studio(studioFile);
+    const series = await svc.createProject({ name: 'Dragon Rider', kind: 'Series' });
+    await svc.createProject({ name: 'Book 1', parentId: series.id, kind: 'Book' });
+    const s = await mcpSession(path.join(here, 'mcp.mjs'), ['--root', books, '--library', library, '--studio', studioFile]);
     check('mcp: the one server starts and names itself cadrel', s.name === 'cadrel', s.name);
     check('mcp: it carries both modules\' tools', ['read_chapter', 'add_notes', 'top_books', 'search_book_text'].every((t) => s.tools.includes(t)), `${s.tools.length} tools`);
     check('mcp: a writing tool reads the project', s.project === 'Smoke', s.project);
+    check('mcp: the studio tools see the project tree the app keeps', s.studio.join('|') === 'Dragon Rider|Dragon Rider / Book 1', s.studio.join('|'));
   } catch (e) {
     check('mcp: the one server starts', false, e instanceof Error ? e.message : String(e));
   }
@@ -100,7 +107,7 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
 }
 
 /** A minimal MCP client over stdio: initialize, list the tools, call list_projects. */
-async function mcpSession(script: string, args: string[]): Promise<{ name: string; tools: string[]; project: string }> {
+async function mcpSession(script: string, args: string[]): Promise<{ name: string; tools: string[]; project: string; studio: string[] }> {
   const child = spawn(process.execPath, [script, ...args], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
   let err = '';
   child.stderr.on('data', (d) => (err += d));
@@ -136,7 +143,9 @@ async function mcpSession(script: string, args: string[]): Promise<{ name: strin
     const list = await request(2, 'tools/list');
     const call = await request(3, 'tools/call', { name: 'list_projects', arguments: {} });
     const projects = JSON.parse(call.result.content[0].text) as { project: string }[];
-    return { name: init.result.serverInfo.name, tools: list.result.tools.map((t: { name: string }) => t.name), project: projects[0]?.project ?? '' };
+    const tree = await request(4, 'tools/call', { name: 'studio_projects', arguments: {} });
+    const studio = (JSON.parse(tree.result.content[0].text).projects ?? []).map((p: { path: string }) => p.path) as string[];
+    return { name: init.result.serverInfo.name, tools: list.result.tools.map((t: { name: string }) => t.name), project: projects[0]?.project ?? '', studio };
   } finally {
     child.kill();
   }

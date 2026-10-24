@@ -19,15 +19,15 @@ Person ──┬── Assignment(role, scope, expires?) ──► Role ──�
 Team ────┘                                              (set of names like file.checkout)
                          │
                          ▼
- Scope:  studio ► IP ► series ► book ► folder/file     (an assignment applies to its scope and everything below)
+ Scope:  studio ► project ► subproject ► … ► folder/file   (an assignment applies to its scope and everything below)
 ```
 
 - **Capability**: a named permission, `area.action` (`file.checkout`, `finance.read`, `canon.approve`). Each module declares its own in its manifest, so new modules extend the list without core changes.
 - **Role**: a named set of capabilities, with a description. Roles are data, not code.
 - **Assignment**: *this person (or team) has this role at this scope*, optionally until a date. A person can hold many assignments: Author on one series, Editor on another, Series Lead on a third.
 - **Team**: a named group (Editors, Art, Launch crew). Assign a role to a team once, and membership decides who has it.
-- **Scope**: studio, IP, series, book, or a single folder or file. The narrower the scope, the narrower the access. Freelancers and guests normally get a role scoped to one book or file, with an expiry.
-- **Confidential**: any IP, series or book can be marked confidential. Studio-wide assignments no longer reach it. Only people assigned at or below that node, plus holders of `confidential.access` (Owner by default), can see it. Its existence is hidden from everyone else, and the assistant (MCP) is disabled on it by default.
+- **Scope**: the studio, a **project** (which includes all its subprojects; a Series and a Book are both just projects), or a single folder or file. The narrower the scope, the narrower the access. Freelancers and guests normally get a role scoped to one book or file, with an expiry.
+- **Confidential**: any project can be marked confidential. Studio-wide assignments no longer reach it. Only people assigned at or below that node, plus holders of `confidential.access` (Owner by default), can see it. Its existence is hidden from everyone else, and the assistant (MCP) is disabled on it by default.
 
 ### How a request is decided
 
@@ -113,7 +113,7 @@ Notes on the defaults:
 | Guest access | Allowed; expires after 90 days unless renewed; cannot invite anyone |
 | Stale check-out | Warn the holder and the admin after 7 days; never released automatically |
 | Force release | Needs `vault.force`, a typed reason, confirmation of the data-loss warning; notifies the holder; audited |
-| Confidential projects | Optional per IP, series or book; assistant disabled on them |
+| Confidential projects | Optional per project (and so for everything under it); assistant disabled on them |
 | Assistant (MCP) | On for roles that have the capability; acts only with the signed-in person's permissions; writes are proposals |
 | Local copies on departure | When access is removed, the app deletes cached read-only copies the next time it connects and moves any file with unsaved changes into a quarantine folder for the admin; it cannot recall files from a machine that never reconnects |
 | Audit retention | Kept indefinitely |

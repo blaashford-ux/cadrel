@@ -5,6 +5,7 @@ import type { MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
 import { collectFiles, collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
+import { applyThemeCustom } from './applyTheme';
 import { BookDetailsDialog } from './BookDetailsDialog';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Editor } from './Editor';
@@ -301,11 +302,13 @@ export function App() {
     })();
     // Files handed over later by another launch (double-clicking a second .md).
     const stopLaunch = window.mdedit.onLaunchFiles(() => void ws.openLaunchFiles());
+    const stopTheme = window.mdedit.onThemeCustom?.(applyThemeCustom);
     const stopClose = window.mdedit.onCloseRequested(() => {
       void ws.handleCloseRequest().then((ok) => window.mdedit.reportCloseDecision(ok));
     });
     return () => {
       stopLaunch();
+      stopTheme?.();
       stopClose();
     };
   }, [ws]);

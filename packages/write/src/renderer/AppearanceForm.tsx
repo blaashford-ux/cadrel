@@ -70,8 +70,8 @@ export function AppearanceForm({ custom, onChange }: Props) {
   return (
     <section className="appearance">
       <p className="muted small">
-        Light and dark have their own colours, so you can change one without touching the other. MDEdit shows the one that matches your system
-        (or View → Theme). Pick five colours; panels, buttons and softer text are worked out from them.
+        Light and dark have their own colours, so you can change one without touching the other. The app shows the one that matches your system
+        (or the Light / Dark choice). Pick five colours; panels, buttons and softer text are worked out from them.
       </p>
 
       <div className="subtabs" role="tablist" aria-label="Theme to edit">

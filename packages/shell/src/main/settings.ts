@@ -1,6 +1,8 @@
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
+import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
 import { isPage, type Page } from '../shared/api';
+import { isThemeSource, type ThemeSource } from '../shared/theme';
 
 export interface WindowState {
   x?: number;
@@ -13,6 +15,12 @@ export interface WindowState {
 export interface ShellSettings {
   window?: WindowState;
   page: Page;
+  /** Who notes written in the app are by; empty means the Windows user name. */
+  author?: string;
+  /** Light, dark or follow Windows. Applies to the whole app. */
+  theme?: ThemeSource;
+  /** Colours the user changed; the rest stay as shipped. */
+  themeCustom?: ThemeCustom;
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -21,6 +29,10 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 export function sanitizeSettings(raw: unknown): ShellSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out: ShellSettings = { page: isPage(r.page) ? r.page : 'home' };
+  if (typeof r.author === 'string' && r.author.trim()) out.author = r.author.trim().slice(0, 80);
+  if (isThemeSource(r.theme) && r.theme !== 'system') out.theme = r.theme;
+  const custom = sanitizeThemeCustom(r.themeCustom);
+  if (custom) out.themeCustom = custom;
   const w = r.window as Record<string, unknown> | undefined;
   if (w && finite(w.width) && finite(w.height) && w.width >= 200 && w.height >= 200) {
     out.window = { width: Math.round(w.width), height: Math.round(w.height) };

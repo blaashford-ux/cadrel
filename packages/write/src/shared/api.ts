@@ -140,6 +140,8 @@ export interface Prefs {
   sidebarWidth?: number;
   /** Colours the user changed in the light and dark themes (File → Settings → Appearance). */
   themeCustom?: ThemeCustom;
+  /** True when the host app (Cadrel) owns the colours; Settings then points there instead of offering its own. */
+  themeManaged?: boolean;
 }
 
 /** Unsaved text autosaved for crash recovery. One per file (the open chapter's edits). */
@@ -314,6 +316,8 @@ export interface DesktopApi {
   takeLaunchFiles(): Promise<string[]>;
   /** Fires when another launch hands a file to this running instance. */
   onLaunchFiles(cb: () => void): () => void;
+  /** The host app changed the colours (only a host that manages the theme sends this). */
+  onThemeCustom?(cb: (custom: ThemeCustom | undefined) => void): () => void;
 
   /** Tells the main process which files have unsaved edits so closing the window can ask first. */
   setDirtyFiles(fileNames: string[]): void;

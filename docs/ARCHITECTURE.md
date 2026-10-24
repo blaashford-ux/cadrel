@@ -112,6 +112,20 @@ Client and server carry a schema version. A client refuses to talk to a newer se
 
 Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id, `created/updated` stamps and actor, and every change is appended to an audit log in the same transaction. The audit log is also what the Decision ledger, version history and later sync read.
 
+**Projects** (built, `@cadrel/kernel` `projects.ts`)
+- A **project** is the first-class object the whole suite is organised around: `project(id, parent, name, kind, status, order)`. A project holds **subprojects** to any depth. `kind` is a free label, not a type: the convention is a Series as a project with each Book a subproject, but a standalone novel, a box set, an anthology, "Marketing 2027" or a book with its own subprojects fit the same shape, and nothing in the code depends on the label.
+- Modules own *records* and **link** them to a project (`link(project, module, ref)`): a Write manuscript folder, a Market category, later a cover brief, a royalty statement. A record belongs to one project; linking again moves it. A project's figures (words, goals, open notes) roll up from its whole subtree.
+- Rules: names are unique among siblings; a project cannot move into its own subtree; archiving archives the subtree and restoring needs an active parent; deleting needs `cascade` when there are subprojects, and removes the notes written on it but never a module's records. A damaged file is repaired on load (orphans go to the top level, cycles are cut), never fatal.
+- Permissions follow the tree: the scope of a role assignment is the studio, a project (which includes everything below it), or a file. The old IP / series / book scope kinds are projects with those labels.
+- Stored today in one file, `studio.json` beside the app settings (the app and the AI server both use it; each change re-reads then replaces the file atomically). In M1 it becomes the `project` table in the store and syncs through the vault.
+
+**Notes** (built, `@cadrel/kernel` `notes.ts`)
+- MDEdit's Notes (comments and suggestions; people and AI; topics; replies; resolve; the 1,000-open-AI-notes cap) generalised: a note is about a `NoteTarget(module, kind, id, label, optional text anchor)` on a project, so any module gets Notes by naming its records. Market categories and books, a cover brief or a royalty statement need no Notes code of their own.
+- Write keeps its manuscript notes in the review files beside the manuscript, because they are shared with reviewers through Google Drive. The studio-wide list **reads** them (they carry `source: module`) rather than copying them; they are changed in Write, everything else is changed in the shared Notes panel. A note on a record that is linked to a project belongs to that project.
+- One Notes panel (`NotesPanel`) serves a project, a record and the whole studio.
+
+**Global controllers in the shell.** Things that belong to the whole app are set once, in the shell, and pushed into the modules: the **MCP server** (one, `@cadrel/mcp`), **projects and notes**, the **appearance** (light/dark and colours; Write already spoke this model, Market has its colours mapped onto its own variable names), the **name on notes**, and where data lives. Write's own Appearance settings point to Cadrel's. Candidates for the same treatment later: Google Drive account, update channel, the capture server, the audit log.
+
 **People and access**
 - `studio`, `person`, `membership(person, studio, kind: employee | contractor | guest)`, `role`, `role_assignment(person, role, scope)`.
 - `pen_name(person(s), display name)`: a credited identity, separate from the person.
@@ -126,7 +140,7 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `workflow`, `state`, `transition(from, to, who, conditions, actions)`.
 
 **Production**
-- `project(book | series | initiative, workflow)` (stages and gates are workflow states and transitions), `deliverable(owner, due)`, `task`, `dependency`.
+- `deliverable(owner, due)`, `task`, `dependency`.
 - `brief(kind, project, body, version)`: manuscript, edit, cover, blurb, campaign.
 - `approval(subject, version, decider, outcome, conditions)` and `decision(context, subject, outcome, follow-ups)` (the ledger).
 - manuscripts and art are vault files with versions (above); `asset` adds purpose, channel, licence and approval on top of a vault file.
@@ -190,6 +204,7 @@ interface ModuleManifest {
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |
 | `sales` | KDP import, royalties, payments, payouts | BookScout `library/sales` |
+| `studio` | the project tree and notes store (one file, shared by the app and the AI server), Write notes reader | new |
 | `mcp` | one server, actor-scoped, tools registered by modules | BookScout `mcp` |
 | `mod-*` | one UI package per further module | new |
 
@@ -213,6 +228,8 @@ The vault folder is an ordinary folder: Explorer, Photoshop and Word open its fi
 ## 7. The assistant (MCP)
 
 *Interim (shipped in 0.2):* `packages/mcp` composes each module's tool set (`registerWriteTools`, `registerMarketTools`) into one stdio server, run by the app's own runtime (`ELECTRON_RUN_AS_NODE=1`). Identity and permission filtering arrive with the vault server.
+
+The interim server carries three parts: **studio** (`studio_projects`, `studio_create_project`, `studio_update_project`, `studio_link`, `studio_notes`, `studio_add_note`, `studio_update_note`), **Write** (MDEdit's tools and editing prompts unchanged) and **Market**. The assistant can organise projects (create, rename, move, link, archive) but has no delete; its notes are labelled with the AI's name and marked as AI; `studio_notes` lists notes across every module, including the review notes inside manuscripts.
 
 One MCP server for the suite. Every call carries the user's identity, and tools are registered per module and filtered by permission, so an assistant can never see more than the person using it.
 

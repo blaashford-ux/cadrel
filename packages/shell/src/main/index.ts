@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, WebContentsView, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, Menu, WebContentsView, ipcMain, nativeTheme, screen } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
@@ -14,11 +14,17 @@ import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/sr
 import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/launcher.js';
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
-import { isModule, isPage, type ModuleId, type Overview, type Page } from '../shared/api';
+import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
+import { isModule, isPage, type AppFolders, type AppPrefs, type ModuleId, type Overview, type Page, type ThemeState } from '../shared/api';
+import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
+import { StudioService } from './studio';
+import { nodeFs } from '@cadrel/write/electron/nodeFs';
+import os from 'node:os';
+import { NoteError, ProjectError } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -37,11 +43,47 @@ const marketData = process.env.CADREL_USER_DATA ? path.join(appData, 'market') :
 
 let win: BrowserWindow | null = null;
 let settings: SettingsStore;
+let studio: StudioService;
 let write: WriteModule;
 let market: MarketModule;
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
+
+// ---- appearance: one setting for the whole app --------------------------------------------------
+// Light/dark follows nativeTheme (which reaches every view). The colours are the shell's to set: it paints its own page,
+// tells Write (which already understands the model), and maps the same colours onto Market's differently named variables.
+const themeState = (): ThemeState => ({ source: settings.get().theme ?? 'system', ...(settings.get().themeCustom ? { custom: settings.get().themeCustom } : {}) });
+let marketCssKey: string | undefined;
+
+function paintMarket(): void {
+  const c = views.market?.webContents;
+  if (!c || c.isDestroyed()) return;
+  const old = marketCssKey;
+  void c.insertCSS(marketCss(settings.get().themeCustom)).then((key) => {
+    marketCssKey = key;
+    if (old) void c.removeInsertedCSS(old).catch(() => undefined);
+  });
+}
+
+function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null }): ThemeState {
+  settings.update((s) => {
+    if (change.source !== undefined && isThemeSource(change.source)) {
+      if (change.source === 'system') delete s.theme;
+      else s.theme = change.source;
+    }
+    if (change.custom !== undefined) {
+      const custom = sanitizeThemeCustom(change.custom);
+      if (custom) s.themeCustom = custom;
+      else delete s.themeCustom;
+    }
+  });
+  nativeTheme.themeSource = settings.get().theme ?? 'system';
+  write.themeChanged(settings.get().themeCustom);
+  paintMarket();
+  if (win && !win.isDestroyed()) win.webContents.send('shell:theme', themeState());
+  return themeState();
+}
 
 // ---- the one MCP server --------------------------------------------------------------------
 // Write's AI Kit and Market's "connect to Claude" both end up here: one server, one Claude Desktop extension, one name.
@@ -65,6 +107,9 @@ async function kitLauncher(): Promise<Uint8Array> {
   const handshake = await readHandshake(launch);
   return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData, 'logs', 'mcp-launcher.log') }), 'utf8');
 }
+
+/** Who a note written in the app is by: the name chosen in Settings, else the Windows user. */
+const authorName = () => settings.get().author?.trim() || os.userInfo().username || 'Me';
 
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
 const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(here, 'resources'));
@@ -119,6 +164,7 @@ function ensureView(id: ModuleId): WebContentsView {
       }
     });
   }
+  if (id === 'market') view.webContents.on('did-finish-load', paintMarket);
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
   if (id === 'write') write.attach(view.webContents, win!);
   views[id] = view;
@@ -240,6 +286,46 @@ function registerShellIpc(): void {
   }));
   ipcMain.handle('shell:current', guard(() => page));
   ipcMain.handle('shell:overview', guard(() => overview()));
+  // Projects and notes. A broken rule (a duplicate name, a move into itself) is told to the page as a message, not thrown through IPC.
+  const studioOp = <A extends unknown[], R>(channel: string, fn: (...a: A) => Promise<R>) =>
+    ipcMain.handle(channel, async (e, ...a: unknown[]) => {
+      if (!fromShell(e)) throw new Error('not allowed');
+      try {
+        return await fn(...(a as A));
+      } catch (err) {
+        if (err instanceof ProjectError || err instanceof NoteError || (err instanceof Error && /^There is no project/.test(err.message))) return { __error: err.message };
+        throw err;
+      }
+    });
+  studioOp('studio:state', () => studio.state());
+  studioOp('studio:createProject', async (o: Parameters<StudioService['createProject']>[0]) => ({ id: (await studio.createProject(o)).id }));
+  studioOp('studio:updateProject', (id: string, c: { name?: string; kind?: string }) => studio.updateProject(id, c));
+  studioOp('studio:moveProject', (id: string, parent: string | null, index?: number) => studio.moveProject(id, parent, index));
+  studioOp('studio:archiveProject', (id: string, archived: boolean) => studio.archiveProject(id, archived));
+  studioOp('studio:deleteProject', (id: string, cascade: boolean) => studio.deleteProject(id, cascade));
+  studioOp('studio:link', (id: string, module: string, ref: string) => studio.link(id, module, ref));
+  studioOp('studio:unlink', (module: string, ref: string) => studio.unlink(module, ref));
+  studioOp('studio:addNote', async (o: Parameters<StudioService['addNote']>[0]) => ({ id: (await studio.addNote(o)).id }));
+  studioOp('studio:setNoteStatus', (id: string, status: Parameters<StudioService['setNoteStatus']>[1]) => studio.setNoteStatus(id, status));
+  studioOp('studio:replyToNote', (id: string, body: string) => studio.replyToNote(id, body));
+  studioOp('studio:deleteNote', (id: string) => studio.deleteNote(id));
+  ipcMain.handle('shell:theme:get', guard(() => themeState()));
+  ipcMain.handle('shell:theme:set', guard((change: { source?: ThemeSource; custom?: ThemeCustom | null }) => setTheme(change ?? {})));
+  const prefs = (): AppPrefs => ({ author: authorName(), authorIsDefault: !settings.get().author?.trim() });
+  ipcMain.handle('shell:prefs:get', guard(prefs));
+  ipcMain.handle('shell:prefs:setAuthor', guard((name: unknown) => {
+    settings.update((s) => {
+      const t = typeof name === 'string' ? name.trim().slice(0, 80) : '';
+      if (t) s.author = t;
+      else delete s.author;
+    });
+    return prefs();
+  }));
+  ipcMain.handle('shell:prefs:folders', guard(async (): Promise<AppFolders> => {
+    const w = await write.listProjects().catch(() => null);
+    const m = market.service.status().libraryRoot;
+    return { writeRoot: w?.root ?? null, marketLibrary: m ?? null, studioFile: path.join(app.getPath('userData'), 'studio.json'), settingsFolder: app.getPath('userData') };
+  }));
   ipcMain.handle('shell:info', guard(() => ({ version: app.getVersion(), electron: process.versions.electron, platform: process.platform })));
 }
 
@@ -269,11 +355,22 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null); // the default menu has View > Reload, which would silently discard unsaved edits
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
+    nativeTheme.themeSource = settings.get().theme ?? 'system';
+    studio = new StudioService({
+      file: path.join(app.getPath('userData'), 'studio.json'),
+      author: authorName,
+      writeRoot: async () => {
+        const l = await write.listProjects();
+        return l.exists ? l.root : null;
+      },
+      fs: nodeFs
+    });
 
     write = await createWriteModule({
       getWindow: () => win,
       getContents: () => views.write?.webContents ?? null,
       standalone: false,
+      theme: { get: themeState, set: setTheme },
       dataDir: writeData,
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
