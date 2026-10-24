@@ -19,19 +19,19 @@ Cadrel is a **desktop-first Windows application** for running a book studio: one
 
 The server is TypeScript too, and D1 is SQLite, so the desktop's local database and the server's database share one SQL dialect, one migration set and the same domain code.
 
-### Harmonisation items (checked against the two repos)
-
-These differ today and must be settled in M0:
+### Harmonisation items (settled in M0)
 
 | Item | MDEdit | BookScout | Cadrel |
 |---|---|---|---|
-| Electron | 33 (Node 20) | 44 | **44.** `node:sqlite` needs a newer Node than Electron 33 ships, so the suite cannot stay on MDEdit's version. |
-| Main-process format | CJS bundle (esbuild) | ESM `.mjs` | **ESM** |
-| `pdfjs-dist` | ^6.4 | ^4.10 | **one version**, chosen by whichever passes both apps' PDF tests |
-| Layout | `electron/` + `src/shared` + `src/renderer` | workspaces | **workspaces**; MDEdit's `shared` becomes packages |
+| Electron | 33 (Node 20) | 44 | **44.9** (Node 24, Chromium 152) for the whole workspace. MDEdit needed one change (`printToPDF` margins) and one test pattern widened for the newer Chromium. |
+| Main-process format | CJS bundle (esbuild) | ESM `.mjs` | Sources stay as imported. The shell's main process is one esbuild **ESM** bundle that includes both modules, so the per-app format no longer matters. |
+| `pdfjs-dist` | ^6.4 | ^4.10 | **4.10.38** everywhere. pdf.js 6.4 passes BookScout's unit tests but hard-crashes the Electron app when it reads a PDF; only the desktop e2e suite shows it. Revisit later with that suite as the gate. |
+| Layout | `electron/` + `src/shared` + `src/renderer` | workspaces | workspaces; MDEdit becomes `@cadrel/write` now and is split into `manuscript`, `export` and `mod-write` as the shell takes over |
 | Project concept | folder + `.mdedit/project.json` in a Root Folder | library root, books keyed by ASIN | **Book record** (see 3) that owns a working folder |
 | Chrome | custom title bar, menu bar, dialogs, tokens, dark mode | views, charts | one design system, `@cadrel/ui`, from both |
 | App services | settings, drafts, single instance, file association | logging, updater, token | shared shell services |
+
+Lessons from the import, kept as rules: dependencies are found through Node resolution, never by a package-local `node_modules/...` path (npm hoists them); and a test that skips when its environment is missing must **fail in CI** instead (the Electron e2e and PDF tests did exactly that and hid two real problems).
 
 ## 2. Desktop first, with a vault (the PDM model)
 
