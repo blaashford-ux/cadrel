@@ -64,6 +64,7 @@ Done:
 - `@cadrel/shell`: one window, left rail, **Home** and **Dashboard** with live data from both modules, Write and Market each in its own view with its own bridge, last page remembered, close guard for unsaved edits, only the shell's own page can drive the shell. 33 tests (27 unit and 6 real-Electron end-to-end).
 - Installer (NSIS), version taken from `VERSION`, headless smoke test (`Cadrel.exe --smoke-test=file`, 14 checks), CI that builds and smoke-tests the installer and publishes it on merge. Packaged Linux app: smoke 14/14, shell end-to-end 6/6 against the packaged binary.
 - Whole workspace: typecheck clean, 1,157 tests passing with `CI=true`.
+- Projects (a tree, Series → Book by convention), Notes across modules, shell Settings with app-wide appearance, Cadrel icons and palette; `docs/ARCHITECTURE.md` §3.
 - Cloudflare: resources created (`cadrel-*`, `cadrel-dev-*`), Worker with `/v1/health` and vault migration, deploy step in the release workflow (not yet run on GitHub).
 
 Not done or not yet verified (carry into M1):
@@ -71,7 +72,7 @@ Not done or not yet verified (carry into M1):
 - **GitHub workflows** and the Worker deploy have not run yet.
 - Tests that skip themselves where their environment is missing still skip in this sandbox: the capture-extension browser tests (7) and the Market walkthrough (4) need Chromium via `playwright install`, which CI does; 2 library performance tests are opt-in.
 - `@cadrel/ui` (a shared design system) is deferred: the shell's CSS is its own until a second shell-owned surface needs it. The split of MDEdit into `manuscript` and `export` packages is also deferred; nothing needs it yet.
-- Market's tray and "keep running when the window closes" are not carried into the shell; its About page is not reachable; the shell's palette is not yet shared with the module views.
+- Market's tray and "keep running when the window closes" are not carried into the shell; its About page is not reachable; 
 - Code signing; the installer is unsigned.
 
 ### M1: Shared records (0.3.0)

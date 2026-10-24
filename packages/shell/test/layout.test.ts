@@ -17,7 +17,8 @@ describe('pages', () => {
   });
   it('rejects anything that is not a page', () => {
     expect(isPage('home')).toBe(true);
-    expect(isPage('settings')).toBe(false);
+    expect(isPage('settings')).toBe(true);
+    expect(isPage('billing')).toBe(false);
     expect(isPage(42)).toBe(false);
     expect(isPage(null)).toBe(false);
   });

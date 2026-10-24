@@ -300,3 +300,9 @@ export function sanitizeTree(raw: unknown): ProjectTree {
   }
   return { projects, links };
 }
+
+/** The scope path a permission check needs for a project: the studio, then each project from the top down to it. */
+export function scopePathFor(t: ProjectTree, projectId: string, studioId = 'studio'): { kind: 'studio' | 'project'; id: string }[] {
+  need(t, projectId);
+  return [{ kind: 'studio', id: studioId }, ...ancestorsOf(t, projectId).map((p) => ({ kind: 'project' as const, id: p.id })), { kind: 'project', id: projectId }];
+}

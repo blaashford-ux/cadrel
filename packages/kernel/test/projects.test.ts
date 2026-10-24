@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ancestorsOf, childrenOf, createProject, deleteProject, descendantsOf, emptyTree, kindLabel, linkRecord, moveProject, outline, pathOf,
-  projectFor, relinkRecord, sanitizeTree, setArchived, subtreeIds, unlinkRecord, updateProject, type ProjectTree
+  projectFor, relinkRecord, scopePathFor, sanitizeTree, setArchived, subtreeIds, unlinkRecord, updateProject, type ProjectTree
 } from '../src/projects';
 
 function build() {
@@ -117,6 +117,12 @@ describe('project tree', () => {
     s.t = unlinkRecord(s.t, 'write', 'Dragon Rider 1');
     expect(projectFor(s.t, 'write', 'Dragon Rider 1')).toBeUndefined();
     expect(() => linkRecord(s.t, 'nope', 'write', 'x')).toThrow();
+  });
+
+  it('gives the permission scope path of a project: studio, then each project down to it', () => {
+    const s = build();
+    expect(scopePathFor(s.t, s.b1)).toEqual([{ kind: 'studio', id: 'studio' }, { kind: 'project', id: s.series }, { kind: 'project', id: s.b1 }]);
+    expect(scopePathFor(s.t, s.solo, 's1')).toEqual([{ kind: 'studio', id: 's1' }, { kind: 'project', id: s.solo }]);
   });
 
   it('sanitizeTree survives garbage, orphans, cycles and double claims', () => {

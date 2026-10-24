@@ -6,7 +6,8 @@ import type { Role } from './roles';
  * No runtime-specific imports: this runs in Electron and in a Cloudflare Worker.
  */
 
-export type ScopeKind = 'studio' | 'ip' | 'series' | 'book' | 'file';
+/** A role applies at the studio, at a project (and so everything under it: a Series is a project, a Book a subproject), or at a file. */
+export type ScopeKind = 'studio' | 'project' | 'file';
 
 export interface ScopeRef {
   kind: ScopeKind;

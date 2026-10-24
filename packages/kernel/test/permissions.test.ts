@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { can, defaultRoles, explain, type Assignment, type PermissionContext, type Resource, type ScopeRef } from '../src';
 
 const studio: ScopeRef = { kind: 'studio', id: 's1' };
-const series1: ScopeRef = { kind: 'series', id: 'ser1' };
-const book1: ScopeRef = { kind: 'book', id: 'b1' };
-const book2: ScopeRef = { kind: 'book', id: 'b2' };
+const series1: ScopeRef = { kind: 'project', id: 'ser1' };
+const book1: ScopeRef = { kind: 'project', id: 'b1' };
+const book2: ScopeRef = { kind: 'project', id: 'b2' };
 const roles = new Map(defaultRoles().map((r) => [r.id, r]));
 const NOW = '2026-10-24T00:00:00Z';
 
@@ -86,7 +86,7 @@ describe('can / explain', () => {
 
   it('explain names the grant that allows an action', () => {
     const d = explain(ctx([person('a1', 'editor', book1)]), 'edit.run', at(studio, series1, book1));
-    expect(d.allowed && d.reason).toContain('Editor on book b1');
+    expect(d.allowed && d.reason).toContain('Editor on project b1');
   });
 
   it('can and explain always agree', () => {
