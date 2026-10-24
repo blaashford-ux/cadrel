@@ -101,6 +101,5 @@
   },
   "author": "blaashford-ux",
   "homepage": "https://github.com/blaashford-ux/MDEdit",
-  "private": true,
-  "type": null
+  "private": true
 }
