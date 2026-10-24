@@ -9,11 +9,18 @@ import type { ExportDeps } from './run';
 import { defaultAppDefaults, type AppDefaults } from '../../src/shared/appDefaults';
 import { loadDetails } from './sidecar';
 
+let assetsRoot: string | null = null;
+/** Where the bundled `fonts/` and `vendor/` folders are, when that is not the app's own `assets` folder (a host app ships them). */
+export function setAssetsDir(dir: string | null): void {
+  assetsRoot = dir;
+}
+const assetsDir = () => assetsRoot ?? path.join(app.getAppPath(), 'assets');
+
 /** Bundled files the print pipeline needs (inside the asar when packaged). */
 export function pdfResources(): PdfResources {
   return {
-    fontsDir: path.join(app.getAppPath(), 'assets', 'fonts'),
-    pagedJsPath: path.join(app.getAppPath(), 'assets', 'vendor', 'paged.polyfill.js')
+    fontsDir: path.join(assetsDir(), 'fonts'),
+    pagedJsPath: path.join(assetsDir(), 'vendor', 'paged.polyfill.js')
   };
 }
 

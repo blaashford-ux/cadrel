@@ -4,7 +4,7 @@ import type { DraftRecord, Prefs, Session, ThemeSource } from '../src/shared/api
 import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeBytesAtomic, writeFileAtomic } from './files';
 import { sanitizeBookDetails } from '../src/shared/export/model';
-import { makeExportDeps, pdfResources } from './export/deps';
+import { makeExportDeps, pdfResources, setAssetsDir } from './export/deps';
 import { planExport, runExport } from './export/run';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
@@ -29,9 +29,13 @@ export interface WriteHost {
   getContents(): WebContents | null;
   /** True when Write is the whole application (it then also owns the application menu). */
   standalone: boolean;
+  /** Where settings.json and drafts live. Defaults to the app's userData folder. */
+  dataDir?: string;
+  /** Folder holding the bundled `fonts/` and `vendor/`. Defaults to the app's own `assets` folder. */
+  assetsDir?: string;
 }
 
-export const settings = new SettingsStore(path.join(app.getPath('userData'), 'settings.json'));
+export let settings: SettingsStore;
 let drafts: DraftStore;
 let host: WriteHost;
 const pendingFiles: string[] = [];
@@ -317,6 +321,8 @@ export interface WriteModule {
   queueFile(file: string): void;
   /** Does the editor hold unsaved edits? */
   hasUnsaved(): boolean;
+  /** The projects in the Root Folder (for a host's overview). */
+  listProjects(): ReturnType<typeof projects.listProjects>;
   /** Asks the editor to resolve unsaved edits (save / discard / cancel). Resolves true if the window may close. */
   requestClose(): Promise<boolean>;
   flush(): Promise<void>;
@@ -335,8 +341,11 @@ function requestClose(): Promise<boolean> {
 /** Loads Write's settings and registers its IPC, menu and window-chrome handlers for the given host. Call once. */
 export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
   host = h;
+  if (h.assetsDir) setAssetsDir(h.assetsDir);
+  const dataDir = h.dataDir ?? app.getPath('userData');
+  settings = new SettingsStore(path.join(dataDir, 'settings.json'));
   await settings.load();
-  drafts = new DraftStore(path.join(app.getPath('userData'), 'drafts'));
+  drafts = new DraftStore(path.join(dataDir, 'drafts'));
   nativeTheme.themeSource = settings.get().theme ?? 'system';
 
   registerIpc();
@@ -345,5 +354,5 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     { get: () => settings.get().theme ?? 'system', set: setTheme },
     { getContents: () => host.getContents(), getWindow: () => host.getWindow(), asApplicationMenu: host.standalone }
   );
-  return { queueFile, hasUnsaved: () => dirtyFiles.length > 0, requestClose, flush: () => settings.flush() };
+  return { queueFile, hasUnsaved: () => dirtyFiles.length > 0, listProjects: () => projects.listProjects(projectsRoot()), requestClose, flush: () => settings.flush() };
 }
