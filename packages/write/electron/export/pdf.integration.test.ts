@@ -298,7 +298,8 @@ describe.skipIf(!haveEnv)('print PDF (real Electron + Paged.js)', () => {
         // The small-caps head uses real small-cap glyphs, which pdf.js reads back with gaps; compare loosely here
         // and check the exact text with poppler below.
         const got = head(p).replace(/[\s\u0000]+/g, '').toLowerCase();
-        const want = (i + 1) % 2 === 1 ? /^t.*k$/ : /^a.*w/;
+        // Older Chromium let pdf.js read back only "...k" of "The Lost King"; Chromium 152 reads it whole ("...king").
+        const want = (i + 1) % 2 === 1 ? /^t.*k(ing)?$/ : /^a.*w/;
         expect(want.test(got), `page ${i + 1}: ${JSON.stringify(got)}`).toBe(true);
       });
     }, 240_000);
