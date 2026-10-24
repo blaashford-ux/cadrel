@@ -54,13 +54,25 @@ Each milestone ends in a release (a Minor under [VERSIONING.md](VERSIONING.md)) 
 
 ### M0: One app (0.2.0)
 Merge and harmonise. No new features; behaviour of both apps is unchanged and their tests are the proof.
-- Import both repos at pinned commits (`docs/PROVENANCE.md`), reshape into workspaces per the package map.
-- Settle the harmonisation table: Electron 44, ESM main, one `pdfjs-dist`, shared toolchain.
-- `@cadrel/ui` design system from MDEdit chrome and BookScout charts; shell with left-rail navigation.
-- **Home** and **Dashboard** exist with real but modest content: projects and word-goal progress from Write, capture counts and last-captured from Market.
-- Replace the placeholder `scripts/build.sh`: typecheck, unit tests, Windows installer, packaged-app smoke test (both apps' existing ones), installer as the downloadable artifact.
-- **Cloudflare spike** (runs alongside, needs the account connected): a Worker with D1 and R2; atomic check-out under concurrent requests; signed-URL upload and download from Electron; sign-in from the desktop; record the real limits (D1 size, request body, costs). Output: `docs/spikes/cloudflare.md` with a go / adjust verdict.
-- **Exit:** one installer; Write and Market work exactly as before inside the shell; all imported tests pass in CI; a user with existing MDEdit and BookScout data opens it and finds it.
+
+**Status: built and verified on Linux; the Windows installer is built by CI and not yet seen.**
+
+Done:
+- Both repos imported at pinned commits (`docs/PROVENANCE.md`); every original suite passes in Cadrel with the same counts (MDEdit 564, BookScout 506 plus its own skips).
+- Toolchain settled (`docs/ARCHITECTURE.md`): Electron 44.9 for everything, one `pdfjs-dist` (4.10.38; 6.4 crashes the Electron app reading a PDF), dependencies found through Node resolution.
+- Both main processes split into a hostable module plus a thin standalone entry, with the standalone apps unchanged.
+- `@cadrel/shell`: one window, left rail, **Home** and **Dashboard** with live data from both modules, Write and Market each in its own view with its own bridge, last page remembered, close guard for unsaved edits, only the shell's own page can drive the shell. 33 tests (27 unit and 6 real-Electron end-to-end).
+- Installer (NSIS), version taken from `VERSION`, headless smoke test (`Cadrel.exe --smoke-test=file`, 14 checks), CI that builds and smoke-tests the installer and publishes it on merge. Packaged Linux app: smoke 14/14, shell end-to-end 6/6 against the packaged binary.
+- Whole workspace: typecheck clean, 1,157 tests passing with `CI=true`.
+- Cloudflare: resources created (`cadrel-*`, `cadrel-dev-*`), Worker with `/v1/health` and vault migration, deploy step in the release workflow (not yet run on GitHub).
+
+Not done or not yet verified (carry into M1):
+- **Windows**: the NSIS installer, the installed layout and the Windows window chrome have never run. The first dev merge is the real test. Existing MDEdit and BookScout users are meant to find their settings (the shell keeps their data folders) but that is unproven on a real profile.
+- **GitHub workflows** and the Worker deploy have not run yet.
+- Tests that skip themselves where their environment is missing still skip in this sandbox: the capture-extension browser tests (7) and the Market walkthrough (4) need Chromium via `playwright install`, which CI does; 2 library performance tests are opt-in.
+- `@cadrel/ui` (a shared design system) is deferred: the shell's CSS is its own until a second shell-owned surface needs it. The split of MDEdit into `manuscript` and `export` packages is also deferred; nothing needs it yet.
+- Market's tray and "keep running when the window closes" are not carried into the shell; its About page is not reachable; the shell's palette is not yet shared with the module views.
+- Code signing; the installer is unsigned.
 
 ### M1: Shared records (0.3.0)
 - `kernel`, `store`, `service`: studio, people, roles, IP, series, books, editions, projects, stages and gates, tasks, deadlines, approvals, decisions, audit log; the credit / contribution / rights / revenue-share tables exist (no screens).
