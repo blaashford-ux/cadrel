@@ -151,7 +151,9 @@ I have assumed a default for each so work is not blocked; tell me where you disa
 | 7 | Do `MDEdit` and `bookscout` stay alive? | Archived once M0 ships; fixes after that go in Cadrel. |
 | 8 | Product name for modules and Cadrel installer | Suite is "Cadrel"; modules use the plain names in section 2. |
 | 9 | Who may force a lock? | **Decided:** you start as Owner; administrators configure roles. `vault.force` is held by Owner and Admin by default and can be granted to any role. |
-| 10 | Default roles | Owner, Admin, Director, Series Lead, Author, Editor, Art Director, Artist, Marketing, Analyst, Finance, Guest, with the matrix in PERMISSIONS.md. Tell me which to drop, rename or change. |
+| 10 | Default roles | **Decided:** Owner, Admin, Director, Series Lead, Author, Editor, Art Director, Artist, Marketing, Analyst, Finance, Guest (matrix in PERMISSIONS.md). Admin sees everything. |
+| 11 | Sign-in | **Decided:** email invitation plus one-time link. Needs an email sender; see PERMISSIONS.md. |
+| 12 | Domain for email sending and the API | Open: do you have a domain on Cloudflare to use (for example `api.<yourdomain>` and the sender address)? Without one the Worker runs on a `workers.dev` address and invitations are copied by hand. |
 
 ## 6. The Cloudflare account (checked)
 

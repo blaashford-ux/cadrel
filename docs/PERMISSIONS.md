@@ -9,7 +9,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md) (vault, Cloudflare), [PLAN.md](PLAN.
 1. **Enforced on the server.** The Worker checks every request. The desktop app hides what you cannot do, but hiding is convenience, not security. File downloads and uploads use short-lived signed R2 URLs that are issued only after a permission check; the bucket is private.
 2. **Additive and explainable.** Roles only grant. There are no per-person "deny" rules, so *why can she see this?* always has a traceable answer. Restriction comes from scope, confidential projects, and workflow state, which are all visible.
 3. **Least privilege by default.** A new person has no role until one is assigned. A new capability, when a module adds one, is Owner-only until an admin places it.
-4. **Admins cannot escalate.** You can only grant capabilities you hold yourself. Only an Owner can create or change Owners.
+4. **Governance cannot be handed on unless held.** Powers over who can do what (`people.*`, `roles.manage`, `teams.manage`, `studio.settings`, `security.policy`, `workflow.design`, `vault.force`, `confidential.access`, `audit.read`) can be granted only by someone who holds them. Ordinary content powers can be granted by anyone with `roles.manage`, so an Admin who only reads manuscripts can still make someone an Author. Nobody grants a role to themselves, and only an Owner creates or changes Owners.
 5. **Everything is audited.** Role edits, assignments, invitations, force-releases of locks, and every read of finance and contract data go in an append-only log.
 
 ## 2. The model
@@ -37,7 +37,7 @@ Team ────┘                                              (set of names 
 2. Find assignments whose scope is the resource or an ancestor of it, and whose role contains the capability.
 3. If the resource or an ancestor is confidential, keep only assignments at or below that confidential node (or the actor holding `confidential.access`).
 4. Apply **workflow state**: the file's or record's current state may make it read-only or limit which transitions this role may perform.
-5. For file edits, apply the **lock**: only the holder of the check-out can change a checked-out file; `vault.force` is the only way to break one.
+5. For file edits the vault adds the **lock** rule on top: only the holder of a check-out can change that file, and `vault.force` is the only way to break the lock.
 6. Return allow or deny **with the reason** (`allowed by Editor on Book 3 via team Editors`). The same function powers the admin **Explain access** tool.
 
 ## 3. Starting out
@@ -48,6 +48,13 @@ Team ────┘                                              (set of names 
 4. Anything beyond the defaults is done in **Settings → People & Roles** (below).
 
 Before a server exists, the local vault runs the same model with you as the only Owner, so the role editor can be built and used from M1.
+
+### Sign-in and invitations
+
+- An admin enters an email address and picks a role and scope. The person gets an **invitation link**; opening it in Cadrel (custom `cadrel://` link or a code to paste) creates their account on that device.
+- Afterwards, signing in on a new device sends a **one-time link** to their email (15 minutes, single use). A device then holds a refresh token for the session length, revocable by an admin or the person.
+- Links are single-use random tokens stored hashed, rate-limited per address and per IP.
+- Email needs a sender. Cloudflare Email Sending can do it, but it is in beta, needs the Workers Paid plan and a domain onboarded to Email Service. Until that exists, **an admin can copy the invitation link and send it themselves**, and the Owner's first sign-in uses the setup code and needs no email.
 
 ## 4. Default roles
 
@@ -61,7 +68,7 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Security policy, studio settings | M | M | — | — | — | — | — | — | — | — | — | — |
 | Audit log | R | R | R | — | — | — | — | — | — | — | — | — |
 | Force check-out (`vault.force`) | A | A | — | — | — | — | — | — | — | — | — | — |
-| Confidential projects (`confidential.access`) | A | — | — | — | — | — | — | — | — | — | — | — |
+| Confidential projects (`confidential.access`) | A | A | — | — | — | — | — | — | — | — | — | — |
 | Catalogue: IP, series, books, editions | M | M | M | W | R | R | R | R | R | R | R | — |
 | Workflow design (states, transitions) | M | M | M | — | — | — | — | — | — | — | — | — |
 | Tasks and deadlines | M | M | M | M | W | W | M | W | M | W | W | W |
@@ -73,13 +80,13 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Launch and marketing | M | R | A | C | R | — | C | C | M | R | — | — |
 | Market research | M | R | R | R | R | — | R | R | W | M | — | — |
 | Sales (aggregates) | M | R | R | R | R | — | — | — | R | R | R | — |
-| Royalties, payments, payouts | M | — | R | — | R | — | — | — | — | — | M | — |
-| Contracts, credits, rights, revenue shares, costs | M | — | M | — | R | — | — | — | — | — | M | — |
+| Royalties, payments, payouts | M | R | R | — | R | — | — | — | — | — | M | — |
+| Contracts, credits, rights, revenue shares, costs | M | R | M | — | R | — | — | — | — | — | M | — |
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 
 Notes on the defaults:
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
-- **Admin** runs the studio's setup: people, roles, security, workflows, vault, but by default sees no finance, contracts or confidential projects and cannot force a lock without `vault.force`. If you want admins to see everything, grant them the capability; the default errs on the safe side.
+- **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.
 - **Guest** is the freelancer or beta-reader role: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
@@ -98,10 +105,10 @@ Notes on the defaults:
 
 | Setting | Default |
 |---|---|
-| Sign-in | Email invitation and one-time link; SSO through Cloudflare Access if the studio sets it up (confirmed in the M2 spike) |
-| Second factor | Required for Owner, Admin, Finance, Director (through the sign-in provider) |
+| Sign-in | **Decided:** email invitation and one-time sign-in link; no passwords. SSO can be added later |
+| Second factor | Not part of email-link sign-in; the link proves control of the mailbox. A second factor (authenticator app) for Owner, Admin, Finance and Director is a later addition |
 | Session length on a device | 14 days; revoke any device from People |
-| Invitation lifetime | 7 days |
+| Invitation and sign-in link lifetime | Invitation 7 days; each sign-in link 15 minutes, single use |
 | Who may invite | Holders of `people.invite` (Owner, Admin) |
 | Guest access | Allowed; expires after 90 days unless renewed; cannot invite anyone |
 | Stale check-out | Warn the holder and the admin after 7 days; never released automatically |
@@ -113,7 +120,7 @@ Notes on the defaults:
 
 ## 6. Guardrails
 
-- A person with `roles.manage` can grant only capabilities they hold, and cannot raise their own access.
+- A person with `roles.manage` can grant any ordinary role, but only governance capabilities they hold themselves, and never to themselves. Unknown capabilities are refused.
 - The last Owner cannot be removed, demoted or expired.
 - Removing a capability from a role takes effect on the next request; there is no cached permission beyond a short token lifetime (minutes).
 - Deleting a role needs it to be unassigned, or an explicit replacement role chosen.
