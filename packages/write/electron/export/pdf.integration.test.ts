@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -8,13 +9,23 @@ import { defaultBookDetails, type BookDetails } from '../../src/shared/export/mo
 import { analyzePdf, pdfFonts, type PdfPage } from './pdfAnalyze';
 
 const root = path.resolve(__dirname, '../..');
-const electronBin = path.join(root, 'node_modules/electron/dist/electron');
-const haveEnv = existsSync(electronBin) && spawnSync('xvfb-run', ['--help']).status !== null && spawnSync('xvfb-run', ['--help']).error === undefined;
+// The `electron` package's main export is the path to its binary. Resolved through Node so it is found whether npm
+// hoists it to the workspace root or keeps it in this package.
+const electronBin = (() => {
+  try {
+    return createRequire(path.join(root, 'package.json'))('electron') as string;
+  } catch {
+    return '';
+  }
+})();
+const haveEnv = electronBin !== '' && existsSync(electronBin) && spawnSync('xvfb-run', ['--help']).status !== null && spawnSync('xvfb-run', ['--help']).error === undefined;
 
 let work: string;
 let harness: string;
 
 beforeAll(async () => {
+  // In CI a missing Electron or xvfb is a failure, not a reason to skip the only test that lays out a real PDF.
+  if (!haveEnv && process.env.CI) throw new Error('CI needs Electron and xvfb-run for the PDF integration tests');
   if (!haveEnv) return;
   work = mkdtempSync(path.join(tmpdir(), 'mdedit-pdf-'));
   harness = path.join(work, 'pdfSmoke.js');

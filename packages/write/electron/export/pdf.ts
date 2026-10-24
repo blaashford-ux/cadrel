@@ -100,7 +100,7 @@ async function renderHtml(
     );
     clearInterval(poll);
     onProgress({ stage: 'printing', pass });
-    const pdf = await guard(win.webContents.printToPDF({ preferCSSPageSize: true, printBackground: false, margins: { marginType: 'none' } }));
+    const pdf = await guard(win.webContents.printToPDF({ preferCSSPageSize: true, printBackground: false, margins: { top: 0, bottom: 0, left: 0, right: 0 } }));
     return { pdf, pages };
   } finally {
     if (poll) clearInterval(poll);
