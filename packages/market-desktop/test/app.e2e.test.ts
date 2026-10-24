@@ -174,7 +174,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await client.connect(new StdioClientTransport({ command: cfg.command, args: cfg.args, env: { ...(process.env as Record<string, string>), ...(cfg.env ?? {}) }, stderr: 'ignore' }));
     const status = JSON.parse(((await client.callTool({ name: 'library_status', arguments: {} })) as any).content[0].text);
     expect(status).toMatchObject({ books_captured: 1, categories: 1 });
-    const found = JSON.parse(((await client.callTool({ name: 'search_text', arguments: { query: 'forgotten gods' } })) as any).content[0].text);
+    const found = JSON.parse(((await client.callTool({ name: 'search_book_text', arguments: { query: 'forgotten gods' } })) as any).content[0].text);
     expect(found.mode).toBe('keyword+meaning');
     expect(found.hits[0].asin).toBe('B0C1R52V2J');
     await client.close();

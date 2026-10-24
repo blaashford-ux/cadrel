@@ -1,0 +1,23 @@
+{
+  "name": "@cadrel/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The one MCP server for Cadrel: every module's tools behind a single connection",
+  "main": "src/index.ts",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cadrel/market-library": "*",
+    "@cadrel/market-mcp": "*",
+    "@cadrel/write": "*",
+    "esbuild": "^0.24.0"
+  }
+}

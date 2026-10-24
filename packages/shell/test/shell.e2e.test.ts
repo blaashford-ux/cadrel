@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core';
+import { strFromU8, unzipSync } from 'fflate';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const PKG = path.resolve(__dirname, '..');
@@ -164,6 +165,45 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await waitFor(async () => (await second.shell.locator('.rail-btn[aria-current="page"]').getAttribute('aria-label')) === 'Dashboard', 'Dashboard to be restored');
     await second.app.close();
   }, 90_000);
+
+  it('Write\'s AI Kit and Market\'s Claude connection are the same single server', async () => {
+    const { app, shell } = await launch();
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByText('Welcome to MDEdit').waitFor();
+
+    // Write: the AI server settings and the kit it saves for Claude Desktop.
+    const server = await write.evaluate(() => (window as any).mdedit.getAiServer());
+    expect(server.args[0]).toMatch(/mcp\.mjs$/);
+    const dest: string = await write.evaluate(() => (window as any).mdedit.exportAiKit());
+    expect(path.basename(dest)).toBe('Cadrel AI Kit');
+    const files = fs.readdirSync(dest);
+    expect(files).toEqual(expect.arrayContaining(['README.txt', 'cadrel.mcpb', 'connect-settings.txt', 'skills']));
+    expect(files).not.toContain('mdedit.mcpb');
+    const ext = unzipSync(fs.readFileSync(path.join(dest, 'cadrel.mcpb')));
+    expect(JSON.parse(strFromU8(ext['manifest.json']!))).toMatchObject({ name: 'cadrel', display_name: 'Cadrel' });
+    const launcher = strFromU8(ext['server/index.js']!);
+    expect(launcher).toContain("label");
+    expect(launcher).toMatch(/"name":"cadrel"/); // it answers Claude's handshake as the one server
+    expect(launcher).toMatch(/mcp\.mjs/);
+    expect(fs.readdirSync(path.join(dest, 'skills'))).toContain('mdedit-line-edit.zip');
+    expect(fs.readFileSync(path.join(dest, 'connect-settings.txt'), 'utf8')).toContain('claude mcp add cadrel --');
+
+    // Market: its own "connect to Claude" gives the same server under the same name.
+    const market = await (async () => {
+      await shell.getByRole('button', { name: 'Market', exact: true }).click();
+      return waitFor(() => moduleView(app, 'market'), 'the Market view');
+    })();
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    const cfg = await market.evaluate(() => (window as any).bookscout.mcpConfig());
+    expect(JSON.parse(cfg.claudeDesktop).mcpServers).toHaveProperty('cadrel');
+    expect(cfg.args[0]).toBe(server.args[0]);
+    expect(cfg.args).toContain('--library');
+    const built = await market.evaluate(() => (window as any).bookscout.installClaudeExtension());
+    expect(path.basename(built.file)).toBe('Cadrel.mcpb');
+    expect(JSON.parse(strFromU8(unzipSync(fs.readFileSync(built.file))['manifest.json']!))).toMatchObject({ name: 'cadrel' });
+    await app.close();
+  }, 120_000);
 
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();

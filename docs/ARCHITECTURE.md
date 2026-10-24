@@ -212,6 +212,8 @@ The vault folder is an ordinary folder: Explorer, Photoshop and Word open its fi
 
 ## 7. The assistant (MCP)
 
+*Interim (shipped in 0.2):* `packages/mcp` composes each module's tool set (`registerWriteTools`, `registerMarketTools`) into one stdio server, run by the app's own runtime (`ELECTRON_RUN_AS_NODE=1`). Identity and permission filtering arrive with the vault server.
+
 One MCP server for the suite. Every call carries the user's identity, and tools are registered per module and filtered by permission, so an assistant can never see more than the person using it.
 
 - **Read** tools return structured results with source ids so answers cite evidence (manuscript version and passage, asset version, capture date).

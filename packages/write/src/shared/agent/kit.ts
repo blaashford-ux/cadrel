@@ -4,6 +4,22 @@ import { aiConfigSnippets } from './config';
 /** The folder the AI Kit is written into (inside the user's Downloads). */
 export const KIT_FOLDER = 'MDEdit AI Kit';
 
+/** What the kit calls itself. A host app that bundles MDEdit (Cadrel) passes its own, so there is one extension, not two. */
+export interface KitBrand {
+  /** Lower-case id used in file names and as the MCP server's name in settings: "mdedit", "cadrel". */
+  id: string;
+  /** Display name: "MDEdit", "Cadrel". */
+  name: string;
+  /** Folder inside Downloads. */
+  folder: string;
+  /** What the Claude Desktop extension says it does. Default: the writing description. */
+  description?: string;
+}
+export const MDEDIT_BRAND: KitBrand = { id: 'mdedit', name: 'MDEdit', folder: KIT_FOLDER };
+
+/** Re-words text written for MDEdit for another brand. A no-op for MDEdit itself. */
+const rebrand = (t: string, b: KitBrand): string => (b.id === 'mdedit' ? t : t.replaceAll('MDEdit', b.name).replaceAll('mdedit', b.id));
+
 export interface KitSkill {
   /** Folder name, e.g. "mdedit-line-edit". */
   name: string;
@@ -24,8 +40,10 @@ export interface KitInput {
   version: string;
   /** The Root Folder, offered as the default projects folder. */
   root: string;
-  /** Where `mdedit-mcp.js` will be once written (for the settings snippets that point at it). */
+  /** Where `<id>-mcp.js` will be once written (for the settings snippets that point at it). */
   serverPath: string;
+  /** Default: MDEdit. */
+  brand?: KitBrand;
 }
 
 export interface KitFile {
@@ -37,14 +55,14 @@ export interface KitFile {
 const text = (path: string, content: string): KitFile => ({ path, data: strToU8(content) });
 
 /** A Claude Desktop extension: Claude Desktop runs the server with its own Node, so the user installs nothing else. */
-function extension(i: KitInput): Uint8Array {
+function extension(i: KitInput, b: KitBrand): Uint8Array {
   const manifest = {
     manifest_version: '0.2',
-    name: 'mdedit',
-    display_name: 'MDEdit',
+    name: b.id,
+    display_name: b.name,
     version: i.version,
-    description: 'Lets Claude read your MDEdit chapters and leave comments and suggestions in your Notes panel. It never changes your manuscript.',
-    author: { name: 'MDEdit' },
+    description: b.description ?? rebrand('Lets Claude read your MDEdit chapters and leave comments and suggestions in your Notes panel. It never changes your manuscript.', b),
+    author: { name: b.name },
     server: {
       type: 'node',
       entry_point: 'server/index.js',
@@ -54,7 +72,7 @@ function extension(i: KitInput): Uint8Array {
       root_folder: {
         type: 'directory',
         title: 'Projects folder',
-        description: 'Leave this empty to follow the Root Folder set in MDEdit (File → Settings → Projects). Set it only if your books live somewhere else; it must be the folder that holds your book folders, not one book\'s folder.',
+        description: rebrand('Leave this empty to follow the Root Folder set in MDEdit (File → Settings → Projects). Set it only if your books live somewhere else; it must be the folder that holds your book folders, not one book\'s folder.', b),
         required: false,
       },
     },
@@ -101,8 +119,8 @@ function readme(i: KitInput): string {
   return lines.join('\r\n');
 }
 
-function settings(i: KitInput): string {
-  const s = aiConfigSnippets({ root: i.root, command: 'node', args: [i.serverPath, '--root', i.root] });
+function settings(i: KitInput, b: KitBrand): string {
+  const s = aiConfigSnippets({ root: i.root, command: 'node', args: [i.serverPath, '--root', i.root] }, b.id);
   return [
     'These run the server file saved next to this one. They need Node.js 20 or newer.',
     '(For Claude Desktop, use mdedit.mcpb instead: it needs no Node.js.)',
@@ -121,11 +139,12 @@ function settings(i: KitInput): string {
 
 /** The files of the AI Kit. Pure: the app writes them into Downloads. */
 export function buildKit(i: KitInput): KitFile[] {
+  const b = i.brand ?? MDEDIT_BRAND;
   return [
-    text('README.txt', readme(i)),
-    { path: 'mdedit.mcpb', data: extension(i) },
-    { path: 'mdedit-mcp.js', data: i.server },
-    text('connect-settings.txt', settings(i)),
+    text('README.txt', rebrand(readme(i), b)),
+    { path: `${b.id}.mcpb`, data: extension(i, b) },
+    { path: `${b.id}-mcp.js`, data: i.server },
+    text('connect-settings.txt', rebrand(settings(i, b), b)),
     ...i.skills.flatMap((s) => [
       { path: `skills/${s.name}.zip`, data: skillZip(s) },
       text(`skills/folders/${s.name}/SKILL.md`, s.markdown),

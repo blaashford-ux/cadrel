@@ -45,16 +45,19 @@ await preloadCjs(path.join(write, 'electron', 'preload.ts'), path.join(dist, 'mo
 // ---- Market's view, its MCP server and browser extension ----
 await page(path.join(market, 'src', 'renderer'), path.join(dist, 'modules', 'market', 'renderer'));
 await preloadCjs(path.join(market, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'market', 'preload.cjs'));
-// Run by the app's own Node (ELECTRON_RUN_AS_NODE) so it finds the same native modules.
+// The one MCP server for the whole suite (Write's tools and Market's), run by the app's own Node (ELECTRON_RUN_AS_NODE)
+// so it finds the same native modules.
+const version = fs.readFileSync(path.join(root, '..', '..', 'VERSION'), 'utf8').trim();
 await esbuild({
-  entryPoints: [path.join(pkgs, 'market-mcp', 'src', 'main.ts')],
+  entryPoints: [path.join(pkgs, 'mcp', 'src', 'main.ts')],
   outfile: path.join(dist, 'mcp.mjs'),
   bundle: true,
   platform: 'node',
   format: 'esm',
   target: 'node22',
-  external: ['sqlite-vec', '@huggingface/transformers', 'onnxruntime-node', 'sharp'],
+  external: NATIVE,
   banner: esmBanner,
+  define: { 'process.env.CADREL_VERSION': JSON.stringify(version) },
   logLevel: 'warning'
 });
 const ext = path.join(pkgs, 'market-extension');

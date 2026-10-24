@@ -77,16 +77,19 @@ export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
   );
 }
 
-export function createServer(o: ServerOptions): McpServer {
-  const server = new McpServer(
-    { name: 'mdedit', version: o.version ?? '0.0.0' },
-    {
-      instructions:
-        'MDEdit holds a writer\'s book projects as Markdown files. You are an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
-        'You cannot change the manuscript; the author reviews your notes in MDEdit and accepts or rejects each one. Quote text exactly as read_chapter returns it.',
-    }
-  );
+/** What the AI is told about MDEdit's tools. A server that adds other modules' tools puts this beside theirs. */
+export const WRITE_INSTRUCTIONS =
+  'MDEdit holds a writer\'s book projects as Markdown files. You are an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
+  'You cannot change the manuscript; the author reviews your notes in MDEdit and accepts or rejects each one. Quote text exactly as read_chapter returns it.';
 
+export function createServer(o: ServerOptions): McpServer {
+  const server = new McpServer({ name: 'mdedit', version: o.version ?? '0.0.0' }, { instructions: WRITE_INSTRUCTIONS });
+  registerWriteTools(server, o);
+  return server;
+}
+
+/** MDEdit's tools and editing-skill prompts, registered on any MCP server (so one server can carry several modules' tools). */
+export function registerWriteTools(server: McpServer, o: ServerOptions): void {
   const ctx = (): AgentContext => ({ fs: o.fs, root: o.root, ...agentFromClient(server.server.getClientVersion()?.name, o.agent) });
   const run = <T>(job: (c: AgentContext) => Promise<T>) => async () => {
     try {
@@ -246,5 +249,4 @@ export function createServer(o: ServerOptions): McpServer {
     );
   }
 
-  return server;
 }

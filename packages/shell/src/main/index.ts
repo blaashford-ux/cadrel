@@ -11,6 +11,9 @@ import { createWriteModule, type WriteModule } from '@cadrel/write/electron/modu
 import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
 import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/src/main/module.js';
+import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/launcher.js';
+import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
+import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
 import { isModule, isPage, type ModuleId, type Overview, type Page } from '../shared/api';
 import { moduleBounds } from './layout';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
@@ -39,6 +42,29 @@ let market: MarketModule;
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
+
+// ---- the one MCP server --------------------------------------------------------------------
+// Write's AI Kit and Market's "connect to Claude" both end up here: one server, one Claude Desktop extension, one name.
+const MCP_DESCRIPTION = 'Lets Claude read your Cadrel manuscripts and leave review notes in them (it never changes your manuscript), and search your Kindle market research.';
+const CADREL_MCP: McpBrand = { id: 'cadrel', name: 'Cadrel', description: MCP_DESCRIPTION, file: 'Cadrel.mcpb' };
+const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI Kit', description: MCP_DESCRIPTION };
+const mcpFile = () => path.join(here, 'mcp.mjs');
+/** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
+const mcpLaunch = () => ({
+  command: app.isPackaged ? process.execPath : 'node',
+  args: [mcpFile()],
+  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
+});
+/**
+ * The file inside the Claude Desktop extension: a small launcher that starts the server above with the installed app's runtime.
+ * The server takes seconds to open the library, which Claude Desktop will not wait for, so the launcher answers the handshake first.
+ * Arguments the extension's settings add (the projects folder) are passed on to the server.
+ */
+async function kitLauncher(): Promise<Uint8Array> {
+  const launch = mcpLaunch();
+  const handshake = await readHandshake(launch);
+  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData, 'logs', 'mcp-launcher.log') }), 'utf8');
+}
 
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
 const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(here, 'resources'));
@@ -250,9 +276,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       standalone: false,
       dataDir: writeData,
       assetsDir: path.join(here, 'assets'),
-      // One AI server for the whole suite. AI apps launch `file` with Cadrel's own Node; the Claude Desktop extension gets
-      // `kitFile`, the same server as plain JavaScript (that Node has no native modules, so Market's tools are left out).
-      mcp: { file: path.join(here, 'mcp.mjs'), kitFile: path.join(here, 'mcp-kit.js') },
+      // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND },
       updatesDisabledReason: 'Cadrel is updated as a whole; MDEdit’s own updater is switched off here.'
     });
     market = createMarketModule({
@@ -266,6 +291,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       willQuit: () => {
         quitting = true;
       },
+      mcpLaunch,
+      mcpBrand: CADREL_MCP,
       updatesDisabledReason: 'Cadrel is updated as a whole; BookScout’s own updater is switched off here.'
     });
     await market.start();

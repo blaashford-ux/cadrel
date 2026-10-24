@@ -1,6 +1,6 @@
 import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
-import { buildKit, KIT_FOLDER, type KitFile, type KitSkill } from './kit';
+import { buildKit, KIT_FOLDER, type KitBrand, type KitFile, type KitSkill } from './kit';
 
 const skills: KitSkill[] = [
   { name: 'mdedit-line-edit', id: 'line_edit', tag: 'Line edit', markdown: '---\nname: mdedit-line-edit\ndescription: "x"\n---\n\n# Line Edit\n', body: '# Line Edit' },
@@ -55,5 +55,30 @@ describe('the AI Kit', () => {
     const r = strFromU8(file('README.txt').data);
     for (const needle of ['mdedit.mcpb', 'Settings > Capabilities > Skills', 'C:\\Users\\me\\MDEdit', 'Line edit', 'Copy edit', 'developmental_edit']) expect(r).toContain(needle);
     expect(file('mdedit-mcp.js').data).toBe(server);
+  });
+});
+
+describe('the AI Kit under a host app\'s brand', () => {
+  const cadrel: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI Kit' };
+  const k = buildKit({ skills, server, version: '1.2.3', root: 'C:\\Users\\me\\MDEdit', serverPath: 'C:\\Users\\me\\Downloads\\Cadrel AI Kit\\cadrel-mcp.js', brand: cadrel });
+  const f = (p: string) => k.find((x) => x.path === p)!;
+
+  it('names its files and the Claude Desktop extension after the host, with no MDEdit left in their names', () => {
+    expect(k.map((x) => x.path)).toContain('cadrel.mcpb');
+    expect(k.map((x) => x.path)).toContain('cadrel-mcp.js');
+    expect(k.map((x) => x.path)).not.toContain('mdedit.mcpb');
+    const m = JSON.parse(strFromU8(unzipSync(f('cadrel.mcpb').data)['manifest.json']));
+    expect(m).toMatchObject({ name: 'cadrel', display_name: 'Cadrel', author: { name: 'Cadrel' } });
+    expect(m.description).toContain('Cadrel chapters');
+  });
+
+  it('puts the host\'s name in the settings snippets and the readme', () => {
+    const settings = strFromU8(f('connect-settings.txt').data);
+    expect(settings).toContain('claude mcp add cadrel --');
+    expect(settings).toContain('[mcp_servers.cadrel]');
+    expect(settings).toContain('"cadrel": {');
+    expect(settings).toContain('cadrel.mcpb');
+    expect(strFromU8(f('README.txt').data)).toContain('Cadrel AI Kit'.replace(' AI Kit', ''));
+    expect(strFromU8(f('README.txt').data)).not.toContain('MDEdit');
   });
 });

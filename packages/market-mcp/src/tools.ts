@@ -493,7 +493,7 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
-    name: 'search_text',
+    name: 'search_book_text',
     description:
       'Search blurbs, titles, editorial reviews, author bios, on-page reviews, Reddit threads and comments from subreddits the user linked to a category (the last 7 days per sync) and, where the user has attached them, manuscripts and free-sample text across the library. Combines keyword and meaning-based search. Each hit cites its book and capture date. Use it for questions like "which blurbs promise found family" or "what do readers say about pacing".',
     shape: {
@@ -530,7 +530,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'community_insights',
     description:
-      'A basic analysis of what the subreddits linked to a category are talking about and asking for, from the threads and comments the user synced (a week per sync): request threads (people asking for books) and the tropes they name, recurring topics, review-style themes, how many threads mention, ask for, praise or complain about each trope next to how many of the category\'s listed books carry it ("underserved" = talked about, few books), clauses where readers say what they avoid, and which of the category\'s listed books readers name (replies in request threads first). Counts come from words, not understanding; mention is not approval. Use it for "what do readers want in this category" and for gaps; then use community_threads / search_text to read the evidence.',
+      'A basic analysis of what the subreddits linked to a category are talking about and asking for, from the threads and comments the user synced (a week per sync): request threads (people asking for books) and the tropes they name, recurring topics, review-style themes, how many threads mention, ask for, praise or complain about each trope next to how many of the category\'s listed books carry it ("underserved" = talked about, few books), clauses where readers say what they avoid, and which of the category\'s listed books readers name (replies in request threads first). Counts come from words, not understanding; mention is not approval. Use it for "what do readers want in this category" and for gaps; then use community_threads / search_book_text to read the evidence.',
     shape: { category: categoryArg, max_topics: z.number().int().min(5).max(50).default(25) },
     readOnly: true,
     run: (ctx, a) => {
@@ -554,7 +554,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'community_threads',
-    description: 'List stored Reddit threads for a category (title, text, score, flair, date, comment count, URL), newest, best-scored or most-discussed first. Use community_thread to read one in full, or search_text with kinds community_post / community_comment to search by topic.',
+    description: 'List stored Reddit threads for a category (title, text, score, flair, date, comment count, URL), newest, best-scored or most-discussed first. Use community_thread to read one in full, or search_book_text with kinds community_post / community_comment to search by topic.',
     shape: { category: categoryArg, subreddit: z.string().max(40).optional(), sort: z.enum(['new', 'score', 'comments']).default('new'), limit: z.number().int().min(1).max(50).default(20), offset: z.number().int().min(0).default(0) },
     readOnly: true,
     run: (ctx, a) => {

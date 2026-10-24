@@ -12,14 +12,14 @@ export interface AiServerInfo {
 const quote = (s: string) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
 
 /** Ready-to-paste settings for the AI apps we know. TOML uses literal strings so Windows backslashes need no escaping. */
-export function aiConfigSnippets(s: AiServerInfo): { claudeCode: string; claudeDesktop: string; codex: string } {
+export function aiConfigSnippets(s: AiServerInfo, name = 'mdedit'): { claudeCode: string; claudeDesktop: string; codex: string } {
   const env = Object.entries(s.env ?? {});
   const toml = (v: string) => (v.includes("'") ? JSON.stringify(v) : `'${v}'`);
   return {
-    claudeCode: ['claude mcp add', ...env.map(([k, v]) => `--env ${k}=${v}`), 'mdedit --', quote(s.command), ...s.args.map(quote)].join(' '),
-    claudeDesktop: JSON.stringify({ mcpServers: { mdedit: { command: s.command, args: s.args, ...(env.length ? { env: s.env } : {}) } } }, null, 2),
+    claudeCode: ['claude mcp add', ...env.map(([k, v]) => `--env ${k}=${v}`), `${name} --`, quote(s.command), ...s.args.map(quote)].join(' '),
+    claudeDesktop: JSON.stringify({ mcpServers: { [name]: { command: s.command, args: s.args, ...(env.length ? { env: s.env } : {}) } } }, null, 2),
     codex: [
-      '[mcp_servers.mdedit]',
+      `[mcp_servers.${name}]`,
       `command = ${toml(s.command)}`,
       `args = [${s.args.map(toml).join(', ')}]`,
       ...(env.length ? [`env = { ${env.map(([k, v]) => `${k} = ${toml(v)}`).join(', ')} }`] : []),

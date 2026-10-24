@@ -14,7 +14,7 @@ import {
 } from '@cadrel/market-library';
 import { DEFAULT_PORT, loadOrCreateToken, rotateToken, startIngestServer, type SampleLogEvent } from '@cadrel/market-server';
 import { Logger } from './log.js';
-import { launcherSource, type Handshake } from './launcher.js';
+import { launcherSource, readHandshake, type Handshake } from './launcher.js';
 import { RELEASE_REPO, checkForUpdate, downloadInstaller, type UpdateInfo } from './updater.js';
 import type { AppSettings, BookText, CommunityJob, IndexStatus, KeywordJob, KeywordLookupResult, MaintenanceStatus, IssueRow, McpSnippets, Status, TextJob } from '../shared/api.js';
 
@@ -74,6 +74,8 @@ export interface ServiceOptions {
   iconFile?: () => string | null;
   /** Test hook: what the MCP server answers to `initialize`; by default it is read from the server (`--print-handshake`). */
   mcpHandshake?: () => Promise<Handshake | null>;
+  /** The MCP server's name and the extension's wording. Default: BookScout's. */
+  mcpBrand?: McpBrand;
   /** Pause between autocomplete requests, in ms; tests set 0. */
   keywordDelayMs?: number;
 }
@@ -106,16 +108,34 @@ export interface TokenStatus {
   fromEnvironment: boolean;
 }
 
-export function buildMcpSnippets(launch: { command: string; args: string[]; env: Record<string, string> }): McpSnippets {
+/** What the MCP server is called in settings and in the Claude Desktop extension. A host app that carries one server for several modules passes its own. */
+export interface McpBrand {
+  /** The server's name in settings: "bookscout", "cadrel". */
+  id: string;
+  /** Display name: "BookScout", "Cadrel". */
+  name: string;
+  /** What the Claude Desktop extension says it does. */
+  description: string;
+  /** The extension file's name. */
+  file: string;
+}
+export const BOOKSCOUT_BRAND: McpBrand = {
+  id: 'bookscout',
+  name: 'BookScout',
+  description: 'Search and analyse the Kindle categories, books, reviews, texts and Reddit threads in your BookScout library.',
+  file: 'BookScout.mcpb'
+};
+
+export function buildMcpSnippets(launch: { command: string; args: string[]; env: Record<string, string> }, id = 'bookscout'): McpSnippets {
   const entry: Record<string, unknown> = { command: launch.command, args: launch.args };
   if (Object.keys(launch.env).length) entry.env = launch.env;
   const q = (s: string) => JSON.stringify(s);
   const envFlags = Object.entries(launch.env).map(([k, v]) => `-e ${k}=${v} `).join('');
   return {
     ...launch,
-    claudeDesktop: JSON.stringify({ mcpServers: { bookscout: entry } }, null, 2),
-    claudeCode: `claude mcp add bookscout ${envFlags}-- ${[launch.command, ...launch.args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ')}`,
-    codex: [`[mcp_servers.bookscout]`, `command = ${q(launch.command)}`, `args = [${launch.args.map(q).join(', ')}]`, ...(Object.keys(launch.env).length ? [`env = { ${Object.entries(launch.env).map(([k, v]) => `${k} = ${q(v)}`).join(', ')} }`] : [])].join('\n'),
+    claudeDesktop: JSON.stringify({ mcpServers: { [id]: entry } }, null, 2),
+    claudeCode: `claude mcp add ${id} ${envFlags}-- ${[launch.command, ...launch.args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ')}`,
+    codex: [`[mcp_servers.${id}]`, `command = ${q(launch.command)}`, `args = [${launch.args.map(q).join(', ')}]`, ...(Object.keys(launch.env).length ? [`env = { ${Object.entries(launch.env).map(([k, v]) => `${k} = ${q(v)}`).join(', ')} }`] : [])].join('\n'),
   };
 }
 
@@ -1184,7 +1204,7 @@ export class AppService {
   mcpConfig(): McpSnippets {
     const root = this.need().root;
     const base = this.opts.mcpLaunch?.() ?? { command: 'node', args: [path.resolve('packages/market-mcp/dist/main.mjs')], env: {} };
-    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] });
+    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? BOOKSCOUT_BRAND).id);
   }
 
   /**
@@ -1197,15 +1217,16 @@ export class AppService {
     const c = this.mcpConfig();
     // Claude Desktop wants the handshake answered within a fraction of a second; the server takes longer than that to start, so the launcher
     // answers it from what the server itself reports and hands over when the server is ready (see launcher.ts)
-    const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : this.readHandshake(c));
-    const launcher = launcherSource({ command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
+    const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : readHandshake(c));
+    const brand = this.opts.mcpBrand ?? BOOKSCOUT_BRAND;
+    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
     const manifest = {
       manifest_version: '0.2',
-      name: 'bookscout',
-      display_name: 'BookScout',
+      name: brand.id,
+      display_name: brand.name,
       version: /^\d+\.\d+\.\d+/.test(this.opts.version ?? '') ? this.opts.version : '0.0.0',
-      description: 'Search and analyse the Kindle categories, books, reviews, texts and Reddit threads in your BookScout library.',
-      author: { name: 'BookScout' },
+      description: brand.description,
+      author: { name: brand.name },
       icon: 'icon.png',
       server: { type: 'node', entry_point: 'server/launch.js', mcp_config: { command: 'node', args: ['${__dirname}/server/launch.js'] } },
       compatibility: { platforms: [process.platform] },
@@ -1215,25 +1236,9 @@ export class AppService {
     if (icon && fs.existsSync(icon)) files['icon.png'] = new Uint8Array(fs.readFileSync(icon));
     else delete (manifest as { icon?: string }).icon, (files['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2)));
     fs.mkdirSync(this.opts.userData, { recursive: true });
-    const file = path.join(this.opts.userData, 'BookScout.mcpb');
+    const file = path.join(this.opts.userData, brand.file);
     fs.writeFileSync(file, zipSync(files, { level: 9 }));
     return { file, earlyHandshake: handshake !== null };
-  }
-
-  /** Ask the MCP server what it answers to `initialize` (it prints that and exits without opening the library). Null if it cannot say. */
-  private readHandshake(c: { command: string; args: string[]; env: Record<string, string> }): Promise<Handshake | null> {
-    return new Promise((resolve) => {
-      execFile(c.command, [c.args[0] ?? '', '--print-handshake'], { env: { ...process.env, ...c.env }, timeout: 20000, maxBuffer: 1 << 20, windowsHide: true }, (err, stdout) => {
-        if (err) return resolve(null);
-        try {
-          const h = JSON.parse(stdout) as Handshake;
-          const ok = typeof h?.serverInfo?.name === 'string' && typeof h.serverInfo.version === 'string' && typeof h.instructions === 'string' && h.capabilities && typeof h.capabilities === 'object' && Array.isArray(h.protocolVersions) && h.protocolVersions.length > 0 && h.protocolVersions.every((v) => typeof v === 'string');
-          resolve(ok ? h : null);
-        } catch {
-          resolve(null);
-        }
-      });
-    });
   }
 
   onIndex(cb: () => void): () => void {

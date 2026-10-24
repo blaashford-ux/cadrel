@@ -1,4 +1,5 @@
 import { app } from 'electron';
+import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -18,6 +19,8 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
   const checks: { name: string; ok: boolean; detail?: string }[] = [];
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'cadrel-smoke-'));
+  const library = path.join(tmp, 'library');
+  const books = path.join(tmp, 'books');
 
   try {
     // Write: the whole export pipeline.
@@ -33,7 +36,6 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
   try {
     // Market: its library, vector extension and capture server, on a throwaway library and a spare port.
     const dataDir = path.join(tmp, 'market-data');
-    const library = path.join(tmp, 'library');
     await fs.mkdir(dataDir, { recursive: true });
     await fs.mkdir(library);
     await fs.writeFile(path.join(dataDir, 'config.json'), JSON.stringify({ libraryRoot: null, port: 49000 + Math.floor(Math.random() * 900) }));
@@ -75,8 +77,18 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
     check('market: the PDF reader extracts text', false, e instanceof Error ? e.message : String(e));
   }
 
-  const mcp = path.join(here, 'mcp.mjs');
-  check('market: the MCP server is bundled', await fs.stat(mcp).then((s) => s.isFile() && s.size > 10_000, () => false), mcp);
+  // The one MCP server, started the way an AI app starts it: this runtime acting as Node, on a project and a library.
+  try {
+    await fs.mkdir(path.join(books, 'Smoke', '.mdedit'), { recursive: true });
+    await fs.writeFile(path.join(books, 'Smoke', '.mdedit', 'project.json'), '{"status":"drafting"}');
+    await fs.writeFile(path.join(books, 'Smoke', 'Book.md'), '# One\n\nShe walked slowly to the door.\n');
+    const s = await mcpSession(path.join(here, 'mcp.mjs'), ['--root', books, '--library', library]);
+    check('mcp: the one server starts and names itself cadrel', s.name === 'cadrel', s.name);
+    check('mcp: it carries both modules\' tools', ['read_chapter', 'add_notes', 'top_books', 'search_book_text'].every((t) => s.tools.includes(t)), `${s.tools.length} tools`);
+    check('mcp: a writing tool reads the project', s.project === 'Smoke', s.project);
+  } catch (e) {
+    check('mcp: the one server starts', false, e instanceof Error ? e.message : String(e));
+  }
 
   const ok = checks.length > 0 && checks.every((c) => c.ok);
   await fs.writeFile(
@@ -85,4 +97,47 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
   );
   await fs.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
   return ok ? 0 : 1;
+}
+
+/** A minimal MCP client over stdio: initialize, list the tools, call list_projects. */
+async function mcpSession(script: string, args: string[]): Promise<{ name: string; tools: string[]; project: string }> {
+  const child = spawn(process.execPath, [script, ...args], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  let err = '';
+  child.stderr.on('data', (d) => (err += d));
+  const pending = new Map<number, (m: any) => void>();
+  let buf = '';
+  child.stdout.on('data', (d: Buffer) => {
+    buf += d.toString('utf8');
+    for (let i = buf.indexOf('\n'); i >= 0; i = buf.indexOf('\n')) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      try {
+        const m = JSON.parse(line);
+        if (m.id !== undefined) pending.get(m.id)?.(m);
+      } catch {
+        /* not a message */
+      }
+    }
+  });
+  const exited = new Promise<never>((_, reject) => child.on('exit', (code) => reject(new Error(`the server exited (${code}): ${err.trim().slice(-300)}`))));
+  const send = (msg: object) => child.stdin.write(JSON.stringify(msg) + '\n');
+  const request = (id: number, method: string, params: object = {}) =>
+    Promise.race([
+      new Promise<any>((resolve) => {
+        pending.set(id, resolve);
+        send({ jsonrpc: '2.0', id, method, params });
+      }),
+      exited,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`no answer to ${method} after 40 s: ${err.trim().slice(-300)}`)), 40_000).unref())
+    ]);
+  try {
+    const init = await request(1, 'initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'smoke', version: '0' } });
+    send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+    const list = await request(2, 'tools/list');
+    const call = await request(3, 'tools/call', { name: 'list_projects', arguments: {} });
+    const projects = JSON.parse(call.result.content[0].text) as { project: string }[];
+    return { name: init.result.serverInfo.name, tools: list.result.tools.map((t: { name: string }) => t.name), project: projects[0]?.project ?? '' };
+  } finally {
+    child.kill();
+  }
 }

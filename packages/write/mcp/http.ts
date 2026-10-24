@@ -15,6 +15,8 @@ import { agentFromClient, createServer, type ServerOptions } from './server';
 import { handleRest, openApiDocument } from './rest';
 
 export interface HttpOptions extends ServerOptions {
+  /** Builds the MCP server for each session. Default: MDEdit's own tools; the Cadrel server passes one that adds the other modules'. */
+  makeServer?: (o: ServerOptions) => McpServer | Promise<McpServer>;
   token: string;
   /** 0 picks a free port. */
   port: number;
@@ -93,7 +95,7 @@ export async function startHttp(o: HttpOptions): Promise<{ port: number; host: s
           const body = await readBody(req);
           if (!isInitializeRequest(body)) return send(res, 400, { error: 'Unknown or expired session. Send an initialize request first.' });
           if (sessions.size >= MAX_SESSIONS) return send(res, 503, { error: 'Too many open sessions. Try again shortly.' });
-          const mcp = createServer(o);
+          const mcp = await (o.makeServer ?? createServer)(o);
           const transport: StreamableHTTPServerTransport = new StreamableHTTPServerTransport({
             sessionIdGenerator: randomUUID,
             enableJsonResponse: true,

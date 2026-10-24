@@ -11,6 +11,12 @@ export const SERVER_CAPABILITIES = { tools: { listChanged: true } };
 
 export function createServer(ctx: ToolContext): McpServer {
   const server = new McpServer(SERVER_INFO, { instructions: SERVER_INSTRUCTIONS });
+  registerMarketTools(server, ctx);
+  return server;
+}
+
+/** BookScout's tools, registered on any MCP server (so one server can carry several modules' tools). */
+export function registerMarketTools(server: McpServer, ctx: ToolContext): void {
   for (const t of TOOLS) {
     server.registerTool(
       t.name,
@@ -33,5 +39,4 @@ export function createServer(ctx: ToolContext): McpServer {
       },
     );
   }
-  return server;
 }

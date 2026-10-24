@@ -7,7 +7,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { Logger } from './log.js';
-import { AppService } from './service.js';
+import { AppService, type McpBrand } from './service.js';
 import { CHANNELS } from '../shared/api.js';
 
 // Tests run the real app but must not open a real browser or a real folder dialog.
@@ -30,6 +30,10 @@ export interface MarketHost {
   willQuit(): void;
   /** When set, the self-updater is off and shows this message (the shell is updated as a whole). */
   updatesDisabledReason?: string;
+  /** The MCP server's name and the Claude Desktop extension's wording. Default: BookScout's. */
+  mcpBrand?: McpBrand;
+  /** How an AI app launches the MCP server. Default: BookScout's own bundled server next to the code. */
+  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
 }
 
 export interface MarketModule {
@@ -71,11 +75,14 @@ export function createMarketModule(host: MarketHost): MarketModule {
         }
       : undefined,
     // The server is bundled next to the app code. Installed: the app's own Node runs it. Development: the system Node.
-    mcpLaunch: () => ({
-      command: app.isPackaged ? process.execPath : 'node',
-      args: [path.join(host.codeDir, 'mcp.mjs')],
-      env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>,
-    }),
+    mcpLaunch:
+      host.mcpLaunch ??
+      (() => ({
+        command: app.isPackaged ? process.execPath : 'node',
+        args: [path.join(host.codeDir, 'mcp.mjs')],
+        env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>,
+      })),
+    mcpBrand: host.mcpBrand,
   });
 
   function applySettings() {

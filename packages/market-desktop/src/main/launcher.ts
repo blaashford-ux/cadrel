@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+
 /**
  * The launcher inside BookScout.mcpb. Claude Desktop runs it with its own Node and expects an answer to the MCP `initialize` request within a
  * fraction of a second, but the real server (the installed app's runtime loading the library) takes a few hundred milliseconds on a fast
@@ -15,6 +17,8 @@ export interface Handshake {
 }
 
 export interface LauncherConfig {
+  /** The product's name in log lines and error messages. Default "BookScout". */
+  label?: string;
   command: string;
   args: string[];
   env: Record<string, string>;
@@ -29,12 +33,13 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const cfg = __CONFIG__;
+const label = cfg.label || 'BookScout';
 const hs = cfg.handshake;
 const HS_ID = '__bookscout_initialize__';
 const started = Date.now();
 
 function log(message) {
-  console.error('[BookScout launcher] ' + message);
+  console.error('[' + label + ' launcher] ' + message);
   if (!cfg.logFile) return;
   try {
     fs.mkdirSync(path.dirname(cfg.logFile), { recursive: true });
@@ -44,7 +49,8 @@ function log(message) {
 }
 
 log('starting ' + cfg.command + ' (' + (hs ? 'answering the handshake early' : 'passing stdio through') + ')');
-const child = spawn(cfg.command, cfg.args, { stdio: ['pipe', 'pipe', 'pipe'], env: Object.assign({}, process.env, cfg.env), windowsHide: true });
+// arguments the client adds (an extension's settings, such as --root) go to the server after the fixed ones
+const child = spawn(cfg.command, cfg.args.concat(process.argv.slice(2)), { stdio: ['pipe', 'pipe', 'pipe'], env: Object.assign({}, process.env, cfg.env), windowsHide: true });
 
 let ready = !hs;
 let exited = false;
@@ -95,7 +101,7 @@ child.stderr.on('data', (d) => {
 });
 
 child.on('error', (e) => {
-  log('could not start the server (' + e.message + '). Is BookScout installed at ' + cfg.command + '? Install the extension again from BookScout > Settings.');
+  log('could not start the server (' + e.message + '). Is ' + label + ' installed at ' + cfg.command + '? Install the extension again from ' + label + '.');
   process.exit(1);
 });
 
@@ -107,7 +113,7 @@ child.on('exit', (code, sig) => {
   for (const raw of queue.splice(0)) {
     let m = null;
     try { m = JSON.parse(raw); } catch (e) { /* skip */ }
-    if (m && m.id !== undefined && m.method) fail(m.id, -32000, 'BookScout stopped before it could answer (' + why + '). ' + (cfg.logFile ? 'Details: ' + cfg.logFile : 'Open BookScout and check it is running.'));
+    if (m && m.id !== undefined && m.method) fail(m.id, -32000, label + ' stopped before it could answer (' + why + '). ' + (cfg.logFile ? 'Details: ' + cfg.logFile : 'Open ' + label + ' and check it is running.'));
   }
   process.exit(code == null ? (sig ? 1 : 0) : code);
 });
@@ -142,6 +148,29 @@ if (hs) {
 for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { if (!exited) child.kill(s); });
 setTimeout(() => { if (!ready && !exited) log('the server has not finished starting after 60 s'); }, 60000).unref();
 `;
+
+/** Ask an MCP server what it answers to `initialize` (it prints that and exits without opening anything). Null if it cannot say. */
+export function readHandshake(c: { command: string; args: string[]; env: Record<string, string> }): Promise<Handshake | null> {
+  return new Promise((resolve) => {
+    execFile(c.command, [c.args[0] ?? '', '--print-handshake'], { env: { ...process.env, ...c.env }, timeout: 20000, maxBuffer: 1 << 20, windowsHide: true }, (err, stdout) => {
+      if (err) return resolve(null);
+      try {
+        const h = JSON.parse(stdout) as Handshake;
+        const ok =
+          typeof h?.serverInfo?.name === 'string' &&
+          typeof h.serverInfo.version === 'string' &&
+          typeof h.instructions === 'string' &&
+          !!h.capabilities &&
+          typeof h.capabilities === 'object' &&
+          Array.isArray(h.protocolVersions) &&
+          h.protocolVersions.length > 0;
+        resolve(ok ? h : null);
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
 
 export function launcherSource(cfg: LauncherConfig): string {
   return SOURCE.replace('__CONFIG__', () => JSON.stringify(cfg));

@@ -140,13 +140,13 @@ describe('MCP server over stdio', () => {
     expect((await call('get_text_block', { asin: 'B0C1R52V2J', kind: 'about_author', ordinal: 9 })).isError).toBe(true);
   });
 
-  it('search_text uses keywords and meaning, with filters', async () => {
-    const r = await call('search_text', { query: 'forgotten gods and a rapidly deteriorating AI system', limit: 3 });
+  it('search_book_text uses keywords and meaning, with filters', async () => {
+    const r = await call('search_book_text', { query: 'forgotten gods and a rapidly deteriorating AI system', limit: 3 });
     expect(r.json.mode).toBe('keyword+meaning');
     expect(r.json.hits.some((h: any) => h.asin === 'B0C1R52V2J' && h.kind === 'blurb')).toBe(true);
-    const f = await call('search_text', { query: 'crawlers', category: 'humorous', kinds: ['blurb'] });
+    const f = await call('search_book_text', { query: 'crawlers', category: 'humorous', kinds: ['blurb'] });
     expect(f.json.hits.every((h: any) => h.kind === 'blurb')).toBe(true);
-    expect((await call('search_text', { query: 'x', category: 'nope' })).isError).toBe(true);
+    expect((await call('search_book_text', { query: 'x', category: 'nope' })).isError).toBe(true);
   });
 
   it('cohort_stats and distribution', async () => {
@@ -317,7 +317,7 @@ describe('manuscript tools', () => {
     const status = await call('library_status');
     expect(status.json.books_with_text).toBe(1);
     expect((await call('get_book', { asin: 'B0C1R52V2J' })).json.full_text[0]).toMatchObject({ source: 'whole book', chapters: 2 });
-    const found = await call('search_text', { query: 'baker sighed oven', kinds: ['manuscript'], limit: 3 });
+    const found = await call('search_book_text', { query: 'baker sighed oven', kinds: ['manuscript'], limit: 3 });
     expect(found.json.hits[0]).toMatchObject({ asin: 'B0C1R52V2J', kind: 'manuscript' });
   });
 });
