@@ -1,6 +1,6 @@
 import type { Overview, Page } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, greeting, percent, STATUS_LABEL } from './format';
+import { ago, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
 
 interface Props {
   overview: Overview | null;
@@ -35,7 +35,7 @@ export function Home({ overview, onGo }: Props) {
               <span className="chip">{STATUS_LABEL[recent.status] ?? recent.status}</span>
             </div>
             <p className="muted">
-              {formatWords(recent.words)} words · edited {ago(recent.lastEdited, now)}
+              {wordsLabel(recent.words)} · edited {ago(recent.lastEdited, now)}
             </p>
             {pct !== null && (
               <div className="bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={`${recent.name} progress toward its word goal`}>

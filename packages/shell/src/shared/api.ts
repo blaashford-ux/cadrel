@@ -17,7 +17,8 @@ export interface WindowInfo {
 export interface WriteProjectRow {
   name: string;
   status: string;
-  words: number;
+  /** Words in the project's active manuscript, or null when none has been chosen (nothing is counted then). */
+  words: number | null;
   /** Words the project aims for, or null if no goal is set. */
   goalWords: number | null;
   /** Milliseconds since epoch, or null if nothing has been written. */

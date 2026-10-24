@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, formatWords, greeting, percent } from '../src/renderer/format';
+import { ago, formatWords, greeting, percent, wordsLabel } from '../src/renderer/format';
 
 describe('format', () => {
   const now = Date.UTC(2026, 9, 24, 12, 0, 0);
@@ -21,6 +21,12 @@ describe('format', () => {
     expect(percent(10, 0)).toBeNull();
     expect(percent(25000, 100000)).toBe(25);
     expect(percent(150000, 100000)).toBe(100);
+  });
+  it('a project with no active manuscript says so instead of showing 0', () => {
+    expect(wordsLabel(null)).toBe('no active manuscript');
+    expect(wordsLabel(0)).toBe('0 words');
+    expect(wordsLabel(81234)).toBe('81,234 words');
+    expect(percent(null, 80000)).toBeNull();
   });
   it('greeting follows the hour', () => {
     expect([2, 9, 14, 21].map(greeting)).toEqual(['Working late', 'Good morning', 'Good afternoon', 'Good evening']);

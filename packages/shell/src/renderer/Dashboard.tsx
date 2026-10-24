@@ -1,6 +1,6 @@
 import type { MarketCategoryRow, Overview, Page, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, percent, STATUS_LABEL } from './format';
+import { ago, formatWords, percent, STATUS_LABEL, wordsLabel } from './format';
 
 interface Props {
   overview: Overview | null;
@@ -26,7 +26,7 @@ function ProjectsTable({ rows, now }: { rows: WriteProjectRow[]; now: number }) 
             <tr key={p.name}>
               <th scope="row">{p.name}</th>
               <td>{STATUS_LABEL[p.status] ?? p.status}</td>
-              <td className="num">{formatWords(p.words)}</td>
+              <td className="num">{p.words === null ? <span className="muted">none active</span> : formatWords(p.words)}</td>
               <td>
                 {pct === null ? (
                   <span className="muted">no goal</span>
@@ -78,7 +78,7 @@ export function Dashboard({ overview, onGo }: Props) {
   if (!overview) return <p className="muted">Loading…</p>;
   const { write, market } = overview;
   const live = write.projects.filter((p) => !p.archived);
-  const totalWords = live.reduce((n, p) => n + p.words, 0);
+  const totalWords = live.reduce((n, p) => n + (p.words ?? 0), 0);
 
   return (
     <div className="dashboard">
