@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import type { BookDetails } from '../shared/export/model';
+import { useState } from 'react';
 import { basename } from '../shared/paths';
 import { BackMatterForm, FrontMatterForm, TitleCopyrightForm } from './bookForms';
+import { LayerProvider } from './layerEditor';
+import { useBookLayers } from './useBookLayers';
 import { useEscape } from './useEscape';
 
 type Tab = 'title' | 'front' | 'back';
@@ -15,40 +16,22 @@ interface Props {
 
 /** The Book Details form: title page, copyright page, optional front matter, and back matter. */
 export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
-  const [details, setDetails] = useState<BookDetails | null>(null);
-  const [initial, setInitial] = useState('');
-  const [damaged, setDamaged] = useState(false);
+  const { loaded, layer, dirty, error: loadError, save: saveLayers } = useBookLayers(file);
   const [tab, setTab] = useState<Tab>('title');
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    window.mdedit
-      .getBookDetails(file)
-      .then((r) => {
-        if (!live) return;
-        setDetails(r.details);
-        setInitial(JSON.stringify(r.details));
-        setDamaged(r.damaged);
-      })
-      .catch((e) => live && setError(String(e)));
-    return () => {
-      live = false;
-    };
-  }, [file]);
-
-  const dirty = details !== null && JSON.stringify(details) !== initial;
+  const damaged = loaded?.damaged ?? false;
+  const details = layer?.details ?? null;
 
   const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
   useEscape(() => (confirmDiscard ? setConfirmDiscard(false) : requestClose()));
 
   const save = async () => {
-    if (!details || saving) return;
+    if (!layer || saving) return;
     setSaving(true);
     try {
-      await window.mdedit.saveBookDetails(file, details);
+      await saveLayers();
       onSaved?.();
       onClose();
     } catch (e) {
@@ -57,13 +40,13 @@ export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
     }
   };
 
-  if (!details) {
+  if (!details || !layer) {
     return (
       <div className="modal-backdrop">
         <div className="modal wide" role="dialog" aria-label="Book Details">
           <h3>Book Details</h3>
-          {error ? <div className="banner error">{error}</div> : <p className="muted">Loading…</p>}
-          {error && (
+          {error || loadError ? <div className="banner error">{error ?? loadError}</div> : <p className="muted">Loading…</p>}
+          {(error || loadError) && (
             <div className="modal-actions">
               <button onClick={onClose}>Close</button>
             </div>
@@ -73,7 +56,7 @@ export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
     );
   }
 
-  const set = (patch: Partial<BookDetails>) => setDetails({ ...details, ...patch });
+  const set = layer.set;
 
   return (
     <div className="modal-backdrop">
@@ -112,11 +95,16 @@ export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
           )}
           {error && <div className="banner error">{error}</div>}
 
-          {tab === 'title' && <TitleCopyrightForm details={details} set={set} />}
+          <p className="muted small">
+            Settings marked “From project settings” or “From app settings” follow those. Change one here to give this book its own value; Reset hands it back.
+          </p>
+          <LayerProvider value={layer}>
+            {tab === 'title' && <TitleCopyrightForm details={details} set={set} />}
 
-          {tab === 'front' && <FrontMatterForm details={details} set={set} />}
+            {tab === 'front' && <FrontMatterForm details={details} set={set} />}
 
-          {tab === 'back' && <BackMatterForm details={details} set={set} />}
+            {tab === 'back' && <BackMatterForm details={details} set={set} />}
+          </LayerProvider>
         </div>
 
         <div className="modal-actions">

@@ -1,6 +1,7 @@
 import type { Content, PhrasingContent, Root } from 'mdast';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
+import { splitAligned, stripFences, type Align } from '../align';
 import { splitChapters } from '../chapters';
 import { countWords } from '../words';
 import { hasTypographicQuotes, smartenString } from './quotes';
@@ -15,11 +16,11 @@ export type Inline =
   | { t: 'br' };
 
 export type Block =
-  | { t: 'para'; inlines: Inline[] }
-  | { t: 'sub'; level: 2 | 3 | 4 | 5 | 6; inlines: Inline[] }
+  | { t: 'para'; inlines: Inline[]; align?: Align }
+  | { t: 'sub'; level: 2 | 3 | 4 | 5 | 6; inlines: Inline[]; align?: Align }
   | { t: 'scene' }
-  | { t: 'quote'; blocks: Block[] }
-  | { t: 'list'; ordered: boolean; items: Block[][] }
+  | { t: 'quote'; blocks: Block[]; align?: Align }
+  | { t: 'list'; ordered: boolean; items: Block[][]; align?: Align }
   | { t: 'code'; text: string };
 
 export interface ManuscriptChapter {
@@ -138,6 +139,12 @@ function toBlocks(nodes: Content[], ctx: Ctx): Block[] {
   return out;
 }
 
+/** Marks the top-level blocks of an alignment fence (scene breaks and code are always as they are). */
+function withAlign(blocks: Block[], align: Align | null): Block[] {
+  if (!align) return blocks;
+  return blocks.map((b): Block => (b.t === 'para' || b.t === 'sub' || b.t === 'quote' || b.t === 'list' ? { ...b, align } : b));
+}
+
 /** Drops leading/trailing scene breaks and collapses repeated ones. */
 function tidyScenes(blocks: Block[], ctx: Ctx): Block[] {
   const out: Block[] = [];
@@ -167,16 +174,20 @@ export function parseManuscript(source: string, chapterLevel = 1): Manuscript {
       if (text) warnings.push(`Text before the first Heading ${level} was left out (${countWords(text).toLocaleString()} words).`);
       continue;
     }
-    const tree = parser.parse(c.raw) as Root;
-    const headIdx = tree.children.findIndex((n) => n.type === 'heading' && n.depth === level);
-    const head = tree.children[headIdx];
+    // each alignment fence is parsed on its own, so its blocks can carry the alignment
+    const parts = splitAligned(c.raw).map((seg) => ({ align: seg.align, nodes: (parser.parse(seg.text) as Root).children }));
+    const all = parts.flatMap((p) => p.nodes.map((node) => ({ node, align: p.align })));
+    const headIdx = all.findIndex((x) => x.node.type === 'heading' && x.node.depth === level);
+    const head = all[headIdx]?.node;
     const title = head && head.type === 'heading' ? inlinesToPlain(toInlines(head.children, new Ctx(''))) : c.title;
     const ctx = new Ctx(title || '(untitled)', level);
-    const body = tree.children.filter((_, i) => i !== headIdx);
-    const blocks = tidyScenes(toBlocks(body, ctx), ctx);
+    const blocks = tidyScenes(
+      parts.flatMap((p) => withAlign(toBlocks(p.nodes.filter((n) => n !== head), ctx), p.align)),
+      ctx
+    );
     if (blocks.length === 0) ctx.warn('this chapter is empty');
     warnings.push(...ctx.warnings);
-    chapters.push({ title: title.trim(), blocks, words: countWords(c.raw) });
+    chapters.push({ title: title.trim(), blocks, words: countWords(stripFences(c.raw)) });
   }
   return { chapters, warnings };
 }
@@ -225,11 +236,11 @@ function smartenBlocks(blocks: Block[]): Block[] {
   return blocks.map((b): Block => {
     switch (b.t) {
       case 'para':
-        return { t: 'para', inlines: smartenInlines(b.inlines) };
+        return { ...b, inlines: smartenInlines(b.inlines) };
       case 'sub':
         return { ...b, inlines: smartenInlines(b.inlines) };
       case 'quote':
-        return { t: 'quote', blocks: smartenBlocks(b.blocks) };
+        return { ...b, blocks: smartenBlocks(b.blocks) };
       case 'list':
         return { ...b, items: b.items.map(smartenBlocks) };
       default:

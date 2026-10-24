@@ -14,6 +14,7 @@ import {
   type ISectionOptions
 } from 'docx';
 import type { BookBuild, BuiltChapter } from './assemble';
+import type { Align } from '../align';
 import type { Block, Inline } from './manuscript';
 import type { MatterPage, PageBlock } from './matter';
 import { safeUrl } from './matter';
@@ -45,6 +46,8 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   const indent = s.paragraphStyle === 'indent';
   const sceneBreak = book.settings.sceneBreak;
   const margin = convertInchesToTwip(0.75);
+  /** One blank line (in twips) after every back-matter paragraph, line and link. */
+  const BACK_GAP = Math.round(size * 10 * 1.2);
 
   const run = (text: string, st: RunStyle = {}, extra: Record<string, unknown> = {}) =>
     new TextRun({ text, font: st.code ? 'Courier New' : FONT, size, bold: st.bold, italics: st.italics, ...extra });
@@ -72,13 +75,16 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
     });
   const textOf = (inl: Inline[]): string => inl.map((x) => (x.t === 'text' || x.t === 'code' ? x.text : x.t === 'br' ? ' ' : textOf(x.children))).join('');
 
-  const body = (children: (TextRun | ExternalHyperlink)[], opts: { first?: boolean; quote?: boolean } = {}) =>
+  const alignment = (a: Align | undefined, fallback: (typeof AlignmentType)[keyof typeof AlignmentType]) =>
+    a === 'center' ? AlignmentType.CENTER : a === 'right' ? AlignmentType.RIGHT : a === 'left' ? AlignmentType.LEFT : a === 'justify' ? AlignmentType.JUSTIFIED : fallback;
+  const bodyDefault = s.bodyAlign === 'left' ? AlignmentType.LEFT : AlignmentType.JUSTIFIED;
+  const body = (children: (TextRun | ExternalHyperlink)[], opts: { first?: boolean; quote?: boolean; align?: Align } = {}) =>
     new Paragraph({
       children,
-      alignment: AlignmentType.JUSTIFIED,
+      alignment: alignment(opts.align, bodyDefault),
       spacing: { before: 0, after: 0 },
       indent: {
-        firstLine: indent && !opts.first && !opts.quote ? Math.round(0.3 * 1440) : 0,
+        firstLine: indent && !opts.first && !opts.quote && opts.align !== 'center' && opts.align !== 'right' ? Math.round(0.3 * 1440) : 0,
         ...(opts.quote ? { left: convertInchesToTwip(0.4), right: convertInchesToTwip(0.4) } : {})
       }
     });
@@ -86,14 +92,14 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   const centered = (children: TextRun[], after = 0) => new Paragraph({ children, alignment: AlignmentType.CENTER, spacing: { before: 0, after } });
 
   /** Body blocks → paragraphs, with the blank (nbsp) paragraph between consecutive items when the style asks for it. */
-  const blocksToParagraphs = (blocks: Block[], quote = false): Paragraph[] => {
+  const blocksToParagraphs = (blocks: Block[], quote = false, inherit?: Align): Paragraph[] => {
     const items: { p: Paragraph[]; kind: Block['t'] }[] = [];
     let prev: Block['t'] | null = null;
     for (const b of blocks) {
       const first = prev === null || prev === 'scene' || prev === 'sub';
       switch (b.t) {
         case 'para':
-          items.push({ kind: 'para', p: [body(runsFor(b.inlines), { first, quote })] });
+          items.push({ kind: 'para', p: [body(runsFor(b.inlines), { first, quote, align: b.align ?? inherit })] });
           break;
         case 'scene':
           items.push({ kind: 'scene', p: [centered([run(sceneBreak)])] });
@@ -101,11 +107,11 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
         case 'sub':
           items.push({
             kind: 'sub',
-            p: [new Paragraph({ children: runsFor(b.inlines, { bold: true }), alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 } })]
+            p: [new Paragraph({ children: runsFor(b.inlines, { bold: true }), alignment: alignment(b.align, AlignmentType.CENTER), spacing: { before: 0, after: 0 } })]
           });
           break;
         case 'quote':
-          items.push({ kind: 'quote', p: blocksToParagraphs(b.blocks, true) });
+          items.push({ kind: 'quote', p: blocksToParagraphs(b.blocks, true, b.align) });
           break;
         case 'list':
           items.push({
@@ -116,7 +122,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
                   ? [
                       new Paragraph({
                         children: runsFor(blk.inlines),
-                        alignment: AlignmentType.LEFT,
+                        alignment: alignment(b.align, AlignmentType.LEFT),
                         spacing: { before: 0, after: 0 },
                         ...(b.ordered ? { numbering: { reference: 'ordered', level: 0, instance: idx } } : { bullet: { level: 0 } })
                       })
@@ -141,7 +147,10 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
   };
 
   // ---- front matter -----------------------------------------------------------------------
-  const pageBlock = (b: PageBlock, pageBreakBefore = false): Paragraph => {
+  /** Text runs for a field value; typed newlines become line breaks. */
+  const textRuns = (text: string, st: RunStyle = {}) =>
+    text.split('\n').map((l, i) => run(l, st, i > 0 ? { break: 1 } : {}));
+  const pageBlock = (b: PageBlock, pageBreakBefore = false, backMatter = false): Paragraph => {
     const pb = pageBreakBefore ? { pageBreakBefore: true } : {};
     switch (b.t) {
       case 'title':
@@ -153,15 +162,15 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
       case 'heading':
         return new Paragraph({ children: [new TextRun({ text: b.text, font: FONT, size: Math.round(size * 1.4), bold: true })], alignment: AlignmentType.CENTER, spacing: { before: 0, after: 360 }, ...pb });
       case 'line':
-        return new Paragraph({ children: [run(b.text, { bold: b.bold })], alignment: AlignmentType.LEFT, spacing: { before: 0, after: 120 }, ...pb });
+        return new Paragraph({ children: textRuns(b.text, { bold: b.bold }), alignment: AlignmentType.LEFT, spacing: { before: 0, after: backMatter ? BACK_GAP : 120 }, ...pb });
       case 'para': {
         const align = b.align === 'center' ? AlignmentType.CENTER : b.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT;
-        return new Paragraph({ children: [run(b.text, { bold: b.bold, italics: b.italic })], alignment: align, spacing: { before: 0, after: 180 }, ...pb });
+        return new Paragraph({ children: textRuns(b.text, { bold: b.bold, italics: b.italic }), alignment: align, spacing: { before: 0, after: backMatter ? BACK_GAP : 180 }, ...pb });
       }
       case 'link':
         return new Paragraph({
           children: [new ExternalHyperlink({ link: safeUrl(b.url), children: [new TextRun({ text: b.label, font: FONT, size, color: '0563C1', underline: {} })] })],
-          spacing: { before: 0, after: 120 },
+          spacing: { before: 0, after: backMatter ? BACK_GAP : 120 },
           ...pb
         });
     }
@@ -226,7 +235,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
             pageBreakBefore: true
           })
         );
-      } else bodyChildren.push(pageBlock(b, i === 0));
+      } else bodyChildren.push(pageBlock(b, i === 0, true));
     });
   }
 

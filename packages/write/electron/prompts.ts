@@ -68,3 +68,17 @@ export async function confirmRecover(win: BrowserWindow | null, fileName: string
   });
   return response === 0;
 }
+
+export async function confirmMarkEdited(win: BrowserWindow | null, chapterTitle: string): Promise<boolean> {
+  const response = await show(win, {
+    type: 'question',
+    title: 'MDEdit',
+    message: `Mark "${chapterTitle}" as edited?`,
+    detail: 'Edited chapters show a green dot in the file list.',
+    buttons: ['Mark Edited', 'Not Yet'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true
+  });
+  return response === 0;
+}

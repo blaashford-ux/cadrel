@@ -1,4 +1,5 @@
 import { Icon } from './Icon';
+import { justLongPressed, longPressProps } from './longPress';
 import { useEffect, useRef } from 'react';
 import { navigate, type NavKey, type Row } from './treeRows';
 
@@ -84,11 +85,8 @@ export function Tree(p: Props) {
             className={'row ' + r.kind + (active ? ' active' : '') + (r.key === p.focusKey ? ' focused' : '')}
             style={{ paddingLeft: 8 + r.depth * 14 }}
             onFocus={() => p.onFocusKey(r.key)}
-            onClick={() => p.onActivate(r)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              p.onContextMenu(r, e.clientX, e.clientY);
-            }}
+            onClick={() => !justLongPressed() && p.onActivate(r)}
+            {...longPressProps((x, y) => p.onContextMenu(r, x, y))}
           >
             {r.expandable ? (
               <span
@@ -104,6 +102,9 @@ export function Tree(p: Props) {
               </span>
             ) : (
               <span className="caret" aria-hidden />
+            )}
+            {r.edit && (
+              <span className={`edit-dot ${r.edit}`} title={r.edit === 'done' ? 'Edited' : 'Not yet edited'} aria-label={r.edit === 'done' ? 'edited' : 'not yet edited'} />
             )}
             <span className="label">
               {r.kind !== 'chapter' && <Icon name={r.kind === 'dir' ? 'folder' : 'file'} size={15} className={'kind-' + r.kind} />}

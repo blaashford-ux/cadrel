@@ -3,7 +3,7 @@ import type { BookBuild, BuiltChapter } from './assemble';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { MatterPage } from './matter';
 import { bundledFont, embeddedFileName, FONT_FILES, fontFaceCss, fontStack } from './fonts';
-import type { ParagraphStyle } from './model';
+import type { BodyAlign, ParagraphStyle } from './model';
 
 /** The files of a bundled font family, to embed. Keys are FONT_FILES names. */
 export type EpubFonts = Record<string, Uint8Array>;
@@ -17,16 +17,17 @@ export interface EpubCover {
 const XHTML_NS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"';
 
 /** The skill's EPUB stylesheet, with the per-book options applied. */
-export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; dropCaps: boolean; font?: string; embedFont?: boolean }): string {
+export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; bodyAlign?: BodyAlign; dropCaps: boolean; font?: string; embedFont?: boolean }): string {
   const stack = fontStack(opts.font ?? 'EB Garamond');
   const bundled = bundledFont(opts.font ?? 'EB Garamond');
   const faces = opts.embedFont && bundled ? fontFaceCss(bundled, (f) => `fonts/${embeddedFileName(bundled, f)}`) + '\n' : '';
+  const al = opts.bodyAlign === 'left' ? 'left' : 'justify';
   const para =
     opts.paragraphStyle === 'blockGap'
-      ? 'p { text-align: justify; text-indent: 0; margin: 0 0 1em 0; }'
+      ? `p { text-align: ${al}; text-indent: 0; margin: 0 0 1em 0; }`
       : opts.paragraphStyle === 'blockNoGap'
-        ? 'p { text-align: justify; text-indent: 0; margin: 0; }'
-        : 'p { text-align: justify; text-indent: 1.5em; margin: 0; }\np.first, p.center, p.right, p.scenebreak, p.booktitle, p.booksubtitle, p.bookauthor, p.crline, p.crpara, p.linkline { text-indent: 0; }';
+        ? `p { text-align: ${al}; text-indent: 0; margin: 0; }`
+        : `p { text-align: ${al}; text-indent: 1.5em; margin: 0; }\np.first, p.al-center, p.al-right, p.center, p.right, p.scenebreak, p.booktitle, p.booksubtitle, p.bookauthor, p.crline, p.crpara, p.linkline { text-indent: 0; }`;
   return `${faces}h1 {
   font-family: ${stack};
   font-size: 1.6em;
@@ -60,6 +61,11 @@ p.bookauthor { text-align: center; font-weight: bold; font-size: 1.3em; margin: 
 .centered-page { margin-top: 20%; }
 p.center { text-align: center; }
 p.right { text-align: right; }
+.al-left { text-align: left; }
+.al-center { text-align: center; }
+.al-right { text-align: right; }
+.al-justify { text-align: justify; }
+p.al-center, p.al-right { text-indent: 0; }
 p.linkline { text-align: left; margin: 0 0 0.6em 0; }
 .backpage h1.matter { margin-top: 1em; }
 p.cover { text-align: center; margin: 0; }
@@ -122,7 +128,7 @@ export function buildEpub(book: BookBuild, cover?: EpubCover, fonts?: EpubFonts)
   const m = book.meta;
   const bundled = bundledFont(s.epub.font);
   const embed = !!bundled && !!fonts && FONT_FILES.every((f) => fonts[f.file]);
-  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, dropCaps: s.epub.dropCaps, font: s.epub.font, embedFont: embed });
+  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, bodyAlign: s.epub.bodyAlign, dropCaps: s.epub.dropCaps, font: s.epub.font, embedFont: embed });
   const lang = m.language;
   const files: Record<string, string> = {};
   const items: Item[] = [];

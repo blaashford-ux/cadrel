@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { defaultAppDefaults, type AppDefaults } from '../shared/appDefaults';
 import type { BookDetails } from '../shared/export/model';
 import { BackMatterForm, FrontMatterForm, TitleCopyrightForm } from './bookForms';
@@ -6,9 +6,12 @@ import { OutputsForm, TextForm } from './exportForms';
 import { Field, Select } from './formParts';
 import { TemplateEditor, type ProjectsDraft } from './TemplateEditor';
 import { templateErrors, type ProjectsConfig } from '../shared/projects';
+import { sanitizeThemeCustom, type ThemeCustom } from '../shared/theme';
+import { AppearanceForm } from './AppearanceForm';
+import { applyThemeCustom } from './applyTheme';
 import { useEscape } from './useEscape';
 
-type Tab = 'chapters' | 'title' | 'front' | 'back' | 'export' | 'projects';
+type Tab = 'appearance' | 'chapters' | 'title' | 'front' | 'back' | 'export' | 'projects';
 
 interface Props {
   /** Saves the settings; resolves false if that was cancelled or failed (the dialog then stays open). */
@@ -32,12 +35,22 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
   const [pInitial, setPinitial] = useState('');
   const [projectCount, setProjectCount] = useState(0);
   const [tab, setTab] = useState<Tab>('chapters');
+  // Theme colours: shown on the page as they are changed, and put back to the saved ones if the dialog closes without saving.
+  const [theme, setTheme] = useState<ThemeCustom | undefined>(undefined);
+  const [themeInitial, setThemeInitial] = useState('');
+  const savedTheme = useRef<ThemeCustom | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let live = true;
+    void window.mdedit.getPrefs().then((p) => {
+      if (!live) return;
+      savedTheme.current = p.themeCustom;
+      setTheme(p.themeCustom);
+      setThemeInitial(JSON.stringify(p.themeCustom ?? null));
+    });
     window.mdedit
       .getAppDefaults()
       .then((d) => {
@@ -61,9 +74,17 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
     };
   }, []);
 
+  useEffect(() => () => applyThemeCustom(savedTheme.current), []);
+  const changeTheme = (next: ThemeCustom | undefined) => {
+    setTheme(next);
+    applyThemeCustom(next);
+  };
+  const themeDirty = JSON.stringify(theme ?? null) !== themeInitial;
   const projectsDirty = pdraft !== null && JSON.stringify(pdraft) !== pInitial;
   const projectErrors = pdraft ? pdraft.templates.flatMap((t) => templateErrors(t).map((e) => `${t.name || '(unnamed)'}: ${e}`)) : [];
-  const dirty = (defaults !== null && JSON.stringify(defaults) !== initial) || projectsDirty;
+  const dirty = (defaults !== null && JSON.stringify(defaults) !== initial) || projectsDirty || themeDirty;
+  // First time through: the default Root Folder was never saved (and may not exist yet), so Save must work without a change.
+  const needsSetup = config !== null && (!config.setupDone || !config.rootExists);
   const requestClose = () => (dirty ? setConfirmDiscard(true) : onClose());
   useEscape(() => (confirmDiscard ? setConfirmDiscard(false) : requestClose()));
 
@@ -77,7 +98,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
       setSaving(false);
       return;
     }
-    if (projectsDirty && pdraft && config) {
+    if ((projectsDirty || needsSetup) && pdraft && config) {
       const newRoot = pdraft.rootFolder ?? config.defaultRoot;
       try {
         if (pdraft.moveProjects && newRoot !== config.root) {
@@ -86,7 +107,13 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
           const r = await window.mdedit.moveProjects(newRoot);
           if (r.failed.length) setError(`Some projects couldn’t be moved: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`);
         }
-        await window.mdedit.setProjectsConfig({ rootFolder: pdraft.rootFolder, templates: pdraft.templates, defaultTemplateId: pdraft.defaultTemplateId, reopenLast: pdraft.reopenLast });
+        await window.mdedit.setProjectsConfig({
+          rootFolder: needsSetup ? newRoot : pdraft.rootFolder, // saves the default too, and creates the folder
+          templates: pdraft.templates,
+          defaultTemplateId: pdraft.defaultTemplateId,
+          reopenLast: pdraft.reopenLast,
+          ...(needsSetup ? { setupDone: true } : {}),
+        });
       } catch (e) {
         setError(`Could not save the project settings: ${e instanceof Error ? e.message : e}`);
         setSaving(false);
@@ -94,7 +121,14 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
       }
     }
     const ok = await onSave(defaults);
-    if (ok) onClose();
+    if (ok) {
+      if (themeDirty) {
+        const saved = sanitizeThemeCustom(theme);
+        window.mdedit.setPrefs({ themeCustom: saved });
+        savedTheme.current = saved;
+      }
+      onClose();
+    }
     else setSaving(false);
   };
 
@@ -140,6 +174,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
           {(
             [
               ['chapters', 'Chapters'],
+              ['appearance', 'Appearance'],
               ['title', 'Title & copyright'],
               ['front', 'Front matter'],
               ['back', 'Back matter'],
@@ -155,6 +190,8 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
 
         <div className="dialog-body">
           {error && <div className="banner error">{error}</div>}
+
+          {tab === 'appearance' && <AppearanceForm custom={theme} onChange={changeTheme} />}
 
           {tab === 'chapters' && (
             <section>
@@ -232,7 +269,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
               <button type="button" onClick={requestClose}>
                 Cancel
               </button>
-              <button type="submit" className="primary" disabled={saving || !dirty}>
+              <button type="submit" className="primary" disabled={saving || !(dirty || needsSetup)}>
                 Save
               </button>
             </div>

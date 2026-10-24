@@ -50,47 +50,49 @@ export function TemplateEditor({ config, draft, setDraft, app, projectCount }: P
 
   return (
     <div className="projects-settings">
-      <section>
-        <h4>Root Folder</h4>
-        <p className="muted small">Your projects live here, one folder each. Anything you can do in File Explorer still works.</p>
-        <div className="inline">
-          <code className="path root-path">{root}</code>
-          <button type="button" onClick={() => void chooseRoot()}>
-            Change…
-          </button>
-          {draft.rootFolder !== null && (
-            <button type="button" onClick={() => setDraft({ ...draft, rootFolder: null, moveProjects: false })}>
-              Use the default
+      {window.mdedit.capabilities.folderPicker && (
+        <section>
+          <h4>Root Folder</h4>
+          <p className="muted small">Your projects live here, one folder each. Anything you can do in File Explorer still works.</p>
+          <div className="inline">
+            <code className="path root-path">{root}</code>
+            <button type="button" onClick={() => void chooseRoot()}>
+              Change…
             </button>
-          )}
-          <button type="button" onClick={() => window.mdedit.reveal(config.root)} disabled={!config.rootExists}>
-            Show in Explorer
-          </button>
-        </div>
-        {!config.rootExists && <p className="warn-text small">This folder doesn’t exist yet; it is created when you save or make your first project.</p>}
-        {changedRoot && (
-          <div className="banner info" role="status">
-            <div>
-              New Root Folder: <strong>{root}</strong>
-            </div>
-            {projectCount > 0 ? (
-              <>
-                <label className="toggle">
-                  <input type="radio" name="move" checked={!draft.moveProjects} onChange={() => setDraft({ ...draft, moveProjects: false })} />
-                  <span>Just use the new folder (your {projectCount} project{projectCount === 1 ? '' : 's'} stay where they are and won’t be listed)</span>
-                </label>
-                <label className="toggle">
-                  <input type="radio" name="move" checked={draft.moveProjects} onChange={() => setDraft({ ...draft, moveProjects: true })} />
-                  <span>Move my {projectCount} project{projectCount === 1 ? '' : 's'} to the new folder</span>
-                </label>
-              </>
-            ) : (
-              <span className="muted small">No projects to move.</span>
+            {draft.rootFolder !== null && (
+              <button type="button" onClick={() => setDraft({ ...draft, rootFolder: null, moveProjects: false })}>
+                Use the default
+              </button>
             )}
+            <button type="button" onClick={() => window.mdedit.reveal(config.root)} disabled={!config.rootExists}>
+              Show in Explorer
+            </button>
           </div>
-        )}
-        <Toggle2 label="Reopen the project I was working on when the app starts" checked={draft.reopenLast} onChange={(v) => setDraft({ ...draft, reopenLast: v })} />
-      </section>
+          {!config.rootExists && <p className="warn-text small">This folder doesn’t exist yet; it is created when you save or make your first project.</p>}
+          {changedRoot && (
+            <div className="banner info" role="status">
+              <div>
+                New Root Folder: <strong>{root}</strong>
+              </div>
+              {projectCount > 0 ? (
+                <>
+                  <label className="toggle">
+                    <input type="radio" name="move" checked={!draft.moveProjects} onChange={() => setDraft({ ...draft, moveProjects: false })} />
+                    <span>Just use the new folder (your {projectCount} project{projectCount === 1 ? '' : 's'} stay where they are and won’t be listed)</span>
+                  </label>
+                  <label className="toggle">
+                    <input type="radio" name="move" checked={draft.moveProjects} onChange={() => setDraft({ ...draft, moveProjects: true })} />
+                    <span>Move my {projectCount} project{projectCount === 1 ? '' : 's'} to the new folder</span>
+                  </label>
+                </>
+              ) : (
+                <span className="muted small">No projects to move.</span>
+              )}
+            </div>
+          )}
+          <Toggle2 label="Reopen the project I was working on when the app starts" checked={draft.reopenLast} onChange={(v) => setDraft({ ...draft, reopenLast: v })} />
+        </section>
+      )}
 
       <section>
         <h4>Project templates</h4>

@@ -6,6 +6,8 @@
 import { cleanFamily, DEFAULT_FONT } from './fonts';
 
 export type ParagraphStyle = 'blockGap' | 'blockNoGap' | 'indent';
+/** Body text alignment for a whole book: justified or left. (Single paragraphs can be aligned with a `::: center` fence.) */
+export type BodyAlign = 'justify' | 'left';
 export type ChapterHeadingStyle = 'verbatim' | 'numberWord';
 export type RunningHead = 'none' | 'author' | 'title' | 'authorTitle';
 export type SmartQuotes = 'auto' | 'always' | 'never';
@@ -26,6 +28,8 @@ export interface LinkItem {
 export interface TitleItem {
   title: string;
   url: string;
+  /** Optional short description shown under the title. */
+  blurb: string;
 }
 
 export interface CopyrightDetails {
@@ -60,6 +64,8 @@ export interface ExportSettings {
     coverImage: string;
     dropCaps: boolean;
     paragraphStyle: ParagraphStyle;
+    /** How body paragraphs line up: justified (flush both sides) or left (ragged right). */
+    bodyAlign: BodyAlign;
     fontSize: number;
     /** Font family. A bundled family is embedded in the EPUB; any other is only named. */
     font: string;
@@ -72,16 +78,20 @@ export interface ExportSettings {
     topMargin: number;
     bottomMargin: number;
     rectoStarts: boolean;
+    /** Extra space above each chapter heading, in inches, on top of the page margin (0 = heading at the top margin). */
+    chapterSink: number;
     pageNumbers: boolean;
     runningHead: RunningHead;
     fontSize: number;
     paragraphStyle: ParagraphStyle;
+    bodyAlign: BodyAlign;
     /** Font family: bundled, or any font installed on this computer. Embedded in the PDF either way. */
     font: string;
   };
   docx: {
     trim: string;
     paragraphStyle: ParagraphStyle;
+    bodyAlign: BodyAlign;
     fontSize: number;
   };
 }
@@ -114,7 +124,7 @@ export function defaultExportSettings(): ExportSettings {
     chapterHeading: 'verbatim',
     smartQuotes: 'auto',
     sceneBreak: '•  •  •',
-    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', fontSize: 11, font: DEFAULT_FONT },
+    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', bodyAlign: 'justify', fontSize: 11, font: DEFAULT_FONT },
     pdf: {
       trim: DEFAULT_TRIM,
       gutter: 'auto',
@@ -122,13 +132,15 @@ export function defaultExportSettings(): ExportSettings {
       topMargin: 0.75,
       bottomMargin: 0.75,
       rectoStarts: true,
+      chapterSink: 1.25,
       pageNumbers: true,
       runningHead: 'none',
       fontSize: 11,
       paragraphStyle: 'blockNoGap',
+      bodyAlign: 'justify',
       font: DEFAULT_FONT
     },
-    docx: { trim: DEFAULT_TRIM, paragraphStyle: 'blockGap', fontSize: 11 }
+    docx: { trim: DEFAULT_TRIM, paragraphStyle: 'blockGap', bodyAlign: 'justify', fontSize: 11 }
   };
 }
 
@@ -180,6 +192,7 @@ const list = <T>(v: unknown, item: (x: Record<string, unknown>) => T, max = 200)
   Array.isArray(v) ? v.filter(isObj).slice(0, max).map(item) : [];
 
 const PSTYLES = ['blockGap', 'blockNoGap', 'indent'] as const;
+const BODY_ALIGNS = ['justify', 'left'] as const;
 
 /**
  * Turns whatever was on disk into a valid BookDetails: unknown or wrong-typed fields fall back to
@@ -240,7 +253,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       alsoBy: {
         enabled: bool(also.enabled, false),
         heading: str(also.heading, '', 300),
-        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000) }))
+        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
       },
       about: { enabled: bool(about.enabled, false), heading: str(about.heading, d.back.about.heading, 300), text: str(about.text, '') },
       custom: { enabled: bool(custom.enabled, false), heading: str(custom.heading, '', 300), text: str(custom.text, '') }
@@ -260,6 +273,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         coverImage: str(ep.coverImage, '', 2000),
         dropCaps: bool(ep.dropCaps, e.epub.dropCaps),
         paragraphStyle: oneOf(ep.paragraphStyle, PSTYLES, e.epub.paragraphStyle),
+        bodyAlign: oneOf(ep.bodyAlign, BODY_ALIGNS, e.epub.bodyAlign),
         fontSize: num(ep.fontSize, e.epub.fontSize, 8, 20),
         font: cleanFamily(ep.font, e.epub.font)
       },
@@ -270,15 +284,18 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         topMargin: num(pd.topMargin, e.pdf.topMargin, 0.25, 2),
         bottomMargin: num(pd.bottomMargin, e.pdf.bottomMargin, 0.25, 2),
         rectoStarts: bool(pd.rectoStarts, e.pdf.rectoStarts),
+        chapterSink: num(pd.chapterSink, e.pdf.chapterSink, 0, 3),
         pageNumbers: bool(pd.pageNumbers, e.pdf.pageNumbers),
         runningHead: oneOf(pd.runningHead, ['none', 'author', 'title', 'authorTitle'] as const, e.pdf.runningHead),
         fontSize: num(pd.fontSize, e.pdf.fontSize, 8, 16),
         paragraphStyle: oneOf(pd.paragraphStyle, PSTYLES, e.pdf.paragraphStyle),
+        bodyAlign: oneOf(pd.bodyAlign, BODY_ALIGNS, e.pdf.bodyAlign),
         font: cleanFamily(pd.font, e.pdf.font)
       },
       docx: {
         trim: str(dx.trim, e.docx.trim, 20) || e.docx.trim,
         paragraphStyle: oneOf(dx.paragraphStyle, PSTYLES, e.docx.paragraphStyle),
+        bodyAlign: oneOf(dx.bodyAlign, BODY_ALIGNS, e.docx.bodyAlign),
         fontSize: num(dx.fontSize, e.docx.fontSize, 8, 20)
       }
     }

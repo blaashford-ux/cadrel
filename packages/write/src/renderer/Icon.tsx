@@ -6,6 +6,7 @@ const PATHS = {
   chevron: 'm9 6 6 6-6 6',
   refresh: 'M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7',
   download: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
+  upload: 'M12 15V4m0 0-4 4m4-4 4 4M5 20h14',
   plus: 'M12 5v14M5 12h14',
   folderPlus: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm9 3v6m-3-3h6',
   filePlus: 'M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm7 0v5h5m-5 4v5m-2.5-2.5h5',
@@ -19,7 +20,13 @@ const PATHS = {
   save: 'M5 4h11l3 3v13H5V4Zm3 0v5h7V4M8 20v-6h8v6',
   check: 'm5 12.5 4.5 4.5L19 7',
   target: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-3a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z',
-  scene: 'M4 12h4m4 0h.01M16 12h4'
+  scene: 'M4 12h4m4 0h.01M16 12h4',
+  alignLeft: 'M4 6h16M4 10h10M4 14h16M4 18h10',
+  alignCenter: 'M4 6h16M7 10h10M4 14h16M7 18h10',
+  alignRight: 'M4 6h16M10 10h10M4 14h16M10 18h10',
+  alignJustify: 'M4 6h16M4 10h16M4 14h16M4 18h16',
+  expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+  shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5'
 } as const;
 
 export type IconName = keyof typeof PATHS;

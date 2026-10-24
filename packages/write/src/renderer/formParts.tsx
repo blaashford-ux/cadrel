@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { LayerTag } from './layerEditor';
 
 export function Field(props: {
   label: string;
@@ -9,6 +10,8 @@ export function Field(props: {
   required?: boolean;
   type?: string;
   width?: number;
+  /** The BookDetails field this edits, so a layered form can show where its value comes from. */
+  path?: string;
 }) {
   const missing = props.required && props.value.trim() === '';
   return (
@@ -16,6 +19,7 @@ export function Field(props: {
       <span className="field-label">
         {props.label}
         {props.required && <span className="req"> *</span>}
+        <LayerTag path={props.path} />
       </span>
       <input
         type={props.type ?? 'text'}
@@ -29,23 +33,27 @@ export function Field(props: {
   );
 }
 
-export function TextArea(props: { label: string; value: string; onChange(v: string): void; rows?: number; hint?: ReactNode; placeholder?: string }) {
+export function TextArea(props: { label: string; value: string; onChange(v: string): void; rows?: number; hint?: ReactNode; placeholder?: string; path?: string }) {
   return (
     <label className="field">
-      <span className="field-label">{props.label}</span>
+      <span className="field-label">
+        {props.label}
+        <LayerTag path={props.path} />
+      </span>
       <textarea value={props.value} rows={props.rows ?? 4} placeholder={props.placeholder} onChange={(e) => props.onChange(e.target.value)} />
       {props.hint && <span className="field-hint">{props.hint}</span>}
     </label>
   );
 }
 
-export function Toggle(props: { label: string; checked: boolean; onChange(v: boolean): void; hint?: ReactNode }) {
+export function Toggle(props: { label: string; checked: boolean; onChange(v: boolean): void; hint?: ReactNode; path?: string }) {
   return (
     <label className="toggle">
       <input type="checkbox" checked={props.checked} onChange={(e) => props.onChange(e.target.checked)} />
       <span>
         {props.label}
         {props.hint && <span className="field-hint"> {props.hint}</span>}
+        <LayerTag path={props.path} />
       </span>
     </label>
   );
@@ -57,10 +65,14 @@ export function Select<T extends string | number>(props: {
   options: { value: T; label: string }[];
   onChange(v: T): void;
   hint?: ReactNode;
+  path?: string;
 }) {
   return (
     <label className="field">
-      <span className="field-label">{props.label}</span>
+      <span className="field-label">
+        {props.label}
+        <LayerTag path={props.path} />
+      </span>
       <select
         value={String(props.value)}
         onChange={(e) => {
@@ -79,10 +91,13 @@ export function Select<T extends string | number>(props: {
   );
 }
 
-export function NumberField(props: { label: string; value: number; min: number; max: number; step?: number; onChange(v: number): void; unit?: string; hint?: ReactNode }) {
+export function NumberField(props: { label: string; value: number; min: number; max: number; step?: number; onChange(v: number): void; unit?: string; hint?: ReactNode; path?: string }) {
   return (
-    <label className="field" style={{ maxWidth: 160 }}>
-      <span className="field-label">{props.label}</span>
+    <label className="field" style={{ maxWidth: props.path ? undefined : 160 }}>
+      <span className="field-label">
+        {props.label}
+        <LayerTag path={props.path} />
+      </span>
       <span className="with-unit">
         <input
           type="number"
@@ -109,6 +124,7 @@ export function ListEditor<T>(props: {
   blank: () => T;
   addLabel: string;
   row(item: T, update: (next: T) => void, index: number): ReactNode;
+  path?: string;
 }) {
   const { items, onChange } = props;
   const move = (i: number, d: -1 | 1) => {
@@ -120,6 +136,11 @@ export function ListEditor<T>(props: {
   };
   return (
     <div className="list-editor">
+      {props.path && (
+        <div className="field-label">
+          <LayerTag path={props.path} />
+        </div>
+      )}
       {items.map((item, i) => (
         <div className="list-row" key={i}>
           <div className="list-fields">{props.row(item, (n) => onChange(items.map((x, k) => (k === i ? n : x))), i)}</div>

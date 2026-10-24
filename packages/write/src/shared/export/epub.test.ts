@@ -46,7 +46,7 @@ const details = (edit: (d: BookDetails) => void = () => undefined): BookDetails 
   d.dedication = { enabled: true, text: 'For everyone.' };
   d.epigraph = { enabled: true, text: 'To be or not.', attribution: 'Someone' };
   d.back.links = { enabled: true, heading: '', intro: 'More at:', items: [{ label: 'Newsletter', url: 'https://example.com/news?a=1&b=2' }, { label: 'Bad', url: 'javascript:alert(1)' }] };
-  d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: '' }] };
+  d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: '', blurb: '' }] };
   d.back.about = { enabled: true, heading: '', text: 'Bio.' };
   edit(d);
   return d;
@@ -331,5 +331,36 @@ describe('embedded fonts', () => {
     const bytes = buildEpub(book());
     expect(Object.keys(unzip(bytes)).some((n) => n.startsWith('OEBPS/fonts/'))).toBe(false);
     expect(verifyEpub(bytes)).toEqual([]);
+  });
+});
+
+describe('buildEpub — alignment', () => {
+  const SRC2 = '# One\n\nPlain.\n\n::: center\nCentred.\n\nAlso centred.\n:::\n\n::: right\n> Quoted right.\n:::\n\n::: left\n- a\n- b\n:::\n\n::: center\n## Sub\n:::\n';
+  const page = (edit?: (d: BookDetails) => void) => {
+    const r = assembleBook(SRC2, details(edit), env);
+    expect(r.errors).toEqual([]);
+    const files = unzip(buildEpub(r.build!));
+    const name = Object.keys(files).find((k) => /chapter-?1|ch0*1|chapter/i.test(k) && k.endsWith('.xhtml')) ?? Object.keys(files).filter((k) => k.endsWith('.xhtml'))[2];
+    return { html: read(files, name), css: read(files, Object.keys(files).find((k) => k.endsWith('.css'))!) };
+  };
+
+  it('puts the alignment on the blocks of each fence', () => {
+    const { html } = page();
+    expect(html).toMatch(/<p class="first">Plain\.<\/p>/);
+    expect(html).toContain('<p class="al-center">Centred.</p>');
+    expect(html).toContain('<p class="al-center">Also centred.</p>');
+    expect(html).toContain('<blockquote class="al-right">');
+    expect(html).toContain('<ul class="al-left">');
+    expect(html).toMatch(/<h2 class="sub al-center">Sub<\/h2>/);
+    expect(html).not.toContain(':::');
+  });
+
+  it('defines the classes, and justifies body text unless the book says left', () => {
+    const j = page().css;
+    expect(j).toContain('.al-center { text-align: center; }');
+    expect(j).toMatch(/p \{ text-align: justify;/);
+    const l = page((d) => void (d.export.epub.bodyAlign = 'left')).css;
+    expect(l).toMatch(/p \{ text-align: left;/);
+    expect(l).not.toMatch(/p \{ text-align: justify;/);
   });
 });

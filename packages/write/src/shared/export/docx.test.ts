@@ -247,3 +247,52 @@ describe.skipIf(!hasWriter)('buildDocx — opens in LibreOffice', () => {
     }
   }, 180_000);
 });
+
+describe('buildDocx — alignment', () => {
+  const ALIGNED = `# One
+
+Plain body.
+
+::: center
+Centred line.
+:::
+
+::: right
+Right line.
+:::
+
+::: left
+Left line.
+:::
+
+::: justify
+Justified line.
+:::
+
+> A quote.
+`;
+  const build = async (edit?: (d: BookDetails) => void) => {
+    const r = assembleBook(ALIGNED, details(edit), env);
+    expect(r.errors).toEqual([]);
+    const files = unzipSync(await buildDocx(r.build!));
+    return paragraphs(strFromU8(files['word/document.xml']));
+  };
+  const jc = (p: string) => /<w:jc w:val="(\w+)"/.exec(p)?.[1];
+  const find = (ps: string[], text: string) => ps.find((p) => textOfPara(p) === text)!;
+
+  it('aligns each fenced block, and justifies the rest by default', async () => {
+    const ps = await build();
+    expect(jc(find(ps, 'Plain body.'))).toBe('both');
+    expect(jc(find(ps, 'Centred line.'))).toBe('center');
+    expect(jc(find(ps, 'Right line.'))).toBe('right');
+    expect(jc(find(ps, 'Left line.'))).toBe('left');
+    expect(jc(find(ps, 'Justified line.'))).toBe('both');
+  });
+
+  it('follows the book-level setting for unfenced paragraphs only', async () => {
+    const ps = await build((d) => void (d.export.docx.bodyAlign = 'left'));
+    expect(jc(find(ps, 'Plain body.'))).toBe('left');
+    expect(jc(find(ps, 'Centred line.'))).toBe('center');
+    expect(jc(find(ps, 'Justified line.'))).toBe('both');
+  });
+});

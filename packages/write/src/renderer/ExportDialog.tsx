@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExportPlan, ExportProgress, ExportResult } from '../shared/api';
 import { splitChapters } from '../shared/chapters';
-import type { BookDetails } from '../shared/export/model';
 import { formatBytes } from '../shared/export/outputs';
 import { basename } from '../shared/paths';
 import { countWords } from '../shared/words';
 import { OutputsForm, TextForm, KINDS } from './exportForms';
-import { Field, Select, Toggle } from './formParts';
+import { Select, Toggle } from './formParts';
+import { LayerProvider, LayerTag, SettingsReview } from './layerEditor';
+import { useBookLayers } from './useBookLayers';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -29,8 +30,8 @@ type Phase = 'form' | 'running' | 'done';
 
 export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, saveFile, onEditDetails, detailsVersion, onClose }: Props) {
   const [file, setFile] = useState(initialFile);
-  const [details, setDetails] = useState<BookDetails | null>(null);
-  const [initial, setInitial] = useState('');
+  const { layer, dirty, error: loadError, save: saveLayers } = useBookLayers(file, detailsVersion);
+  const details = layer?.details ?? null;
   const [chapters, setChapters] = useState<{ title: string; words: number }[]>([]);
   const [plan, setPlan] = useState<ExportPlan | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -46,13 +47,11 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
   // ---- load the book --------------------------------------------------------------------
   useEffect(() => {
     let live = true;
-    setDetails(null);
     setConfirmed(false);
-    Promise.all([window.mdedit.getBookDetails(file), window.mdedit.readFile(file)])
-      .then(([d, f]) => {
+    window.mdedit
+      .readFile(file)
+      .then((f) => {
         if (!live) return;
-        setDetails(d.details);
-        setInitial(JSON.stringify(d.details));
         setChapters(splitChapters(f.text, chapterLevel).chapters.filter((c) => !c.isPreamble).map((c) => ({ title: c.title, words: countWords(c.raw) })));
       })
       .catch((e) => live && setError(String(e)));
@@ -60,6 +59,7 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
       live = false;
     };
   }, [file, detailsVersion, chapterLevel]);
+  useEffect(() => setConfirmed(false), [file, detailsVersion]);
 
   // ---- where the files will go (reflects the form as it is now) ---------------------------
   useEffect(() => {
@@ -72,21 +72,14 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
 
   useEffect(() => window.mdedit.onExportProgress((p) => setProgress((prev) => [...prev, p])), []);
 
-  const dirty = details !== null && JSON.stringify(details) !== initial;
   const running = phase === 'running';
   useEscape(() => !running && closeAndSave());
 
-  const edit = (fn: (d: BookDetails) => void) =>
-    setDetails((d) => {
-      if (!d) return d;
-      const next = structuredClone(d);
-      fn(next);
-      return next;
-    });
+  const edit = layer?.edit ?? (() => undefined);
 
   const closeAndSave = async () => {
     // export settings are remembered even if you don't export
-    if (details && dirty) await window.mdedit.saveBookDetails(file, details).catch(() => undefined);
+    if (layer && dirty) await saveLayers().catch(() => undefined);
     onClose();
   };
 
@@ -116,8 +109,7 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
     setPhase('running');
     const seq = ++runSeq.current;
     try {
-      await window.mdedit.saveBookDetails(file, details);
-      setInitial(JSON.stringify(details));
+      await saveLayers();
       const r = await window.mdedit.runExport(file);
       if (seq === runSeq.current) setResult(r);
     } catch (e) {
@@ -129,12 +121,12 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
   const onExportClick = () => (dirtyBook ? setAskDirty(true) : void startExport(false));
 
   // ---- render -----------------------------------------------------------------------------
-  if (!details) {
+  if (!details || !layer) {
     return (
       <div className="modal-backdrop">
         <div className="modal wide" role="dialog" aria-label="Export">
           <h3>Export</h3>
-          {error ? <div className="banner error">{error}</div> : <p className="muted">Loading…</p>}
+          {error ?? loadError ? <div className="banner error">{error ?? loadError}</div> : <p className="muted">Loading…</p>}
           <div className="modal-actions">
             <button onClick={onClose}>Close</button>
           </div>
@@ -183,9 +175,11 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
               </div>
             )}
 
-            <OutputsForm details={details} edit={edit} />
+            <LayerProvider value={layer}>
+              <OutputsForm details={details} edit={edit} />
 
-            <TextForm details={details} edit={edit} />
+              <TextForm details={details} edit={edit} />
+            </LayerProvider>
 
             <section>
               <h4>Chapters</h4>
@@ -213,7 +207,9 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
             </section>
 
             <section>
-              <h4>Save to</h4>
+              <h4>
+                Save to <LayerProvider value={layer}><LayerTag path="export.outputDir" /></LayerProvider>
+              </h4>
               <div className="inline">
                 <input
                   className="grow"
@@ -242,6 +238,8 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
                 </ul>
               )}
             </section>
+
+            <SettingsReview layer={layer} />
 
             {problems.length > 0 && (
               <div className="banner error" role="alert">

@@ -91,9 +91,16 @@ describe('project metadata', () => {
     expect(m).toMatchObject({ name: 'The Lost King', templateId: 'novel', templateName: 'Novel', status: 'planning', archived: false, goal: null, createdAt: now.toISOString() });
     expect(m.excludedFolders).toEqual(['Characters', 'Worldbuilding', 'Research', 'Exports']);
     expect(m.overrides.chapterLevel).toBe(2);
-    expect(m.overrides.book!.author).toBe('Template Author');
-    m.overrides.book!.author = 'changed';
+    expect(m.overrides.book).toEqual({ author: 'Template Author' }); // only what the template changes
+    m.overrides.book.author = 'changed';
     expect(t.book!.author).toBe('Template Author');
+  });
+  it('project files saved before layering (a whole book, or null) become the fields they change', () => {
+    const whole = { ...defaultBookDetails({ title: '', author: 'Old Project Author' }), copyright: { ...defaultBookDetails().copyright, year: '' } };
+    const m = sanitizeProjectMeta({ overrides: { chapterLevel: 2, book: whole } }, 'P', '2026-10-05');
+    expect(m.overrides.book).toEqual({ author: 'Old Project Author' });
+    expect(sanitizeProjectMeta({ overrides: { book: null } }, 'P', '2026-10-05').overrides.book).toEqual({});
+    expect(sanitizeProjectMeta({ overrides: { book: { author: 'A', bogus: 1, 'export.epub.coverImage': 'x' } } }, 'P', '2026-10-05').overrides.book).toEqual({ author: 'A' });
   });
   it('round-trips through sanitising', () => {
     const m = newProjectMeta({ id: 'p1', name: 'X', template: novel(), now });
@@ -107,7 +114,7 @@ describe('project metadata', () => {
     expect(m.status).toBe('planning');
     expect(m.goal).toBeNull();
     expect(m.excludedFolders).toEqual(['ok']);
-    expect(m.overrides).toEqual({ chapterLevel: null, book: null });
+    expect(m.overrides).toEqual({ chapterLevel: null, book: {} });
     expect(sanitizeProjectMeta(null, 'F', '2026-10-05').name).toBe('F');
   });
 });
@@ -150,13 +157,13 @@ import { defaultAppDefaults, sanitizeAppDefaults } from './appDefaults';
 import { effectiveDefaults } from './projects';
 describe('defaults cascade', () => {
   const app = sanitizeAppDefaults({ chapterLevel: 2, book: { author: 'App Author' } });
-  const meta = (o: Partial<ReturnType<typeof newProjectMeta>['overrides']>) => ({ ...newProjectMeta({ id: 'x', name: 'x', template: defaultTemplates()[3], now: new Date() }), overrides: { chapterLevel: null, book: null, ...o } });
+  const meta = (o: Partial<ReturnType<typeof newProjectMeta>['overrides']>) => ({ ...newProjectMeta({ id: 'x', name: 'x', template: defaultTemplates()[3], now: new Date() }), overrides: { chapterLevel: null, book: {}, ...o } });
   it('outside a project, or with nothing overridden, the app defaults apply', () => {
     expect(effectiveDefaults(app, null)).toBe(app);
     expect(effectiveDefaults(app, meta({}))).toEqual(app);
   });
   it('a project’s chapter level and book defaults win independently', () => {
-    const book = sanitizeAppDefaults({ book: { author: 'Project Author' } }).book;
+    const book = { author: 'Project Author' };
     expect(effectiveDefaults(app, meta({ chapterLevel: 3 }))).toEqual({ chapterLevel: 3, book: app.book });
     const both = effectiveDefaults(app, meta({ book }));
     expect(both.chapterLevel).toBe(2);
@@ -177,9 +184,10 @@ describe('active manuscript', () => {
     expect(t.folders.map((f) => f.name)).toContain('Manuscripts');
     expect(t.files.map((f) => f.path).filter((f) => f.startsWith('Manuscripts'))).toEqual([]);
   });
-  it('goalFor follows the active manuscript, otherwise the project goal', () => {
+  it('goalFor follows the active manuscript; with none there is no goal (the project goal is kept, not shown)', () => {
     let m = withGoal(meta(), g);
-    expect(goalFor(m)).toEqual(g);
+    expect(goalFor(m)).toBeNull();
+    expect(m.goal).toEqual(g);
     m = { ...m, activeManuscript: 'Manuscripts/Book 1.md' };
     expect(goalFor(m)).toBeNull();
     m = withGoal(m, { ...g, targetWords: 70000 });
@@ -195,5 +203,63 @@ describe('active manuscript', () => {
   it('relativeTo gives "/" paths inside the project', () => {
     expect(relativeTo('C:\\Root\\P', 'C:\\Root\\P\\Manuscripts\\Book 1.md')).toBe('Manuscripts/Book 1.md');
     expect(relativeTo('/r/P', '/r/P/a/b.md')).toBe('a/b.md');
+  });
+});
+
+import { chapterIds, isChapterEdited, withChapterEdited } from './projects';
+
+describe('edited chapters', () => {
+  it('ids follow titles, telling repeated titles apart', () => {
+    expect(chapterIds([{ title: '' }, { title: 'One' }, { title: 'Two' }, { title: 'One' }])).toEqual(['', 'One', 'Two', 'One\u00012']);
+  });
+  it('marks and unmarks without touching the input, dropping empty files', () => {
+    const a = withChapterEdited({}, 'Book.md', 'One', true);
+    expect(a).toEqual({ 'Book.md': ['One'] });
+    expect(withChapterEdited(a, 'Book.md', 'One', true)).toEqual(a);
+    expect(withChapterEdited(a, 'Book.md', 'One', false)).toEqual({});
+    expect(a).toEqual({ 'Book.md': ['One'] });
+    expect(isChapterEdited({ editedChapters: a }, 'Book.md', 'One')).toBe(true);
+    expect(isChapterEdited({ editedChapters: a }, 'Book.md', 'Two')).toBe(false);
+  });
+  it('is sanitised and kept in the project metadata', () => {
+    const m = sanitizeProjectMeta({ editedChapters: { 'A/b.md': ['One', 'One', 5], '../x.md': ['Y'], 'C.md': 'no' } }, 'S', '2026-10-05');
+    expect(m.editedChapters).toEqual({ 'A/b.md': ['One'] });
+    expect(sanitizeProjectMeta({}, 'S', '2026-10-05').editedChapters).toEqual({});
+  });
+});
+
+import { byRecentlyOpened, MAX_RECENT, withOpened } from './projects';
+describe('the order of the switch-to list', () => {
+  const p = (name: string, lastEdited: number | null, archived = false) => ({ path: `/r/${name}`, name, lastEdited, meta: { archived } });
+  const A = p('A', 300), B = p('B', 100), C = p('C', 200), D = p('D', null), E = p('E', 900, true);
+
+  it('puts the most recently opened first, then the rest by their latest edit', () => {
+    expect(byRecentlyOpened([A, B, C, D], ['/r/B', '/r/D']).map((x) => x.name)).toEqual(['B', 'D', 'A', 'C']);
+    expect(byRecentlyOpened([A, B, C, D], []).map((x) => x.name)).toEqual(['A', 'C', 'B', 'D']); // nothing opened yet: newest edit first
+  });
+
+  it('leaves out archived projects and the one that is open, and ignores paths that no longer exist', () => {
+    expect(byRecentlyOpened([A, B, C, E], ['/r/E', '/r/gone', '/r/C', '/r/A'], '/r/A').map((x) => x.name)).toEqual(['C', 'B']);
+  });
+
+  it('matches paths however they are written (slashes, case, trailing slash)', () => {
+    const win = { path: 'C:\\Books\\Novel', name: 'Novel', lastEdited: 1, meta: {} };
+    expect(byRecentlyOpened([A, win], ['c:/books/novel/']).map((x) => x.name)).toEqual(['Novel', 'A']);
+    expect(byRecentlyOpened([A, win], [], 'c:/BOOKS/novel').map((x) => x.name)).toEqual(['A']);
+  });
+
+  it('keeps a most-recent-first list of opened projects without repeats, and not too long', () => {
+    expect(withOpened(['/r/B', '/r/A'], '/r/A')).toEqual(['/r/A', '/r/B']);
+    expect(withOpened(['/r/B'], '/R/b/')).toEqual(['/R/b/']);
+    expect(withOpened(['/r/B'], null)).toEqual(['/r/B']);
+    const many = Array.from({ length: MAX_RECENT + 5 }, (_, i) => `/r/${i}`);
+    expect(withOpened(many, '/r/new')).toHaveLength(MAX_RECENT);
+    expect(withOpened(many, '/r/new')[0]).toBe('/r/new');
+  });
+
+  it('is saved with the settings, and tidied when read back', () => {
+    expect(defaultProjectsSettings().recentProjects).toEqual([]);
+    expect(sanitizeProjectsSettings({ recentProjects: ['/a', 5, '', null, '/b'] }).recentProjects).toEqual(['/a', '/b']);
+    expect(sanitizeProjectsSettings({ recentProjects: 'nope' }).recentProjects).toEqual([]);
   });
 });

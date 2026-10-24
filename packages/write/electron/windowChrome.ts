@@ -1,21 +1,34 @@
 import { BrowserWindow, ipcMain, nativeTheme, type BrowserWindowConstructorOptions, type WebContents } from 'electron';
 import type { WindowInfo } from '../src/shared/api';
+import { colorsFor, type Scheme, type ThemeCustom } from '../src/shared/theme';
 import { describeMenu, invokeMenuItem } from './menu';
 
 /** Height of the custom title bar (also the height of the OS-drawn buttons on Windows). */
 export const TITLEBAR_HEIGHT = 40;
 
-const SHELL = { dark: '#1a1430', light: '#ece9f8' };
-const INK = { dark: '#ece9f9', light: '#1f1a38' };
+let custom: ThemeCustom | undefined;
+const scheme = (): Scheme => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 
-export const shellColor = () => (nativeTheme.shouldUseDarkColors ? SHELL.dark : SHELL.light);
+/** The window colour and the title-bar button colour follow the user's custom theme colours. */
+export const shellColor = () => colorsFor(scheme(), custom).shell;
+const inkColor = () => colorsFor(scheme(), custom).fg;
+
+/** Called when the custom colours are loaded or changed; recolours every open window. */
+export function setChromeTheme(next: ThemeCustom | undefined): void {
+  custom = next;
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue;
+    win.setBackgroundColor(shellColor());
+    if (usesOverlay()) win.setTitleBarOverlay(overlay());
+  }
+}
 
 /** On Windows the OS draws minimise/maximise/close over our bar; elsewhere we draw them ourselves. */
 const usesOverlay = () => process.platform === 'win32';
 
 const overlay = () => ({
   color: shellColor(),
-  symbolColor: nativeTheme.shouldUseDarkColors ? INK.dark : INK.light,
+  symbolColor: inkColor(),
   height: TITLEBAR_HEIGHT
 });
 
@@ -60,6 +73,8 @@ export function registerWindowChrome(getWindow: () => BrowserWindow | null, getC
     if (action === 'minimize') win.minimize();
     else if (action === 'maximize') win.isMaximized() ? win.unmaximize() : win.maximize();
     else if (action === 'close') win.close();
+    else if (action === 'fullscreen') win.setFullScreen(true);
+    else if (action === 'windowed') win.setFullScreen(false);
   });
   ipcMain.handle('menu:describe', () => describeMenu());
   ipcMain.on('menu:click', (_e, id: unknown) => {

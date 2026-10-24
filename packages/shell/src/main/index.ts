@@ -94,6 +94,7 @@ function ensureView(id: ModuleId): WebContentsView {
     });
   }
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
+  if (id === 'write') write.attach(view.webContents, win!);
   views[id] = view;
   win!.contentView.addChildView(view);
   view.setBounds(moduleBounds(win!.getContentBounds()));
@@ -248,7 +249,11 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       getContents: () => views.write?.webContents ?? null,
       standalone: false,
       dataDir: writeData,
-      assetsDir: path.join(here, 'assets')
+      assetsDir: path.join(here, 'assets'),
+      // One AI server for the whole suite. AI apps launch `file` with Cadrel's own Node; the Claude Desktop extension gets
+      // `kitFile`, the same server as plain JavaScript (that Node has no native modules, so Market's tools are left out).
+      mcp: { file: path.join(here, 'mcp.mjs'), kitFile: path.join(here, 'mcp-kit.js') },
+      updatesDisabledReason: 'Cadrel is updated as a whole; MDEdit’s own updater is switched off here.'
     });
     market = createMarketModule({
       getWindow: () => win,
@@ -284,10 +289,19 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
   });
 }
 
-app.on('before-quit', () => {
+let finalSyncStarted = false;
+app.on('before-quit', (e) => {
   quitting = true;
   void write?.flush();
   void settings?.flush();
+  write?.stop();
+  // Edits made in the last few seconds haven't synced to Google Drive yet: give them one pass (at most 10 s) before exiting.
+  const sync = write?.syncService();
+  if (!smokeArg && !finalSyncStarted && sync?.dirty) {
+    finalSyncStarted = true;
+    e.preventDefault();
+    void Promise.race([sync.syncNow(), new Promise((resolve) => setTimeout(resolve, 10_000))]).finally(() => app.quit());
+  }
 });
 
 app.on('window-all-closed', () => {

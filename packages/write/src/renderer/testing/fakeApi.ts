@@ -1,23 +1,44 @@
 import { defaultProjectsSettings, defaultTemplates, newProjectMeta, type ProjectMeta, type ProjectsConfig, type ProjectsSettings } from '../../shared/projects';
 import { emptyProgress, recordSnapshot, type Progress } from '../../shared/progress';
+import { diffOverrides, resolveInherited } from '../../shared/export/layers';
 import { bookFromDefaults, defaultAppDefaults, type AppDefaults } from '../../shared/appDefaults';
 import type { BookDetails } from '../../shared/export/model';
 import { defaultBookDetails } from '../../shared/export/model';
-import type {
-  DirNode,
-  DraftRecord,
-  FileStamp,
-  MdeditApi,
-  MenuAction,
-  Prefs,
-  Session,
-  TreeNode,
-  UnsavedChoice
+import {
+  DESKTOP_CAPABILITIES,
+  type DirNode,
+  type DraftRecord,
+  type FileStamp,
+  type MdeditApi,
+  type MenuAction,
+  type Prefs,
+  type Session,
+  type TreeNode,
+  type UnsavedChoice
 } from '../../shared/api';
+import type { UpdateInfo } from '../../shared/update';
 import { basename, dirname, isInside } from '../../shared/paths';
+import { reviewOff, syncOff } from '../../shared/syncStub';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
 export class FakeApi implements MdeditApi {
+  capabilities = DESKTOP_CAPABILITIES;
+  getSyncStatus = syncOff.getSyncStatus;
+  connectSync = syncOff.connectSync;
+  syncNow = syncOff.syncNow;
+  confirmDeletes = syncOff.confirmDeletes;
+  disconnectSync = syncOff.disconnectSync;
+  onSyncStatus = syncOff.onSyncStatus;
+  getShareStatus = reviewOff.getShareStatus;
+  listShares = reviewOff.listShares;
+  stopSharing = reviewOff.stopSharing;
+  inviteReviewer = reviewOff.inviteReviewer;
+  getShareChapters = reviewOff.getShareChapters;
+  revokeReviewer = reviewOff.revokeReviewer;
+  exchangeReviews = reviewOff.exchangeReviews;
+  listShared = reviewOff.listShared;
+  pickerToken = reviewOff.pickerToken;
+  joinReview = reviewOff.joinReview;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */
   dirs = new Set<string>();
@@ -37,6 +58,8 @@ export class FakeApi implements MdeditApi {
   overwriteAnswers: boolean[] = [];
   deleteAnswers: boolean[] = [];
   recoverAnswers: boolean[] = [];
+  markEditedAnswers: boolean[] = [];
+  markEditedAsked: string[] = [];
   unsavedAsked: string[] = [];
   pickResult: string | null = null;
   failTrash = false;
@@ -84,11 +107,24 @@ export class FakeApi implements MdeditApi {
   orphans: string[] = [];
   damagedOnMark = false;
   coverPick: string | null = null;
+  /** The fields each saved book sets itself (absent = all that differ, as for a file saved before layering). */
+  bookOverrides = new Map<string, string[]>();
   getBookDetails = async (file: string) => {
     const d = this.books.get(file);
-    return { details: d ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') }), exists: !!d, damaged: false };
+    const inh = resolveInherited(this.appDefaults.book, {});
+    return {
+      details: d ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') }),
+      inherited: inh.details,
+      origins: inh.origins,
+      overrides: this.bookOverrides.get(file) ?? (d ? Object.keys(diffOverrides(inh.details, d)) : ['copyright.year']),
+      exists: !!d,
+      damaged: false
+    };
   };
-  saveBookDetails = async (file: string, d: BookDetails) => void this.books.set(file, d);
+  saveBookDetails = async (file: string, d: BookDetails, overrides?: string[]) => {
+    this.books.set(file, d);
+    if (overrides) this.bookOverrides.set(file, overrides);
+  };
   setMarked = async (file: string, marked: boolean) => {
     const cur = this.books.get(file) ?? bookFromDefaults(this.appDefaults, { title: basename(file).replace(/\.md$/, '') });
     if (!marked && !this.books.has(file)) return { backedUp: false };
@@ -163,6 +199,11 @@ export class FakeApi implements MdeditApi {
   onExportProgress = () => () => undefined;
   revealOutput = () => undefined;
   openOutput = async () => '';
+  reports: { kind: string; name: string; html: string }[] = [];
+  saveReport = async (kind: 'html' | 'pdf', name: string, html: string) => {
+    this.reports.push({ kind, name, html });
+    return `/saved/${name}`;
+  };
 
   pickFolder = async () => this.pickResult;
   getLastFolder = async () => this.lastFolder;
@@ -176,6 +217,21 @@ export class FakeApi implements MdeditApi {
     if (!f) throw new Error(`ENOENT: ${p}`);
     return { text: f.text, stamp: this.stampOf(p)! };
   };
+  reviews = new Map<string, string>();
+  listReviews = async (project: string) =>
+    [...this.reviews].filter(([k]) => k.startsWith(`${project}|`)).map(([k, text]) => ({ id: k.slice(project.length + 1), text }));
+  saveReview = async (project: string, id: string, text: string) => {
+    this.reviews.set(`${project}|${id}`, text);
+  };
+  deleteReview = async (project: string, id: string) => {
+    this.reviews.delete(`${project}|${id}`);
+  };
+  exportAiKit = async () => '/Downloads/MDEdit AI Kit';
+  private remote = { enabled: false, running: false, port: 47831, token: 'fake-token-0123456789abcdef', mcpUrl: 'http://127.0.0.1:47831/mcp', apiUrl: 'http://127.0.0.1:47831/api', openApiUrl: 'http://127.0.0.1:47831/openapi.json', error: null as string | null };
+  getAiRemote = async () => ({ ...this.remote });
+  setAiRemote = async (enabled: boolean) => ({ ...(this.remote = { ...this.remote, enabled, running: enabled }) });
+  resetAiRemoteToken = async () => ({ ...(this.remote = { ...this.remote, token: 'new-token-0123456789abcdefgh' }) });
+  getAiServer = async () => ({ root: '/root', command: 'node', args: ['/x/mdedit-mcp.js'] });
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
     this.writes.push(p);
@@ -220,6 +276,7 @@ export class FakeApi implements MdeditApi {
     this.trashed.push(p);
   };
   reveal = (p: string) => void this.revealed.push(p);
+  importDocx = async () => null;
 
   getPrefs = async () => this.prefs;
   setPrefs = (patch: Partial<Prefs>) => void Object.assign(this.prefs, patch);
@@ -237,9 +294,17 @@ export class FakeApi implements MdeditApi {
   confirmOverwrite = async () => this.overwriteAnswers.shift() ?? true;
   confirmDelete = async () => this.deleteAnswers.shift() ?? true;
   confirmRecover = async () => this.recoverAnswers.shift() ?? true;
+  confirmMarkEdited = async (title: string) => {
+    this.markEditedAsked.push(title);
+    return this.markEditedAnswers.shift() ?? false;
+  };
 
   setDirtyFiles = (names: string[]) => void this.dirtyReports.push(names);
   onCloseRequested = () => () => undefined;
   reportCloseDecision = () => undefined;
+  getAppVersion = async () => '0.0.0';
+  checkForUpdate = async (): Promise<UpdateInfo> => ({ current: '0.0.0', latest: '0.0.0', available: false, notes: '', pageUrl: '', asset: null, sumsUrl: null });
+  installUpdate = async () => undefined;
+  onUpdateProgress = () => () => undefined;
   onMenuAction = (_cb: (a: MenuAction) => void) => () => undefined;
 }

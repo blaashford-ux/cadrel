@@ -13,9 +13,11 @@ interface Props {
   y: number;
   items: MenuItem[];
   onClose(): void;
+  /** Leave keyboard focus (and the text selection) where it is, for menus that act on an editor. */
+  keepFocus?: boolean;
 }
 
-export function ContextMenu({ x, y, items, onClose }: Props) {
+export function ContextMenu({ x, y, items, onClose, keepFocus }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const enabled = items.map((it, i) => (it.disabled ? -1 : i)).filter((i) => i >= 0);
   const [index, setIndex] = useState(enabled[0] ?? -1);
@@ -29,7 +31,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   }, [x, y]);
 
   useEffect(() => {
-    ref.current?.focus();
+    if (!keepFocus) ref.current?.focus();
     const away = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
     };
@@ -39,7 +41,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       window.removeEventListener('pointerdown', away, true);
       window.removeEventListener('blur', onClose);
     };
-  }, [onClose]);
+  }, [onClose, keepFocus]);
 
   const step = (d: 1 | -1) => {
     if (enabled.length === 0) return;
@@ -73,6 +75,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           role="menuitem"
           disabled={it.disabled}
           className={(it.danger ? 'danger ' : '') + (i === index ? 'hot' : '')}
+          onMouseDown={(e) => keepFocus && e.preventDefault()}
           onMouseEnter={() => !it.disabled && setIndex(i)}
           onClick={() => {
             onClose();

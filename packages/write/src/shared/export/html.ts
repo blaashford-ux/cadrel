@@ -49,21 +49,23 @@ export function blocksHtml(blocks: Block[], medium: Medium, sceneBreak: string):
   for (const b of blocks) {
     const first = prev === null || prev === 'scene' || prev === 'sub';
     switch (b.t) {
-      case 'para':
-        out.push(`<p${first ? ' class="first"' : ''}>${inlinesHtml(b.inlines, medium)}</p>`);
+      case 'para': {
+        const cls = [first ? 'first' : '', b.align ? `al-${b.align}` : ''].filter(Boolean).join(' ');
+        out.push(`<p${cls ? ` class="${cls}"` : ''}>${inlinesHtml(b.inlines, medium)}</p>`);
         break;
+      }
       case 'sub':
-        out.push(`<h${b.level} class="sub">${inlinesHtml(b.inlines, medium)}</h${b.level}>`);
+        out.push(`<h${b.level} class="sub${b.align ? ` al-${b.align}` : ''}">${inlinesHtml(b.inlines, medium)}</h${b.level}>`);
         break;
       case 'scene':
         out.push(`<p class="scenebreak">${esc(sceneBreak)}</p>`);
         break;
       case 'quote':
-        out.push(`<blockquote>${blocksHtml(b.blocks, medium, sceneBreak)}</blockquote>`);
+        out.push(`<blockquote${b.align ? ` class="al-${b.align}"` : ''}>${blocksHtml(b.blocks.map((x) => (b.align && (x.t === 'para' || x.t === 'sub') && !x.align ? { ...x, align: b.align } : x)), medium, sceneBreak)}</blockquote>`);
         break;
       case 'list': {
         const tag = b.ordered ? 'ol' : 'ul';
-        out.push(`<${tag}>${b.items.map((it) => `<li>${blocksHtml(it, medium, sceneBreak).replace(/^<p( class="first")?>([\s\S]*?)<\/p>$/, '$2')}</li>`).join('')}</${tag}>`);
+        out.push(`<${tag}${b.align ? ` class="al-${b.align}"` : ''}>${b.items.map((it) => `<li>${blocksHtml(it, medium, sceneBreak).replace(/^<p( class="first")?>([\s\S]*?)<\/p>$/, '$2')}</li>`).join('')}</${tag}>`);
         break;
       }
       case 'code':
@@ -95,7 +97,7 @@ function pageBlockHtml(b: PageBlock, medium: Medium, headingClass: string): stri
       return `<p class="crline">${b.bold ? `<strong>${esc(b.text)}</strong>` : esc(b.text)}</p>`;
     case 'para': {
       const cls = ['crpara', b.align === 'center' ? 'center' : b.align === 'right' ? 'right' : ''].filter(Boolean).join(' ');
-      let inner = esc(b.text);
+      let inner = esc(b.text).replace(/\n/g, '<br/>');
       if (b.bold) inner = `<strong>${inner}</strong>`;
       if (b.italic) inner = `<em>${inner}</em>`;
       return `<p class="${cls}">${inner}</p>`;

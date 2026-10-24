@@ -118,10 +118,18 @@ Defaults cascade, most specific wins:
 1. **Built-in** defaults (code).
 2. **App** defaults (File → Settings): chapter heading level and the new-book template.
 3. **Project template** (Settings → Projects → Templates): may carry its own chapter level and book template.
-4. **Project** (`project.json` `overrides`): `chapterLevel` and `book` (author, copyright page, front/back matter, export choices,
-   fonts, trim size…). Created from the template when the project is made; edited in **Project Settings**. Each section can be
-   switched back to "use app defaults".
-5. **Book** (`<name>.export.json`): unchanged; a book marked for export inside a project starts from the project's defaults.
+4. **Project** (`project.json` `overrides`): `chapterLevel`, and `book` — a map of only the **fields** the project sets (author,
+   copyright page, front/back matter, export choices, fonts, trim size…, as `"export.pdf.chapterSink": 1`). Every other field
+   follows the app. Seeded from the template's changes when the project is made; edited per field in **Project Settings**
+   (each field shows "From app settings" until changed, with a Reset). Projects saved before this stored a whole book; it is
+   converted to the fields it changes.
+5. **Book** (`<name>.export.json`): the book's identity (title, subtitle, marked) and `overrides`, the fields the book sets itself.
+   Everything else is read from the project and the app each time, so a changed project/app default reaches every book that has
+   not set that field. The copyright year is pinned when the book is first set up. Excluded chapters and the cover image belong to
+   the book alone. Files saved before this held a whole book; on first read they are converted (fields equal to what the book
+   would inherit now follow it, the rest stay the book's own) and the old file is kept as `.v1.bak`.
+6. **Export dialog** is the last check: it shows every setting with where it comes from (app / project / this book), lets you
+   change or Reset any of them for this book, and lists the fields that don't simply follow the app. It opens from a file only.
 
 The chapter heading level is per project (the workspace re-splits when you switch). Exports inside a project use that project's level.
 

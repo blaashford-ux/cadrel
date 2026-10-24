@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MDEdit review invitation</title>
+<style>
+  :root { --bg: #f6f4fb; --fg: #1d1a2b; --muted: #6a6580; --card: #fff; --accent: #0f7a8a; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #15131f; --fg: #ece9f7; --muted: #a29cba; --card: #201d2e; --accent: #4cc3d4; } }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 520px; margin: 0 auto; padding: 32px 16px; }
+  .card { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: 0 4px 18px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 8px; }
+  p { margin: 8px 0; color: var(--muted); }
+  code { display: block; padding: 10px; margin: 10px 0; background: var(--bg); border-radius: 8px; word-break: break-all; font-size: 13px; color: var(--fg); }
+  button { font: inherit; padding: 10px 16px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; cursor: pointer; }
+  #picker-msg { padding: 24px; text-align: center; }
+  .btn { display: inline-block; padding: 12px 20px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; }
+</style>
+</head>
+<body>
+<main id="landing">
+  <div class="card">
+    <h1>You’ve been invited to review a project in MDEdit</h1>
+    <p>Copy this page’s address, then in MDEdit open <strong>Projects → Shared with me → Open invitation</strong> and paste it.</p>
+    <code id="addr"></code>
+    <button id="copy" type="button">Copy the link</button>
+    <p>Don’t have MDEdit yet? Get it from the project’s releases page on GitHub.</p>
+  </div>
+</main>
+<div id="picker-msg" hidden>Opening Google’s file picker…</div>
+
+<script>
+// This page has two jobs. Opened by a person it explains what to do with the link. Opened inside MDEdit (an iframe,
+// #mode=pick) it runs Google's file picker, which is how MDEdit is given access to the two shared files.
+var API_KEY = 'AIzaSyBb4IKQLReiwL9LuAubz0srrPqXhDPbedo'; // public browser key, restricted to this page and the Picker API
+var APP_ID = '312461756737'; // the Google Cloud project number
+var params = new URLSearchParams(location.hash.slice(1));
+
+if (params.get('mode') === 'pick') {
+  document.getElementById('landing').hidden = true;
+  var msg = document.getElementById('picker-msg');
+  msg.hidden = false;
+  // Embedded in the app (Windows) the result goes to the parent window. On the phone the page runs in the browser (Google's picker
+  // stays blank inside the app's web view) and hands the result back to the app with an mdedit:// link.
+  // ret=1: hand back with an mdedit://picked link (phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
+  // desktop app's local listener. Anything else is ignored, so this page can never send a result to some other address.
+  var retParam = params.get('ret');
+  var loopback = /^http:\/\/127\.0\.0\.1:\d{2,5}\/picked\?state=[A-Za-z0-9_-]{8,64}$/.test(retParam || '');
+  var ret = retParam === '1' || loopback;
+  var send = function (data) {
+    if (!ret) return parent.postMessage(Object.assign({ source: 'mdedit-picker' }, data), '*');
+    var answer = data.picked ? 'ids=' + encodeURIComponent(data.picked.join(',')) : data.cancelled ? 'cancelled=1' : 'error=1';
+    var back = loopback ? retParam + '&' + answer : 'mdedit://picked?' + answer;
+    msg.innerHTML = '';
+    var a = document.createElement('a');
+    a.href = back; a.textContent = loopback ? 'Back to MDEdit' : 'Return to MDEdit'; a.className = 'btn';
+    msg.appendChild(a);
+    location.href = back;
+  };
+  var ids = [params.get('p'), params.get('c')].filter(Boolean);
+  var token = params.get('t');
+  var script = document.createElement('script');
+  script.src = 'https://apis.google.com/js/api.js';
+  script.onerror = function () { msg.textContent = 'Couldn’t load Google’s file picker. Check your connection.'; send({ error: 'load' }); };
+  script.onload = function () {
+    gapi.load('picker', { callback: function () {
+      var view = new google.picker.DocsView().setFileIds(ids.join(',')).setIncludeFolders(false).setMode(google.picker.DocsViewMode.LIST);
+      new google.picker.PickerBuilder()
+        .addView(view)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setTitle(ids.length > 1 ? 'Select both files (Ctrl or Shift + click for the second) to open this project' : 'Select the remaining file to open this project')
+        .setOAuthToken(token)
+        .setDeveloperKey(API_KEY)
+        .setAppId(APP_ID)
+        .setCallback(function (d) {
+          if (d.action === google.picker.Action.PICKED) {
+            if (!ret) msg.textContent = 'Done.';
+            send({ picked: (d.docs || []).map(function (x) { return x.id; }) });
+          } else if (d.action === google.picker.Action.CANCEL) send({ cancelled: true });
+        })
+        .build()
+        .setVisible(true);
+    } });
+  };
+  document.head.appendChild(script);
+} else {
+  document.getElementById('addr').textContent = location.href;
+  document.getElementById('copy').onclick = function () {
+    navigator.clipboard.writeText(location.href).then(function () { document.getElementById('copy').textContent = 'Copied'; });
+  };
+}
+</script>
+</body>
+</html>

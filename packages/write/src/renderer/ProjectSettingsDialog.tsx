@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AppDefaults } from '../shared/appDefaults';
-import type { TreeNode } from '../shared/api';
 import { localDate, sanitizeGoal } from '../shared/progress';
 import { goalFor, STATUS_LABELS, STATUSES, withGoal, type ProjectMeta, type ProjectStatus, type ProjectsConfig } from '../shared/projects';
-import { DefaultsEditor } from './DefaultsEditor';
+import { ProjectDefaultsEditor } from './ProjectDefaultsEditor';
 import { Field, NumberField, TextArea, Toggle } from './formParts';
 import { useEscape } from './useEscape';
 
@@ -17,18 +16,11 @@ interface Props {
   onChanged(meta: ProjectMeta): void;
 }
 
-/** Folders of a scanned project, relative to it ("Manuscript", "Notes/Maps"). */
-function relFolders(tree: TreeNode, base = ''): string[] {
-  if (tree.kind !== 'dir') return [];
-  return tree.children.flatMap((c) => (c.kind === 'dir' ? [base + c.name, ...relFolders(c, `${base}${c.name}/`)] : []));
-}
-
-/** Project settings: status and notes, the word-count goal and what counts toward it, and export defaults. */
+/** Project settings: status and notes, the word-count goal, and export defaults. */
 export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Props) {
   const [meta, setMeta] = useState<ProjectMeta | null>(null);
   const [initial, setInitial] = useState('');
   const [app, setApp] = useState<AppDefaults | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>('general');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -39,15 +31,14 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
 
   useEffect(() => {
     let live = true;
-    void Promise.all([window.mdedit.getProjectMeta(path), window.mdedit.getAppDefaults(), window.mdedit.scanFolder(path)])
-      .then(([m, a, tree]) => {
+    void Promise.all([window.mdedit.getProjectMeta(path), window.mdedit.getAppDefaults()])
+      .then(([m, a]) => {
         if (!live) return;
         if (!m) return setError('That folder is not a project.');
         setMeta(m);
         setInitial(JSON.stringify(m));
         setGoalOn(goalFor(m) !== null);
         setApp(a);
-        setFolders(relFolders(tree));
       })
       .catch((e) => live && setError(String(e)));
     return () => {
@@ -80,14 +71,6 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
   const fileName = meta.activeManuscript ? meta.activeManuscript.split('/').pop() : null;
   const setGoal = (g: Partial<NonNullable<ProjectMeta['goal']>>) =>
     setMeta(withGoal(meta, { targetWords: 80000, startDate: today, targetDate: null, ...goal, ...g }));
-  const excluded = new Set(meta.excludedFolders);
-  const toggleFolder = (f: string, counted: boolean) => {
-    const next = new Set(excluded);
-    if (counted) next.delete(f);
-    else next.add(f);
-    patch({ excludedFolders: [...next].sort() });
-  };
-
   const save = async () => {
     if (saving) return;
     let finalGoal = goal;
@@ -123,7 +106,6 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
     try {
       const added = await window.mdedit.addMissingTemplateParts(path, template.id);
       setInfo(added.length ? `Added: ${added.join(', ')}` : 'Nothing was missing.');
-      setFolders(relFolders(await window.mdedit.scanFolder(path)));
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     }
@@ -180,9 +162,11 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                 <button type="button" onClick={() => void addMissing()} disabled={!template} title={template ? '' : 'The template this project was made from no longer exists'}>
                   Add missing template folders
                 </button>
-                <button type="button" onClick={() => window.mdedit.reveal(path)}>
-                  Show in File Explorer
-                </button>
+                {window.mdedit.capabilities.folderPicker && (
+                  <button type="button" onClick={() => window.mdedit.reveal(path)}>
+                    Show in File Explorer
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -195,40 +179,26 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                     This goal is for the active manuscript, <strong>{fileName}</strong>. Right-click another file and choose “Active Manuscript” to give that one its own goal.
                   </>
                 ) : (
-                  'This goal covers the whole project. Right-click a file and choose “Active Manuscript” to track one book on its own.'
+                  'Word counts and goals follow the active manuscript. Right-click a file and choose “Active Manuscript” to set a goal for it; each manuscript keeps its own goal and progress.'
                 )}
               </p>
-              <Toggle label="Set a word-count goal" checked={goalOn} onChange={(v) => (setGoalOn(v), v && !goal && setGoal({}))} />
-              {goalOn && goal && (
+              {fileName && (
                 <>
-                  <NumberField label="Target" value={goal.targetWords} min={1} max={10_000_000} step={1} unit="words" onChange={(v) => setGoal({ targetWords: Math.round(v) })} />
-                  <Field label="Start date" type="date" value={goal.startDate} onChange={(v) => v && setGoal({ startDate: v })} hint="Words already written before this day don’t count as progress." />
-                  <Field label="Finish by (optional)" type="date" value={goal.targetDate ?? ''} onChange={(v) => setGoal({ targetDate: v || null })} hint="With a deadline you’ll see the words per day you need." />
-                </>
-              )}
-              {fileName ? null : <h4>What counts</h4>}
-              {!fileName && (
-                <>
-              <p className="muted small">Words in checked folders count toward the goal. Files directly in the project folder always count.</p>
-              {folders.length === 0 ? (
-                <p className="muted small">This project has no subfolders.</p>
-              ) : (
-                <div className="count-list">
-                  {folders.map((f) => (
-                    <label key={f} className="count-row" style={{ paddingLeft: 8 + (f.split('/').length - 1) * 18 }}>
-                      <input type="checkbox" checked={!excluded.has(f)} onChange={(e) => toggleFolder(f, e.target.checked)} /> {f.split('/').pop()}
-                    </label>
-                  ))}
-                </div>
-              )}
+                  <Toggle label="Set a word-count goal" checked={goalOn} onChange={(v) => (setGoalOn(v), v && !goal && setGoal({}))} />
+                  {goalOn && goal && (
+                    <>
+                      <NumberField label="Target" value={goal.targetWords} min={1} max={10_000_000} step={1} unit="words" onChange={(v) => setGoal({ targetWords: Math.round(v) })} />
+                      <Field label="Start date" type="date" value={goal.startDate} onChange={(v) => v && setGoal({ startDate: v })} hint="Words already written before this day don’t count as progress." />
+                      <Field label="Finish by (optional)" type="date" value={goal.targetDate ?? ''} onChange={(v) => setGoal({ targetDate: v || null })} hint="With a deadline you’ll see the words per day you need." />
+                    </>
+                  )}
                 </>
               )}
             </section>
           )}
 
           {tab === 'defaults' && (
-            <DefaultsEditor
-              scope="this project"
+            <ProjectDefaultsEditor
               app={{ chapterLevel: app.chapterLevel, book: app.book }}
               value={{ chapterLevel: meta.overrides.chapterLevel, book: meta.overrides.book }}
               onChange={(v) => patch({ overrides: { chapterLevel: v.chapterLevel, book: v.book } })}

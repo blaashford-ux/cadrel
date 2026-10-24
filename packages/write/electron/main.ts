@@ -3,11 +3,12 @@
  * ./module.ts, which the Cadrel shell also hosts inside its own window.
  */
 import { app, BrowserWindow, screen } from 'electron';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileFromArgv } from './launch';
 import { runSmokeTest } from './smokeTest';
 import { chromeOptions, shellColor, watchWindow } from './windowChrome';
-import { createWriteModule, settings, type WriteModule } from './module';
+import { createWriteModule, settings, updateLog, type WriteModule } from './module';
 import type { WindowState } from './settings';
 
 let mainWindow: BrowserWindow | null = null;
@@ -80,6 +81,7 @@ function createWindow(): BrowserWindow {
   });
   guardClose(win);
   watchWindow(win);
+  write?.attach(win.webContents, win);
 
   let timer: NodeJS.Timeout | undefined;
   const later = () => {
@@ -136,6 +138,7 @@ if (!firstInstance) {
     // Files named on the command line wait here until the renderer collects them (see app:takeLaunchFiles).
     pendingLaunch.splice(0).forEach((f) => write!.queueFile(f));
     createWindow();
+    app.on('before-quit', () => write?.stop());
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
@@ -146,8 +149,26 @@ if (!firstInstance) {
   });
 }
 
-app.on('before-quit', () => {
+app.on('quit', () => {
+  const installerToRun = write?.takeInstaller();
+  if (!installerToRun) return;
+  updateLog(`starting ${installerToRun}`);
+  // Started the way a double-click starts it (through the shell). Started directly from here it failed its own
+  // integrity check now and then, while the same file run by hand was fine.
+  const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [installerToRun]] : [installerToRun, []];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', (e) => updateLog(`start failed: ${e.message}`)).unref();
+});
+
+let finalSyncStarted = false;
+app.on('before-quit', (e) => {
   if (!smokeMode) void write?.flush();
+  // Edits made in the last few seconds haven't synced yet: give them one pass (at most 10 s) before exiting.
+  const sync = write?.syncService();
+  if (!smokeMode && !finalSyncStarted && sync?.dirty) {
+    finalSyncStarted = true;
+    e.preventDefault();
+    void Promise.race([sync.syncNow(), new Promise((resolve) => setTimeout(resolve, 10_000))]).finally(() => app.quit());
+  }
 });
 
 app.on('window-all-closed', () => {

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
+import type { SharedProject } from '../shared/review/share';
+import { justLongPressed, longPressProps } from './longPress';
 
 interface Props {
   config: ProjectsConfig | null;
@@ -9,8 +11,8 @@ interface Props {
   loading: boolean;
   onOpen(path: string): void;
   onNew(): void;
-  onChangeRoot(): void;
-  onOpenFolder(): void;
+  onChangeRoot?(): void;
+  onOpenFolder?(): void;
   onRetry(): void;
   onConvert(path: string): void;
   onRename(p: ProjectSummary): void;
@@ -19,7 +21,13 @@ interface Props {
   onArchive(p: ProjectSummary, archived: boolean): void;
   onStatus(p: ProjectSummary, status: ProjectStatus): void;
   onProperties(p: ProjectSummary): void;
-  onReveal(path: string): void;
+  onReveal?(path: string): void;
+  /** Projects other people shared with this person (only where sharing is available). */
+  shared?: SharedProject[];
+  onOpenShared?(dir: string): void;
+  onJoin?(): void;
+  /** Opens the Sharing page (where sharing is available). */
+  onSharing?(): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -43,17 +51,18 @@ export function ProjectsHome(p: Props) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
   const [showArchived, setShowArchived] = useState(false);
+  const [status, setStatus] = useState<ProjectStatus | 'all'>('all');
   const [menu, setMenu] = useState<{ x: number; y: number; project: ProjectSummary } | null>(null);
 
   const all = p.listing?.projects ?? [];
   const archivedCount = all.filter((x) => x.meta.archived).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = all.filter((x) => x.meta.archived === showArchived && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
+    const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.status === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? b.words - a.words : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
+      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
-  }, [all, query, sort, showArchived]);
+  }, [all, query, sort, showArchived, status]);
 
   const items = (x: ProjectSummary): MenuItem[] => [
     { label: 'Open', onClick: () => p.onOpen(x.path) },
@@ -62,7 +71,7 @@ export function ProjectsHome(p: Props) {
     { label: 'Duplicate…', onClick: () => p.onDuplicate(x) },
     ...STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus(x, s) })),
     { label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive(x, !x.meta.archived) },
-    { label: 'Show in File Explorer', onClick: () => p.onReveal(x.path) },
+    ...(p.onReveal ? [{ label: 'Show in File Explorer', onClick: () => p.onReveal!(x.path) }] : []),
     { label: 'Delete…', danger: true, onClick: () => p.onDelete(x) }
   ];
 
@@ -79,20 +88,29 @@ export function ProjectsHome(p: Props) {
               <code className="path" title="Root Folder">
                 {p.config?.root ?? '…'}
               </code>
-              <button type="button" className="link-btn" onClick={p.onChangeRoot}>
-                Change…
-              </button>
-              {p.config?.rootExists && (
-                <button type="button" className="link-btn" onClick={() => p.onReveal(p.config!.root)}>
+              {p.onChangeRoot && (
+                <button type="button" className="link-btn" onClick={p.onChangeRoot}>
+                  Change…
+                </button>
+              )}
+              {p.onReveal && p.config?.rootExists && (
+                <button type="button" className="link-btn" onClick={() => p.onReveal!(p.config!.root)}>
                   Show in Explorer
                 </button>
               )}
             </div>
           </div>
           <div className="home-head-actions">
-            <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
-              Open Folder…
-            </button>
+            {p.onOpenFolder && (
+              <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
+                Open Folder…
+              </button>
+            )}
+            {p.onSharing && (
+              <button type="button" onClick={p.onSharing} title="Projects you've shared for review, and their links">
+                Sharing
+              </button>
+            )}
             <button type="button" className="primary big" onClick={p.onNew}>
               <Icon name="plus" /> New Project
             </button>
@@ -102,7 +120,7 @@ export function ProjectsHome(p: Props) {
         {missingRoot && (
           <div className="banner warn" role="alert">
             The Root Folder <code className="path">{p.config?.root}</code> can’t be found (renamed, on a drive that isn’t connected, or not created yet).{' '}
-            <button onClick={p.onChangeRoot}>Choose Root Folder…</button> <button onClick={p.onRetry}>Try again</button> <button onClick={p.onNew}>Create it with a new project</button>
+            {p.onChangeRoot && <button onClick={p.onChangeRoot}>Choose Root Folder…</button>} <button onClick={p.onRetry}>Try again</button> <button onClick={p.onNew}>Create it with a new project</button>
           </div>
         )}
 
@@ -113,6 +131,14 @@ export function ProjectsHome(p: Props) {
               <option value="recent">Recently edited</option>
               <option value="name">Name</option>
               <option value="words">Most words</option>
+            </select>
+            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus | 'all')} aria-label="Filter by status">
+              <option value="all">All statuses</option>
+              {STATUSES.map((st) => (
+                <option key={st} value={st}>
+                  {STATUS_LABELS[st]}
+                </option>
+              ))}
             </select>
             {archivedCount > 0 && (
               <button type="button" className={showArchived ? 'on' : ''} onClick={() => setShowArchived(!showArchived)} aria-pressed={showArchived}>
@@ -142,7 +168,7 @@ export function ProjectsHome(p: Props) {
         <div className="project-grid">
           {shown.map((x) => {
             const g = goalFor(x.meta);
-            const pct = g ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
+            const pct = g && x.words !== null ? Math.min(100, Math.round((x.words / g.targetWords) * 100)) : null;
             return (
               <div
                 key={x.path}
@@ -150,16 +176,13 @@ export function ProjectsHome(p: Props) {
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${x.name}`}
-                onClick={() => p.onOpen(x.path)}
+                onClick={() => !justLongPressed() && p.onOpen(x.path)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') p.onOpen(x.path);
                   else if (e.key === 'F2') p.onRename(x);
                   else if (e.key === 'ContextMenu') setMenu({ x: 200, y: 200, project: x });
                 }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, project: x });
-                }}
+                {...longPressProps((mx, my) => setMenu({ x: mx, y: my, project: x }))}
               >
                 <div className="card-top">
                   <span className="card-name">{x.name}</span>
@@ -186,7 +209,7 @@ export function ProjectsHome(p: Props) {
                   </div>
                 )}
                 <div className="card-words">
-                  <strong>{x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
+                  <strong>{x.words === null ? '-' : x.words.toLocaleString()}</strong> <span className="muted">words{g ? ` of ${g.targetWords.toLocaleString()}` : ''}</span>
                 </div>
                 {pct !== null && (
                   <div className="goal-bar" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${pct}% of the word goal`}>
@@ -198,7 +221,7 @@ export function ProjectsHome(p: Props) {
             );
           })}
         </div>
-        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
+        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : status !== 'all' ? `No ${STATUS_LABELS[status].toLowerCase()} projects.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
 
         {(p.listing?.folders.length ?? 0) > 0 && (
           <section className="other-folders">
@@ -215,6 +238,19 @@ export function ProjectsHome(p: Props) {
                 </button>
               </div>
             ))}
+          </section>
+        )}
+        {p.onJoin && (
+          <section className="other-folders shared-with-me">
+            <h3>Shared with me</h3>
+            {(p.shared ?? []).length === 0 && <p className="muted small">Projects other people ask you to review appear here.</p>}
+            {(p.shared ?? []).map((sp) => (
+              <div className="other-folder" key={sp.dir}>
+                <Icon name="folder" size={15} className="kind-dir" /> <span className="grow-text">{sp.project}</span>
+                <button type="button" onClick={() => p.onOpenShared?.(sp.dir)}>Open</button>
+              </div>
+            ))}
+            <button type="button" onClick={p.onJoin}>Open invitation…</button>
           </section>
         )}
       </div>

@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { STATUS_LABELS, type ProjectSummary } from '../shared/projects';
+import { byRecentlyOpened, STATUS_LABELS, type ProjectSummary } from '../shared/projects';
 import { useEscape } from './useEscape';
 
 interface Props {
   projects: ProjectSummary[];
   currentPath: string | null;
+  /** Paths of the projects opened on this device, most recent first. */
+  openedOrder: string[];
   onOpen(path: string): void;
   onHome(): void;
   onNew(): void;
@@ -19,7 +21,7 @@ interface Entry {
 }
 
 /** Ctrl+K: type a few letters of a project's name and press Enter. */
-export function QuickSwitcher({ projects, currentPath, onOpen, onHome, onNew, onClose }: Props) {
+export function QuickSwitcher({ projects, currentPath, openedOrder, onOpen, onHome, onNew, onClose }: Props) {
   const [query, setQuery] = useState('');
   const [index, setIndex] = useState(0);
   const input = useRef<HTMLInputElement>(null);
@@ -28,12 +30,13 @@ export function QuickSwitcher({ projects, currentPath, onOpen, onHome, onNew, on
 
   const entries = useMemo<Entry[]>(() => {
     const q = query.trim().toLowerCase();
-    const sorted = [...projects].filter((p) => !p.meta.archived).sort((a, b) => (b.lastEdited ?? 0) - (a.lastEdited ?? 0));
+    // Most recently opened first; the open project goes last, so Ctrl+K then Enter returns to the one you were in before.
+    const sorted = [...byRecentlyOpened(projects, openedOrder, currentPath), ...projects.filter((p) => !p.meta.archived && p.path === currentPath)];
     const matching = sorted.filter((p) => q === '' || p.name.toLowerCase().includes(q) || p.meta.templateName.toLowerCase().includes(q));
     const list: Entry[] = matching.map((p) => ({
       key: p.path,
       label: p.name,
-      detail: `${STATUS_LABELS[p.meta.status]} · ${p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
+      detail: `${STATUS_LABELS[p.meta.status]} · ${p.words === null ? '-' : p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
       run: () => onOpen(p.path)
     }));
     if ('projects home all projects'.includes(q) || q === '') list.push({ key: '#home', label: 'All projects…', run: onHome });

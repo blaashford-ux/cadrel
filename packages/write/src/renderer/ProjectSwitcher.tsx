@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { STATUS_LABELS, type ProjectSummary } from '../shared/projects';
+import { byRecentlyOpened, STATUS_LABELS, type ProjectSummary } from '../shared/projects';
 import { Icon } from './Icon';
 
 interface Props {
@@ -8,16 +8,19 @@ interface Props {
   isProject: boolean;
   projects: ProjectSummary[];
   currentPath: string | null;
+  /** Paths of the projects opened on this device, most recent first. */
+  openedOrder: string[];
   onOpen(path: string): void;
   onHome(): void;
   onNew(): void;
-  onOpenFolder(): void;
+  /** Absent where the app can't open arbitrary folders (the phone). */
+  onOpenFolder?(): void;
   onSettings(): void;
   onProgress(): void;
 }
 
 /** The sidebar header: the open project's name, with a menu to jump to another project or back to the Projects home. */
-export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress }: Props) {
+export function ProjectSwitcher({ name, isProject, projects, currentPath, openedOrder, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -35,7 +38,8 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen
     };
   }, [open]);
 
-  const recent = [...projects].filter((p) => !p.meta.archived && p.path !== currentPath).sort((a, b) => (b.lastEdited ?? 0) - (a.lastEdited ?? 0)).slice(0, 6);
+  // The projects opened most recently come first; ones never opened here follow, newest edit first.
+  const recent = byRecentlyOpened(projects, openedOrder, currentPath).slice(0, 6);
 
   return (
     <div className="switcher" ref={root}>
@@ -70,9 +74,11 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, onOpen
           <button type="button" role="menuitem" onClick={() => (setOpen(false), onNew())}>
             New project…
           </button>
-          <button type="button" role="menuitem" onClick={() => (setOpen(false), onOpenFolder())}>
-            Open folder…
-          </button>
+          {onOpenFolder && (
+            <button type="button" role="menuitem" onClick={() => (setOpen(false), onOpenFolder())}>
+              Open folder…
+            </button>
+          )}
         </div>
       )}
     </div>

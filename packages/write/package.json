@@ -1,21 +1,29 @@
 {
   "name": "@cadrel/write",
-  "version": "0.3.0",
+  "version": "0.8.5",
   "description": "Folder-based Markdown editor that splits files into chapters by Heading 1",
   "main": "dist-electron/electron/main.js",
   "scripts": {
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build:electron": "npm run build:assets && node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && esbuild electron/main.ts electron/preload.ts --bundle --platform=node --target=node22 --format=cjs --external:electron --outdir=dist-electron/electron --sourcemap",
+    "build:electron": "npm run build:assets && node scripts/build-electron.mjs",
     "build:renderer": "vite build",
+    "mcp": "node dist-electron/mcp/mdedit-mcp.js",
+    "build:skills": "node scripts/skills.mjs",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
     "test": "vitest run",
     "dist": "npm run build && electron-builder --win nsis --publish never",
-    "build:assets": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('assets/vendor',{recursive:true});fs.copyFileSync(path.join(path.dirname(require.resolve('pagedjs')),'..','dist','paged.polyfill.js'),'assets/vendor/paged.polyfill.js')\""
+    "build:assets": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('assets/vendor',{recursive:true});fs.copyFileSync(path.join(path.dirname(require.resolve('pagedjs')),'..','dist','paged.polyfill.js'),'assets/vendor/paged.polyfill.js')\"",
+    "dev:mobile": "vite --config vite.mobile.config.ts",
+    "build:mobile": "vite build --config vite.mobile.config.ts",
+    "android:sync": "npm run build:mobile && cap sync android"
   },
   "build": {
     "appId": "com.blaashford.mdedit",
     "productName": "MDEdit",
+    "asarUnpack": [
+      "dist-electron/mcp/**"
+    ],
     "files": [
       "dist/**",
       "dist-electron/**",
@@ -50,7 +58,7 @@
       "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false
     },
-    "copyright": "Copyright \u00a9 2026 blaashford-ux",
+    "copyright": "Copyright © 2026 blaashford-ux",
     "fileAssociations": [
       {
         "ext": [
@@ -72,9 +80,12 @@
     }
   },
   "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
     "@fontsource/eb-garamond": "^5.3.0",
     "@milkdown/crepe": "^7.22.2",
     "@milkdown/kit": "^7.22.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@types/mdast": "^4.0.4",
     "@types/node": "^22.0.0",
     "@types/react": "^18.3.0",
@@ -88,6 +99,10 @@
     "esbuild": "^0.24.0",
     "fflate": "^0.8.3",
     "font-list": "^2.1.0",
+    "jsdom": "^25.0.1",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
     "pagedjs": "^0.4.3",
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
@@ -97,9 +112,15 @@
     "unified": "^11.0.5",
     "vite": "^5.4.0",
     "vitest": "^2.1.0",
-    "wait-on": "^8.0.0"
+    "wait-on": "^8.0.0",
+    "zod": "^3.25.76"
   },
   "author": "blaashford-ux",
   "homepage": "https://github.com/blaashford-ux/MDEdit",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4"
+  }
 }

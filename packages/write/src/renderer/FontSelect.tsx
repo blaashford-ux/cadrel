@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { LayerTag } from './layerEditor';
 import { BUNDLED_FONTS, bundledFont, fontStack } from '../shared/export/fonts';
 
 let installedPromise: Promise<string[]> | null = null;
@@ -28,10 +29,11 @@ interface Props {
   value: string;
   onChange(family: string): void;
   hint?: ReactNode;
+  path?: string;
 }
 
 /** A font picker: the bundled families first, then everything installed on this computer. */
-export function FontSelect({ label, value, onChange, hint }: Props) {
+export function FontSelect({ label, value, onChange, hint, path }: Props) {
   const [installed, setInstalled] = useState<string[] | null>(null);
   const [previewFamily, setPreviewFamily] = useState(fontStack(value));
 
@@ -59,7 +61,10 @@ export function FontSelect({ label, value, onChange, hint }: Props) {
   return (
     <div className="field font-field">
       <label>
-        <span className="field-label">{label}</span>
+        <span className="field-label">
+          {label}
+          <LayerTag path={path} />
+        </span>
         <select value={bundledFont(value)?.family ?? value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
           <optgroup label="Included with MDEdit">
             {BUNDLED_FONTS.map((b) => (

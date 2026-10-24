@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDEdit Help</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --panel: #f1eee7; --ink: #222; --muted: #6b665c; --line: #ddd8cc;
+    --accent: #8a4b14; --code: #ebe6da; --kbd: #fff; --hit: #fff1b8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #1c1b19; --panel: #25231f; --ink: #e8e4da; --muted: #a39d90; --line: #38352f;
+      --accent: #e0a46a; --code: #2d2a25; --kbd: #333029; --hit: #5a4a10;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #1c1b19; --panel: #25231f; --ink: #e8e4da; --muted: #a39d90; --line: #38352f;
+    --accent: #e0a46a; --code: #2d2a25; --kbd: #333029; --hit: #5a4a10;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 15px/1.55 "Segoe UI", system-ui, sans-serif; display: flex; flex-direction: column; }
+  a { color: var(--accent); }
+  header { display: flex; gap: 8px; align-items: center; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; white-space: nowrap; }
+  header button { font: inherit; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 2px 10px; cursor: pointer; }
+  header button:disabled { opacity: .4; cursor: default; }
+  header input { flex: 1; min-width: 80px; max-width: 320px; margin-left: auto; font: inherit; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  .layout { flex: 1; display: flex; min-height: 0; }
+  nav { width: 220px; flex: none; overflow-y: auto; padding: 12px 8px 24px; background: var(--panel); border-right: 1px solid var(--line); }
+  nav a { display: block; padding: 3px 10px; border-radius: 4px; color: var(--ink); text-decoration: none; font-size: 14px; }
+  nav a:hover { background: var(--code); }
+  nav a.current { background: var(--accent); color: var(--bg); }
+  nav .group { margin: 12px 10px 2px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  nav a.hidden, nav .group.hidden { display: none; }
+  main { flex: 1; overflow-y: auto; padding: 18px 32px 60px; scroll-behavior: smooth; }
+  article { max-width: 760px; margin: 0 auto; }
+  article h2 { margin: 0 0 .3em; font-size: 24px; }
+  article h3 { margin: 1.4em 0 .3em; font-size: 16px; }
+  p, ul, ol, table, pre { margin: .6em 0; }
+  ul, ol { padding-left: 1.4em; }
+  code, kbd { font: 13px Consolas, monospace; background: var(--code); padding: 1px 5px; border-radius: 3px; }
+  kbd { background: var(--kbd); border: 1px solid var(--line); border-bottom-width: 2px; white-space: nowrap; }
+  pre { background: var(--code); padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 4px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tip, .note { padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--panel); border-radius: 0 4px 4px 0; margin: .8em 0; }
+  .see { margin-top: 1.6em; padding-top: .6em; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+  .tag { font-size: 11px; background: var(--code); color: var(--muted); padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
+  mark { background: var(--hit); color: inherit; }
+  .js section.topic { display: none; }
+  .js section.topic.current { display: block; }
+  .empty { color: var(--muted); }
+  @media (max-width: 640px) { nav { display: none; } main { padding: 14px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>MDEdit Help</h1>
+  <button id="back" title="Back (Alt+Left)" disabled>&larr;</button>
+  <button id="fwd" title="Forward (Alt+Right)" disabled>&rarr;</button>
+  <button id="home" title="Contents">Home</button>
+  <input id="q" type="search" placeholder="Search help…" aria-label="Search help">
+</header>
+<div class="layout">
+<nav id="toc" aria-label="Topics"></nav>
+<main id="main"><article>
+
+<section class="topic" id="start" data-group="Getting started" data-title="Welcome">
+  <h2>Welcome to MDEdit</h2>
+  <p>MDEdit is a Markdown editor for writing books. Each book lives in a <a href="#projects">project</a>, you edit it <a href="#chapters">one chapter at a time</a>, and you can <a href="#export">export an EPUB, print PDF and Word file</a> ready for Kindle Direct Publishing. Projects stay in step across your PC and phone through <a href="#sync">Google Drive</a>.</p>
+  <h3>Quick start</h3>
+  <ol>
+    <li><strong>File → New Project…</strong> (<kbd>Ctrl+Alt+N</kbd>), pick a template and name it. See <a href="#projects">Projects</a>.</li>
+    <li>Create a file (<kbd>Ctrl+N</kbd>) and start writing. Each <code># Heading 1</code> starts a new chapter in the file list. See <a href="#chapters">Files and chapters</a>.</li>
+    <li>Set a word goal under <strong>File → Project Progress…</strong>. See <a href="#goals">Goals and progress</a>.</li>
+    <li>When the draft is done, right-click the file → <strong>Mark for Export</strong>, fill in <a href="#bookdetails">Book Details</a>, then <strong>Export…</strong> (<kbd>Ctrl+E</kbd>).</li>
+  </ol>
+  <h3>Where to find things</h3>
+  <table>
+    <tr><th>Menu</th><th>What's in it</th></tr>
+    <tr><td><strong>File</strong></td><td>Projects, new file/folder, Open Folder, Project Settings, Progress, Export, Drive Sync, Settings, Save, Close Tab</td></tr>
+    <tr><td><strong>Edit</strong></td><td>Undo/redo, <a href="#undo">Undo Last Action</a>, clipboard, <a href="#find">Find, Replace, Go to Line</a></td></tr>
+    <tr><td><strong>Go</strong></td><td>Next/previous chapter, scene break and tab. See <a href="#navigate">Moving around</a></td></tr>
+    <tr><td><strong>View</strong></td><td>Theme, zoom, Zone Mode, full screen. See <a href="#settings">Settings</a></td></tr>
+    <tr><td><strong>Help</strong></td><td>This window (<kbd>F1</kbd>) and About/updates</td></tr>
+  </table>
+  <p class="tip">This help opens in its own window, so keep it beside MDEdit while you work. Use <kbd>Alt+←</kbd>/<kbd>Alt+→</kbd> to go back and forward, and the search box to find a word.</p>
+  <div class="see">Next: <a href="#projects">Projects</a> · <a href="#shortcuts">Shortcuts</a> · <a href="#troubleshooting">Troubleshooting</a></div>
+</section>
+
+<section class="topic" id="projects" data-group="Writing" data-title="Projects">
+  <h2>Projects</h2>
+  <p>A project is a folder with the subfolders you choose, kept inside your <strong>Root Folder</strong> (set in <a href="#settings">Settings</a>). The <strong>Projects home</strong> shows each project as a card with its status, word count and <a href="#goals">goal</a> progress.</p>
+  <h3>Create and switch</h3>
+  <ul>
+    <li><strong>New Project…</strong> (<kbd>Ctrl+Alt+N</kbd>): choose a template (<em>Novel</em>, <em>Series</em>, <em>Short story</em> or <em>Blank</em>). The template decides which subfolders are made (for example a notes or characters folder).</li>
+    <li><strong>Switch Project…</strong> (<kbd>Ctrl+K</kbd>): type to jump to another project. <strong>Projects Home</strong> returns to the cards.</li>
+    <li><strong>Open Folder…</strong> (<kbd>Ctrl+O</kbd>) opens any folder of Markdown files, even outside the Root Folder, as a plain folder.</li>
+  </ul>
+  <h3>On the Projects home</h3>
+  <p>Search, sort, filter by status, <strong>archive</strong> or <strong>duplicate</strong> a project. Status is one of the project's settings; setting it to <em>Editing</em> turns on the <a href="#editing-stage">editing stage</a>.</p>
+  <h3>Project Settings</h3>
+  <p><strong>File → Project Settings…</strong> holds the status, the folder layout and project-wide defaults for <a href="#export">export</a>. Project defaults sit between app settings and each book's own settings (see <a href="#layers">Settings layers</a>).</p>
+  <div class="see">See also: <a href="#chapters">Files and chapters</a> · <a href="#goals">Goals and progress</a> · <a href="#sync">Google Drive sync</a> · <a href="#sharing">Review with others</a></div>
+</section>
+
+<section class="topic" id="chapters" data-group="Writing" data-title="Files and chapters">
+  <h2>Files and chapters</h2>
+  <p>The file tree on the left lists your folders and Markdown files. Under each file it lists its <strong>chapters</strong>, split by <code># Heading 1</code> by default (change the level in <a href="#settings">Settings</a>). Click a chapter to open it; only that chapter is loaded into the editor, so long manuscripts stay fast.</p>
+  <h3>Tree toolbar</h3>
+  <p><strong>File</strong> and <strong>Folder</strong> create new ones, <strong>Import</strong> brings in <a href="#import">Word documents</a>, and <kbd>Ctrl+P</kbd> filters the tree by name.</p>
+  <h3>Right-click a folder</h3>
+  <p>New File Here, New Folder Here, Import Word Document, Rename (<kbd>F2</kbd>), Delete Folder (<kbd>Del</kbd>), Show in File Explorer.</p>
+  <h3>Right-click a file</h3>
+  <table>
+    <tr><td><strong>Mark for Export</strong> / Export… / Book Details… / Unmark</td><td>See <a href="#export">Export for KDP</a> and <a href="#bookdetails">Book Details</a>.</td></tr>
+    <tr><td><strong>Active Manuscript</strong></td><td>Tells MDEdit which file is the book. Goals, progress and <a href="#sharing">sharing</a> use it.</td></tr>
+    <tr><td><strong>Analyze Text</strong></td><td>See <a href="#analysis">Text analysis</a>.</td></tr>
+    <tr><td>Rename, Delete</td><td>Deleted files go to the Recycle Bin. <a href="#undo">Undo</a> can bring back chapters.</td></tr>
+  </table>
+  <h3>Right-click a chapter</h3>
+  <ul>
+    <li><strong>New Chapter Below…</strong> adds a chapter after this one.</li>
+    <li><strong>Move Up / Move Down</strong> (<kbd>Alt+↑</kbd> / <kbd>Alt+↓</kbd>) reorders chapters.</li>
+    <li><strong>Rename</strong> (<kbd>F2</kbd>) changes the chapter's heading; <strong>Delete Chapter…</strong> (<kbd>Del</kbd>).</li>
+    <li><strong>Mark Edited</strong>, <strong>Mark Edited to Here</strong>, <strong>Unmark Edited</strong>: see <a href="#editing-stage">Editing stage</a>.</li>
+  </ul>
+  <p class="tip">Example: to reorder chapter 7 before chapter 6, select chapter 7 in the tree and press <kbd>Alt+↑</kbd> once. The file's text is rearranged for you.</p>
+  <div class="see">See also: <a href="#writing">Writing and formatting</a> · <a href="#navigate">Moving around</a> · <a href="#tabs">Tabs</a></div>
+</section>
+
+<section class="topic" id="writing" data-group="Writing" data-title="Writing and formatting">
+  <h2>Writing and formatting</h2>
+  <p>Edit in the <strong>formatted (Visual) view</strong>, or switch to raw Markdown with <kbd>Ctrl+Shift+M</kbd> (Source). Both edit the same text. The toolbar above the text offers bold, italic, headings, quotes, lists, scene break, undo and <a href="#alignment">alignment</a>; select text for a floating toolbar.</p>
+  <h3>Markdown you will use most</h3>
+<pre><code># Chapter title            (Heading 1: starts a chapter)
+## Section heading
+**bold**   *italic*   ~~strike~~
+&gt; A quote
+- bullet      1. numbered
+* * *                      (a scene break)</code></pre>
+  <h3>Scene breaks</h3>
+  <p>A line containing <code>* * *</code> (or <code>---</code>) is a scene break. Insert one from the toolbar and jump between them with <kbd>Ctrl+↓</kbd>/<kbd>Ctrl+↑</kbd> (see <a href="#navigate">Moving around</a>). They are printed as a break in the <a href="#export">export</a> and ignored by <a href="#analysis">text analysis</a>.</p>
+  <h3>Source vs Visual</h3>
+  <p>Use Source for exact control of the Markdown (alignment fences, comments, odd formatting), with a line-number gutter and <kbd>Ctrl+G</kbd> to go to a line. Use Visual for writing.</p>
+  <h3>Zone Mode</h3>
+  <p><strong>View → Zone Mode</strong> (<kbd>F8</kbd>) hides the surrounding panels so you can write without distraction.</p>
+  <h3>Word counts</h3>
+  <p>The status bar shows the word count of what you are editing. Totals used by <a href="#goals">goals</a> ignore headings' markup, comments and alignment fence lines.</p>
+  <div class="see">See also: <a href="#alignment">Alignment</a> · <a href="#find">Find and replace</a> · <a href="#safety">Safety and autosave</a></div>
+</section>
+
+<section class="topic" id="alignment" data-group="Writing" data-title="Alignment">
+  <h2>Alignment</h2>
+  <p>Body text is <strong>justified</strong> in the exported EPUB, print PDF and Word file. To line a part up differently, select the paragraphs and press an alignment button, or use the keys:</p>
+  <table>
+    <tr><th>Left</th><th>Centre</th><th>Right</th><th>Justify</th></tr>
+    <tr><td><kbd>Ctrl+Shift+L</kbd></td><td><kbd>Ctrl+Shift+E</kbd></td><td><kbd>Ctrl+Shift+R</kbd></td><td><kbd>Ctrl+Shift+J</kbd></td></tr>
+  </table>
+  <p>Pressing the alignment already in force removes it. In the file it is stored as a fence:</p>
+<pre><code>::: center
+A centred title or verse,
+as many paragraphs as you like.
+:::</code></pre>
+  <p>Fences can hold paragraphs, headings, quotes and lists, and do not nest. After a quote or list, leave a blank line before the closing <code>:::</code>.</p>
+  <p>To change what <em>unfenced</em> paragraphs do for the whole book (justified or left/ragged right), set <strong>Body text alignment</strong> in <a href="#bookdetails">Book Details → Export</a>.</p>
+  <div class="see">See also: <a href="#writing">Writing and formatting</a> · <a href="#export">Export for KDP</a></div>
+</section>
+
+<section class="topic" id="find" data-group="Writing" data-title="Find and replace">
+  <h2>Find and replace</h2>
+  <ul>
+    <li><kbd>Ctrl+F</kbd> Find, <kbd>Ctrl+H</kbd> Find &amp; Replace, <kbd>F3</kbd> / <kbd>Shift+F3</kbd> next / previous match.</li>
+    <li>Search the current <strong>chapter</strong> or the <strong>whole file</strong>.</li>
+    <li>In the find bar: <kbd>Alt+C</kbd> match case, <kbd>Alt+W</kbd> whole word, <kbd>Alt+R</kbd> regular expression.</li>
+  </ul>
+  <h3>Examples</h3>
+  <table>
+    <tr><th>Goal</th><th>Find (regex on)</th><th>Replace</th></tr>
+    <tr><td>Two spaces to one</td><td><code>  +</code> (two spaces, then +)</td><td>one space</td></tr>
+    <tr><td>Straight to curly quotes (opening)</td><td><code>"(\w)</code></td><td><code>“$1</code></td></tr>
+    <tr><td>Find a word and its variants</td><td><code>\bwalk(s|ed|ing)?\b</code></td><td>(just look)</td></tr>
+  </table>
+  <p class="tip">To hunt overused words across the whole book, <a href="#analysis">Analyze Text</a> lists them for you, then use Find (whole file) to fix each one.</p>
+  <div class="see">See also: <a href="#navigate">Moving around</a> · <a href="#undo">Undo</a></div>
+</section>
+
+<section class="topic" id="navigate" data-group="Writing" data-title="Moving around">
+  <h2>Moving around</h2>
+  <table>
+    <tr><th>Do this</th><th>Keys (or Go menu)</th></tr>
+    <tr><td>Next / previous chapter</td><td><kbd>Ctrl+PgDn</kbd> / <kbd>Ctrl+PgUp</kbd></td></tr>
+    <tr><td>Next / previous scene break</td><td><kbd>Ctrl+↓</kbd> / <kbd>Ctrl+↑</kbd></td></tr>
+    <tr><td>Next / previous tab</td><td><kbd>Ctrl+Tab</kbd> / <kbd>Ctrl+Shift+Tab</kbd></td></tr>
+    <tr><td>Go to a line number</td><td><kbd>Ctrl+G</kbd></td></tr>
+    <tr><td>Filter the file tree</td><td><kbd>Ctrl+P</kbd></td></tr>
+    <tr><td>Switch project</td><td><kbd>Ctrl+K</kbd></td></tr>
+  </table>
+  <p>In the <a href="#editing-stage">editing stage</a>, moving past a chapter may ask whether to mark it edited.</p>
+  <div class="see">See also: <a href="#tabs">Tabs</a> · <a href="#chapters">Files and chapters</a> · <a href="#shortcuts">All shortcuts</a></div>
+</section>
+
+<section class="topic" id="tabs" data-group="Writing" data-title="Tabs">
+  <h2>Tabs</h2>
+  <p>Each open file has a tab. <kbd>Ctrl+W</kbd> closes the current tab; <kbd>Ctrl+Tab</kbd> cycles. MDEdit remembers your open tabs and window position between sessions. Analysis reports open in a tab too, see <a href="#analysis">Text analysis</a>.</p>
+  <div class="see">See also: <a href="#navigate">Moving around</a> · <a href="#safety">Safety and autosave</a></div>
+</section>
+
+<section class="topic" id="safety" data-group="Writing" data-title="Safety and autosave">
+  <h2>Safety and autosave</h2>
+  <ul>
+    <li><strong>Drafts.</strong> What you type is saved as a draft as you go, so a crash or power cut doesn't lose it; MDEdit offers to restore it next time. Press <kbd>Ctrl+S</kbd> to save to the real file.</li>
+    <li><strong>Outside changes.</strong> If the file is changed by another program, MDEdit notices and asks how to proceed rather than overwriting.</li>
+    <li><strong>Recycle Bin.</strong> Deleted files and folders go to the Windows Recycle Bin.</li>
+    <li><strong>Undo for structure.</strong> See <a href="#undo">Undo</a>.</li>
+    <li><strong>Sync conflicts</strong> keep both versions. See <a href="#sync">Google Drive sync</a>.</li>
+  </ul>
+  <div class="see">See also: <a href="#undo">Undo</a> · <a href="#troubleshooting">Troubleshooting</a></div>
+</section>
+
+<section class="topic" id="undo" data-group="Writing" data-title="Undo and redo">
+  <h2>Undo and redo</h2>
+  <ul>
+    <li><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd> undo and redo typing in the editor.</li>
+    <li><kbd>Ctrl+Alt+Z</kbd> / <kbd>Ctrl+Alt+Y</kbd> (<strong>Edit → Undo Last Action</strong>) undo and redo the last <em>chapter or file action</em>: deleting, moving or adding chapters. It remembers the last 5.</li>
+  </ul>
+  <p class="tip">Deleted a chapter by mistake? Press <kbd>Ctrl+Alt+Z</kbd> before doing anything else.</p>
+  <div class="see">See also: <a href="#safety">Safety and autosave</a> · <a href="#chapters">Files and chapters</a></div>
+</section>
+
+<section class="topic" id="goals" data-group="Tracking" data-title="Goals and progress">
+  <h2>Goals and progress</h2>
+  <p>Open <strong>File → Project Progress…</strong>. Set a <strong>word-count goal</strong> and a <strong>deadline</strong> for the project's <a href="#chapters">active manuscript</a>. You get a day-by-day chart, the words per day still needed, and an estimated finish date. Project cards on the <a href="#projects">Projects home</a> show the same progress.</p>
+  <p class="note">Example: a 90,000-word goal due in 60 days shows 1,500 words/day. If you write 2,000 a day the estimated finish moves earlier.</p>
+  <div class="see">See also: <a href="#projects">Projects</a> · <a href="#editing-stage">Editing stage</a></div>
+</section>
+
+<section class="topic" id="editing-stage" data-group="Tracking" data-title="Editing stage">
+  <h2>Editing stage</h2>
+  <p>Set a project's status to <em>Editing</em> (see <a href="#projects">Project Settings</a>) to track your revision pass. Then:</p>
+  <ul>
+    <li>Moving on from a chapter asks <strong>Mark Edited?</strong> (answer <em>Not Yet</em> to skip; it is not asked again until you save).</li>
+    <li>Right-click a chapter: <strong>Mark Edited</strong>, <strong>Unmark Edited</strong>, or <strong>Mark Edited to Here</strong> to mark it and every earlier chapter in the file.</li>
+    <li>The tree and project card show how far through the book you are.</li>
+  </ul>
+  <p class="tip">Finished the first 12 chapters on paper? Right-click chapter 12 → <strong>Mark Edited to Here</strong>.</p>
+  <div class="see">See also: <a href="#ai">Review with AI</a> · <a href="#goals">Goals and progress</a></div>
+</section>
+
+<section class="topic" id="notes" data-group="Review" data-title="Comments and suggestions">
+  <h2>Comments and suggestions (Notes)</h2>
+  <p>Select text (right-click it on the PC) and choose:</p>
+  <ul>
+    <li><strong>Add comment…</strong> to leave a remark on the passage.</li>
+    <li><strong>Suggest a change…</strong> to propose replacement text (one paragraph at a time).</li>
+  </ul>
+  <p>The <strong>Notes</strong> panel lists every note with its author. <strong>Accept</strong> a suggestion to apply it to your chapter, or reject it; mark a comment <em>Resolved</em>. Notes can have an optional <strong>Topic</strong> (for example <em>Pacing</em>) and can be filtered by author, topic, or to the chapter you are reading. A note stays with its text as you edit; if the text is deleted, the note is marked Resolved.</p>
+  <p>Notes come from you, from <a href="#sharing">human reviewers</a> and from <a href="#ai">AI reviewers</a> (marked with an <strong>AI</strong> badge).</p>
+  <div class="see">See also: <a href="#sharing">Review with others</a> · <a href="#ai">Review with AI</a></div>
+</section>
+
+<section class="topic" id="sharing" data-group="Review" data-title="Review with others">
+  <h2>Review with others</h2>
+  <p>Get feedback from people with their own MDEdit. It uses <a href="#sync">Google Drive</a>, so sync must be set up on both sides.</p>
+  <ol>
+    <li>Set the project's <strong>Active Manuscript</strong> (right-click the file). Reviewers see only that book.</li>
+    <li>Open <strong>Notes → Share…</strong> and create a link for each reviewer.</li>
+    <li>Tick the chapters that reviewer should get (<strong>All</strong>/<strong>None</strong> above the list). Your ticks are remembered. Ticking everything shares the whole book.</li>
+    <li>Send them the link or the short invitation with the download link for MDEdit.</li>
+  </ol>
+  <p>Reviewers open it under <strong>Projects → Shared with me</strong>, read your latest text and add their own <a href="#notes">notes</a>. You see everyone's together; they never see each other's. <strong>Projects → Sharing</strong> lists all your shares and lets you manage or remove links.</p>
+  <div class="see">See also: <a href="#collab">Work on a book together</a> · <a href="#notes">Comments and suggestions</a> · <a href="#sync">Google Drive sync</a></div>
+</section>
+
+<section class="topic" id="collab" data-group="Review" data-title="Work on a book together">
+  <h2>Work on a book together</h2>
+  <p>Let another author edit the same project. In <strong>Notes → Share…</strong> choose <strong>Collaborator (can edit)</strong> before <strong>Create editable link</strong>. They open it like a reviewer's link, under <strong>Projects → Shared with me</strong>.</p>
+  <ul>
+    <li>A collaborator gets <strong>every Markdown file</strong> in the project and can edit them and create new ones. Reviewers still see only the Active Manuscript.</li>
+    <li>The chapter ticks limit only the Active Manuscript for a collaborator; every other file is shared whole.</li>
+    <li>Each time either of you syncs, both sets of changes are merged chapter by chapter and paragraph by paragraph. If you both changed the same lines, both versions are kept between <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code> and <code>&gt;&gt;&gt;&gt;&gt;&gt;&gt;</code> lines for you to settle.</li>
+    <li>You and your collaborators see each other's <a href="#notes">notes</a>, including <a href="#ai">AI notes</a>; collaborators can use <strong>Notes → AI…</strong> on their own copy. Reviewers' notes stay private to you.</li>
+    <li>Deleting or renaming a file isn't passed on (the other copy brings it back), and chapter order isn't merged. Changes pass between collaborators through your copy, so your MDEdit needs to be open and online.</li>
+  </ul>
+  <div class="see">See also: <a href="#sharing">Review with others</a> · <a href="#sync">Google Drive sync</a></div>
+</section>
+
+<section class="topic" id="ai" data-group="Review" data-title="Review with AI">
+  <h2>Review with AI</h2>
+  <p>Let Claude, GPT or another AI app read your chapters and leave <a href="#notes">comments and suggestions</a> as a reviewer. <strong>The AI can never change your text</strong>; you accept or reject each note, and <strong>Accept all</strong> applies one reviewer's suggestions after a confirmation.</p>
+  <h3>Set up</h3>
+  <ol>
+    <li>Open a project and choose <strong>Notes → AI…</strong>, then <strong>Save files to Downloads</strong>. You get a <em>MDEdit AI Kit</em> folder with a README.</li>
+    <li><strong>Claude Desktop:</strong> double-click <code>mdedit.mcpb</code> to install the extension, and upload the three skill zips under Settings → Capabilities → Skills.</li>
+    <li><strong>Claude Code, Codex and other MCP apps:</strong> use the ready-made settings in the kit.</li>
+  </ol>
+  <h3>Ask for an edit</h3>
+<pre><code>Do a line edit of the chapters in my project The Lost King.</code></pre>
+  <table>
+    <tr><th>Skill</th><th>What it does</th></tr>
+    <tr><td>Developmental edit</td><td>Comments on structure, pacing, stakes, continuity and character.</td></tr>
+    <tr><td>Line edit</td><td>One-click suggestions for sentence-level fixes, plus comments on patterns.</td></tr>
+    <tr><td>Copy edit</td><td>Exact corrections for spelling, grammar, punctuation, consistency.</td></tr>
+  </table>
+  <p>Skills follow your style sheet and notes in the project. Notes are signed with the AI and skill (for example "Claude · Line edit"), and one skill's notes can be removed in a go from <strong>Notes → AI…</strong>. AI notes appear within seconds and stay on the PC where they were written.</p>
+  <p class="note">Web-only apps (ChatGPT app, claude.ai) can't reach your PC. <strong>Notes → AI… → Online apps</strong> can open a token-protected door for them if you also set up a tunnel; read the risks in the AI-REVIEW document before using it. The phone app has no AI review.</p>
+  <div class="see">See also: <a href="#notes">Comments and suggestions</a> · <a href="#analysis">Text analysis</a></div>
+</section>
+
+<section class="topic" id="analysis" data-group="Review" data-title="Text analysis">
+  <h2>Text analysis</h2>
+  <p>Right-click a manuscript → <strong>Analyze Text</strong>. It runs in the background and writes <code>&lt;name&gt; - Analysis.md</code> beside the file, opening in a new <a href="#tabs">tab</a> without taking focus. Running again makes <code>Analysis 2.md</code> so you can compare drafts.</p>
+  <p>The tab shows a formatted report with <strong>Save as HTML</strong>, <strong>Save as PDF</strong> and <strong>Edit as Markdown</strong> (the <strong>Report</strong> button returns). It covers:</p>
+  <ul>
+    <li>Dialogue share and speech tags; sentence length and rhythm; reading level.</li>
+    <li>Repeated words, echoes and phrases; adverbs; passive voice.</li>
+    <li>Filler, filter and crutch words; point of view and tense consistency; head-hopping.</li>
+    <li>Character mentions and where they appear; punctuation habits.</li>
+  </ul>
+  <p>The Summary lists what is "worth a look" (for example average sentence over 22 words, more than 12 adverbs per 1,000 words, over 15% passive). These are guides for fiction, not rules, and some false positives are expected. Re-run it after editing; the page shows stored results.</p>
+  <p class="tip">Typical use: run it on a finished draft, jump to the <em>Filler, filter and crutch words</em> section, then use <a href="#find">Find</a> across the whole file to trim "just" and "really".</p>
+  <div class="see">See also: <a href="#find">Find and replace</a> · <a href="#ai">Review with AI</a></div>
+</section>
+
+<section class="topic" id="import" data-group="Files" data-title="Import from Word">
+  <h2>Import from Word</h2>
+  <p>Right-click a folder → <strong>Import Word Document…</strong>, or use the <strong>Import</strong> button above the file tree. Choose one or more <code>.docx</code> files; each becomes a Markdown file of the same name in that folder (a taken name becomes <code>Name (2).md</code>).</p>
+  <p>Headings (including Title) become <code>#</code> headings; bold, italic, strikethrough, links, lists, quotes and tables are kept. Windows app only. After importing, check the <a href="#chapters">chapter list</a>: each <code>#</code> heading is a chapter.</p>
+  <div class="see">See also: <a href="#chapters">Files and chapters</a> · <a href="#export">Export for KDP</a></div>
+</section>
+
+<section class="topic" id="export" data-group="Publishing" data-title="Export for KDP">
+  <h2>Export for KDP</h2>
+  <ol>
+    <li>Right-click a <code>.md</code> file → <strong>Mark for Export</strong>. Your manuscript is never modified; the book's details are saved beside it.</li>
+    <li>Fill in <a href="#bookdetails">Book Details</a>.</li>
+    <li><strong>Export…</strong> (<kbd>Ctrl+E</kbd>): check the title and author, choose outputs and the save folder, and export.</li>
+  </ol>
+  <table>
+    <tr><th>Output</th><th>What you get</th></tr>
+    <tr><td>EPUB 3</td><td>Passes the standard EPUB checker, with embedded fonts.</td></tr>
+    <tr><td>Print PDF</td><td>Exact KDP trim size (5 × 8 up to 8.5 × 11 in), mirrored margins with the right inside margin for your page count, chapters starting on right-hand pages, page numbers and a contents page.</td></tr>
+    <tr><td>DOCX</td><td>A clean Word file with a linked contents list.</td></tr>
+  </table>
+  <p>Fonts: EB Garamond, Crimson Pro and Libre Baskerville come with the app; the print PDF can use any font installed on your computer. Text <a href="#alignment">alignment</a> is carried into all three.</p>
+  <p class="note">Not included: the paperback cover PDF, ISBN barcodes and uploading to KDP. The phone app has no export.</p>
+  <div class="see">See also: <a href="#bookdetails">Book Details</a> · <a href="#layers">Settings layers</a> · <a href="#alignment">Alignment</a></div>
+</section>
+
+<section class="topic" id="bookdetails" data-group="Publishing" data-title="Book Details">
+  <h2>Book Details</h2>
+  <p>Right-click a marked file → <strong>Book Details…</strong>, or open it from the <a href="#export">Export</a> dialog. Sections:</p>
+  <ul>
+    <li><strong>Title page:</strong> title, subtitle, author, optional cover image (JPEG or PNG).</li>
+    <li><strong>Copyright page</strong>, <strong>Dedication</strong>, <strong>Epigraph</strong>.</li>
+    <li><strong>Back matter:</strong> Continue the Story, Also by the author (with a blurb for each book), About the Author, and a Custom page. Only links you type are ever added.</li>
+    <li><strong>Chapters</strong> and <strong>Text</strong>: chapter heading style, fonts, size, spacing, body text alignment, trim size and margins for each output.</li>
+  </ul>
+  <div class="see">See also: <a href="#layers">Settings layers</a> · <a href="#export">Export for KDP</a></div>
+</section>
+
+<section class="topic" id="layers" data-group="Publishing" data-title="Settings layers">
+  <h2>Settings layers</h2>
+  <p>Export settings apply in this order: <strong>App</strong> (<a href="#settings">Settings</a>) → <strong>Project</strong> (<a href="#projects">Project Settings</a>) → <strong>Book</strong> (<a href="#bookdetails">Book Details</a>). A book changes only the fields you edit, so updating a project default reaches every book that hasn't set that field.</p>
+  <p>Each field shows where its value comes from; <strong>Reset</strong> hands it back to the layer above.</p>
+  <p class="tip">Example: set the font to Crimson Pro in Project Settings once. Every book inherits it, except one where you picked EB Garamond in its Book Details.</p>
+  <div class="see">See also: <a href="#export">Export for KDP</a> · <a href="#settings">Settings</a></div>
+</section>
+
+<section class="topic" id="sync" data-group="Sync and devices" data-title="Google Drive sync">
+  <h2>Google Drive sync</h2>
+  <p>Open <strong>File → Google Drive Sync…</strong> and sign in once on each device. MDEdit keeps your projects in an <code>MDEdit</code> folder in your Drive and can only see files it created there.</p>
+  <ul>
+    <li>Edits sync a few seconds after you save and when you return to the app.</li>
+    <li>If two devices change the same chapter, <strong>both versions are kept</strong> as a conflict copy for you to merge.</li>
+    <li>Nothing is deleted in bulk without asking: a pass that would remove many files waits for your go-ahead.</li>
+  </ul>
+  <p class="note">Don't put your Root Folder inside OneDrive, Dropbox or Google Drive for Desktop; two sync tools will fight.</p>
+  <div class="see">See also: <a href="#phone">On your phone</a> · <a href="#sharing">Review with others</a> · <a href="#safety">Safety and autosave</a></div>
+</section>
+
+<section class="topic" id="phone" data-group="Sync and devices" data-title="On your phone">
+  <h2>On your phone (Android)</h2>
+  <p>The Android app has the same editor, <a href="#projects">Projects home</a>, <a href="#goals">goals</a> and <a href="#find">find and replace</a>. Files stay on the phone and sync through <a href="#sync">Google Drive</a>.</p>
+  <ul>
+    <li>Press and hold a file or project for its menu.</li>
+    <li>Press and hold text to select with Android's own handles. A bar above the keyboard then offers Cut, Copy, Paste, Comment, Suggest and Find. With nothing selected it offers bold, italic, headings, lists, scene break, <a href="#alignment">alignment</a> and undo.</li>
+    <li>No KDP export and no AI review on the phone; you can still read and add <a href="#notes">notes</a> and <a href="#sharing">share</a>.</li>
+  </ul>
+  <div class="see">See also: <a href="#sync">Google Drive sync</a> · <a href="#notes">Comments and suggestions</a></div>
+</section>
+
+<section class="topic" id="settings" data-group="Reference" data-title="Settings">
+  <h2>Settings</h2>
+  <p><strong>File → Settings…</strong> (<kbd>Ctrl+,</kbd>) holds app-wide choices: the <strong>Root Folder</strong> where projects live, the chapter heading level, appearance and colours, and the default export settings (the first of the <a href="#layers">settings layers</a>). A button puts everything back to the shipped defaults; nothing is saved until you press Save.</p>
+  <p><strong>View → Theme</strong> chooses Match Windows, Light or Dark. <strong>View → Zoom</strong> (<kbd>Ctrl++</kbd>, <kbd>Ctrl+-</kbd>, <kbd>Ctrl+0</kbd>) resizes the whole window. <kbd>F11</kbd> toggles full screen.</p>
+  <div class="see">See also: <a href="#layers">Settings layers</a> · <a href="#projects">Projects</a></div>
+</section>
+
+<section class="topic" id="shortcuts" data-group="Reference" data-title="Keyboard shortcuts">
+  <h2>Keyboard shortcuts</h2>
+  <table>
+    <tr><th>Key</th><th>Action</th></tr>
+    <tr><td><kbd>F1</kbd></td><td>Open this help</td></tr>
+    <tr><td><kbd>Ctrl+S</kbd></td><td>Save</td></tr>
+    <tr><td><kbd>Ctrl+Alt+N</kbd> / <kbd>Ctrl+K</kbd></td><td>New project / switch project (<a href="#projects">Projects</a>)</td></tr>
+    <tr><td><kbd>Ctrl+O</kbd> / <kbd>Ctrl+N</kbd> / <kbd>Ctrl+Shift+N</kbd></td><td>Open folder / new file / new folder</td></tr>
+    <tr><td><kbd>Ctrl+W</kbd></td><td>Close tab</td></tr>
+    <tr><td><kbd>Ctrl+Tab</kbd> / <kbd>Ctrl+Shift+Tab</kbd></td><td>Next / previous tab</td></tr>
+    <tr><td><kbd>Ctrl+PgDn</kbd> / <kbd>Ctrl+PgUp</kbd></td><td>Next / previous chapter</td></tr>
+    <tr><td><kbd>Ctrl+↓</kbd> / <kbd>Ctrl+↑</kbd></td><td>Next / previous scene break</td></tr>
+    <tr><td><kbd>Ctrl+,</kbd></td><td>Settings</td></tr>
+    <tr><td><kbd>Ctrl+Shift+M</kbd></td><td>Toggle Source / Visual (<a href="#writing">Writing</a>)</td></tr>
+    <tr><td><kbd>Ctrl+Shift+L</kbd> / <kbd>E</kbd> / <kbd>R</kbd> / <kbd>J</kbd></td><td>Align left / centre / right / justify (<a href="#alignment">Alignment</a>)</td></tr>
+    <tr><td><kbd>Ctrl+Alt+Z</kbd> / <kbd>Ctrl+Alt+Y</kbd></td><td>Undo / redo last chapter or file action (<a href="#undo">Undo</a>)</td></tr>
+    <tr><td><kbd>Ctrl+P</kbd></td><td>Filter files</td></tr>
+    <tr><td><kbd>Ctrl+F</kbd> / <kbd>Ctrl+H</kbd></td><td>Find / Find &amp; Replace (<a href="#find">Find</a>)</td></tr>
+    <tr><td><kbd>F3</kbd> / <kbd>Shift+F3</kbd></td><td>Next / previous match</td></tr>
+    <tr><td><kbd>Ctrl+G</kbd></td><td>Go to line</td></tr>
+    <tr><td><kbd>Alt+C</kbd> / <kbd>Alt+W</kbd> / <kbd>Alt+R</kbd></td><td>In the find bar: match case / whole word / regex</td></tr>
+    <tr><td><kbd>Ctrl+E</kbd></td><td>Export (<a href="#export">Export</a>)</td></tr>
+    <tr><td><kbd>F5</kbd></td><td>Refresh the file list</td></tr>
+    <tr><td><kbd>F8</kbd></td><td>Zone Mode</td></tr>
+    <tr><td><kbd>F2</kbd> / <kbd>Del</kbd> / <kbd>Alt+↑</kbd> / <kbd>Alt+↓</kbd></td><td>In the file list: rename / delete / move chapter (<a href="#chapters">Chapters</a>)</td></tr>
+  </table>
+  <p>Menus can also be opened with <kbd>Alt</kbd> plus the underlined letter.</p>
+</section>
+
+<section class="topic" id="troubleshooting" data-group="Reference" data-title="Troubleshooting">
+  <h2>Troubleshooting</h2>
+  <table>
+    <tr><th>Problem</th><th>Try</th></tr>
+    <tr><td>My chapter list is wrong or has a missing chapter</td><td>Chapters start at the heading level set in <a href="#settings">Settings</a> (Heading 1 by default). Check the heading has a space after <code>#</code>, then press <kbd>F5</kbd>.</td></tr>
+    <tr><td>I can't find Export / Book Details for a file</td><td>Right-click the file and choose <strong>Mark for Export</strong> first (<a href="#export">Export for KDP</a>).</td></tr>
+    <tr><td>A file changed while I had it open</td><td>Another program or device edited it; see <a href="#safety">Safety and autosave</a>. Sync conflicts keep both copies (<a href="#sync">Google Drive sync</a>).</td></tr>
+    <tr><td>Sync is stuck or asks to confirm deletions</td><td>Open <strong>Google Drive Sync…</strong> to read the message and confirm or cancel. Keep the Root Folder out of other sync tools.</td></tr>
+    <tr><td>Reviewer sees the wrong book</td><td>Set the <a href="#sharing">Active Manuscript</a> and re-check the ticked chapters in Share.</td></tr>
+    <tr><td>Windows says "unknown publisher"</td><td>The installer isn't code-signed yet: <strong>More info → Run anyway</strong>.</td></tr>
+    <tr><td>Updating MDEdit</td><td><strong>Help → About MDEdit</strong> can check for and install the latest release.</td></tr>
+  </table>
+  <p>Questions, bugs or ideas: open an issue at <a href="https://github.com/blaashford-ux/MDEdit/issues">github.com/blaashford-ux/MDEdit/issues</a>.</p>
+  <div class="see">See also: <a href="#start">Welcome</a> · <a href="#shortcuts">Shortcuts</a></div>
+</section>
+
+<p id="none" class="empty" hidden>No topics match.</p>
+</article></main>
+</div>
+<script>
+(function () {
+  var doc = document, root = doc.documentElement;
+  var topics = Array.prototype.slice.call(doc.querySelectorAll('section.topic'));
+  var toc = doc.getElementById('toc'), main = doc.getElementById('main');
+  var q = doc.getElementById('q'), back = doc.getElementById('back'), fwd = doc.getElementById('fwd');
+  root.className += ' js';
+
+  // build the contents list, grouped
+  var links = {}, last = null;
+  topics.forEach(function (s) {
+    var g = s.getAttribute('data-group');
+    if (g !== last) { var h = doc.createElement('div'); h.className = 'group'; h.textContent = g; h.setAttribute('data-group', g); toc.appendChild(h); last = g; }
+    var a = doc.createElement('a'); a.href = '#' + s.id; a.textContent = s.getAttribute('data-title'); toc.appendChild(a); links[s.id] = a;
+  });
+
+  var current = null;
+  function show(id) {
+    if (!links[id]) id = 'start';
+    if (current === id) return;
+    current = id;
+    topics.forEach(function (s) { s.classList.toggle('current', s.id === id); });
+    Object.keys(links).forEach(function (k) { links[k].classList.toggle('current', k === id); });
+    main.scrollTop = 0;
+    doc.title = links[id].textContent + ' – MDEdit Help';
+    if (q.value) highlight(q.value);
+  }
+  function route() { show(decodeURIComponent(location.hash.slice(1)) || 'start'); }
+  window.addEventListener('hashchange', route);
+
+  // back / forward use the page history
+  function go(n) { history.go(n); }
+  back.onclick = function () { go(-1); };
+  fwd.onclick = function () { go(1); };
+  doc.getElementById('home').onclick = function () { location.hash = '#start'; };
+  doc.addEventListener('keydown', function (e) {
+    if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+    else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+    else if ((e.ctrlKey && e.key === 'f') || e.key === '/' && doc.activeElement !== q) { e.preventDefault(); q.focus(); q.select(); }
+    else if (e.key === 'Escape' && q.value) { q.value = ''; filter(); }
+  });
+  // history length is not exposed per direction, so enable both and let go() no-op at the ends
+  back.disabled = false; fwd.disabled = false;
+
+  // search: narrow the contents list to matching topics and highlight the hits in the open topic
+  function clearMarks(el) {
+    Array.prototype.slice.call(el.querySelectorAll('mark')).forEach(function (m) {
+      m.parentNode.replaceChild(doc.createTextNode(m.textContent), m); m.parentNode.normalize();
+    });
+  }
+  function highlight(term) {
+    var el = doc.getElementById(current); if (!el) return;
+    clearMarks(el);
+    if (!term) return;
+    var re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    var walker = doc.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = [], n;
+    while ((n = walker.nextNode())) if (re.test(n.nodeValue)) nodes.push(n), re.lastIndex = 0;
+    nodes.forEach(function (node) {
+      var frag = doc.createDocumentFragment(), text = node.nodeValue, pos = 0, m;
+      re.lastIndex = 0;
+      while ((m = re.exec(text))) {
+        frag.appendChild(doc.createTextNode(text.slice(pos, m.index)));
+        var mk = doc.createElement('mark'); mk.textContent = m[0]; frag.appendChild(mk);
+        pos = m.index + m[0].length;
+      }
+      frag.appendChild(doc.createTextNode(text.slice(pos)));
+      node.parentNode.replaceChild(frag, node);
+    });
+  }
+  function filter() {
+    var term = q.value.trim().toLowerCase(), any = false, firstHit = null;
+    var shownGroups = {};
+    topics.forEach(function (s) {
+      var hit = !term || s.textContent.toLowerCase().indexOf(term) >= 0 || s.getAttribute('data-title').toLowerCase().indexOf(term) >= 0;
+      links[s.id].classList.toggle('hidden', !hit);
+      if (hit) { any = true; shownGroups[s.getAttribute('data-group')] = true; if (!firstHit) firstHit = s.id; }
+    });
+    Array.prototype.forEach.call(toc.querySelectorAll('.group'), function (g) { g.classList.toggle('hidden', !shownGroups[g.getAttribute('data-group')]); });
+    doc.getElementById('none').hidden = any;
+    if (term && firstHit && links[current].classList.contains('hidden')) location.hash = '#' + firstHit;
+    highlight(term);
+  }
+  q.addEventListener('input', filter);
+
+  route();
+})();
+</script>
+</body>
+</html>

@@ -1,5 +1,6 @@
-import type { AppDefaults } from './appDefaults';
+import { defaultAppDefaults, type AppDefaults } from './appDefaults';
 import { clampLevel } from './chapters';
+import { applyOverrides, diffOverrides, overridesFromLegacyBook, projectLayer, sanitizeOverrides, type Overrides } from './export/layers';
 import { sanitizeBookDetails, type BookDetails } from './export/model';
 import { isDate, sanitizeGoal, type Goal } from './progress';
 import { validateName } from './paths';
@@ -191,8 +192,8 @@ export function templateErrors(t: ProjectTemplate): string[] {
 export interface ProjectOverrides {
   /** null = use the app's chapter heading level. */
   chapterLevel: number | null;
-  /** null = use the app's book defaults. */
-  book: BookDetails | null;
+  /** The book fields this project sets itself (field path → value); every other field follows the app. */
+  book: Overrides;
 }
 
 export interface ProjectMeta {
@@ -213,10 +214,21 @@ export interface ProjectMeta {
   manuscriptGoals: Record<string, Goal>;
   /** Folders (relative, "/" separated) whose words do not count toward the goal. */
   excludedFolders: string[];
+  /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's status. */
+  editedChapters: Record<string, string[]>;
   overrides: ProjectOverrides;
 }
 
-export function newProjectMeta(opts: { id: string; name: string; template: ProjectTemplate; now: Date }): ProjectMeta {
+/** What a template's book changes relative to the app. A year that is just the date it was made, or blank, isn't a choice. */
+function templateOverrides(book: BookDetails, app: AppDefaults, now: Date): Overrides {
+  const out = projectLayer(diffOverrides(app.book, book));
+  const year = book.copyright.year.trim();
+  if (year === '' || year === String(now.getFullYear())) delete out['copyright.year'];
+  return out;
+}
+
+/** `app` is what a template's book is compared with: only what the template changes becomes a project override. */
+export function newProjectMeta(opts: { id: string; name: string; template: ProjectTemplate; now: Date; app?: AppDefaults }): ProjectMeta {
   const { template: t } = opts;
   return {
     version: 1,
@@ -232,7 +244,8 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     activeManuscript: null,
     manuscriptGoals: {},
     excludedFolders: uncountedFolders(t.folders),
-    overrides: { chapterLevel: t.chapterLevel, book: t.book ? structuredClone(t.book) : null }
+    editedChapters: {},
+    overrides: { chapterLevel: t.chapterLevel, book: t.book ? templateOverrides(t.book, opts.app ?? defaultAppDefaults(), opts.now) : {} }
   };
 }
 
@@ -256,9 +269,11 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
     excludedFolders: Array.isArray(r.excludedFolders)
       ? r.excludedFolders.filter((x): x is string => typeof x === 'string' && safeRelPath(x.replace(/\\/g, '/'))).map((x) => x.replace(/\\/g, '/')).slice(0, 200)
       : [],
+    editedChapters: sanitizeEditedChapters(r.editedChapters),
     overrides: {
       chapterLevel: o.chapterLevel === null || o.chapterLevel === undefined ? null : clampLevel(o.chapterLevel),
-      book: isObj(o.book) ? sanitizeBookDetails(o.book) : null
+      // projects saved before layering held a whole book (or null for "use the app's")
+      book: isObj(o.book) ? (isObj(o.book.copyright) ? overridesFromLegacyBook(o.book) : projectLayer(sanitizeOverrides(o.book))) : {}
     }
   };
 }
@@ -274,9 +289,46 @@ function sanitizeManuscriptGoals(raw: unknown, today: string): Record<string, Go
   return out;
 }
 
-/** The goal that applies now: the active manuscript's own goal, or the project's when no manuscript is active. */
+function sanitizeEditedChapters(raw: unknown): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!isObj(raw)) return out;
+  for (const [file, ids] of Object.entries(raw).slice(0, 2000)) {
+    const key = file.replace(/\\/g, '/');
+    if (!safeRelPath(key) || !Array.isArray(ids)) continue;
+    const clean = [...new Set(ids.filter((x): x is string => typeof x === 'string' && x.length <= 500))].slice(0, 2000);
+    if (clean.length) out[key] = clean;
+  }
+  return out;
+}
+
+/**
+ * A stable id for each chapter of a file: its title, with later chapters of the same title told apart by their order.
+ * Unlike a position it survives chapters being moved around the file.
+ */
+export function chapterIds(chapters: readonly { title: string }[]): string[] {
+  const seen = new Map<string, number>();
+  return chapters.map((c) => {
+    const n = seen.get(c.title) ?? 0;
+    seen.set(c.title, n + 1);
+    return n === 0 ? c.title : `${c.title}\u0001${n + 1}`;
+  });
+}
+
+export const isChapterEdited = (meta: Pick<ProjectMeta, 'editedChapters'>, file: string, id: string): boolean => meta.editedChapters[file]?.includes(id) ?? false;
+
+/** The edited-chapter record with `id` marked (or unmarked) in `file`; the input is not changed. */
+export function withChapterEdited(edited: Record<string, string[]>, file: string, id: string, on: boolean): Record<string, string[]> {
+  const rest = (edited[file] ?? []).filter((x) => x !== id);
+  const next = { ...edited };
+  const ids = on ? [...rest, id] : rest;
+  if (ids.length) next[file] = ids;
+  else delete next[file];
+  return next;
+}
+
+/** The goal that applies now: the active manuscript's own goal. Without an active manuscript there is none (goals are kept per manuscript). */
 export function goalFor(meta: Pick<ProjectMeta, 'goal' | 'activeManuscript' | 'manuscriptGoals'>): Goal | null {
-  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : meta.goal;
+  return meta.activeManuscript ? (meta.manuscriptGoals[meta.activeManuscript] ?? null) : null;
 }
 
 /** The same metadata with the applicable goal replaced (null removes it). */
@@ -342,10 +394,12 @@ export interface ProjectsSettings {
   /** Open the project that was open last time when the app starts. */
   reopenLast: boolean;
   lastProject: string | null;
+  /** Project paths in the order they were opened on this device, most recent first (kept short). */
+  recentProjects: string[];
 }
 
 export function defaultProjectsSettings(): ProjectsSettings {
-  return { rootFolder: null, setupDone: false, templates: defaultTemplates(), defaultTemplateId: 'novel', reopenLast: true, lastProject: null };
+  return { rootFolder: null, setupDone: false, templates: defaultTemplates(), defaultTemplateId: 'novel', reopenLast: true, lastProject: null, recentProjects: [] };
 }
 
 export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
@@ -359,8 +413,33 @@ export function sanitizeProjectsSettings(raw: unknown): ProjectsSettings {
     templates,
     defaultTemplateId: templates.some((t) => t.id === wanted) ? wanted : templates[0].id,
     reopenLast: raw.reopenLast !== false,
-    lastProject: typeof raw.lastProject === 'string' && raw.lastProject ? raw.lastProject.slice(0, 1000) : null
+    lastProject: typeof raw.lastProject === 'string' && raw.lastProject ? raw.lastProject.slice(0, 1000) : null,
+    recentProjects: Array.isArray(raw.recentProjects) ? raw.recentProjects.filter((p): p is string => typeof p === 'string' && !!p).map((p) => p.slice(0, 1000)).slice(0, MAX_RECENT) : []
   };
+}
+
+export const MAX_RECENT = 30;
+
+const samePath = (a: string, b: string) => a.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+
+/** The list of recently opened projects with `opened` moved to the front (once, whatever its spelling), or unchanged for null. */
+export function withOpened(recent: string[], opened: string | null): string[] {
+  if (!opened) return recent;
+  return [opened, ...recent.filter((p) => !samePath(p, opened))].slice(0, MAX_RECENT);
+}
+
+/**
+ * Projects for a "switch to" list: the ones opened on this device first, most recently opened first, then the rest by
+ * when their files were last edited. Archived projects and `exceptPath` (the open one) are left out.
+ */
+export function byRecentlyOpened<T extends { path: string; lastEdited: number | null; meta: { archived?: boolean } }>(projects: T[], recent: string[], exceptPath: string | null = null): T[] {
+  const rank = (p: T) => {
+    const i = recent.findIndex((r) => samePath(r, p.path));
+    return i < 0 ? Number.POSITIVE_INFINITY : i;
+  };
+  return projects
+    .filter((p) => !p.meta.archived && !(exceptPath && samePath(p.path, exceptPath)))
+    .sort((a, b) => (rank(a) === rank(b) ? (b.lastEdited ?? 0) - (a.lastEdited ?? 0) : rank(a) - rank(b)));
 }
 
 /** What the renderer gets: the settings plus where the Root really is. */
@@ -377,8 +456,8 @@ export interface ProjectSummary {
   path: string;
   name: string;
   meta: ProjectMeta;
-  /** Words in the files that count toward the goal. */
-  words: number;
+  /** Words in the active manuscript; null when no manuscript is active (nothing is counted then). */
+  words: number | null;
   files: number;
   /** Most recent edit among the project's Markdown files (ms since epoch), or null if it has none. */
   lastEdited: number | null;
@@ -400,5 +479,5 @@ export interface RootListing {
  */
 export function effectiveDefaults(app: AppDefaults, meta: ProjectMeta | null): AppDefaults {
   if (!meta) return app;
-  return { chapterLevel: meta.overrides.chapterLevel ?? app.chapterLevel, book: meta.overrides.book ?? app.book };
+  return { chapterLevel: meta.overrides.chapterLevel ?? app.chapterLevel, book: applyOverrides(app.book, meta.overrides.book) };
 }

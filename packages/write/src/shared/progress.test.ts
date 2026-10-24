@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, averageWritten, burnDown, dailySeries, dateRange, daysBetween, daysLeft, emptyProgress, isDate, localDate, projectCompletion,
+  addDays, averageWritten, burnDown, dailySeries, dateRange, daysBetween, daysLeft, emptyProgress, isDate, localDate, mergeProgress, projectCompletion,
   recordSnapshot, requiredPerDay, sanitizeGoal, sanitizeProgress, summarize, totalOn, writtenOn, type Goal, type Progress
 } from './progress';
 
@@ -168,5 +168,31 @@ describe('goal input', () => {
     expect(sanitizeGoal(null, '2026-10-05')).toBeNull();
     expect(sanitizeGoal({ targetWords: 0 }, '2026-10-05')).toBeNull();
     expect(sanitizeGoal({ targetWords: 'lots' }, '2026-10-05')).toBeNull();
+  });
+});
+
+describe('mergeProgress', () => {
+  const p = (days: Progress['days']): Progress => ({ version: 1, days });
+
+  it('keeps every date from both sides', () => {
+    const m = mergeProgress(p({ '2026-10-01': { start: 0, end: 100 } }), p({ '2026-10-02': { start: 100, end: 150 } }));
+    expect(Object.keys(m.days)).toEqual(['2026-10-01', '2026-10-02']);
+  });
+
+  it('uses the earliest start and the highest end for a shared date', () => {
+    const m = mergeProgress(p({ '2026-10-05': { start: 1000, end: 1500 } }), p({ '2026-10-05': { start: 1000, end: 1300 } }));
+    expect(m.days['2026-10-05']).toEqual({ start: 1000, end: 1500 });
+  });
+
+  it('is symmetric and does not change its inputs', () => {
+    const a = p({ '2026-10-05': { start: 10, end: 20 } });
+    const b = p({ '2026-10-05': { start: 5, end: 15 } });
+    expect(mergeProgress(a, b)).toEqual(mergeProgress(b, a));
+    expect(a.days['2026-10-05']).toEqual({ start: 10, end: 20 });
+  });
+
+  it('corrects the current day once the merged total is re-recorded', () => {
+    const merged = mergeProgress(p({ '2026-10-05': { start: 1000, end: 1500 } }), p({ '2026-10-05': { start: 1000, end: 1300 } }));
+    expect(recordSnapshot(merged, '2026-10-05', 1800).days['2026-10-05']).toEqual({ start: 1000, end: 1800 });
   });
 });

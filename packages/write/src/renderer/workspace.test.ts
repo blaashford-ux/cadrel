@@ -1,6 +1,7 @@
 import { relativeTo } from '../shared/projects';
 import { dirname } from '../shared/paths';
 import { beforeEach, describe, expect, it } from 'vitest';
+import type { WorkspaceApi } from '../shared/api';
 import { FakeApi } from './testing/fakeApi';
 import { Workspace } from './workspace';
 
@@ -964,7 +965,7 @@ describe('projects in the workspace', () => {
     api.add('lv.md', '# Book\n\n## One\na\n\n## Two\nb\n');
     api.appDefaults = { ...api.appDefaults, chapterLevel: 1 };
     await ws.init();
-    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: {} } });
     await ws.openPath(PROJ);
     await ws.openChapter(`${ROOT}/lv.md`, 0);
     expect(state().chapterLevel).toBe(2);
@@ -975,11 +976,11 @@ describe('projects in the workspace', () => {
   });
 
   it('changing the app level does not change a project that has its own', async () => {
-    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: null } });
+    api.addProject(PROJ, { overrides: { chapterLevel: 2, book: {} } });
     await ws.openPath(PROJ);
     await ws.applyAppDefaults({ ...api.appDefaults, chapterLevel: 3 });
     expect(state().chapterLevel).toBe(2);
-    api.projectMetas.set(PROJ, { ...api.projectMetas.get(PROJ)!, overrides: { chapterLevel: null, book: null } });
+    api.projectMetas.set(PROJ, { ...api.projectMetas.get(PROJ)!, overrides: { chapterLevel: null, book: {} } });
     await ws.openPath(PROJ);
     expect(state().chapterLevel).toBe(3);
   });
@@ -991,10 +992,10 @@ describe('projects in the workspace', () => {
     await ws.openChapter(`${ROOT}/lv.md`, 0);
     ws.setDraft(tabOf(`${ROOT}/lv.md`).id, '# Book EDIT');
     api.unsavedAnswers = ['cancel'];
-    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(false);
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: {} } })).toBe(false);
     expect(state().chapterLevel).toBe(1);
     api.unsavedAnswers = ['discard'];
-    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: null } })).toBe(true);
+    expect(await ws.updateProjectMeta({ ...meta, overrides: { chapterLevel: 2, book: {} } })).toBe(true);
     expect(state().chapterLevel).toBe(2);
     expect(state().project?.meta.overrides.chapterLevel).toBe(2);
   });
@@ -1041,5 +1042,225 @@ describe('projects in the workspace', () => {
     expect(state().project?.meta.activeManuscript).toBe(relativeTo(PROJ, dirname(B) + '/Renamed.md'));
     expect(await ws.setActiveManuscript(null)).toBe(true);
     expect(state().project?.meta.activeManuscript).toBeNull();
+  });
+});
+
+describe('a core-only API (the phone)', () => {
+  /** FakeApi with every desktop-only method removed, as the Android app provides it. */
+  const phoneApi = (fake: FakeApi): WorkspaceApi => {
+    const desktopOnly = new Set(['setDirtyFiles', 'takeLaunchFiles', 'pickFolder', 'reveal', 'setMarked', 'relinkSidecar']);
+    return new Proxy(fake, { get: (target, prop, recv) => (desktopOnly.has(String(prop)) ? undefined : Reflect.get(target, prop, recv)) }) as unknown as WorkspaceApi;
+  };
+
+  it('opens, edits and saves without any desktop method', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await phone.openChapter(A, 0);
+    const tab = phone.getState().tabs[0];
+    phone.setDraft(tab.id, '# One\nEDITED ON THE PHONE');
+    expect(await phone.save()).toBe(true);
+    expect(api.files.get(A)!.text).toContain('EDITED ON THE PHONE');
+  });
+
+  it('treats the missing desktop calls as "not available" instead of throwing', async () => {
+    const phone = new Workspace(phoneApi(api), { draftDelayMs: 5, sessionDelayMs: 5 });
+    await phone.openPath(ROOT);
+    await expect(phone.openLaunchFiles()).resolves.toBeUndefined();
+    await expect(phone.openFolder()).resolves.toBeUndefined();
+    expect(await phone.setMarked(A, true)).toBe(false);
+    expect(await phone.relinkSidecar('x.export.json', A)).toBe(false);
+    expect(() => phone.reveal(A)).not.toThrow();
+  });
+});
+
+describe('edited chapters (Editing stage)', () => {
+  const PROJ = ROOT;
+  const edited = () => state().project!.meta.editedChapters;
+  const openEditing = async (patch: Record<string, unknown> = { status: 'editing' }) => {
+    api.addProject(PROJ, patch as never);
+    await ws.openPath(PROJ);
+  };
+  const saveChapter = async (file: string, md: string) => {
+    ws.setDraft(tabOf(file).id, md);
+    await ws.save(tabOf(file).id);
+  };
+
+  it('leaving a saved chapter offers to mark it; yes marks it and it is kept in the project', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nfirst, polished');
+    api.markEditedAnswers = [true];
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual(['One']);
+    expect(edited()).toEqual({ 'a.md': ['One'] });
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    expect(api.projectMetas.get(PROJ)!.editedChapters).toEqual({ 'a.md': ['One'] });
+  });
+
+  it('no means not marked, and a chapter already marked is not asked about again', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nx');
+    await ws.openChapter(A, 1); // default answer: no
+    expect(edited()).toEqual({});
+    await ws.setChapterEdited(A, 0, true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\ny');
+    await ws.openChapter(A, 2); // passes through chapter two, which is offered now (read, not changed)
+    expect(api.markEditedAsked).toEqual(['One', 'Two']);
+  });
+
+  it('leaving a chapter you only read through (no changes, no save) is offered too, and only in the Editing stage', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await ws.openChapter(A, 1); // read it, changed nothing
+    expect(api.markEditedAsked).toEqual(['One']);
+    await ws.closeProject();
+    api.markEditedAsked.length = 0;
+    await openEditing({ status: 'drafting' });
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# One\nz');
+    await ws.openChapter(A, 1);
+    expect(api.markEditedAsked).toEqual([]);
+  });
+
+  it('adding a chapter after the last one (Next chapter on the last chapter) offers to mark the saved chapter too', async () => {
+    await openEditing();
+    const last = 2; // BOOK has three chapters
+    await ws.openChapter(A, last);
+    await saveChapter(A, '# Three\nfinal polish');
+    api.markEditedAnswers = [true];
+    expect(await ws.newChapter(A, last, 'Four')).toBe(true);
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(ws.isChapterEdited(A, last)).toBe(true);
+    expect(tabOf(A).chapter).toBe(last + 1);
+  });
+
+  it('Next chapter on the last chapter asks first (and only once), so cancelling the new-chapter dialog does not skip it', async () => {
+    await openEditing();
+    await ws.openChapter(A, 2);
+    await saveChapter(A, '# Three\nfinal');
+    api.markEditedAnswers = [false];
+    await ws.offerMarkEdited(tabOf(A).id); // what the button does before opening the New chapter dialog
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(edited()).toEqual({});
+    await ws.offerMarkEdited(tabOf(A).id); // asking again without saving does not nag
+    expect(api.markEditedAsked).toEqual(['Three']);
+    expect(await ws.newChapter(A, 2, 'Four')).toBe(true); // leaving for the new chapter does not ask a second time
+    expect(api.markEditedAsked).toEqual(['Three']);
+    await ws.openChapter(A, 2); // leaving the new, empty chapter asks about it
+    await saveChapter(A, '# Three\nfinal, again'); // saving again makes it ask again
+    api.markEditedAnswers = [true];
+    await ws.offerMarkEdited(tabOf(A).id);
+    expect(api.markEditedAsked).toEqual(['Three', 'Four', 'Three']);
+    expect(ws.isChapterEdited(A, 2)).toBe(true);
+  });
+
+  it('closing a saved chapter’s tab offers too', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await saveChapter(A, '# Two\nbetter');
+    api.markEditedAnswers = [true];
+    await ws.closeTab(tabOf(A).id);
+    expect(edited()).toEqual({ 'a.md': ['Two'] });
+  });
+
+  it('marks stay with a chapter that moves, is retitled, or whose file is renamed, and survive a status change', async () => {
+    await openEditing();
+    await ws.openChapter(A, 1);
+    await ws.setChapterEdited(A, 1, true); // "Two"
+    await ws.moveChapter(A, 1, -1);
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    await ws.openChapter(A, 0);
+    await saveChapter(A, '# Second\nsecond');
+    expect(edited()).toEqual({ 'a.md': ['Second'] });
+    await ws.renameNode(A, 'renamed.md');
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+    await ws.updateProjectMeta({ ...state().project!.meta, status: 'drafting' });
+    expect(edited()).toEqual({ 'renamed.md': ['Second'] });
+  });
+
+  it('Mark Edited to Here marks every chapter up to and including the one chosen, and keeps later marks', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0); // loads the file's chapters
+    await ws.setChapterEdited(A, 2, true);
+    await ws.markEditedThrough(A, 1);
+    expect(ws.isChapterEdited(A, 0)).toBe(true);
+    expect(ws.isChapterEdited(A, 1)).toBe(true);
+    expect(ws.isChapterEdited(A, 2)).toBe(true); // already marked, still marked
+    await ws.setChapterEdited(A, 2, false);
+    await ws.markEditedThrough(A, 0);
+    expect(ws.isChapterEdited(A, 2)).toBe(false);
+  });
+
+  it('Unmark Edited to Here removes the marks up to and including the chapter, and keeps later ones', async () => {
+    await openEditing();
+    await ws.openChapter(A, 0);
+    await ws.markEditedThrough(A, 2);
+    await ws.unmarkEditedThrough(A, 1);
+    expect(ws.isChapterEdited(A, 0)).toBe(false);
+    expect(ws.isChapterEdited(A, 1)).toBe(false);
+    expect(ws.isChapterEdited(A, 2)).toBe(true);
+  });
+
+  it('Unmark Edited removes the mark', async () => {
+    await openEditing();
+    await ws.setChapterEdited(A, 2, true);
+    await ws.setChapterEdited(A, 2, false);
+    expect(edited()).toEqual({});
+  });
+});
+
+describe('refresh picks up changes to the project made elsewhere', () => {
+  it('shows edited marks that arrived from another device (a sync) and keeps open work', async () => {
+    api.addProject(ROOT, { status: 'editing' });
+    await ws.openPath(ROOT);
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nunsaved');
+    expect(state().project!.meta.editedChapters).toEqual({});
+    api.projectMetas.set(ROOT, { ...api.projectMetas.get(ROOT)!, editedChapters: { 'a.md': ['Two'] } });
+    await ws.refresh();
+    expect(state().project!.meta.editedChapters).toEqual({ 'a.md': ['Two'] });
+    expect(ws.isChapterEdited(A, 1)).toBe(true);
+    expect(tabOf(A).draft).toBe('# One\nunsaved');
+  });
+});
+
+describe('text analysis', () => {
+  const PROSE = '# Ch 1\n\n"Hello," Mara said. She walked slowly home.\n\n# Ch 2\n\nThe door was opened by Tomas. He felt cold.\n';
+
+  it('writes the report beside the file and opens it in a tab without switching to it', async () => {
+    api.add('sub/novel.md', PROSE);
+    await ws.openChapter(A, 0);
+    const active = state().activeId;
+    const report = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    expect(report).toBe(`${ROOT}/sub/novel - Analysis.md`);
+    expect(api.text(report!)).toContain('Text analysis: novel.md');
+    expect(api.text(report!)).toMatch(/<!-- mdedit-analysis v1 \{.*\} -->\s*$/);
+    expect(state().tabs.map((t) => t.file)).toContain(report);
+    expect(state().activeId).toBe(active);
+    expect(state().notice).toContain('is ready');
+    expect(ws.isAnalyzing(`${ROOT}/sub/novel.md`)).toBe(false);
+  });
+
+  it('numbers the report when one already exists', async () => {
+    api.add('sub/novel.md', PROSE);
+    const first = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    const second = await ws.analyzeFile(`${ROOT}/sub/novel.md`);
+    expect(first).toBe(`${ROOT}/sub/novel - Analysis.md`);
+    expect(second).toBe(`${ROOT}/sub/novel - Analysis 2.md`);
+  });
+
+  it('analyses the unsaved edits of the open chapter', async () => {
+    await ws.openChapter(B, 0);
+    ws.setDraft(tabOf(B).id, '# Bee\n\nZorbaxian zorbaxian zorbaxian.\n');
+    const report = await ws.analyzeFile(B);
+    expect(api.text(report!)).toContain('zorbaxian');
+  });
+
+  it('refuses to start the same analysis twice at once', async () => {
+    api.add('sub/novel.md', PROSE);
+    const [one, two] = await Promise.all([ws.analyzeFile(`${ROOT}/sub/novel.md`), ws.analyzeFile(`${ROOT}/sub/novel.md`)]);
+    expect([one, two].filter(Boolean)).toHaveLength(1);
   });
 });

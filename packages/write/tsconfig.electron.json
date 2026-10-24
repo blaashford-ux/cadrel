@@ -13,9 +13,11 @@
   },
   "include": [
     "electron",
+    "mcp",
     "src/shared"
   ],
   "exclude": [
-    "electron/**/*.test.ts"
+    "electron/**/*.test.ts",
+    "mcp/**/*.test.ts"
   ]
 }

@@ -37,6 +37,9 @@ export function joinPath(dir: string, name: string): string {
   return dir.replace(/[\\/]+$/, '') + sepOf(dir) + name;
 }
 
+/** `joinPath` over several parts: joinParts(dir, 'a', 'b') → dir/a/b. */
+export const joinParts = (dir: string, ...parts: string[]): string => parts.reduce(joinPath, dir);
+
 /** If `p` is `from` or inside it, returns the same location under `to`; otherwise `p` unchanged. */
 export function remapPath(p: string, from: string, to: string): string {
   if (p === from) return to;

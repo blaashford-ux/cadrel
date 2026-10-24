@@ -37,29 +37,29 @@ export function TitleCopyrightForm(props: BookFormProps) {
                 {!template && (
                   <Field label="Subtitle" value={details.subtitle} onChange={(v) => set({ subtitle: v })} hint="Optional. Shown in italics under the title." />
                 )}
-                <Field label="Author / pen name" required={!template} value={details.author} onChange={(v) => set({ author: v })} />
+                <Field label="Author / pen name" required={!template} value={details.author} path="author" onChange={(v) => set({ author: v })} />
               </section>
               <section>
                 <h4>Copyright page</h4>
                 <div className="row2">
-                  <Field label="Copyright year" value={c.year} width={140} placeholder={template ? String(new Date().getFullYear()) : undefined} onChange={(v) => setCopyright({ year: v })} hint={template ? 'Leave blank to use the current year.' : undefined} />
-                  <Field label="Edition line" value={c.edition} onChange={(v) => setCopyright({ edition: v })} hint="Leave blank to omit." />
+                  <Field label="Copyright year" value={c.year} width={140} placeholder={template ? String(new Date().getFullYear()) : undefined} path="copyright.year" onChange={(v) => setCopyright({ year: v })} hint={template ? 'Leave blank to use the current year.' : undefined} />
+                  <Field label="Edition line" value={c.edition} path="copyright.edition" onChange={(v) => setCopyright({ edition: v })} hint="Leave blank to omit." />
                 </div>
                 <div className="row2">
-                  <Field label="Publisher" value={c.publisher} onChange={(v) => setCopyright({ publisher: v })} hint="Optional." />
-                  <Field label="ISBN" value={c.isbn} onChange={(v) => setCopyright({ isbn: v })} hint="Optional." />
+                  <Field label="Publisher" value={c.publisher} path="copyright.publisher" onChange={(v) => setCopyright({ publisher: v })} hint="Optional." />
+                  <Field label="ISBN" value={c.isbn} path="copyright.isbn" onChange={(v) => setCopyright({ isbn: v })} hint="Optional." />
                 </div>
-                <Toggle label="Fiction disclaimer" checked={c.fictionDisclaimer} onChange={(v) => setCopyright({ fictionDisclaimer: v })} />
-                {c.fictionDisclaimer && <TextArea label="Wording" rows={3} value={c.fictionText} onChange={(v) => setCopyright({ fictionText: v })} />}
-                <TextArea label="Reproduction-rights paragraph" rows={3} value={c.reproductionText} onChange={(v) => setCopyright({ reproductionText: v })} hint="Leave blank to omit." />
-                <Toggle label="Mature-content notice (18+)" checked={c.matureNotice} onChange={(v) => setCopyright({ matureNotice: v })} />
-                {c.matureNotice && <TextArea label="Wording" rows={2} value={c.matureText} onChange={(v) => setCopyright({ matureText: v })} />}
-                <Toggle label="Content Warning" checked={c.contentWarning} onChange={(v) => setCopyright({ contentWarning: v })} />
-                {c.contentWarning && <TextArea label="Wording" rows={2} value={c.contentWarningText} onChange={(v) => setCopyright({ contentWarningText: v })} />}
+                <Toggle label="Fiction disclaimer" checked={c.fictionDisclaimer} path="copyright.fictionDisclaimer" onChange={(v) => setCopyright({ fictionDisclaimer: v })} />
+                {c.fictionDisclaimer && <TextArea label="Wording" rows={3} value={c.fictionText} path="copyright.fictionText" onChange={(v) => setCopyright({ fictionText: v })} />}
+                <TextArea label="Reproduction-rights paragraph" rows={3} value={c.reproductionText} path="copyright.reproductionText" onChange={(v) => setCopyright({ reproductionText: v })} hint="Leave blank to omit." />
+                <Toggle label="Mature-content notice (18+)" checked={c.matureNotice} path="copyright.matureNotice" onChange={(v) => setCopyright({ matureNotice: v })} />
+                {c.matureNotice && <TextArea label="Wording" rows={2} value={c.matureText} path="copyright.matureText" onChange={(v) => setCopyright({ matureText: v })} />}
+                <Toggle label="Content Warning" checked={c.contentWarning} path="copyright.contentWarning" onChange={(v) => setCopyright({ contentWarning: v })} />
+                {c.contentWarning && <TextArea label="Wording" rows={2} value={c.contentWarningText} path="copyright.contentWarningText" onChange={(v) => setCopyright({ contentWarningText: v })} />}
                 <h5>Extra lines</h5>
                 <ListEditor
                   items={c.extraLines}
-                  onChange={(extraLines) => setCopyright({ extraLines })}
+                  path="copyright.extraLines" onChange={(extraLines) => setCopyright({ extraLines })}
                   blank={() => ''}
                   addLabel="Add a line"
                   row={(line, update) => <input aria-label="Extra line" value={line} onChange={(e) => update(e.target.value)} />}
@@ -83,18 +83,18 @@ export function FrontMatterForm(props: BookFormProps) {
     <>
               <section>
                 <h4>Dedication</h4>
-                <Toggle label="Include a dedication page" checked={details.dedication.enabled} onChange={(v) => set({ dedication: { ...details.dedication, enabled: v } })} />
+                <Toggle label="Include a dedication page" checked={details.dedication.enabled} path="dedication.enabled" onChange={(v) => set({ dedication: { ...details.dedication, enabled: v } })} />
                 {details.dedication.enabled && (
-                  <TextArea label="Text" value={details.dedication.text} onChange={(v) => set({ dedication: { ...details.dedication, text: v } })} hint="Blank lines start a new paragraph." />
+                  <TextArea label="Text" value={details.dedication.text} path="dedication.text" onChange={(v) => set({ dedication: { ...details.dedication, text: v } })} hint="Blank lines start a new paragraph." />
                 )}
               </section>
               <section>
                 <h4>Epigraph</h4>
-                <Toggle label="Include an epigraph page" checked={details.epigraph.enabled} onChange={(v) => set({ epigraph: { ...details.epigraph, enabled: v } })} />
+                <Toggle label="Include an epigraph page" checked={details.epigraph.enabled} path="epigraph.enabled" onChange={(v) => set({ epigraph: { ...details.epigraph, enabled: v } })} />
                 {details.epigraph.enabled && (
                   <>
-                    <TextArea label="Quotation" value={details.epigraph.text} onChange={(v) => set({ epigraph: { ...details.epigraph, text: v } })} />
-                    <Field label="Attribution" value={details.epigraph.attribution} onChange={(v) => set({ epigraph: { ...details.epigraph, attribution: v } })} hint="Shown as “— Name”." />
+                    <TextArea label="Quotation" value={details.epigraph.text} path="epigraph.text" onChange={(v) => set({ epigraph: { ...details.epigraph, text: v } })} />
+                    <Field label="Attribution" value={details.epigraph.attribution} path="epigraph.attribution" onChange={(v) => set({ epigraph: { ...details.epigraph, attribution: v } })} hint="Shown as “— Name”." />
                   </>
                 )}
               </section>
@@ -110,14 +110,14 @@ export function BackMatterForm(props: BookFormProps) {
               <p className="muted small">Each page starts on its own page after the last chapter. No link is ever added unless you type it here.</p>
               <section>
                 <h4>Continue the story</h4>
-                <Toggle label="Include this page" checked={details.back.links.enabled} onChange={(v) => setBack('links', { enabled: v })} />
+                <Toggle label="Include this page" checked={details.back.links.enabled} path="back.links.enabled" onChange={(v) => setBack('links', { enabled: v })} />
                 {details.back.links.enabled && (
                   <>
-                    <Field label="Heading" value={details.back.links.heading} onChange={(v) => setBack('links', { heading: v })} />
-                    <TextArea label="Text" rows={3} value={details.back.links.intro} onChange={(v) => setBack('links', { intro: v })} />
+                    <Field label="Heading" value={details.back.links.heading} path="back.links.heading" onChange={(v) => setBack('links', { heading: v })} />
+                    <TextArea label="Text" rows={3} value={details.back.links.intro} path="back.links.intro" onChange={(v) => setBack('links', { intro: v })} />
                     <ListEditor
                       items={details.back.links.items}
-                      onChange={(items) => setBack('links', { items })}
+                      path="back.links.items" onChange={(items) => setBack('links', { items })}
                       blank={() => ({ label: '', url: '' })}
                       addLabel="Add a link"
                       row={(it, update) => (
@@ -133,20 +133,21 @@ export function BackMatterForm(props: BookFormProps) {
               </section>
               <section>
                 <h4>Also by the author</h4>
-                <Toggle label="Include this page" checked={details.back.alsoBy.enabled} onChange={(v) => setBack('alsoBy', { enabled: v })} />
+                <Toggle label="Include this page" checked={details.back.alsoBy.enabled} path="back.alsoBy.enabled" onChange={(v) => setBack('alsoBy', { enabled: v })} />
                 {details.back.alsoBy.enabled && (
                   <>
-                    <Field label="Heading" value={details.back.alsoBy.heading} placeholder={`ALSO BY ${details.author.toUpperCase() || 'AUTHOR'}`} onChange={(v) => setBack('alsoBy', { heading: v })} hint="Leave blank for the default shown." />
+                    <Field label="Heading" value={details.back.alsoBy.heading} placeholder={`ALSO BY ${details.author.toUpperCase() || 'AUTHOR'}`} path="back.alsoBy.heading" onChange={(v) => setBack('alsoBy', { heading: v })} hint="Leave blank for the default shown." />
                     <ListEditor
                       items={details.back.alsoBy.items}
-                      onChange={(items) => setBack('alsoBy', { items })}
-                      blank={() => ({ title: '', url: '' })}
+                      path="back.alsoBy.items" onChange={(items) => setBack('alsoBy', { items })}
+                      blank={() => ({ title: '', url: '', blurb: '' })}
                       addLabel="Add a book"
                       row={(it, update) => (
                         <>
                           <input aria-label="Book title" placeholder="Book title" value={it.title} onChange={(e) => update({ ...it, title: e.target.value })} />
                           <input aria-label="Book link" placeholder="https://… (optional)" value={it.url} onChange={(e) => update({ ...it, url: e.target.value })} />
                           {urlHint(it.url)}
+                          <textarea aria-label="Book blurb" placeholder="Blurb (optional)" rows={4} value={it.blurb} onChange={(e) => update({ ...it, blurb: e.target.value })} />
                         </>
                       )}
                     />
@@ -155,21 +156,21 @@ export function BackMatterForm(props: BookFormProps) {
               </section>
               <section>
                 <h4>About the author</h4>
-                <Toggle label="Include this page" checked={details.back.about.enabled} onChange={(v) => setBack('about', { enabled: v })} />
+                <Toggle label="Include this page" checked={details.back.about.enabled} path="back.about.enabled" onChange={(v) => setBack('about', { enabled: v })} />
                 {details.back.about.enabled && (
                   <>
-                    <Field label="Heading" value={details.back.about.heading} onChange={(v) => setBack('about', { heading: v })} />
-                    <TextArea label="Bio" value={details.back.about.text} onChange={(v) => setBack('about', { text: v })} />
+                    <Field label="Heading" value={details.back.about.heading} path="back.about.heading" onChange={(v) => setBack('about', { heading: v })} />
+                    <TextArea label="Bio" value={details.back.about.text} path="back.about.text" onChange={(v) => setBack('about', { text: v })} />
                   </>
                 )}
               </section>
               <section>
                 <h4>Custom page</h4>
-                <Toggle label="Include this page" checked={details.back.custom.enabled} onChange={(v) => setBack('custom', { enabled: v })} />
+                <Toggle label="Include this page" checked={details.back.custom.enabled} path="back.custom.enabled" onChange={(v) => setBack('custom', { enabled: v })} />
                 {details.back.custom.enabled && (
                   <>
-                    <Field label="Heading" value={details.back.custom.heading} onChange={(v) => setBack('custom', { heading: v })} hint="Optional. A heading also adds the page to the contents." />
-                    <TextArea label="Text" value={details.back.custom.text} onChange={(v) => setBack('custom', { text: v })} />
+                    <Field label="Heading" value={details.back.custom.heading} path="back.custom.heading" onChange={(v) => setBack('custom', { heading: v })} hint="Optional. A heading also adds the page to the contents." />
+                    <TextArea label="Text" value={details.back.custom.text} path="back.custom.text" onChange={(v) => setBack('custom', { text: v })} />
                   </>
                 )}
               </section>

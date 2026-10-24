@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { sanitizeAppDefaults } from '../../src/shared/appDefaults';
+import { assembleBook } from '../../src/shared/export/assemble';
 import { defaultBookDetails } from '../../src/shared/export/model';
+import { effectiveDefaults, sanitizeProjectMeta } from '../../src/shared/projects';
 import { existingSidecar, loadDetails, renameSidecar, saveDetails, setMarked } from './sidecar';
 
 let dir: string;
@@ -112,7 +114,10 @@ describe('new books start from the Settings template', () => {
     const defaults = sanitizeAppDefaults({ book: { author: 'Template Author' } });
     await setMarked(md, true, defaults);
     const saved = JSON.parse(await readFile(sidecar(), 'utf8'));
-    expect(saved).toMatchObject({ marked: true, author: 'Template Author', title: 'my-book' });
+    // the author comes from the template each time it is read; the book stores only its identity and what it sets itself
+    expect(saved).toMatchObject({ marked: true, title: 'my-book' });
+    expect(Object.keys(saved.overrides)).toEqual(['copyright.year']);
+    expect((await loadDetails(md, defaults)).details.author).toBe('Template Author');
   });
 
   it('an existing sidecar is never changed by the template', async () => {
@@ -132,7 +137,7 @@ describe('old export files are tidied on first read', () => {
     const l = await loadDetails(md);
     expect(l.details.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Contains peril.' });
     const onDisk = JSON.parse(await readFile(sidecar(), 'utf8'));
-    expect(onDisk.copyright).toMatchObject({ contentWarning: true, contentWarningText: 'Contains peril.' });
+    expect(onDisk.overrides).toMatchObject({ 'copyright.contentWarning': true, 'copyright.contentWarningText': 'Contains peril.' });
     expect(JSON.stringify(onDisk)).not.toMatch(/aiDisclosure|aiText|junk/);
     expect(onDisk.title).toBe('Mine');
   });
@@ -146,5 +151,96 @@ describe('old export files are tidied on first read', () => {
     await loadDetails(md);
     expect(statSync(sidecar()).mtimeMs).toBe(m1);
     expect(await readFile(sidecar(), 'utf8')).toBe(before);
+  });
+});
+
+describe('layered settings', () => {
+  const app = (book: Record<string, unknown>) => sanitizeAppDefaults({ book });
+  const at = (...paths: string[]) => paths;
+
+  it('a book follows its defaults until it sets a field itself, and a changed default reaches it', async () => {
+    const before = app({ author: 'Old Author', back: { about: { enabled: true, text: 'Old bio' } } });
+    await setMarked(md, true, before);
+    const after = app({ author: 'New Author', back: { about: { enabled: true, text: 'New bio' } } });
+    const l = await loadDetails(md, after);
+    expect(l.details.author).toBe('New Author');
+    expect(l.details.back.about.text).toBe('New bio');
+    expect(l.overrides).toEqual(['copyright.year']);
+  });
+
+  it('a field the book sets stays its own when the defaults change, and Reset hands it back', async () => {
+    const defaults = app({ author: 'App Author' });
+    const l = await loadDetails(md, defaults);
+    await saveDetails(md, { ...l.details, author: 'Pen Name' }, [...l.overrides, 'author'], defaults);
+    const changed = app({ author: 'Other App Author' });
+    const mine = await loadDetails(md, changed);
+    expect(mine.details.author).toBe('Pen Name');
+    expect(mine.overrides).toContain('author');
+    await saveDetails(md, mine.details, mine.overrides.filter((p) => p !== 'author'), changed);
+    expect((await loadDetails(md, changed)).details.author).toBe('Other App Author');
+  });
+
+  it('says whether each inherited field comes from the project or the app', async () => {
+    const l = await loadDetails(md, app({}), at('copyright.publisher'));
+    expect(l.origins['copyright.publisher']).toBe('project');
+    expect(l.origins['copyright.isbn']).toBe('app');
+    expect(l.inherited.title).toBe('');
+  });
+
+  it('the copyright year is pinned when the book is set up, so it does not move with the calendar', async () => {
+    await setMarked(md, true, undefined);
+    const stored = JSON.parse(await readFile(sidecar(), 'utf8'));
+    expect(stored.overrides['copyright.year']).toBe(String(new Date().getFullYear()));
+    const later = await loadDetails(md, undefined, [], new Date('2041-03-01T00:00:00Z'));
+    expect(later.details.copyright.year).toBe(String(new Date().getFullYear()));
+  });
+
+  it('book-only fields (excluded chapters, cover image) are always stored with the book', async () => {
+    const l = await loadDetails(md);
+    const d = structuredClone(l.details);
+    d.export.excludedChapters = ['Chapter 2'];
+    await saveDetails(md, d, []);
+    expect(JSON.parse(await readFile(sidecar(), 'utf8')).overrides['export.excludedChapters']).toEqual(['Chapter 2']);
+  });
+
+  it('a file saved before layering keeps what differs from its defaults, inherits the rest, and is backed up once', async () => {
+    const old = defaultBookDetails({ title: 'Mine', author: 'Old Author', year: 2030 });
+    old.back.about = { enabled: true, heading: 'ABOUT THE AUTHOR', text: 'Stale bio' };
+    old.export.pdf.fontSize = 12;
+    await writeFile(sidecar(), JSON.stringify(old));
+    const defaults = app({ author: 'Old Author', back: { about: { enabled: true, text: 'Stale bio' } } });
+    const l = await loadDetails(md, defaults);
+    expect(l.details).toMatchObject({ title: 'Mine', author: 'Old Author' });
+    expect(l.details.export.pdf.fontSize).toBe(12);
+    expect(l.overrides).toContain('export.pdf.fontSize');
+    expect(l.overrides).toContain('copyright.year');
+    expect(l.overrides).not.toContain('author');
+    expect(l.overrides).not.toContain('back.about.text');
+    expect(JSON.parse(await readFile(sidecar() + '.v1.bak', 'utf8')).title).toBe('Mine');
+    // converting again changes nothing
+    expect((await loadDetails(md, defaults)).overrides.sort()).toEqual(l.overrides.sort());
+    // and the converted book now follows a changed default
+    const changed = app({ author: 'Old Author', back: { about: { enabled: true, text: 'Fresh bio' } } });
+    expect((await loadDetails(md, changed)).details.back.about.text).toBe('Fresh bio');
+  });
+});
+
+describe('the back matter set on a project reaches its books (the original bug)', () => {
+  it('a book set up earlier exports with the project’s back matter, and its own choice still wins', async () => {
+    const appDefs = sanitizeAppDefaults({});
+    const project = (about: string) =>
+      effectiveDefaults(appDefs, sanitizeProjectMeta({ overrides: { book: { 'back.about.enabled': true, 'back.about.text': about } } }, 'P', '2026-10-05'));
+    await setMarked(md, true, project('First bio'));
+    const edited = project('Second bio');
+    const l = await loadDetails(md, edited, ['back.about.enabled', 'back.about.text']);
+    expect(l.details.back.about).toMatchObject({ enabled: true, text: 'Second bio' });
+    expect(l.origins['back.about.text']).toBe('project');
+    const built = assembleBook('# One\n\nText.\n', { ...l.details, author: 'A' });
+    expect(built.build!.back.map((p) => p.id)).toEqual(['about']);
+
+    const d = structuredClone(l.details);
+    d.back.about.text = 'Book-only bio';
+    await saveDetails(md, d, [...l.overrides, 'back.about.text'], edited);
+    expect((await loadDetails(md, project('Third bio'))).details.back.about.text).toBe('Book-only bio');
   });
 });

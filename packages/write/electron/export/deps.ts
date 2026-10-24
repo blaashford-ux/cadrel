@@ -14,7 +14,8 @@ let assetsRoot: string | null = null;
 export function setAssetsDir(dir: string | null): void {
   assetsRoot = dir;
 }
-const assetsDir = () => assetsRoot ?? path.join(app.getAppPath(), 'assets');
+/** The folder holding the bundled assets (`fonts/`, `vendor/`, `help/`, `icon.png`). */
+export const assetsDir = () => assetsRoot ?? path.join(app.getAppPath(), 'assets');
 
 /** Bundled files the print pipeline needs (inside the asar when packaged). */
 export function pdfResources(): PdfResources {

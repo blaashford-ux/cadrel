@@ -91,6 +91,19 @@ export function recordSnapshot(p: Progress, date: string, total: number): Progre
   return { ...p, days: { ...p.days, [date]: { start: prev ? prev.end : t, end: t } } };
 }
 
+/**
+ * Merges two devices' histories for sync: every date from either side; where both have a date, the earliest `start`
+ * and the highest `end`. The caller then re-records today's total with `recordSnapshot`, so the current day corrects itself.
+ */
+export function mergeProgress(a: Progress, b: Progress): Progress {
+  const days: Record<string, DayRecord> = { ...a.days };
+  for (const [date, rec] of Object.entries(b.days)) {
+    const mine = days[date];
+    days[date] = mine ? { start: Math.min(mine.start, rec.start), end: Math.max(mine.end, rec.end) } : rec;
+  }
+  return { version: 1, days };
+}
+
 /** Words written on a day (net: deletions subtract). Zero for days with no record. */
 export const writtenOn = (p: Progress, date: string): number => {
   const r = p.days[date];

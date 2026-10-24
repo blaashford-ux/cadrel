@@ -1,38 +1,9 @@
 import { promises as fs } from 'node:fs';
-import type { FileStamp } from '../src/shared/api';
+import { makeFiles } from '../src/shared/backend/files';
+import { nodeFs } from './nodeFs';
 
-/** Null when the file does not exist. */
-export async function statStamp(file: string): Promise<FileStamp | null> {
-  try {
-    const st = await fs.stat(file);
-    return { mtimeMs: st.mtimeMs, size: st.size };
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw e;
-  }
-}
-
-export async function readWithStamp(file: string): Promise<{ text: string; stamp: FileStamp }> {
-  const text = await fs.readFile(file, 'utf8');
-  const stamp = await statStamp(file);
-  if (!stamp) throw new Error(`File disappeared while reading: ${file}`);
-  return { text, stamp };
-}
-
-/** Writes via a temp file + rename so a crash mid-write can't leave a truncated .md. */
-export async function writeFileAtomic(target: string, content: string): Promise<FileStamp> {
-  const tmp = `${target}.mdedit-${process.pid}.tmp`;
-  try {
-    await fs.writeFile(tmp, content, 'utf8');
-    await fs.rename(tmp, target);
-  } catch (e) {
-    await fs.rm(tmp, { force: true });
-    throw e;
-  }
-  const stamp = await statStamp(target);
-  if (!stamp) throw new Error(`File disappeared after writing: ${target}`);
-  return stamp;
-}
+// The shared implementation over Node's fs (the temp file keeps the process id in its name, as before).
+export const { statStamp, readWithStamp, writeFileAtomic } = makeFiles(nodeFs, () => process.pid);
 
 /** Like writeFileAtomic, for binary output (EPUB, PDF, DOCX). */
 export async function writeBytesAtomic(target: string, bytes: Uint8Array): Promise<void> {

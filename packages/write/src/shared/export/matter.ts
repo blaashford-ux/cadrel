@@ -27,6 +27,19 @@ const paragraphs = (text: string) =>
     .map((p) => p.replace(/\s*\r?\n\s*/g, ' ').trim())
     .filter(Boolean);
 
+/** Back-matter fields keep the line breaks the user typed: blank line = new paragraph, single newline = line break. */
+const paragraphsKeepBreaks = (text: string) =>
+  text
+    .split(/\r?\n\s*\r?\n/)
+    .map((p) =>
+      p
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .join('\n')
+    )
+    .filter(Boolean);
+
 export function buildFrontMatter(d: BookDetails): MatterPage[] {
   const pages: MatterPage[] = [];
   const c = d.copyright;
@@ -79,7 +92,7 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
   if (links.enabled) {
     const heading = links.heading.trim() || 'CONTINUE THE STORY';
     const blocks: PageBlock[] = [{ t: 'heading', text: heading }];
-    for (const p of paragraphs(links.intro)) blocks.push({ t: 'para', text: p });
+    for (const p of paragraphsKeepBreaks(links.intro)) blocks.push({ t: 'para', text: p });
     for (const it of links.items) {
       const url = checked(it.url, it.label || '(unlabelled)');
       if (it.label.trim() && url) blocks.push({ t: 'link', label: it.label.trim(), url });
@@ -96,6 +109,7 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
       if (!it.title.trim()) continue;
       const url = checked(it.url, it.title);
       blocks.push(url ? { t: 'link', label: it.title.trim(), url } : { t: 'line', text: it.title.trim() });
+      for (const p of paragraphsKeepBreaks(it.blurb ?? '')) blocks.push({ t: 'para', text: p });
     }
     pages.push({ id: 'alsoBy', heading, blocks });
   }
@@ -106,7 +120,7 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
     pages.push({
       id: 'about',
       heading,
-      blocks: [{ t: 'heading', text: heading }, ...paragraphs(about.text).map((text) => ({ t: 'para' as const, text }))]
+      blocks: [{ t: 'heading', text: heading }, ...paragraphsKeepBreaks(about.text).map((text) => ({ t: 'para' as const, text }))]
     });
   }
 
@@ -116,7 +130,7 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
     pages.push({
       id: 'custom',
       heading: heading || undefined,
-      blocks: [...(heading ? [{ t: 'heading' as const, text: heading }] : []), ...paragraphs(custom.text).map((text) => ({ t: 'para' as const, text }))]
+      blocks: [...(heading ? [{ t: 'heading' as const, text: heading }] : []), ...paragraphsKeepBreaks(custom.text).map((text) => ({ t: 'para' as const, text }))]
     });
   }
   return pages;

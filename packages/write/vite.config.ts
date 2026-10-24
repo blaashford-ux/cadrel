@@ -7,5 +7,5 @@ export default defineConfig({
   plugins: [react()],
   build: { outDir: '../../dist', emptyOutDir: true },
   server: { port: 5173, strictPort: true },
-  test: { root: '.', include: ['src/**/*.test.ts', 'electron/**/*.test.ts'] }
+  test: { root: '.', include: ['src/**/*.test.ts', 'electron/**/*.test.ts', 'mcp/**/*.test.ts'] }
 });

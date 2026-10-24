@@ -33,10 +33,10 @@ const preloadCjs = (entry, out) => esbuild({ entryPoints: [entry], outfile: out,
 
 // ---- assets Write's print pipeline reads at run time ----
 const polyfill = path.join(path.dirname(createRequire(path.join(write, 'package.json')).resolve('pagedjs')), '..', 'dist', 'paged.polyfill.js');
-fs.cpSync(path.join(write, 'assets', 'fonts'), path.join(dist, 'assets', 'fonts'), { recursive: true });
+// Write's whole assets folder: fonts, help, branding, icon (vendor/ is generated, so the polyfill is copied from the package itself).
+fs.cpSync(path.join(write, 'assets'), path.join(dist, 'assets'), { recursive: true, filter: (src) => !src.includes(`${path.sep}vendor`) });
 fs.mkdirSync(path.join(dist, 'assets', 'vendor'), { recursive: true });
 fs.copyFileSync(polyfill, path.join(dist, 'assets', 'vendor', 'paged.polyfill.js'));
-fs.copyFileSync(path.join(write, 'assets', 'icon.png'), path.join(dist, 'assets', 'icon.png'));
 
 // ---- Write's view ----
 await page(path.join(write, 'src', 'renderer'), path.join(dist, 'modules', 'write', 'renderer'));

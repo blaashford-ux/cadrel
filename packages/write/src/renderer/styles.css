@@ -151,9 +151,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 /* ---- editor area ---- */
 .panes { flex: 1; min-height: 0; position: relative; background: var(--panel); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
 .tabs + .panes { border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-.pane { position: absolute; inset: 0; overflow: auto; padding: 0 28px 28px; }
+.pane { position: absolute; inset: 0; overflow: auto; padding: 0 56px 28px 28px; }
 /* the heading row and the find bar stay visible while the chapter scrolls underneath */
-.pane-top { position: sticky; top: 0; z-index: 30; margin: 0 -28px; padding: 0 28px; background: var(--panel); box-shadow: 0 10px 14px -12px rgba(8, 4, 26, 0.5); }
+.pane-top { position: sticky; top: 0; z-index: 30; margin: 0 -56px 0 -28px; padding: 0 56px 0 28px; background: var(--panel); box-shadow: 0 10px 14px -12px rgba(8, 4, 26, 0.5); }
 .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 10px; }
 .editor-head h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
 .head-actions { display: flex; gap: 6px; }
@@ -162,7 +162,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .head-actions button.save-btn:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .scene-msg { margin-right: auto; margin-left: 12px; font-size: 12px; color: var(--gold); }
 .editor { margin-top: 10px; max-width: 880px; margin-left: auto; margin-right: auto; }
-.source-editor { display: block; width: 100%; max-width: 880px; margin: 10px auto 0; min-height: 60vh; resize: vertical; padding: 18px 20px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
+.editor-wrap, .source-wrap { position: relative; max-width: 880px; margin: 10px auto 0; }
+.editor-wrap > .editor { margin: 0; max-width: none; }
+.source-editor { display: block; width: 100%; margin: 0; min-height: 60vh; resize: vertical; padding: 18px 20px; font: 13px/1.6 'Cascadia Code', 'Cascadia Mono', Consolas, monospace; color: var(--fg); background: var(--bg); border: 0; border-radius: var(--radius-lg); tab-size: 4; }
 
 .statusbar { display: flex; gap: 18px; flex: none; padding: 6px 18px; font-size: 12px; color: var(--muted); background: transparent; }
 .statusbar .spacer { flex: 1; }
@@ -178,6 +180,8 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 
 .context-menu { position: fixed; z-index: 40; min-width: 210px; padding: 6px; background: var(--panel); border-radius: 12px; box-shadow: var(--shadow-pop); outline: none; }
 .context-menu button { display: flex; justify-content: space-between; gap: 24px; width: 100%; text-align: left; background: none; padding: 6px 12px; border-radius: 8px; }
+/* Press-and-hold targets: no system callout or text-selection bubble on top of the app's own menu */
+.tree .row, .project-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .context-menu button.hot { background: var(--raised); }
 .context-menu button.danger { color: var(--danger); }
 .context-menu .hint { color: var(--faint); }
@@ -499,3 +503,271 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .ms-badge { display: inline-flex; color: var(--gold); flex: none; }
 .card-ms { color: var(--muted); font-size: 12px; margin-top: -4px; }
 .ms-name { color: var(--gold); font-weight: 600; }
+
+/* Where a setting comes from (project / book layers) */
+.layer-tag { display: inline-flex; align-items: baseline; gap: 6px; margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.layer-tag.own { color: var(--accent, #2b6cb0); font-weight: 600; }
+.layer-reset { font-size: 11px; padding: 0 6px; line-height: 1.5; }
+.layer-review-list { list-style: none; margin: 0; padding: 0; }
+.layer-review-list li { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(80px, 1fr) auto auto; gap: 8px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); font-size: 13px; }
+.layer-review-list .layer-review-value { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- phone layout: used when the platform has no window chrome (Android) ---- */
+.frame.mobile { height: 100dvh; position: relative; }
+.mobilebar { display: flex; align-items: center; gap: 6px; flex: none; padding: max(6px, env(safe-area-inset-top)) 8px 6px; background: var(--shell); }
+.mobilebar .tb-logo { margin: 0 6px 0 4px; }
+.mobilebar .mb-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 15px; }
+.mb-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 12px; }
+.mb-btn.text { font-size: 14px; }
+.mb-btn.on { background: var(--accent); color: var(--accent-ink); }
+.mb-btn.primary:not(:disabled) { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.mb-btn:disabled { opacity: 0.4; }
+
+.frame.mobile .app { display: block !important; position: relative; overflow: hidden; }
+.frame.mobile .splitter { display: none; }
+.frame.mobile .content { margin: 0; height: 100%; border-radius: 0; box-shadow: none; }
+/* above the sticky .pane-top (z-index 30), which otherwise paints over the drawer */
+.frame.mobile .sidebar { position: absolute; z-index: 36; top: 0; bottom: 0; left: 0; width: min(88vw, 380px); padding-top: 8px; background: var(--panel); box-shadow: var(--shadow-pop); transform: translateX(-104%); transition: transform 0.18s ease-out; visibility: hidden; }
+.frame.mobile.drawer-open .sidebar { transform: none; visibility: visible; }
+.drawer-backdrop { position: absolute; inset: 0; z-index: 34; background: rgba(0, 0, 0, 0.45); }
+.frame.mobile .toolbar button, .frame.mobile .modal-actions button { min-height: 40px; }
+.frame.mobile .filter { min-height: 40px; }
+.frame.mobile .tabs { padding-top: 6px; }
+.frame.mobile .statusbar { flex-wrap: wrap; gap: 4px 14px; padding: 4px 12px max(6px, env(safe-area-inset-bottom)); }
+.frame.mobile .modal { width: min(92vw, 420px); }
+.frame.mobile .app-home { padding-bottom: env(safe-area-inset-bottom); }
+.frame.mobile .home-head { flex-direction: column; align-items: stretch; gap: 10px; }
+.frame.mobile .editor-head { padding: 8px 0 6px; }
+.frame.mobile .pane { padding: 0 34px 24px 8px; }
+.frame.mobile .pane-top { margin: 0 -34px 0 -8px; padding: 0 38px 0 12px; }
+.frame.mobile .head-actions .save-btn { display: none; } /* the top bar has Save */
+.frame.mobile .head-actions button { padding: 8px 10px; }
+.frame.mobile .editor-head h2 { font-size: 17px; }
+.frame.mobile .editor .milkdown .ProseMirror { padding: 24px 16px 40px; }
+.frame.mobile .editor-head { flex-wrap: wrap; row-gap: 4px; }
+.frame.mobile .head-actions { flex-wrap: wrap; }
+
+/* ---- Google Drive sync ---- */
+.sync-btn { position: relative; }
+.sync-btn.s-error, .sync-btn.s-confirm { color: var(--danger); }
+.sync-btn .sync-dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sync-btn.s-syncing .sync-dot { animation: sync-pulse 1s ease-in-out infinite; }
+.sync-btn.s-error .sync-dot, .sync-btn.s-confirm .sync-dot { background: var(--danger); }
+@keyframes sync-pulse { 50% { opacity: 0.25; } }
+.sync-dialog { max-height: 86dvh; overflow-y: auto; }
+.sync-line { margin: 0 0 8px; font-weight: 600; }
+.sync-line.s-error { color: var(--danger); }
+.sync-block { margin: 12px 0; padding: 10px 12px; background: var(--raised); border-radius: 12px; }
+.sync-list { margin: 6px 0 0; padding-left: 18px; font-size: 13px; overflow-wrap: anywhere; }
+.sync-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 16px 0; }
+
+.sb-sync.s-error, .sb-sync.s-confirm { color: var(--danger); }
+.sb-sync.s-syncing { opacity: 0.75; }
+
+/* ---- comments and suggestions ---- */
+.review-mark { background: color-mix(in srgb, var(--gold) 28%, transparent); border-bottom: 2px solid var(--gold); cursor: pointer; }
+.review-mark.review-suggestion { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-color: var(--accent); }
+.review-mark.review-active { background: color-mix(in srgb, var(--gold) 50%, transparent); }
+.review-panel { position: fixed; z-index: 35; top: 96px; right: 16px; bottom: 56px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow: hidden; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-pop); }
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-head h3 { margin: 0; font-size: 15px; }
+.review-head button { background: transparent; color: var(--muted); padding: 2px 8px; font-size: 18px; }
+.review-begin .primary { width: 100%; }
+.review-msg { margin: 6px 0 0; font-size: 12px; color: var(--gold); }
+.review-compose { display: flex; flex-direction: column; gap: 8px; }
+.review-compose blockquote { margin: 0; padding: 6px 10px; font-size: 12px; color: var(--muted); border-left: 3px solid var(--gold); background: var(--raised); border-radius: 6px; }
+.review-compose label { display: block; font-size: 12px; color: var(--muted); }
+.review-compose textarea, .review-replybox textarea { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; font: inherit; color: var(--fg); background: var(--raised); border: 0; border-radius: 8px; resize: vertical; }
+.review-kinds { display: flex; gap: 14px; }
+.review-kinds input { display: inline; width: auto; margin: 0 4px 0 0; }
+.review-list { flex: 1; min-height: 0; margin: 0; padding: 0; overflow: auto; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.review-empty { padding: 12px 4px; font-size: 13px; color: var(--muted); }
+.review-item { padding: 10px; background: var(--raised); border-radius: 12px; font-size: 13px; }
+.review-item.s-resolved, .review-item.s-accepted, .review-item.s-rejected { opacity: 0.6; }
+.review-item.detached { outline: 1px dashed var(--faint); }
+.review-quote { display: block; width: 100%; padding: 0 0 4px; text-align: left; background: transparent; color: var(--muted); font-style: italic; }
+.review-meta { font-size: 11px; color: var(--muted); }
+.review-lost { color: var(--danger); }
+.review-diff { margin-top: 4px; }
+.review-diff del { color: var(--danger); }
+.review-diff ins { color: var(--accent); text-decoration: none; font-weight: 600; }
+.review-body, .review-reply { margin: 6px 0 0; white-space: pre-wrap; }
+.review-reply { padding-left: 10px; border-left: 2px solid var(--faint); color: var(--muted); }
+.review-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.review-actions button { padding: 3px 9px; font-size: 12px; background: var(--panel); }
+.review-replybox { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; align-items: flex-end; }
+.review-foot { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--muted); }
+.review-name input { display: inline-block; width: 140px; margin-left: 6px; padding: 3px 8px; background: var(--raised); }
+.frame.mobile .review-panel { top: auto; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 62dvh; }
+
+/* ---- sharing for review ---- */
+.picker-frame { display: block; width: 100%; height: min(70vh, 560px); border: 0; border-radius: 12px; background: var(--raised); }
+.join-dialog, .share-dialog { width: 460px; }
+.share-list { margin: 8px 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.share-list li { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--raised); border-radius: 10px; }
+.share-list .grow-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.share-add { display: flex; gap: 6px; margin-top: 8px; }
+.share-chapters { margin: 8px 0 0; padding: 6px 8px; border: 1px solid var(--border, rgba(128,128,128,.3)); border-radius: 10px; min-width: 0; }
+.share-chapters legend { padding: 0 4px; font-size: 13px; }
+.share-chapters-tools { display: flex; gap: 10px; align-items: center; margin-bottom: 4px; }
+.share-chapters-tools .link { background: none; border: 0; padding: 0; color: var(--accent, inherit); text-decoration: underline; cursor: pointer; }
+.share-chapter-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.share-chapter-list label { display: flex; align-items: center; gap: 8px; padding: 2px 4px; cursor: pointer; }
+.share-chapter-list input { margin: 0; flex: none; }
+.share-chapter-list span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-add input { margin-top: 0; }
+.share-add select { margin-top: 0; flex: none; max-width: 46%; }
+.share-note { margin: 6px 0; font-size: 12px; color: var(--accent); word-break: break-all; }
+.shared-with-me > button { margin-top: 8px; }
+.review-head .review-share { margin-left: auto; margin-right: 6px; padding: 3px 10px; font-size: 12px; background: var(--raised); color: var(--fg); }
+/* ---- line numbers: every tenth line faint, the hovered line in full ---- */
+/* line numbers sit in the margin to the right of the editor, outside the text */
+.line-gutter { position: absolute; left: calc(100% + 8px); top: 0; bottom: 0; width: 44px; overflow: hidden; pointer-events: none; font: 12px 'Cascadia Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
+.line-gutter > div { position: relative; }
+.line-no { position: absolute; left: 0; display: block; text-align: left; white-space: nowrap; }
+/* every line has a number: the tens are always there, the rest appear while the pointer is over the editor */
+.line-no { color: var(--faint); opacity: 0; transition: opacity 0.12s; }
+.line-no.ten, .line-gutter.all .line-no { opacity: 1; }
+.line-no.one { color: var(--fg); opacity: 1; }
+.frame.mobile .line-gutter { left: calc(100% + 3px); width: 26px; font-size: 10px; }
+
+/* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
+.edit-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--danger); background: transparent; }
+.edit-dot.done { border-color: #3fb27f; background: #3fb27f; }
+
+/* Project/template settings: the inherited app values are shown, but can't be changed until Override is ticked */
+.defaults-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.defaults-fields.readonly { opacity: 0.6; }
+.defaults-fields.readonly input, .defaults-fields.readonly select, .defaults-fields.readonly textarea, .defaults-fields.readonly button { cursor: not-allowed; }
+
+/* text-analysis report */
+.pane.report { padding: 0; overflow: hidden; }
+.report-view { display: flex; flex-direction: column; height: 100%; }
+.report-bar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border, rgba(128, 128, 128, 0.25)); flex-wrap: wrap; }
+.report-bar .spacer { flex: 1; }
+.report-msg { color: var(--muted); font-size: 13px; }
+.report-frame { flex: 1; min-height: 0; width: 100%; border: 0; background: transparent; }
+
+/* phone: selection belongs to the system (handles + its own menu); formatting lives in a bar above the keyboard */
+.frame.mobile .editor .milkdown .ProseMirror { -webkit-tap-highlight-color: transparent; touch-action: manipulation; -webkit-user-select: text; user-select: text; padding-bottom: 88px; }
+.format-bar { position: fixed; left: 0; right: 0; z-index: 40; display: flex; gap: 2px; padding: 4px 6px; overflow-x: auto; background: var(--shell); border-top: 1px solid var(--faint); box-shadow: 0 -4px 14px rgba(8, 4, 26, 0.25); -webkit-overflow-scrolling: touch; }
+.fb-btn { flex: 1 0 auto; min-width: 44px; height: 42px; padding: 0 10px; background: transparent; color: var(--fg); border-radius: 10px; font-size: 17px; touch-action: manipulation; }
+.fb-btn:active { background: var(--raised); }
+.fb-btn.b { font-weight: 800; }
+.fb-btn.word { font-size: 14px; font-weight: 600; padding: 0 12px; }
+.fb-btn.i { font-style: italic; font-family: Georgia, serif; }
+.about-head { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.about-head h3 { margin: 0; }
+.about-version { color: var(--muted); font-size: 13px; }
+.about-update { margin: 12px 0 4px; font-size: 13px; }
+.about-update p { margin: 4px 0; }
+.about-notes summary { cursor: pointer; color: var(--muted); }
+.about-notes pre { max-height: 180px; margin: 6px 0 0; padding: 8px 10px; overflow: auto; white-space: pre-wrap; background: var(--raised); border-radius: 10px; font: inherit; font-size: 12px; }
+.share-sub { display: block; font-size: 11px; }
+.share-list li { flex-wrap: wrap; }
+.share-dialog { width: 520px; }
+.share-dialog .danger { background: var(--danger); color: #fff; }
+.frame.mobile .share-dialog, .frame.mobile .join-dialog { width: auto; }
+.share-list li .grow-text { flex: 1 1 100%; }
+.share-list li button { padding: 4px 10px; font-size: 12px; }
+
+/* ---- find bar on the phone: wrap instead of running off the right edge, so Close is always reachable ---- */
+.frame.mobile .find-bar { margin-right: 0; max-width: 100%; box-sizing: border-box; }
+.frame.mobile .find-row { flex-wrap: wrap; row-gap: 6px; }
+.frame.mobile .find-row .find-input { flex: 1 1 calc(100% - 36px); min-width: 0; max-width: none; } /* the box takes the first line, the options wrap below */
+.frame.mobile .find-scope { order: 5; flex: 1 1 100%; max-width: 100%; }
+.frame.mobile .find-bar button { min-height: 36px; }
+
+/* AI reviewers */
+.review-ai { display: inline-block; margin-right: 6px; padding: 0 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg, #fff); background: var(--accent); border-radius: 4px; }
+.review-cat.editable { background: transparent; cursor: pointer; font: inherit; font-size: 10px; line-height: inherit; }
+.review-cat.editable:hover { color: var(--fg); border-color: var(--muted); }
+.review-cat.add { border-style: dashed; }
+.review-topic-edit { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.review-topic-edit input { flex: 1 1 120px; min-width: 0; }
+.review-cat { margin-left: 6px; padding: 0 6px; font-size: 10px; color: var(--muted); border: 1px solid var(--faint); border-radius: 999px; }
+.review-filters { display: flex; gap: 6px; }
+.review-filters select { flex: 1; min-width: 0; padding: 4px 6px; font-size: 12px; background: var(--raised); color: var(--fg); border: 0; border-radius: 8px; }
+.review-bulk { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+.review-bulk button { padding: 3px 10px; font-size: 12px; background: var(--raised); }
+.review-bulk .primary { background: var(--accent); }
+.ai-dialog { width: 560px; max-height: calc(100dvh - 48px); overflow: auto; }
+.ai-dialog h4 { margin: 14px 0 4px; font-size: 13px; }
+.ai-snippet { margin: 8px 0; }
+.ai-snippet-head { display: flex; align-items: baseline; gap: 8px; }
+.ai-snippet-head button { margin-left: auto; padding: 3px 10px; font-size: 12px; }
+.ai-snippet pre { margin: 4px 0 0; padding: 8px 10px; overflow: auto; max-height: 120px; font: 11px/1.4 Consolas, monospace; user-select: all; background: var(--raised); border-radius: 8px; white-space: pre-wrap; word-break: break-all; }
+.frame.mobile .ai-dialog { width: auto; }
+
+.ai-kit { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 10px 0 4px; }
+
+.ai-remote { margin: 12px 0 0; padding: 8px 10px; background: var(--raised); border-radius: 10px; }
+.ai-remote summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.ai-remote-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.ai-on { color: var(--accent); font-weight: 600; }
+.ai-remote-field { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; margin: 6px 0; }
+.ai-remote-field .muted { grid-column: 1 / -1; }
+.ai-remote-field code { overflow: hidden; text-overflow: ellipsis; user-select: all; font: 11px Consolas, monospace; }
+.ai-remote-field button, .ai-remote > button { padding: 3px 10px; font-size: 12px; }
+
+/* The note whose text was clicked: marked, and the list can scroll far enough to put it at the top. */
+.review-item.focused { outline: 2px solid var(--gold); background: color-mix(in srgb, var(--gold) 14%, var(--raised)); }
+.review-list.has-focus::after { content: ""; flex: 0 0 var(--spacer, 0px); }
+
+/* ---- Settings → Appearance ---- */
+.appearance .subtabs { margin-top: 10px; }
+.theme-presets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 14px; }
+.theme-chip { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; border: 2px solid; font-size: 11px; font-weight: 700; }
+.theme-layout { display: flex; flex-direction: column-reverse; gap: 14px; }
+.theme-rows { display: flex; flex-direction: column; gap: 10px; }
+.theme-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px auto; align-items: center; gap: 8px; }
+.theme-row-main { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.theme-row-main input[type='color'] { flex: none; width: 38px; height: 38px; padding: 2px; border: 0; border-radius: 10px; background: var(--raised); cursor: pointer; }
+.theme-row-text { display: flex; flex-direction: column; min-width: 0; }
+.theme-hex { padding: 6px 8px; font-family: 'Cascadia Mono', Consolas, monospace; font-size: 12.5px; }
+.theme-hex[aria-invalid='true'] { outline: 2px solid var(--danger); }
+.theme-reset { padding: 4px 8px; font-size: 12px; }
+/* The preview paints with its own copy of the variables, so it shows the theme being edited, not the one in use. */
+.theme-preview { display: grid; grid-template-columns: 34% 1fr; min-height: 210px; border-radius: var(--radius-lg); overflow: hidden; background: var(--shell); color: var(--fg); box-shadow: var(--shadow-card); font-size: 12.5px; }
+.tp-side { display: flex; flex-direction: column; gap: 3px; padding: 10px 8px; }
+.tp-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 4px; }
+.tp-item { padding: 4px 8px; border-radius: 8px; color: var(--muted); }
+.tp-item.selected { background: var(--selected); color: var(--fg); font-weight: 600; }
+.tp-card { margin: 8px 8px 8px 0; padding: 10px 12px; border-radius: 12px; background: var(--bg); color: var(--fg); }
+.tp-card h5 { margin: 0 0 6px; font-size: 14px; text-transform: none; letter-spacing: 0; color: var(--fg); }
+.tp-card p { margin: 0 0 8px; line-height: 1.5; }
+.tp-card mark { background: var(--accent-soft); color: var(--fg); border-radius: 3px; padding: 0 2px; }
+.tp-card em { color: var(--gold); font-style: normal; }
+.tp-muted { color: var(--muted); }
+.tp-buttons { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.tp-button { padding: 4px 10px; border-radius: var(--radius); background: var(--raised); }
+.tp-button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.tp-dirty { color: var(--dirty); margin-left: auto; }
+
+/* ---- Zone Mode: full screen, just the open file and its navigation bar ---- */
+.frame.zone .sidebar, .frame.zone .splitter { display: none; }
+.frame.zone .content { margin: 10px; }
+.zone-btn[aria-pressed='true'] { background: var(--accent-soft); color: var(--fg); }
+
+/* ---- toggle switch (Notes: This chapter only) ---- */
+.switch { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-track { position: relative; flex: none; width: 34px; height: 20px; border-radius: 999px; background: var(--hover); transition: background 0.12s; }
+.switch-track::after { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--fg); opacity: 0.75; transition: transform 0.12s, background 0.12s, opacity 0.12s; }
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track::after { transform: translateX(14px); background: var(--accent-ink); opacity: 1; }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--focus); outline-offset: 2px; }
+.review-chapter-switch { padding: 2px 4px 6px; font-size: 12.5px; }
+
+/* alignment fences (::: center) in the formatted editor */
+.editor .md-align { position: relative; margin: 0.4em 0 0.4em -12px; padding-left: 10px; border-left: 2px dotted var(--faint); }
+.editor .md-align > * { text-align: inherit; }
+.editor .md-align[data-md-align='left'] { text-align: left; }
+.editor .md-align[data-md-align='center'] { text-align: center; }
+.editor .md-align[data-md-align='right'] { text-align: right; }
+.editor .md-align[data-md-align='justify'] { text-align: justify; }
+.editor .md-align::before { content: attr(data-md-align); position: absolute; left: -2px; top: -1.15em; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); opacity: 0; transition: opacity 0.12s; pointer-events: none; }
+.editor .md-align:hover::before, .editor .md-align:focus-within::before { opacity: 0.9; }
+.editor .md-align[data-md-align='center'] ul, .editor .md-align[data-md-align='center'] ol { list-style-position: inside; padding-left: 0; }
+.align-group { display: inline-flex; gap: 2px; margin-right: 4px; }
+.align-group button { padding: 4px 6px; }

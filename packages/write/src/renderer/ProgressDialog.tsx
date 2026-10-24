@@ -5,7 +5,7 @@ import { useEscape } from './useEscape';
 
 interface Props {
   project: { path: string; meta: ProjectMeta };
-  progress: { progress: Progress; total: number; manuscript: string | null } | null;
+  progress: { progress: Progress; total: number | null; manuscript: string | null } | null;
   onClose(): void;
   onSetGoal(): void;
 }
@@ -51,6 +51,25 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
     }
     return dateRange(addDays(today, -(range - 1)), today);
   }, [p, range, goal, today]);
+
+  if (progress && progress.manuscript === null) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal progress-dialog" role="dialog" aria-modal="true" aria-label="Progress">
+          <h3>Progress — {project.meta.name}</h3>
+          <div className="tiles">
+            <Tile label="Words" value="-" />
+          </div>
+          <p className="muted">
+            No active manuscript. Right-click a file and choose “Active Manuscript” to count its words and track a goal. Each manuscript keeps its own history, so switching back brings its stats with it.
+          </p>
+          <div className="modal-actions">
+            <button onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!p) {
     return (

@@ -73,10 +73,17 @@ describe('back matter', () => {
     expect(buildBackMatter(base(), [])).toEqual([]);
   });
 
+  it('keeps typed line breaks inside a back-matter paragraph', () => {
+    const d = base();
+    d.back.about = { enabled: true, heading: '', text: 'Line one\nLine two\n\nSecond para' };
+    const blocks = buildBackMatter(d, [])[0].blocks;
+    expect(blocks.slice(1)).toEqual([{ t: 'para', text: 'Line one\nLine two' }, { t: 'para', text: 'Second para' }]);
+  });
+
   it('builds each enabled page with its heading (also used for the contents list)', () => {
     const d = base();
     d.back.links = { enabled: true, heading: '', intro: 'Join us.', items: [{ label: 'Newsletter', url: 'https://example.com/n' }, { label: 'Plain', url: '' }] };
-    d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: 'https://example.com/2' }, { title: 'Book Three', url: '' }, { title: '', url: '' }] };
+    d.back.alsoBy = { enabled: true, heading: '', items: [{ title: 'Book Two', url: 'https://example.com/2', blurb: 'A sequel.\n\nMore peril.' }, { title: 'Book Three', url: '', blurb: '' }, { title: '', url: '', blurb: '' }] };
     d.back.about = { enabled: true, heading: '', text: 'Bio para one.\n\nBio para two.' };
     d.back.custom = { enabled: true, heading: 'A NOTE', text: 'Thanks.' };
     const w: string[] = [];
@@ -89,6 +96,7 @@ describe('back matter', () => {
       { t: 'link', label: 'Newsletter', url: 'https://example.com/n' }, { t: 'line', text: 'Plain' }
     ]);
     expect(pages[1].blocks.filter((b) => b.t === 'link' || b.t === 'line')).toHaveLength(2);
+    expect(pages[1].blocks.filter((b) => b.t === 'para').map((b) => (b as { text: string }).text)).toEqual(['A sequel.', 'More peril.']);
     expect(w).toEqual([]);
   });
 

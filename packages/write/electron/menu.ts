@@ -1,21 +1,21 @@
-import { app, BrowserWindow, dialog, Menu, type MenuItem, type MenuItemConstructorOptions, type WebContents } from 'electron';
+import { app, BrowserWindow, Menu, type MenuItem, type MenuItemConstructorOptions, type WebContents } from 'electron';
+import { openHelp } from './help';
 import type { MenuAction, MenuNode, ThemeSource } from '../src/shared/api';
-
-interface ThemeHooks {
-  get(): ThemeSource;
-  set(theme: ThemeSource): void;
-}
 
 /** Where the menu's actions go. Write's renderer may be a view inside a bigger window, so none of this assumes a focused window. */
 interface MenuHost {
   getContents(): WebContents | null;
-  getWindow(): BrowserWindow | null;
   /** Standalone Write also owns the application menu; inside the shell the shell does, and this menu is only drawn in Write's own view. */
   asApplicationMenu: boolean;
 }
 
 /** The menu this module owns (drawn by the in-window menu bar). */
 let current: Menu | null = null;
+
+interface ThemeHooks {
+  get(): ThemeSource;
+  set(theme: ThemeSource): void;
+}
 
 /**
  * Replaces Electron's default menu. The default has View > Reload (Ctrl+R / Ctrl+Shift+R),
@@ -51,6 +51,7 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
         { label: 'Project Settings…', click: send('project-settings') },
         { label: 'Project Progress…', click: send('project-progress') },
         { label: 'Export…\tCtrl+E', click: send('export') },
+        { label: 'Google Drive Sync…', click: send('sync') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Save\tCtrl+S', click: send('save') },
@@ -75,7 +76,8 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
         { label: 'Find…\tCtrl+F', click: send('find') },
         { label: 'Find Next\tF3', click: send('find-next') },
         { label: 'Find Previous\tShift+F3', click: send('find-prev') },
-        { label: 'Replace…\tCtrl+H', click: send('replace') }
+        { label: 'Replace…\tCtrl+H', click: send('replace') },
+        { label: 'Go to Line…\tCtrl+G', click: send('go-to-line') }
       ]
     },
     {
@@ -103,6 +105,7 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
         { role: 'zoomOut' },
         { role: 'resetZoom' },
         { type: 'separator' },
+        { label: 'Zone Mode\tF8', click: send('zone-mode') },
         { role: 'togglefullscreen' },
         ...(app.isPackaged ? [] : ([{ type: 'separator' }, { role: 'toggleDevTools' }] as MenuItemConstructorOptions[]))
       ]
@@ -110,26 +113,11 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
     {
       label: '&Help',
       submenu: [
+        { label: 'MDEdit Help\tF1', click: () => openHelp() },
+        { type: 'separator' },
         {
           label: 'About MDEdit',
-          click: () => {
-            const opts = {
-              type: 'info' as const,
-              title: 'About MDEdit',
-              message: `MDEdit ${app.getVersion()}`,
-              detail: [
-                'A folder-based Markdown editor with KDP export.',
-                '',
-                `Electron ${process.versions.electron} · Chromium ${process.versions.chrome} · Node ${process.versions.node}`,
-                '',
-                'Bundled fonts: EB Garamond, Crimson Pro, Libre Baskerville (SIL Open Font License 1.1).',
-                'Print layout: Paged.js (MIT).'
-              ].join('\n'),
-              buttons: ['OK']
-            };
-            const win = menuHost.getWindow() ?? BrowserWindow.getFocusedWindow();
-            void (win ? dialog.showMessageBox(win, opts) : dialog.showMessageBox(opts));
-          }
+          click: send('about')
         }
       ]
     }

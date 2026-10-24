@@ -99,3 +99,14 @@ describe('navigate (arrow-key tree behaviour)', () => {
     expect(navigate([], null, 'ArrowDown')).toEqual({});
   });
 });
+
+describe('edit dots', () => {
+  it('chapters get a todo/done state only when the project is in the Editing stage', () => {
+    const tree = { kind: 'dir', name: 'r', path: '/r', children: [{ kind: 'file', name: 'story.md', path: '/r/story.md' }] } as never;
+    const docs = new Map([['/r/story.md', splitChapters('# One\nx\n\n# Two\ny\n')]]);
+    const open = new Set(['/r/story.md']);
+    const chapters = (rows: ReturnType<typeof buildRows>) => rows.filter((r) => r.kind === 'chapter');
+    expect(chapters(buildRows(tree, open, docs, '')).map((r) => r.edit)).toEqual([undefined, undefined]);
+    expect(chapters(buildRows(tree, open, docs, '', () => ['Two'])).map((r) => r.edit)).toEqual(['todo', 'done']);
+  });
+});

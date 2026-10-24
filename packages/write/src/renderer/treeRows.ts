@@ -1,5 +1,6 @@
 import type { DirNode, TreeNode } from '../shared/api';
 import type { MarkdownDoc } from '../shared/chapters';
+import { chapterIds } from '../shared/projects';
 import { countWords } from '../shared/words';
 
 export interface Row {
@@ -15,6 +16,8 @@ export interface Row {
   parentKey: string | null;
   /** Word count, for chapters of files that have been read. */
   words?: number;
+  /** Editing stage: whether this chapter has been marked as edited (absent outside the Editing stage). */
+  edit?: 'todo' | 'done';
   /** File marked for export. */
   marked?: boolean;
   /** File that can't be marked because another file with the same name owns the export settings. */
@@ -47,7 +50,9 @@ export function buildRows(
   root: DirNode,
   expanded: Set<string>,
   docs: Map<string, MarkdownDoc>,
-  filter: string
+  filter: string,
+  /** In the Editing stage: the edited-chapter ids of a file (relative lookups are the caller's business); null otherwise. */
+  editedIds: ((file: string) => readonly string[]) | null = null
 ): Row[] {
   const filtered = filterTree(root, filter);
   if (!filtered || filtered.kind !== 'dir') return [];
@@ -75,7 +80,10 @@ export function buildRows(
       if (n.kind === 'dir') {
         walk(n.children, depth + 1, n.path);
       } else {
-        docs.get(n.path)?.chapters.forEach((c, i) =>
+        const doc = docs.get(n.path);
+        const ids = doc && editedIds ? chapterIds(doc.chapters) : [];
+        const done = editedIds ? new Set(editedIds(n.path)) : null;
+        doc?.chapters.forEach((c, i) =>
           rows.push({
             key: chapterKey(n.path, i),
             kind: 'chapter',
@@ -86,7 +94,8 @@ export function buildRows(
             expandable: false,
             expanded: false,
             parentKey: n.path,
-            words: countWords(c.raw)
+            words: countWords(c.raw),
+            ...(done ? { edit: done.has(ids[i]) ? ('done' as const) : ('todo' as const) } : {})
           })
         );
       }
