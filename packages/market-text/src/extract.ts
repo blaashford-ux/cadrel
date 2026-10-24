@@ -162,7 +162,9 @@ function fromEpub(buf: Buffer): Extracted {
 
 async function fromPdf(buf: Buffer): Promise<Extracted> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: false, isEvalSupported: false, disableFontFace: true, verbosity: 0 }).promise;
+  // pdf.js 6 never evaluates font programs (the old isEvalSupported switch is gone) and destroys through the loading task.
+  const task = pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: false, disableFontFace: true, verbosity: 0 });
+  const doc = await task.promise;
   const pages: string[] = [];
   try {
     for (let n = 1; n <= doc.numPages; n++) {
@@ -190,7 +192,7 @@ async function fromPdf(buf: Buffer): Promise<Extracted> {
       page.cleanup();
     }
   } finally {
-    await doc.destroy();
+    await task.destroy();
   }
   const text = normalizeText(pages.join('\n\n'));
   const warnings: string[] = [];

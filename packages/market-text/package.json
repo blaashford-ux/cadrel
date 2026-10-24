@@ -13,7 +13,7 @@
     "@tesseract.js-data/eng": "^1.0.0",
     "cheerio": "^1.0.0",
     "fflate": "^0.8.2",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^6.4.299",
     "sharp": "^0.34.0",
     "tesseract.js": "^6.0.0"
   },

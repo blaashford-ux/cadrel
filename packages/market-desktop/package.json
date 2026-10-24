@@ -18,7 +18,7 @@
     "sharp": "^0.34.0",
     "tesseract.js": "^6.0.0",
     "@tesseract.js-data/eng": "^1.0.0",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^6.4.299",
     "@huggingface/transformers": "^3.7.0"
   },
   "devDependencies": {
