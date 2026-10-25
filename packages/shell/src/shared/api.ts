@@ -176,6 +176,12 @@ export type { Attachment };
 
 /** Where everything lives, for the Settings page. */
 export interface AppFolders {
+  /** This Studio's folder inside the Cadrel folder; Projects, Write and Market are inside it. */
+  studioFolder: string;
+  studioName: string;
+  /** A move of the Cadrel folder waiting for the next start (nothing may be open while it moves), and the last move that failed. */
+  pendingCadrelMove: string | null;
+  moveError: string | null;
   /** The Cadrel folder: where the working folders below default to. */
   cadrelFolder: string;
   /** False when the person has put it somewhere of their own. */
@@ -273,6 +279,42 @@ export interface StudioEntry {
   createdAt: string;
   /** The last thing worth telling the person about this Studio, in a sentence. */
   note: string | null;
+  /** The folder inside the Cadrel folder that holds this Studio's work: <Cadrel>/<this>/{Projects,Write,Market}. Fixed when the Studio is made. */
+  folderName: string;
+  /** What the person is in a Studio they were invited to (a role key); null for a Studio they own. */
+  memberRole: string | null;
+  /** The owner's key fingerprint: what an invitation is checked against. */
+  fingerprint: string | null;
+  /** Their Cloudflare API token is kept on this computer (encrypted) for upgrades. */
+  tokenKept: boolean;
+  /** What was built in the owner's Cloudflare account, so a build that stopped can be finished and an upgrade knows where to go. */
+  resources: { worker: string; d1Id: string | null; d1Name: string; bucket: string } | null;
+  /** The versions the Studio's server last reported, and the ones in this app; an upgrade is offered when the app's are newer. */
+  server: { api: number; schema: number } | null;
+}
+
+/** One person in a Studio, as the owner sees them. */
+export interface StudioMember {
+  id: string;
+  name: string;
+  role: string;
+  joinedAt: string;
+  revokedAt: string | null;
+}
+
+export interface StudioInvite {
+  id: string;
+  role: string;
+  label: string;
+  expiresAt: string;
+}
+
+/** What the Studio's own server says about itself, when it can be reached. */
+export interface StudioPeople {
+  reachable: boolean;
+  error: string | null;
+  members: StudioMember[];
+  invites: StudioInvite[];
 }
 
 export interface StudiosView {
@@ -295,9 +337,21 @@ export interface StudiosApi {
   rename(id: string, name: string): Promise<StudiosView>;
   /** Forget a Studio on this computer. A provisioned Studio's data stays where it is in Cloudflare. */
   remove(id: string): Promise<StudiosView>;
-  /** Checks the Cloudflare details and (when provisioning is connected) builds the Studio there. The token is used once and never kept. */
-  provision(id: string, details: { accountId: string; apiToken: string }): Promise<StudiosView>;
-  createInvite(id: string, invite: { role: string; label: string }): Promise<{ link: string }>;
+  /**
+   * Builds the Studio in the owner's Cloudflare account (a Worker, a D1 database and an R2 bucket of its own), or finishes a build that stopped.
+   * The token is used for this and dropped, unless `keepToken` asks to keep it (encrypted on this computer) for upgrades.
+   */
+  provision(id: string, details: { accountId: string; apiToken: string; keepToken?: boolean }): Promise<StudiosView>;
+  /** Puts a Worker upgrade (the version in this app) on a built Studio. Uses the kept token, or the one given. */
+  upgrade(id: string, apiToken?: string): Promise<StudiosView>;
+  forgetToken(id: string): Promise<StudiosView>;
+  /** Who is in the Studio and what invitations are open (owner only; asks the Studio's server). */
+  people(id: string): Promise<StudioPeople>;
+  createInvite(id: string, invite: { role: string; label: string }): Promise<{ link: string; expiresAt: string }>;
+  revokeInvite(id: string, inviteId: string): Promise<StudioPeople>;
+  removeMember(id: string, memberId: string): Promise<StudioPeople>;
+  /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */
+  join(link: string, details: { yourName: string; studioName?: string }): Promise<StudiosView>;
   backup(id: string): Promise<string>;
 }
 
@@ -317,6 +371,8 @@ export interface CadrelApi {
     choose(which: FolderKey): Promise<AppFolders | null>;
     /** Back to the default place inside the Cadrel folder. */
     reset(which: FolderKey): Promise<AppFolders>;
+    /** Restart Cadrel (to finish moving the Cadrel folder). */
+    restart(): Promise<void>;
   };
   admin: AdminApi;
   assistants: AssistantsApi;

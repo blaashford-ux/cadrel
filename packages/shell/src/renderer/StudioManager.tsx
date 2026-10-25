@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { ROLE_KEYS, defaultRole } from '@cadrel/kernel';
-import type { StudioEntry, StudiosView } from '../shared/api';
+import { useEffect, useState } from 'react';
+import { ROLE_KEYS, STUDIO_SCHEMA_VERSION, defaultRole } from '@cadrel/kernel';
+import type { StudioEntry, StudioPeople, StudiosView } from '../shared/api';
 import { useStudios } from './useStudios';
 
 const api = window.cadrel.studios;
@@ -53,7 +53,7 @@ export function StudioManager() {
         <h3 id="sm-title">Studio Manager</h3>
         <button type="button" className="link" onClick={() => void act(() => api.enableManager(false))}>Turn off</button>
       </div>
-      <div className="banner info" role="note">Preview: creating a Studio and checking its Cloudflare details work. Building it in Cloudflare, invitations and backup are not connected yet.</div>
+      <div className="banner info" role="note">Backup is not connected yet. Everything else here is.</div>
 
       <h4>Your Studios</h4>
       <ul className="studio-list">
@@ -90,11 +90,24 @@ export function StudioManager() {
 function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; studios: StudiosView; act: <T>(job: () => Promise<T>, after?: (r: T) => void) => Promise<void>; setNote(n: string | null): void; onGone(): void }) {
   const [account, setAccount] = useState('');
   const [token, setToken] = useState('');
+  const [keep, setKeep] = useState(false);
   const [rename, setRename] = useState(studio.name);
   const [role, setRole] = useState<string>('author');
   const [label, setLabel] = useState('');
+  const [link, setLink] = useState<string | null>(null);
+  const [people, setPeople] = useState<StudioPeople | null>(null);
+  const [upToken, setUpToken] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const ready = studio.status === 'ready';
+  const building = studio.status === 'provisioning';
+  const behind = ready && studio.server !== null && studio.server.schema < STUDIO_SCHEMA_VERSION;
+
+  const loadPeople = () => void api.people(studio.id).then(setPeople, () => undefined);
+  useEffect(() => {
+    setPeople(null);
+    setLink(null);
+    if (ready) loadPeople();
+  }, [studio.id, ready]);
 
   return (
     <div className="studio-detail" role="region" aria-label={`${studio.name} settings`}>
@@ -103,52 +116,88 @@ function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; s
         <dt>Status</dt><dd>{STATUS_LABEL[studio.status]}</dd>
         <dt>Address</dt><dd>{studio.url ?? 'none yet'}</dd>
         <dt>Cloudflare account</dt><dd>{mask(studio.accountId)}</dd>
+        <dt>Folder</dt><dd>{studio.folderName}</dd>
         <dt>Created</dt><dd>{new Date(studio.createdAt).toLocaleDateString()}</dd>
       </dl>
-      {studio.note && <p className="muted small" role="status">{studio.note}</p>}
+      {studio.note && <p className={`small ${studio.status === 'error' ? 'warn-text' : 'muted'}`} role="status">{studio.note}</p>}
 
       {!ready && (
-        <form className="provision" aria-label="Provision in Cloudflare" onSubmit={(e) => (e.preventDefault(), void act(() => window.cadrel.studios.provision(studio.id, { accountId: account, apiToken: token }), () => (setToken(''), setNote('Details checked. The token was used once and not kept.'))))}>
+        <form className="provision" aria-label="Provision in Cloudflare" onSubmit={(e) => (e.preventDefault(), void act(() => api.provision(studio.id, { accountId: account, apiToken: token, keepToken: keep }), () => (setToken(''), setNote('Your Studio is built.'))))}>
           <h5>Build it in your Cloudflare account</h5>
           <p className="muted small">
             This Studio gets its own Worker, database and file store in your account, shared with no one. Create an API token in Cloudflare (My Profile → API Tokens) with <b>Workers Scripts: Edit</b>, <b>D1: Edit</b> and <b>R2: Edit</b>.
-            Use a Cloudflare account for Cadrel alone if you can: the token reaches anything of those kinds in the account. It is used once, now, and never saved.
+            Use a Cloudflare account for Cadrel alone if you can: the token reaches anything of those kinds in the account.
           </p>
-          <label className="field"><span className="field-label">Account ID</span><input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="32 letters and numbers" autoComplete="off" spellCheck={false} /></label>
-          <label className="field"><span className="field-label">API token</span><input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} /></label>
-          <button type="submit" className="primary" disabled={!account.trim() || !token.trim()}>Provision</button>
+          <label className="field"><span className="field-label">Account ID</span><input value={account} onChange={(e) => setAccount(e.target.value)} placeholder="32 letters and numbers" autoComplete="off" spellCheck={false} disabled={building} /></label>
+          <label className="field"><span className="field-label">API token</span><input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} disabled={building} /></label>
+          <label className="check"><input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} disabled={building} /> Keep this token on this computer (encrypted), so upgrades do not ask for it again</label>
+          <button type="submit" className="primary" disabled={!account.trim() || !token.trim() || building}>{building ? 'Building…' : 'Provision'}</button>
         </form>
       )}
 
-      <h5>People</h5>
-      <p className="muted small">You are the Owner. Invite people by role; they connect with Cadrel, never with your Cloudflare account.</p>
-      <div className="row">
-        <select aria-label="Role for the invitation" value={role} onChange={(e) => setRole(e.target.value)} disabled={!ready}>
-          {INVITE_ROLES.map((k) => <option key={k} value={k}>{defaultRole(k).name}</option>)}
-        </select>
-        <input aria-label="Who the invitation is for" placeholder="Who is it for? (a label only you see)" value={label} onChange={(e) => setLabel(e.target.value)} disabled={!ready} />
-        <button type="button" disabled={!ready} onClick={() => void act(() => window.cadrel.studios.createInvite(studio.id, { role, label }))}>Create invitation</button>
-      </div>
-      {!ready && <p className="muted small">Available once the Studio has been built.</p>}
+      {ready && (
+        <>
+          <h5>People</h5>
+          <p className="muted small">You are the Owner. Invite people by role; they connect with Cadrel, never with your Cloudflare account.</p>
+          <div className="row">
+            <select aria-label="Role for the invitation" value={role} onChange={(e) => setRole(e.target.value)}>
+              {INVITE_ROLES.map((k) => <option key={k} value={k}>{defaultRole(k).name}</option>)}
+            </select>
+            <input aria-label="Who the invitation is for" placeholder="Who is it for? (a label only you see)" value={label} onChange={(e) => setLabel(e.target.value)} />
+            <button type="button" onClick={() => void act(() => api.createInvite(studio.id, { role, label }), (r) => (setLink(r.link), setLabel(''), loadPeople()))}>Create invitation</button>
+          </div>
+          {link && (
+            <div className="banner info" role="status">
+              <p>Send this link to them. It works once, for 7 days, and is not shown again.</p>
+              <div className="row"><input readOnly aria-label="Invitation link" className="grow" value={link} onFocus={(e) => e.currentTarget.select()} /><button type="button" onClick={() => void navigator.clipboard.writeText(link).then(() => setNote('Invitation link copied.'), () => undefined)}>Copy</button></div>
+            </div>
+          )}
+          {people && !people.reachable && <p className="muted small" role="status">Could not reach the Studio to list its people: {people.error}</p>}
+          {people?.reachable && (
+            <ul className="studio-list" aria-label="People in this Studio">
+              {people.members.length === 0 && people.invites.length === 0 && <li className="muted">No one has joined yet.</li>}
+              {people.members.filter((m) => !m.revokedAt).map((m) => (
+                <li key={m.id}>
+                  <span className="grow-text"><strong>{m.name}</strong> <span className="muted small">{defaultRole(m.role as never).name}</span></span>
+                  <button type="button" aria-label={`Remove ${m.name}`} onClick={() => void act(() => api.removeMember(studio.id, m.id), setPeople)}>Remove</button>
+                </li>
+              ))}
+              {people.invites.map((i) => (
+                <li key={i.id}>
+                  <span className="grow-text">Invitation{i.label ? ` for ${i.label}` : ''} <span className="muted small">{defaultRole(i.role as never).name} · waiting until {new Date(i.expiresAt).toLocaleDateString()}</span></span>
+                  <button type="button" aria-label={`Cancel the invitation${i.label ? ` for ${i.label}` : ''}`} onClick={() => void act(() => api.revokeInvite(studio.id, i.id), setPeople)}>Cancel</button>
+                </li>
+              ))}
+            </ul>
+          )}
 
-      <h5>Looking after it</h5>
-      <div className="row">
-        <button type="button" disabled={!ready} title={ready ? '' : 'Available once the Studio has been built'} onClick={() => void act(() => window.cadrel.studios.backup(studio.id))}>Back up this Studio</button>
-        <button type="button" disabled title="Not available yet">Upgrade</button>
-        <button type="button" disabled title="Not available yet">Recovery code</button>
-      </div>
+          <h5>Looking after it</h5>
+          <div className="row">
+            <button type="button" disabled title="Not available yet">Back up this Studio</button>
+            <button type="button" disabled={!behind || (!studio.tokenKept && !upToken.trim())} onClick={() => void act(() => api.upgrade(studio.id, studio.tokenKept ? undefined : upToken), () => (setUpToken(''), setNote('Upgraded.')))}>Upgrade the server{behind ? '' : ' (up to date)'}</button>
+            <button type="button" disabled title="Not available yet">Recovery code</button>
+          </div>
+          {behind && !studio.tokenKept && (
+            <label className="field"><span className="field-label">Cloudflare API token, to upgrade (not kept)</span><input type="password" aria-label="Token for the upgrade" value={upToken} onChange={(e) => setUpToken(e.target.value)} autoComplete="off" /></label>
+          )}
+          {studio.tokenKept && (
+            <p className="muted small">Your Cloudflare token is kept on this computer, encrypted. <button type="button" className="link" onClick={() => void act(() => api.forgetToken(studio.id))}>Forget it</button></p>
+          )}
+        </>
+      )}
 
       <h5>Name and removal</h5>
-      <form className="row" onSubmit={(e) => (e.preventDefault(), void act(() => window.cadrel.studios.rename(studio.id, rename)))}>
+      <form className="row" onSubmit={(e) => (e.preventDefault(), void act(() => api.rename(studio.id, rename)))}>
         <input aria-label="Studio name" value={rename} onChange={(e) => setRename(e.target.value)} maxLength={60} />
         <button type="submit" disabled={!rename.trim() || rename.trim() === studio.name}>Rename</button>
       </form>
+      <p className="muted small">A Studio’s folder keeps the name it was made with.</p>
       {!confirmRemove ? (
         <button type="button" className="quiet" onClick={() => setConfirmRemove(true)}>Remove from this computer…</button>
       ) : (
         <div className="banner warn" role="alert">
-          Remove “{studio.name}” from this computer? Anything already built in Cloudflare stays there; you would need your account ID and token to connect it again.{' '}
-          <button type="button" className="danger" onClick={() => void act(() => window.cadrel.studios.remove(studio.id), onGone)}>Remove</button>{' '}
+          Remove “{studio.name}” from this computer? Anything already built in Cloudflare stays there, and its files stay in the <b>{studio.folderName}</b> folder; you would need your account ID and token to connect it again.{' '}
+          <button type="button" className="danger" onClick={() => void act(() => api.remove(studio.id), onGone)}>Remove</button>{' '}
           <button type="button" onClick={() => setConfirmRemove(false)}>Keep it</button>
         </div>
       )}

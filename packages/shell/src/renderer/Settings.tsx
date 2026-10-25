@@ -13,7 +13,7 @@ const MODES: { id: ThemeSource; label: string }[] = [
 ];
 
 const FOLDER_ROWS: { key: FolderKey; label: string; hint: string }[] = [
-  { key: 'cadrel', label: 'Cadrel folder', hint: 'Holds the folders below unless you place them elsewhere.' },
+  { key: 'cadrel', label: 'Cadrel folder', hint: 'Holds a folder for each Studio. Moving it moves every Studio’s folder, at the next start.' },
   { key: 'projects', label: 'Projects', hint: 'A folder for each project, made from a template on the Projects page. Write opens them from here.' },
   { key: 'write', label: 'Write', hint: 'Write’s own folder.' },
   { key: 'market', label: 'Market', hint: 'Market’s library of books and research.' }
@@ -141,7 +141,16 @@ export function Settings() {
         <h3 id="s-where">Where things are kept</h3>
         <p className="muted small">Everything you work with lives in one Cadrel folder, in your home folder unless you move it. Each part is ready to use inside it: nothing to set up. Move any of them wherever suits you; moving the Cadrel folder takes along every part you have not placed yourself.</p>
         {error && <div className="banner error" role="alert">{error}</div>}
+        {folders?.moveError && <div className="banner error" role="alert">{folders.moveError}</div>}
+        {folders?.pendingCadrelMove && (
+          <div className="banner info" role="status">
+            The Cadrel folder will move to <code className="path">{folders.pendingCadrelMove}</code> when Cadrel restarts, because nothing can be open while it moves.{' '}
+            <button type="button" className="primary" onClick={() => void api.prefs.restart()}>Restart now</button>
+          </div>
+        )}
         <dl className="kv">
+          <dt>This Studio</dt>
+          <dd><strong>{folders?.studioName}</strong> <code className="path">{folders?.studioFolder}</code><div className="muted small">Each Studio keeps its own Projects, Write and Market folders in a folder named for it. Nothing is shared between Studios.</div></dd>
           {FOLDER_ROWS.map(({ key, label, hint }) => {
             const f = folders && locate(folders, key);
             return (

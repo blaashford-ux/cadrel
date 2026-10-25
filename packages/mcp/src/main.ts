@@ -48,7 +48,9 @@ const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio
 /** Write: the folder that holds the projects, by Cadrel Write's own rules (--root, CADREL_WRITE_ROOT, Cadrel Write's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {
   try {
-    const candidates = await rootCandidates({ flag: flag('root'), fs: nodeFs });
+    // An explicit --root (the app always passes one, for its active Studio) is the only place looked: no other Studio's projects may be found instead.
+    const found = await rootCandidates({ flag: flag('root'), fs: nodeFs });
+    const candidates = flag('root') ? [found[0]!] : found;
     const { root, source, tried } = await chooseRoot(candidates, async (r) => (await listProjects({ fs: nodeFs, root: r, agent: 'ai', agentName: 'AI' })).length > 0);
     if (source !== candidates[0]!.source) say(`No projects in the projects folder from ${candidates[0]!.source} (${candidates[0]!.root}); using ${root} (${source}) instead.`);
     const st = await nodeFs.stat(root);

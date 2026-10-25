@@ -23,6 +23,8 @@ export interface ShellSettings {
   projectsFolder?: string;
   /** Write's own folder, if the person placed it, instead of <Cadrel folder>/Write. */
   writeFolder?: string;
+  /** A move of the Cadrel folder, carried out at the next start (to: null means back to the default). */
+  pendingCadrelMove?: { to: string | null };
   /** What this person is in the studio. A one-person studio is its Owner; the server (vault) will say otherwise for others. */
   role?: 'owner' | 'admin' | 'member';
   /** Light, dark or follow Windows. Applies to the whole app. */
@@ -41,6 +43,8 @@ export function sanitizeSettings(raw: unknown): ShellSettings {
   if (typeof r.cadrelFolder === 'string' && path.isAbsolute(r.cadrelFolder)) out.cadrelFolder = r.cadrelFolder;
   if (typeof r.projectsFolder === 'string' && path.isAbsolute(r.projectsFolder)) out.projectsFolder = r.projectsFolder;
   if (typeof r.writeFolder === 'string' && path.isAbsolute(r.writeFolder)) out.writeFolder = r.writeFolder;
+  const pm = r.pendingCadrelMove as { to?: unknown } | undefined;
+  if (pm && typeof pm === 'object' && (pm.to === null || (typeof pm.to === 'string' && path.isAbsolute(pm.to)))) out.pendingCadrelMove = { to: pm.to };
   if (r.role === 'admin' || r.role === 'member') out.role = r.role;
   if (isThemeSource(r.theme) && r.theme !== 'system') out.theme = r.theme;
   const custom = sanitizeThemeCustom(r.themeCustom);

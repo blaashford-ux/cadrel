@@ -235,3 +235,7 @@ input[type='checkbox'] { padding: 0; }
 .field { display: grid; gap: 3px; }
 .field-label { font-size: 12px; color: var(--muted); }
 .chip.warn { background: var(--warn-bg); color: var(--fg); }
+.studio-switch-wrap { margin-bottom: 14px; }
+.studio-switch-wrap .studio-switch { margin-bottom: 4px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.grow { flex: 1; min-width: 0; }

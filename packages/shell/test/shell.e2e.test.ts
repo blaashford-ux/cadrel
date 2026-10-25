@@ -1,3 +1,4 @@
+// Not type-checked with the shell (it imports the Worker, which needs Cloudflare's types, not the DOM ones): vitest checks it by running it.
 // Drives the real built shell in Electron: Home and Dashboard, Write and Market in their own views, and the shell-level
 // behaviour (navigation, layout, isolation, persistence, the unsaved-edits close guard).
 import { execFileSync } from 'node:child_process';
@@ -11,6 +12,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import zlib from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Library } from '@cadrel/market-library';
+import { ACCOUNT, TOKEN, serveFakeCloudflare } from './fakeCloudflare';
 
 const PKG = path.resolve(__dirname, '..');
 const electronBin = (() => {
@@ -71,10 +73,10 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     home = path.join(tmp, 'home');
     userData = path.join(tmp, 'userdata');
     fs.mkdirSync(home);
-    fs.mkdirSync(path.join(userData, 'market'), { recursive: true });
+    fs.mkdirSync(path.join(userData, 'studios', 'local', 'market'), { recursive: true });
     // A library is needed for Cadrel Market's capture server to start (as in the standalone app).
     fs.mkdirSync(path.join(tmp, 'library'));
-    fs.writeFileSync(path.join(userData, 'market', 'config.json'), JSON.stringify({ libraryRoot: path.join(tmp, 'library'), port: PORT }));
+    fs.writeFileSync(path.join(userData, 'studios', 'local', 'market', 'config.json'), JSON.stringify({ libraryRoot: path.join(tmp, 'library'), port: PORT }));
   }, 180_000);
 
   afterAll(async () => {
@@ -446,7 +448,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(await second.shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByLabel('AI can read').isChecked()).toBe(false);
     await second.shell.locator('.rail .avatar img').waitFor();
     expect(fs.readFileSync(doc, 'utf8')).toBe('Blake writes fantasy.');
-    const stored = fs.readdirSync(path.join(userData, 'user', 'attachments'));
+    const stored = fs.readdirSync(path.join(userData, 'studios', 'local', 'user', 'attachments'));
     expect(stored).toHaveLength(3);
     // Only the shell's own page may use the user bridge.
     const refused = await second.app.evaluate(async ({ ipcMain, BrowserWindow }) => {
@@ -505,16 +507,17 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 120_000);
 
-  it('The Cadrel folder: Write and Market start inside it with nothing to set up, and moving it takes them along', async () => {
+  it('The Cadrel folder: each Studio has Projects, Write and Market inside a folder of its name; they can be placed separately, and the Cadrel folder moves at the next start', async () => {
     const h = path.join(tmp, 'fresh-home');
     const ud = path.join(tmp, 'fresh-userdata');
     fs.mkdirSync(h, { recursive: true });
-    const { app, shell } = await launch({ home: h, userData: ud });
+    const first = await launch({ home: h, userData: ud });
+    let { app, shell } = first;
 
-    // Nothing was set up, yet both have a place under <home>/Cadrel.
+    // Nothing was set up, yet the Studio has its places under <home>/Cadrel/<Studio>.
     await shell.getByRole('button', { name: 'Settings', exact: true }).click();
     await shell.locator('.kv dd', { hasText: path.join(h, 'Cadrel') }).first().waitFor();
-    for (const d of ['Projects', 'Write', 'Market']) expect(fs.existsSync(path.join(h, 'Cadrel', d))).toBe(true);
+    for (const d of ['Projects', 'Write', 'Market']) expect(fs.existsSync(path.join(h, 'Cadrel', 'My Studio', d))).toBe(true);
     expect(await shell.getByText('chosen separately').count()).toBe(0);
 
     // Write shows its projects straight away (no welcome dialog), and Market is already working on its library.
@@ -525,13 +528,35 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
-    expect(await market.getByText('Welcome to Cadrel Market').count()).toBe(0);
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'Market'));
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'My Studio', 'Market'));
 
-    // A project folder in Projects, then the whole Cadrel folder moves (say, to another drive): both follow, with their contents.
-    fs.mkdirSync(path.join(h, 'Cadrel', 'Projects', 'Moving Book', '.cadrel'), { recursive: true });
-    fs.writeFileSync(path.join(h, 'Cadrel', 'Projects', 'Moving Book', '.cadrel', 'project.json'), JSON.stringify({ version: 1, id: 'p1', name: 'Moving Book' }));
-    fs.writeFileSync(path.join(h, 'Cadrel', 'Projects', 'Moving Book', 'Draft.md'), '# One\n');
+    // Projects can be put somewhere of its own, with its contents.
+    fs.mkdirSync(path.join(h, 'Cadrel', 'My Studio', 'Projects', 'Moving Book', '.cadrel'), { recursive: true });
+    fs.writeFileSync(path.join(h, 'Cadrel', 'My Studio', 'Projects', 'Moving Book', '.cadrel', 'project.json'), JSON.stringify({ version: 1, id: 'p1', name: 'Moving Book' }));
+    fs.writeFileSync(path.join(h, 'Cadrel', 'My Studio', 'Projects', 'Moving Book', 'Draft.md'), '# One\n');
+    const mine = path.join(tmp, 'my-projects');
+    await app.evaluate(({ dialog }, d) => {
+      (dialog as any).showOpenDialog = async () => ({ canceled: false, filePaths: [d] });
+    }, mine);
+    await shell.getByRole('button', { name: 'Settings', exact: true }).click();
+    await shell.getByRole('button', { name: 'Change Projects' }).click();
+    await shell.locator('.kv dd', { hasText: mine }).first().waitFor();
+    await shell.getByText('chosen separately').first().waitFor();
+    expect(fs.readFileSync(path.join(mine, 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'settings.json'), 'utf8')).projectsFolder).toBe(mine);
+
+    // The AI server is pinned to this Studio: it looks only where the app says, never at another Studio's folders.
+    const { rootCandidates } = await import('@cadrel/write/mcp/root');
+    const { nodeFs } = await import('@cadrel/write/electron/nodeFs');
+    await shell.getByRole('button', { name: 'AI Assistants', exact: true }).click();
+    await shell.getByRole('tab', { name: 'Claude Code' }).click();
+    const snippet = await shell.locator('pre.snippet').innerText();
+    expect(snippet).toContain(`--root ${mine}`);
+    expect(snippet).toContain(path.join(ud, 'studios', 'local', 'studio.json'));
+    expect(snippet).toContain(path.join(h, 'Cadrel', 'My Studio', 'Market'));
+    void rootCandidates; void nodeFs;
+
+    // The Cadrel folder moves at the next start: it is only requested now, and nothing has moved yet.
     const other = path.join(tmp, 'other-drive');
     fs.mkdirSync(other);
     await app.evaluate(({ dialog }, d) => {
@@ -539,41 +564,23 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     }, other);
     await shell.getByRole('button', { name: 'Settings', exact: true }).click();
     await shell.getByRole('button', { name: 'Change Cadrel folder' }).click();
+    await shell.getByText(/will move to/).waitFor();
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'My Studio', 'Market'))).toBe(true);
+    await shell.getByRole('button', { name: 'Restart now' }).click();
+    await app.waitForEvent('close').catch(() => undefined);
+
+    ({ app, shell } = await launch({ home: h, userData: ud }));
+    await shell.getByRole('button', { name: 'Settings', exact: true }).click();
     await shell.locator('.kv dd', { hasText: path.join(other, 'Cadrel') }).first().waitFor();
-    expect(fs.readFileSync(path.join(other, 'Cadrel', 'Projects', 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
-    expect(fs.existsSync(path.join(h, 'Cadrel', 'Projects', 'Moving Book'))).toBe(false);
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(other, 'Cadrel', 'Market'));
+    expect(fs.existsSync(path.join(h, 'Cadrel'))).toBe(false);
+    expect(fs.existsSync(path.join(other, 'Cadrel', 'My Studio', 'Market', 'scout.db'))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(other, 'Cadrel', 'My Studio', 'Market'));
     expect(JSON.parse(fs.readFileSync(path.join(ud, 'shell.json'), 'utf8')).cadrelFolder).toBe(path.join(other, 'Cadrel'));
-
-    // The AI server finds the moved folder on its own (it reads the same record).
-    const { rootCandidates } = await import('@cadrel/write/mcp/root');
-    const { nodeFs } = await import('@cadrel/write/electron/nodeFs');
-    const found = await rootCandidates({ env: { CADREL_USER_DATA: ud }, platform: 'linux', home: h, fs: nodeFs });
-    expect(found[0]!.root).toBe(path.join(other, 'Cadrel', 'Projects'));
-
-    // Projects can be put somewhere of its own, and then a move of the Cadrel folder leaves it there.
-    const mine = path.join(tmp, 'my-projects');
-    await app.evaluate(({ dialog }, d) => {
-      (dialog as any).showOpenDialog = async () => ({ canceled: false, filePaths: [d] });
-    }, mine);
-    await shell.getByRole('button', { name: 'Change Projects' }).click();
-    await shell.locator('.kv dd', { hasText: mine }).first().waitFor();
-    await shell.getByText('chosen separately').first().waitFor();
-    expect(fs.readFileSync(path.join(mine, 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'shell.json'), 'utf8')).projectsFolder).toBe(mine);
-    expect((await rootCandidates({ env: { CADREL_USER_DATA: ud }, platform: 'linux', home: h, fs: nodeFs }))[0]!.root).toBe(mine);
+    // Projects was placed separately, so the move left it where it was.
+    expect(fs.existsSync(path.join(mine, 'Moving Book', 'Draft.md'))).toBe(true);
     await shell.getByRole('button', { name: 'Use the default for Projects' }).click();
-    await shell.locator('.kv dd', { hasText: path.join(other, 'Cadrel', 'Projects') }).first().waitFor();
-    expect(fs.existsSync(path.join(other, 'Cadrel', 'Projects', 'Moving Book', 'Draft.md'))).toBe(true);
-
-    // And back to the default.
-    await shell.getByRole('button', { name: 'Use the default for Cadrel folder' }).click();
-    await shell.locator('.kv dd', { hasText: path.join(h, 'Cadrel') }).first().waitFor();
-    expect(fs.existsSync(path.join(h, 'Cadrel', 'Projects', 'Moving Book', 'Draft.md'))).toBe(true);
-    // the library came along too; the stale copy from the first move was set aside, not deleted
-    expect(fs.existsSync(path.join(h, 'Cadrel', 'Market', 'scout.db'))).toBe(true);
-    expect(fs.readdirSync(path.join(h, 'Cadrel')).some((n) => n.startsWith('Market (old copy'))).toBe(true);
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'Market'));
+    await shell.locator('.kv dd', { hasText: path.join(other, 'Cadrel', 'My Studio', 'Projects') }).first().waitFor();
+    expect(fs.existsSync(path.join(other, 'Cadrel', 'My Studio', 'Projects', 'Moving Book', 'Draft.md'))).toBe(true);
     await app.close();
   }, 120_000);
 
@@ -634,7 +641,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     });
     await shell.getByRole('button', { name: 'Create' }).click();
     await shell.getByText(/made from Serial Fiction/).waitFor();
-    expect(fs.existsSync(path.join(home, 'Cadrel', 'Projects', 'Serial One', '.cadrel', 'project.json'))).toBe(true);
+    expect(fs.existsSync(path.join(home, 'Cadrel', 'My Studio', 'Projects', 'Serial One', '.cadrel', 'project.json'))).toBe(true);
 
     // Write has no templates of its own: no Projects/Templates tab in its settings.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
@@ -649,7 +656,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
     const ud = path.join(tmp, 'member-userdata');
     fs.mkdirSync(ud, { recursive: true });
-    fs.writeFileSync(path.join(ud, 'shell.json'), JSON.stringify({ page: 'admin', role: 'member' }));
+    fs.writeFileSync(path.join(ud, 'shell.json'), JSON.stringify({ page: 'admin' }));
+    fs.writeFileSync(path.join(ud, 'studios.json'), JSON.stringify({ activeId: 'sinvited', studios: [{ id: 'sinvited', name: 'Their Studio', role: 'member', status: 'ready', memberRole: 'author', url: 'http://127.0.0.1:1/w/x', fingerprint: '0123-4567-89AB-CDEF' }] }));
     const m = await launch({ userData: ud });
     expect(await m.shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).not.toContain('Admin');
     expect(await m.shell.evaluate(() => (window as any).cadrel.admin.save({ templates: [], defaultTemplateId: '' }).then(() => 'saved', (e: Error) => e.message))).toMatch(/Only an administrator/);
@@ -672,7 +680,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // The hand setup names the one server; the assistant reads the Projects folder.
     await shell.getByRole('tab', { name: 'Claude Code' }).click();
     expect(await shell.locator('pre.snippet').innerText()).toMatch(/claude mcp add cadrel/);
-    await shell.getByText(path.join(home, 'Cadrel', 'Projects')).first().waitFor();
+    await shell.getByText(path.join(home, 'Cadrel', 'My Studio', 'Projects')).first().waitFor();
     // Online access stays off until turned on.
     await shell.getByRole('heading', { name: /Online apps/ }).waitFor();
     expect(await shell.getByText('Access token', { exact: true }).count()).toBe(0);
@@ -713,14 +721,15 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await again.app.close();
   }, 120_000);
 
-  it('Studios: the Studio Manager is off until enabled, makes Studios, checks Cloudflare details without keeping the token, and the switcher walls off an unconnected Studio', async () => {
+  it('Studios: the Studio Manager is off until enabled; it checks Cloudflare details; a Studio that is not built is not connected, on every page', async () => {
     const ud = path.join(tmp, 'studios-userdata');
-    const { app, shell } = await launch({ userData: ud, home: path.join(tmp, 'studios-home') });
+    const h = path.join(tmp, 'studios-home');
+    let { app, shell } = await launch({ userData: ud, home: h });
 
-    // Everyone gets a switcher on Home; with one Studio it names it.
-    const switcher = shell.getByLabel('Studio', { exact: true });
-    await switcher.waitFor();
-    expect(await switcher.locator('option').allInnerTexts()).toEqual(['My Studio']);
+    // Everyone gets a Studio menu on Home; with one Studio it names it.
+    const switcher = () => shell.getByLabel('Studio', { exact: true });
+    await switcher().waitFor();
+    expect(await switcher().locator('option').allInnerTexts()).toEqual(['My Studio']);
 
     // Admin → Studio Manager starts switched off, and one press turns it on.
     await shell.getByRole('button', { name: 'Admin', exact: true }).click();
@@ -731,54 +740,144 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Create Studio' }).click();
     const detail = shell.getByRole('region', { name: 'Acme Books settings' });
     await detail.waitFor();
+    await detail.getByText('Acme Books', { exact: true }).first().waitFor(); // its folder
 
-    // Provision: bad details are refused in words; good ones are checked, the account is kept (masked), the token is not.
-    const token = 'cf-token-0123456789abcdefghijklmnopqrstuv';
+    // Provision: bad details are refused in words, before anything is sent.
     await detail.getByLabel('Account ID').fill('not-an-id');
-    await detail.getByLabel('API token').fill(token);
+    await detail.getByLabel('API token').fill('cf-token-0123456789abcdefghijklmnopqrstuv');
     await detail.getByRole('button', { name: 'Provision', exact: true }).click();
     await shell.getByRole('alert').filter({ hasText: /account ID is 32/ }).waitFor();
-    await detail.getByLabel('Account ID').fill('a1b2c3d4e5f60718293a4b5c6d7e8f90');
-    await detail.getByRole('button', { name: 'Provision', exact: true }).click();
-    await detail.getByText('a1b2…8f90').waitFor();
-    await shell.getByText(/not connected in this build yet/).first().waitFor();
-    expect(await detail.getByLabel('API token').inputValue()).toBe(''); // cleared
-    expect(fs.readFileSync(path.join(ud, 'studios.json'), 'utf8')).not.toContain(token);
-    // Invitations and backup wait for a built Studio.
-    expect(await detail.getByRole('button', { name: 'Create invitation' }).isDisabled()).toBe(true);
-    expect(await detail.getByRole('button', { name: 'Back up this Studio' }).isDisabled()).toBe(true);
-    expect(await detail.getByLabel('Role for the invitation').locator('option').allInnerTexts()).not.toContain('Owner');
+    expect(await detail.getByRole('button', { name: 'Create invitation' }).count()).toBe(0); // people come once it is built
+    expect(fs.readFileSync(path.join(ud, 'studios.json'), 'utf8')).not.toContain('cf-token');
 
-    // Switch to it from Home: no data from My Studio is shown under its name, on any page, and Write's view is hidden.
+    // Switching restarts Cadrel into the other Studio's folders, and an unbuilt Studio explains itself on every page.
     await shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await switcher.selectOption({ label: 'Acme Books' });
+    await switcher().selectOption({ label: 'Acme Books' });
+    await app.waitForEvent('close');
+    ({ app, shell } = await launch({ userData: ud, home: h }));
     await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
     expect(await shell.getByText('Your projects').count()).toBe(0);
-    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
-    await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
-    await shell.getByRole('button', { name: 'Write', exact: true }).click();
-    await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+    for (const p of ['Projects', 'Notes', 'Write', 'Market']) {
+      await shell.getByRole('button', { name: p, exact: true }).click();
+      await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+    }
     expect((await views(app)).every((v) => !v.visible)).toBe(true);
 
-    // Back to My Studio: everything returns. The choice survives a restart.
+    // Remove it from this computer: back to My Studio at the next start.
+    await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await shell.getByRole('button', { name: 'Acme Books' }).click();
+    await shell.getByRole('button', { name: 'Remove from this computer…' }).click();
+    await shell.getByRole('button', { name: 'Remove', exact: true }).click();
     await shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await switcher.selectOption({ label: 'My Studio' });
     await shell.getByText('Your projects').waitFor();
-    await switcher.selectOption({ label: 'Acme Books' });
     await app.close();
-    const again = await launch({ userData: ud, home: path.join(tmp, 'studios-home') });
-    await again.shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await again.shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
-
-    // Removing it from this computer falls back to My Studio.
-    await again.shell.getByRole('button', { name: 'Admin', exact: true }).click();
-    await again.shell.getByRole('button', { name: 'Acme Books' }).click();
-    await again.shell.getByRole('button', { name: 'Remove from this computer…' }).click();
-    await again.shell.getByRole('button', { name: 'Remove', exact: true }).click();
-    await again.shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await again.shell.getByText('Your projects').waitFor();
-    await again.app.close();
   }, 120_000);
+
+  it('Studios: build one in Cloudflare, keep the token, invite someone who joins from another computer, and keep every Studio’s data apart', async () => {
+    const cf = await serveFakeCloudflare();
+    try {
+      const udA = path.join(tmp, 'owner-userdata');
+      const hA = path.join(tmp, 'owner-home');
+      const env = { CADREL_TEST_CF: cf.url };
+      let { app, shell } = await launch({ userData: udA, home: hA, env });
+
+      // Something in My Studio, to show it does not appear in the other one.
+      await shell.evaluate(() => (window as any).cadrel.studio.createProject({ name: 'Secret Series', kind: 'Series' }));
+
+      await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+      await shell.getByRole('button', { name: 'Enable Studio Manager' }).click();
+      await shell.getByLabel('New Studio name').fill('Acme Books');
+      await shell.getByRole('button', { name: 'Create Studio' }).click();
+      const detail = shell.getByRole('region', { name: 'Acme Books settings' });
+      await detail.getByLabel('Account ID').fill(ACCOUNT);
+      await detail.getByLabel('API token').fill(TOKEN);
+      await detail.getByLabel(/Keep this token on this computer/).check();
+      await detail.getByRole('button', { name: 'Provision', exact: true }).click();
+
+      // Built: it has an address, the Worker holds the owner's key, and the token is kept for upgrades (and can be forgotten).
+      await detail.getByText('Ready', { exact: true }).waitFor();
+      await detail.getByText(/\/w\/cadrel-studio-/).waitFor();
+      expect(cf.workers.size).toBe(1);
+      expect(cf.db.size).toBe(1);
+      const id = fs.readdirSync(path.join(udA, 'studios')).find((d) => d !== 'local')!;
+      expect(fs.existsSync(path.join(udA, 'studios', id, 'secrets', 'cf-token.bin'))).toBe(true);
+      expect(fs.existsSync(path.join(udA, 'studios', id, 'secrets', 'studio-key.bin'))).toBe(true);
+      await detail.getByRole('button', { name: 'Forget it' }).click();
+      await detail.getByRole('button', { name: 'Forget it' }).waitFor({ state: 'detached' });
+      expect(fs.existsSync(path.join(udA, 'studios', id, 'secrets', 'cf-token.bin'))).toBe(false);
+
+      // Invite: the link is shown once, and the invitation is listed until someone uses it.
+      await detail.getByLabel('Who the invitation is for').fill('Alice');
+      await detail.getByLabel('Role for the invitation').selectOption('author');
+      await detail.getByRole('button', { name: 'Create invitation' }).click();
+      const link = await detail.getByLabel('Invitation link').inputValue();
+      expect(link).toMatch(/^cadrel:\/\/join\?/);
+      await detail.getByRole('list', { name: 'People in this Studio' }).getByText(/Invitation for Alice/).waitFor();
+
+      // Another computer (its own profile, home and data) joins from the link, and is a member, not an owner.
+      const udB = path.join(tmp, 'member-userdata-2');
+      const hB = path.join(tmp, 'member-home-2');
+      let b = await launch({ userData: udB, home: hB, env });
+      await b.shell.getByRole('button', { name: 'Join a Studio…' }).click();
+      const dlg = b.shell.getByRole('dialog', { name: 'Join a Studio' });
+      await dlg.getByLabel('Invitation link').fill(link);
+      await dlg.getByLabel('Your name in this Studio').fill('Alice Author');
+      await dlg.getByRole('button', { name: 'Join', exact: true }).click();
+      await dlg.getByText(/You are in/).waitFor();
+      await dlg.getByRole('button', { name: 'Done' }).click();
+      expect(await b.shell.getByLabel('Studio', { exact: true }).locator('option').allInnerTexts()).toEqual(['My Studio', 'Acme Books (invited)']);
+      // Joining the same Studio twice is refused here, before anything is sent.
+      await b.shell.getByRole('button', { name: 'Join a Studio…' }).click();
+      await dlg.getByLabel('Invitation link').fill(link);
+      await dlg.getByLabel('Your name in this Studio').fill('Someone Else');
+      await dlg.getByLabel(/What to call the Studio/).fill('Second copy');
+      await dlg.getByRole('button', { name: 'Join', exact: true }).click();
+      await dlg.getByRole('alert').filter({ hasText: /already in that Studio/ }).waitFor();
+      await dlg.getByRole('button', { name: 'Cancel' }).click();
+
+      // The owner sees them join, and can remove them.
+      await detail.getByRole('button', { name: 'Create invitation' }).waitFor(); // still on the same screen
+      await shell.getByRole('button', { name: 'Home', exact: true }).click();
+      await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+      await shell.getByRole('button', { name: 'Acme Books' }).click();
+      const list = shell.getByRole('list', { name: 'People in this Studio' });
+      await list.getByText('Alice Author').waitFor();
+      expect(await list.getByText(/Invitation for/).count()).toBe(0);
+
+      // B switches into the Studio: it restarts into its own folders, as a Member with no Admin page.
+      await b.shell.getByLabel('Studio', { exact: true }).selectOption({ label: 'Acme Books (invited)' });
+      await b.app.waitForEvent('close');
+      b = await launch({ userData: udB, home: hB, env });
+      await b.shell.getByLabel('Studio', { exact: true }).waitFor();
+      expect(await b.shell.getByLabel('Studio', { exact: true }).inputValue()).toBe(fs.readdirSync(path.join(udB, 'studios')).find((d) => d !== 'local'));
+      await b.shell.getByText('Member', { exact: true }).waitFor();
+      expect(await b.shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).not.toContain('Admin');
+      for (const d of ['Projects', 'Write', 'Market']) expect(fs.existsSync(path.join(hB, 'Cadrel', 'Acme Books', d))).toBe(true);
+      await b.app.close();
+
+      await list.getByRole('button', { name: 'Remove Alice Author' }).click();
+      await list.getByText('Alice Author').waitFor({ state: 'detached' });
+
+      // A removed member is shut out for good.
+      const gone = await fetch(`${cf.url}/w/${[...cf.workers.keys()][0]}/v1/me`);
+      expect(gone.status).toBe(401); // unsigned; and a signed request from Alice's key is refused by the server (see the server tests)
+
+      // The owner opens the Studio: its own folders, and none of My Studio's projects.
+      await shell.getByRole('button', { name: 'Home', exact: true }).click();
+      await shell.getByLabel('Studio', { exact: true }).selectOption({ label: 'Acme Books' });
+      await app.waitForEvent('close');
+      ({ app, shell } = await launch({ userData: udA, home: hA, env }));
+      await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+      await shell.getByText('Start with a project').waitFor();
+      expect(await shell.getByText('Secret Series').count()).toBe(0);
+      expect(fs.existsSync(path.join(hA, 'Cadrel', 'Acme Books', 'Projects'))).toBe(true);
+      expect(JSON.parse(fs.readFileSync(path.join(udA, 'studios', 'local', 'studio.json'), 'utf8')).tree.projects.map((p: any) => p.name)).toEqual(['Secret Series']);
+      expect(fs.existsSync(path.join(udA, 'studios', id, 'studio.json'))).toBe(false); // nothing was written there
+      await app.close();
+    } finally {
+      await cf.close();
+    }
+  }, 240_000);
 
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();

@@ -9,7 +9,7 @@ Cadrel is a **desktop-first Windows application** for running a book studio: one
 | Layer | Choice | Note |
 |---|---|---|
 | Shell | Electron + React 18 + Vite 5 + TypeScript | Windows only; installer via electron-builder (NSIS) |
-| Studio server | Cloudflare Workers (TypeScript) + **D1** (SQLite) + **R2** (files) | the vault; see 2 |
+| Studio server | Cloudflare Workers (TypeScript) + **D1** (SQLite) + **R2** (files), one set per Studio in the owner's own account | the vault; see 2 and [STUDIOS.md](STUDIOS.md) |
 | Repo | npm workspaces monorepo, `@cadrel/*` packages, ESM | BookScout's layout |
 | Tests | vitest everywhere, real-Electron integration tests, fake-API pattern for renderer tests | both apps already do this |
 | Structured data | SQLite through built-in `node:sqlite` (FTS5, `sqlite-vec` extension) | no native module to rebuild |

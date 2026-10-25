@@ -18,7 +18,13 @@ const api: CadrelApi = {
     rename: (id, name) => studioCall('shell:studios:rename', id, name),
     remove: (id) => studioCall('shell:studios:remove', id),
     provision: (id, details) => studioCall('shell:studios:provision', id, details),
+    upgrade: (id, apiToken) => studioCall('shell:studios:upgrade', id, apiToken),
+    forgetToken: (id) => studioCall('shell:studios:forgetToken', id),
+    people: (id) => studioCall('shell:studios:people', id),
     createInvite: (id, invite) => studioCall('shell:studios:createInvite', id, invite),
+    revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
+    removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
+    join: (link, details) => studioCall('shell:studios:join', link, details),
     backup: (id) => studioCall('shell:studios:backup', id),
     onChange: (cb) => {
       const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
@@ -74,7 +80,8 @@ const api: CadrelApi = {
   prefs: {
     folders: () => ipcRenderer.invoke('shell:prefs:folders'),
     choose: (which) => studioCall('shell:prefs:choose', which),
-    reset: (which) => studioCall('shell:prefs:reset', which)
+    reset: (which) => studioCall('shell:prefs:reset', which),
+    restart: () => studioCall('shell:prefs:restart')
   },
   admin: {
     get: () => studioCall('shell:admin:get'),

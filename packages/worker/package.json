@@ -6,11 +6,13 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "dev": "wrangler dev --env dev",
-    "migrate:dev": "wrangler d1 migrations apply cadrel-dev-db --env dev --remote",
-    "deploy:dev": "wrangler deploy --env dev",
-    "deploy": "wrangler deploy"
+    "dev": "wrangler dev"
   },
-  "dependencies": { "@cadrel/kernel": "*" },
-  "devDependencies": { "@cloudflare/workers-types": "^4.20250101.0", "wrangler": "^4.0.0" }
+  "dependencies": {
+    "@cadrel/kernel": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "wrangler": "^4.0.0"
+  }
 }

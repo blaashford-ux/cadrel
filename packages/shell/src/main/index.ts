@@ -7,7 +7,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promises as fsp, appendFileSync, readFileSync } from 'node:fs';
-import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, screen, shell } from 'electron';
+import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
@@ -31,7 +31,11 @@ import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/ke
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
-import { StudioRegistry } from './studios';
+import { StudioRegistry, LOCAL_ID } from './studios';
+import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
+import { Secrets } from './secrets';
+import { joinStudio, StudioClient } from './studioClient';
+import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -46,11 +50,19 @@ if (process.env.CADREL_USER_DATA) app.setPath('userData', process.env.CADREL_USE
 // folder for each module. The AI server finds Market's config at <that folder>/market/config.json and Write's settings at
 // <that folder>/write/settings.json (CADREL_USER_DATA moves the whole folder, for tests).
 const userData = process.env.CADREL_USER_DATA ?? app.getPath('userData');
-const writeData = path.join(userData, 'write');
-const marketData = path.join(userData, 'market');
+/**
+ * The active Studio's data folder: <userData>/studios/<id>. Its projects and notes, its profile, its Write and Market data and its
+ * settings are all inside it, and nothing is shared between Studios. Which Studio is active is chosen at start-up (switching restarts
+ * Cadrel), so no module ever holds two Studios' data at once.
+ */
+let studioDir = '';
+const writeData = () => path.join(studioDir, 'write');
+const marketData = () => path.join(studioDir, 'market');
 
 let win: BrowserWindow | null = null;
 let settings: SettingsStore;
+/** The active Studio's own settings (where its Projects and Write folders are, if the person moved them). */
+let studioSettings: SettingsStore;
 let studio: StudioService;
 let users: UserStore;
 let admin: AdminStore;
@@ -136,7 +148,8 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
-  args: [mcpFile()],
+  // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile()],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -147,7 +160,7 @@ const mcpLaunch = () => ({
 async function kitLauncher(): Promise<Uint8Array> {
   const launch = mcpLaunch();
   const handshake = await readHandshake(launch);
-  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData, 'logs', 'mcp-launcher.log') }), 'utf8');
+  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData(), 'logs', 'mcp-launcher.log') }), 'utf8');
 }
 
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
@@ -179,6 +192,12 @@ function writeFolders(): WriteFolders {
 
 // ---- updating -------------------------------------------------------------------------------------
 
+/** What the person is in the active Studio: its Owner if they made it, otherwise the role they were invited with. */
+function studioRole(): Role {
+  const a = studios.active();
+  return a.role === 'owner' ? 'owner' : a.memberRole === 'admin' ? 'admin' : 'member';
+}
+
 /** One line per update step in <data folder>\update.log, so a failed update can be diagnosed afterwards. */
 function updateLog(line: string): void {
   try {
@@ -206,31 +225,39 @@ function watchForUpdates(): void {
 
 // ---- the Cadrel folder ----------------------------------------------------------------------------
 // Everything a person works with lives in one folder, <home>\Cadrel by default (wherever their home folder is, so a profile kept on
-// another drive is followed): project folders in Cadrel\Projects, Write's own folder in Cadrel\Write and Market's library in Cadrel\Market.
-// None needs setting up. The whole Cadrel folder can be moved, and each of the three can be given a place of its own, which a move of the
-// Cadrel folder then leaves alone.
+// another drive is followed). Each Studio has its own folder inside it: <Cadrel>\<Studio>\Projects, \Write and \Market. None needs setting
+// up. The Cadrel folder can be moved (it moves at the next start, when nothing is open), and the Projects, Write and Market folders of
+// the active Studio can each be placed elsewhere, which a move of the Cadrel folder then leaves alone.
 const defaultCadrelFolder = () => process.env.CADREL_FOLDER ?? path.join(app.getPath('home'), 'Cadrel');
 const cadrelFolder = () => settings.get().cadrelFolder ?? defaultCadrelFolder();
-const projectsDefault = () => path.join(cadrelFolder(), 'Projects');
-const writeDefault = () => path.join(cadrelFolder(), 'Write');
-const marketDefault = () => path.join(cadrelFolder(), 'Market');
-const projectsFolder = () => settings.get().projectsFolder ?? projectsDefault();
-const writeFolder = () => settings.get().writeFolder ?? writeDefault();
+const studioFolder = () => path.join(cadrelFolder(), studios.active().folderName);
+const projectsDefault = () => path.join(studioFolder(), 'Projects');
+const writeDefault = () => path.join(studioFolder(), 'Write');
+const marketDefault = () => path.join(studioFolder(), 'Market');
+const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefault();
+const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
+const studioFile = () => path.join(studioDir, 'studio.json');
 const sameDir = (a: string, b: string) => path.resolve(a) === path.resolve(b);
+/** The shell's own last word on a move of the Cadrel folder that did not work. */
+let moveError: string | null = null;
 
 async function folders(): Promise<AppFolders> {
   const m = market.service.status().libraryRoot;
   return {
+    studioFolder: studioFolder(),
+    studioName: studios.active().name,
+    pendingCadrelMove: settings.get().pendingCadrelMove ? settings.get().pendingCadrelMove!.to ?? defaultCadrelFolder() : null,
+    moveError,
     cadrelFolder: cadrelFolder(),
     cadrelFolderIsDefault: !settings.get().cadrelFolder,
     projectsFolder: projectsFolder(),
-    projectsIsCustom: !!settings.get().projectsFolder,
+    projectsIsCustom: !!studioSettings.get().projectsFolder,
     writeFolder: writeFolder(),
-    writeIsCustom: !!settings.get().writeFolder,
+    writeIsCustom: !!studioSettings.get().writeFolder,
     marketLibrary: m ?? null,
     marketIsCustom: !!m && !sameDir(m, marketDefault()),
-    studioFile: path.join(app.getPath('userData'), 'studio.json'),
-    settingsFolder: app.getPath('userData')
+    studioFile: studioFile(),
+    settingsFolder: studioDir
   };
 }
 
@@ -263,33 +290,75 @@ async function moveMarket(dest: string): Promise<void> {
 
 /** Moving anything out from under the editor with changes unsaved would lose them. */
 function mustBeIdle(): void {
-  if (write.hasUnsaved()) throw new Error('Save your changes in Write first, then move the folder.');
+  if (write.hasUnsaved()) throw new Error('Save your changes in Write first, then continue.');
 }
 
-/** Moves the Cadrel folder (null: back to the default). What follows the default moves with it; a folder the person placed themselves stays. */
-async function moveCadrelFolder(next: string | null): Promise<AppFolders> {
+/** Rewrites a path that sits under the old Cadrel folder so it sits under the new one (anything else is left alone). */
+const rebase = (p: string | undefined | null, from: string, to: string): string | undefined => {
+  if (!p) return undefined;
+  const rel = path.relative(from, p);
+  return !rel.startsWith('..') && !path.isAbsolute(rel) ? path.join(to, rel) : p;
+};
+
+/**
+ * Finishes a move of the Cadrel folder that was asked for last time. It runs at the start, before anything is opened, because a folder
+ * with open files (Market's library, Write's open project) cannot be moved on Windows. Every Studio's own record of where things are is
+ * updated with it. A move that fails leaves everything where it was and says why in Settings.
+ */
+async function applyPendingCadrelMove(): Promise<void> {
+  const pending = settings.get().pendingCadrelMove;
+  if (!pending) return;
   const from = cadrelFolder();
-  const to = path.resolve(next ?? defaultCadrelFolder());
-  if (sameDir(from, to)) return folders();
-  if (!path.isAbsolute(to)) throw new Error('Choose a full folder path.');
-  if (to.startsWith(path.resolve(from) + path.sep) || path.resolve(from).startsWith(to + path.sep)) throw new Error('The new Cadrel folder cannot be inside the old one, or the other way round.');
-  mustBeIdle();
-  const marketFollows = !!market.service.status().libraryRoot && sameDir(market.service.status().libraryRoot!, marketDefault());
-  await fsp.mkdir(to, { recursive: true });
-  if (!settings.get().projectsFolder) await relocate(path.join(from, 'Projects'), path.join(to, 'Projects'));
-  if (!settings.get().writeFolder) await relocate(path.join(from, 'Write'), path.join(to, 'Write'));
-  if (marketFollows) await moveMarket(path.join(to, 'Market'));
-  settings.update((s) => {
-    if (next === null) delete s.cadrelFolder;
-    else s.cadrelFolder = to;
+  const to = path.resolve(pending.to ?? defaultCadrelFolder());
+  try {
+    await relocate(from, to);
+    for (const st of studios.view().studios) {
+      const dir = path.join(userData, 'studios', st.id);
+      const cfg = path.join(dir, 'market', 'config.json');
+      try {
+        const c = JSON.parse(await fsp.readFile(cfg, 'utf8')) as { libraryRoot?: string };
+        const next = rebase(c.libraryRoot, from, to);
+        if (next && next !== c.libraryRoot) await fsp.writeFile(cfg, JSON.stringify({ ...c, libraryRoot: next }, null, 2));
+      } catch {
+        /* this Studio has no Market library yet */
+      }
+      const own = new SettingsStore(path.join(dir, 'settings.json'));
+      await own.load();
+      const projects = rebase(own.get().projectsFolder, from, to);
+      const write = rebase(own.get().writeFolder, from, to);
+      if (projects !== own.get().projectsFolder || write !== own.get().writeFolder) {
+        own.update((x) => {
+          if (projects) x.projectsFolder = projects;
+          if (write) x.writeFolder = write;
+        });
+        await own.flush();
+      }
+    }
+    settings.update((x) => {
+      if (pending.to === null || sameDir(to, defaultCadrelFolder())) delete x.cadrelFolder;
+      else x.cadrelFolder = to;
+    });
+  } catch (e) {
+    moveError = `The Cadrel folder was not moved: ${(e as Error).message}`;
+  }
+  settings.update((x) => {
+    delete x.pendingCadrelMove;
   });
-  await ensureFolders();
-  return folders();
+  await settings.flush();
 }
 
-/** Puts one of the folders in a new place (null: back inside the Cadrel folder). */
+/** Puts one of the active Studio's folders in a new place (null: back inside the Studio's folder). */
 async function moveFolder(which: FolderKey, next: string | null): Promise<AppFolders> {
-  if (which === 'cadrel') return moveCadrelFolder(next);
+  if (which === 'cadrel') {
+    // Moved at the next start. Asking again, or asking for where it already is, changes the request, never the files.
+    const to = next === null ? null : path.resolve(next);
+    settings.update((s) => {
+      if ((to === null && !s.cadrelFolder) || (to !== null && sameDir(to, cadrelFolder()))) delete s.pendingCadrelMove;
+      else s.pendingCadrelMove = { to };
+    });
+    moveError = null;
+    return folders();
+  }
   mustBeIdle();
   const key = which === 'projects' ? 'projectsFolder' : which === 'write' ? 'writeFolder' : null;
   if (which === 'market') {
@@ -299,7 +368,7 @@ async function moveFolder(which: FolderKey, next: string | null): Promise<AppFol
   const from = which === 'projects' ? projectsFolder() : writeFolder();
   const to = path.resolve(next ?? (which === 'projects' ? projectsDefault() : writeDefault()));
   await relocate(from, to);
-  settings.update((s) => {
+  studioSettings.update((s) => {
     if (next === null || sameDir(to, which === 'projects' ? projectsDefault() : writeDefault())) delete s[key!];
     else s[key!] = to;
   });
@@ -310,6 +379,33 @@ async function moveFolder(which: FolderKey, next: string | null): Promise<AppFol
 /** The folders exist from the first launch, so there is nothing to set up and nothing missing to explain. */
 async function ensureFolders(): Promise<void> {
   await Promise.all([projectsFolder(), writeFolder()].map((d) => fsp.mkdir(d, { recursive: true }).catch(() => undefined)));
+}
+
+// ---- Studios: keys, secrets and Cloudflare -------------------------------------------------------
+const cipher = { available: () => safeStorage.isEncryptionAvailable(), encrypt: (p: string) => safeStorage.encryptString(p), decrypt: (b: Buffer) => safeStorage.decryptString(b) };
+/** A Studio's secrets (its key for this computer, and the Cloudflare token if kept) live in its own data folder. Under test a marked plain file stands in for the operating system's store. */
+const secretsFor = (id: string) => new Secrets(path.join(userData, 'studios', id, 'secrets'), cipher, TEST);
+async function studioKey(id: string): Promise<KeyPair | null> {
+  try {
+    const k = JSON.parse((await secretsFor(id).get('studio-key')) ?? 'null') as KeyPair | null;
+    return k?.publicKey && k.privateKey ? k : null;
+  } catch {
+    return null;
+  }
+}
+const fingerprintOf = async (k: KeyPair) => (await import('@cadrel/kernel')).fingerprint(k.publicKey);
+const studioWorkerSource = () => fsp.readFile(path.join(here, 'studio-worker.mjs'), 'utf8');
+/** Cloudflare's real address, unless a test points the app at a stand-in (CADREL_TEST_CF=http://127.0.0.1:<port>). */
+function cloudflareOptions(): CloudflareOptions {
+  const fake = TEST ? process.env.CADREL_TEST_CF : undefined;
+  return { fetchFn: fetch, ...(fake ? { base: `${fake}/client/v4`, workerUrl: (w: string) => `${fake}/w/${w}`, sleep: async () => undefined } : {}) };
+}
+
+/** Restarts Cadrel (to finish a move, or to open another Studio). Under test the process just ends and the test starts it again. */
+async function restartApp(): Promise<void> {
+  await Promise.all([studios.flush(), settings.flush(), studioSettings.flush()]);
+  if (!TEST) app.relaunch();
+  app.quit();
 }
 
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
@@ -526,24 +622,127 @@ function registerShellIpc(): void {
       }
     });
   // Studios: anyone can switch; the Studio Manager's changes are for administrators.
+  let lastShown = '';
   const studiosChanged = (v: ReturnType<StudioRegistry['view']>) => {
     if (win && !win.isDestroyed()) win.webContents.send('shell:studios', v);
-    showPage(page); // a module's view must appear or go away with the Studio
+    // A module's view must appear or go away with the Studio; the page needs telling only when that changes.
+    const shown = `${v.activeId}:${v.connected}`;
+    if (shown !== lastShown) {
+      lastShown = shown;
+      showPage(page);
+    }
     return v;
   };
   const adminOnly = () => {
     if (!admin.isAdmin()) throw new Error('Only an administrator can manage Studios.');
   };
   manageLike('studios:get', async () => studios.view());
-  manageLike('studios:setActive', async (id: string) => studiosChanged(studios.setActive(String(id))));
+  manageLike('studios:setActive', async (id: string) => {
+    if (String(id) === studios.view().activeId) return studios.view();
+    mustBeIdle();
+    const v = studios.setActive(String(id));
+    // Switching Studios opens the other Studio's folders from the start, so nothing of this one stays in memory.
+    setTimeout(() => void restartApp(), 50);
+    return v;
+  });
   manageLike('studios:enableManager', async (on: boolean) => (adminOnly(), studiosChanged(studios.enableManager(on === true))));
   manageLike('studios:create', async (name: string) => (adminOnly(), studiosChanged(studios.create(name))));
   manageLike('studios:rename', async (id: string, name: string) => (adminOnly(), studiosChanged(studios.rename(String(id), name))));
   manageLike('studios:remove', async (id: string) => (adminOnly(), studiosChanged(studios.remove(String(id)))));
-  manageLike('studios:provision', async (id: string, d: { accountId: string; apiToken: string }) => (adminOnly(), studiosChanged(studios.provision(String(id), d))));
-  manageLike('studios:createInvite', async () => {
+  // Building and looking after a Studio in the owner's own Cloudflare account, and the people in it.
+  manageLike('studios:provision', async (id: string, d: { accountId: string; apiToken: string; keepToken?: boolean }) => {
     adminOnly();
-    throw new Error('Invitations need the Studio to be built in Cloudflare first, and that is not connected in this build yet.');
+    const { accountId, apiToken } = StudioRegistry.checkCredentials(d);
+    const entry = studios.get(String(id));
+    if (entry.role !== 'owner' || entry.status === 'local') throw new Error('Only a Studio you created can be built in Cloudflare.');
+    if (entry.status === 'provisioning') throw new Error('This Studio is already being built.');
+    const secrets = secretsFor(entry.id);
+    // The owner's key is made before anything is uploaded and kept, so a build that stops half way is finished with the same key.
+    let key = await studioKey(entry.id);
+    if (!key) {
+      key = await generateKeyPair();
+      await secrets.put('studio-key', JSON.stringify(key));
+    }
+    studiosChanged(studios.update(entry.id, { status: 'provisioning', accountId, note: 'Starting…' }));
+    try {
+      const built = await buildStudio({ ...cloudflareOptions(), step: (t) => studiosChanged(studios.update(entry.id, { note: t })) }, { accountId, apiToken, studioId: entry.id, ownerKey: key.publicKey, workerSource: await studioWorkerSource() });
+      let kept = false;
+      let note: string | null = null;
+      if (d.keepToken) {
+        try {
+          await secrets.put('cf-token', apiToken);
+          kept = true;
+        } catch (e) {
+          note = `The Studio is built, but the token was not kept: ${(e as Error).message}`;
+        }
+      } else await secrets.delete('cf-token');
+      return studiosChanged(studios.update(entry.id, { status: 'ready', url: built.url, resources: built.resources, server: built.server, fingerprint: await fingerprintOf(key), tokenKept: kept, note }));
+    } catch (e) {
+      studiosChanged(studios.update(entry.id, { status: 'error', note: (e as Error).message }));
+      throw e;
+    }
+  });
+  manageLike('studios:upgrade', async (id: string, token?: string) => {
+    adminOnly();
+    const entry = studios.get(String(id));
+    const secrets = secretsFor(entry.id);
+    const apiToken = (typeof token === 'string' && token.trim()) || (await secrets.get('cf-token'));
+    if (!apiToken) throw new Error('Paste your Cloudflare API token to upgrade this Studio (it was not kept on this computer).');
+    const key = await studioKey(entry.id);
+    if (!key || !entry.accountId) throw new Error('This Studio has no owner key or account here, so it cannot be upgraded from this computer.');
+    const built = await upgradeStudio(cloudflareOptions(), { accountId: entry.accountId, apiToken: apiToken.trim(), studioId: entry.id, ownerKey: key.publicKey, workerSource: await studioWorkerSource() }, entry);
+    return studiosChanged(studios.update(entry.id, { server: built.server, note: null }));
+  });
+  manageLike('studios:forgetToken', async (id: string) => {
+    adminOnly();
+    await secretsFor(String(id)).delete('cf-token');
+    return studiosChanged(studios.update(String(id), { tokenKept: false }));
+  });
+  const clientFor = async (id: string) => {
+    const e = studios.get(id);
+    const key = await studioKey(id);
+    if (e.role !== 'owner' || !e.url || !key) throw new Error('This Studio has not been built yet.');
+    return { e, client: new StudioClient({ url: e.url, key, fetchFn: fetch }) };
+  };
+  manageLike('studios:people', async (id: string) => {
+    adminOnly();
+    try {
+      return { reachable: true, error: null, ...(await (await clientFor(String(id))).client.people()) };
+    } catch (e) {
+      return { reachable: false, error: (e as Error).message, members: [], invites: [] };
+    }
+  });
+  manageLike('studios:createInvite', async (id: string, i: { role: string; label: string }) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    return client.invite(String(i?.role), String(i?.label ?? ''), e.name);
+  });
+  manageLike('studios:revokeInvite', async (id: string, inviteId: string) => {
+    adminOnly();
+    const { client } = await clientFor(String(id));
+    await client.revokeInvite(String(inviteId));
+    return { reachable: true, error: null, ...(await client.people()) };
+  });
+  manageLike('studios:removeMember', async (id: string, memberId: string) => {
+    adminOnly();
+    const { client } = await clientFor(String(id));
+    await client.removeMember(String(memberId));
+    return { reachable: true, error: null, ...(await client.people()) };
+  });
+  // Joining is for anyone: the person was invited by someone else, and is not an administrator of anything yet.
+  manageLike('studios:join', async (link: string, d: { yourName: string; studioName?: string }) => {
+    const yourName = String(d?.yourName ?? '').trim();
+    if (!yourName) throw new Error('Say what you are called in this Studio.');
+    const inv = (await import('@cadrel/kernel')).parseInvitation(String(link));
+    if (!inv) throw new Error('That is not a Cadrel invitation link. It starts with cadrel://join');
+    const name = (d?.studioName?.trim() || inv.studioName || 'Studio').slice(0, 60);
+    studios.checkNewMember(name, inv.url); // before anything is sent: a name clash must not leave a half-joined Studio
+    const joined = await joinStudio({ link: String(link), yourName, fetchFn: fetch });
+    const before = new Set(studios.view().studios.map((x) => x.id));
+    const view = studios.addMember({ name, url: joined.url, fingerprint: joined.fingerprint, memberRole: joined.role, studioId: joined.studioId });
+    const added = view.studios.find((x) => !before.has(x.id))!;
+    await secretsFor(added.id).put('studio-key', JSON.stringify(joined.key));
+    return studiosChanged(view);
   });
   manageLike('studios:backup', async () => {
     adminOnly();
@@ -684,12 +883,13 @@ function registerShellIpc(): void {
     // The Cadrel folder is the one the person points at, or a Cadrel folder inside what they picked; the others are used exactly as chosen.
     return moveFolder(which, which === 'cadrel' ? (path.basename(picked).toLowerCase() === 'cadrel' ? picked : path.join(picked, 'Cadrel')) : picked);
   }));
+  ipcMain.handle('shell:prefs:restart', guard(() => restartApp()));
   ipcMain.handle('shell:prefs:reset', guard((which: unknown) => {
     if (!isKey(which)) throw new Error('unknown folder');
     return moveFolder(which, null);
   }));
   // Administration. Anyone can read the templates (making a project needs them); changing them is refused to anyone who is not an administrator.
-  const roleNow = (): Role => settings.get().role ?? 'owner';
+  const roleNow = (): Role => studioRole();
   const adminView = () => ({ isAdmin: admin.isAdmin(), role: roleNow(), templates: admin.get().templates, defaultTemplateId: admin.get().defaultTemplateId });
   manageLike('admin:get', async () => adminView());
   manageLike('admin:save', async (change: { templates: unknown; defaultTemplateId: string }) => {
@@ -752,9 +952,15 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
     nativeTheme.themeSource = settings.get().theme ?? 'system';
-    studios = new StudioRegistry(path.join(app.getPath('userData'), 'studios.json'));
+    studios = new StudioRegistry(path.join(userData, 'studios.json'));
     await studios.load();
-    admin = new AdminStore(path.join(app.getPath('userData'), 'admin.json'), () => settings.get().role ?? 'owner');
+    await applyPendingCadrelMove();
+    // Which Studio this run belongs to is settled now, before anything is opened.
+    studioDir = path.join(userData, 'studios', studios.active().id);
+    await fsp.mkdir(studioDir, { recursive: true });
+    studioSettings = new SettingsStore(path.join(studioDir, 'settings.json'));
+    await studioSettings.load();
+    admin = new AdminStore(path.join(studioDir, 'admin.json'), studioRole);
     await admin.load();
     await ensureFolders();
     updater = new Updater({
@@ -770,7 +976,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         app.quit();
       }
     });
-    users = new UserStore(path.join(app.getPath('userData'), 'user'));
+    users = new UserStore(path.join(studioDir, 'user'));
     await refreshUser();
     // The name used to be a setting; it belongs to the profile now.
     const legacy = settings.get().author?.trim();
@@ -782,7 +988,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       await refreshUser();
     }
     studio = new StudioService({
-      file: path.join(app.getPath('userData'), 'studio.json'),
+      file: studioFile(),
       author: authorName,
       writeRoot: async () => {
         const l = await write.listProjects();
@@ -800,16 +1006,16 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       projectsFolder,
       templates: () => admin.templates(),
       theme: { get: themeState, set: setTheme },
-      dataDir: writeData,
+      dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     market = createMarketModule({
       getWindow: () => win,
       getContents: () => views.market?.webContents ?? null,
-      dataDir: marketData,
+      dataDir: marketData(),
       codeDir: here,
       resourcesDir: resourcesDir(),
       iconFile: iconPath,

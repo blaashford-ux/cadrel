@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import worker, { type Env } from '../src/index';
+import { fakeD1 } from './d1fake';
 
 function env(over: Partial<{ db: 'ok' | 'fail'; files: 'ok' | 'fail' }> = {}): Env {
   return {
     ENVIRONMENT: 'test',
-    DB: {
-      prepare: () => ({ bind: () => ({ first: async () => { if (over.db === 'fail') throw new Error('no such table'); return { n: 0 }; } }) })
-    } as unknown as D1Database,
+    DB: over.db === 'fail' ? ({ prepare: () => { throw new Error('no such table'); } } as unknown as D1Database) : fakeD1(),
     FILES: { head: async () => { if (over.files === 'fail') throw new Error('down'); return null; } } as unknown as R2Bucket
   };
 }

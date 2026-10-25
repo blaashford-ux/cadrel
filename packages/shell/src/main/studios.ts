@@ -1,15 +1,16 @@
 /**
  * The Studios this Cadrel knows about, kept on this computer: the one-person Studio that is always here, Studios the person created
- * (they own them) and, later, Studios they were invited to. Electron-free, tested in test/studios.test.ts.
+ * (they own them) and Studios they joined by invitation. Electron-free, tested in test/studios.test.ts.
  *
- * What this does not do yet: build a Studio in Cloudflare, issue invitations or back one up. `provision` checks the details and records the
- * account; the token is used once and never written down. Switching Studios changes which Studio the pages show; until Studios have their own
- * data folders, a Studio that is not the local one shows an explanation rather than another Studio's data.
+ * This is the record only. Building a Studio in Cloudflare is `cloudflare.ts` and talking to a built one is `studioClient.ts`; they call
+ * back here to say how it went. Which Studio is active decides which folders Cadrel opens at the next start: each Studio has its own data
+ * folder and its own working folders, and nothing is shared between them.
  */
 import { promises as fsp } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { ROLE_KEYS } from '@cadrel/kernel';
+import { projectNameError } from '@cadrel/write/src/shared/projects';
 import type { StudioEntry, StudioStatus, StudiosView } from '../shared/api';
 
 export const LOCAL_ID = 'local';
@@ -26,7 +27,19 @@ interface Data {
 
 const STATUSES: StudioStatus[] = ['local', 'not-provisioned', 'provisioning', 'ready', 'error'];
 
-const localStudio = (): StudioEntry => ({ id: LOCAL_ID, name: 'My Studio', role: 'owner', status: 'local', url: null, accountId: null, createdAt: new Date(0).toISOString(), note: null });
+const localStudio = (): StudioEntry => ({
+  id: LOCAL_ID, name: 'My Studio', role: 'owner', status: 'local', url: null, accountId: null, createdAt: new Date(0).toISOString(), note: null,
+  folderName: 'My Studio', memberRole: null, fingerprint: null, tokenKept: false, resources: null, server: null
+});
+
+const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) ? v : null);
+
+function sanitizeResources(raw: unknown): StudioEntry['resources'] {
+  const o = (raw && typeof raw === 'object' ? raw : null) as Record<string, unknown> | null;
+  if (!o || !str(o.worker) || !str(o.d1Name) || !str(o.bucket)) return null;
+  return { worker: o.worker as string, d1Id: str(o.d1Id), d1Name: o.d1Name as string, bucket: o.bucket as string };
+}
 
 /** Reads whatever is on disk defensively: a damaged file must never stop the app, and the local Studio is always there. */
 export function sanitizeStudios(raw: unknown): Data {
@@ -35,20 +48,29 @@ export function sanitizeStudios(raw: unknown): Data {
   const studios: StudioEntry[] = [localStudio()];
   for (const x of list) {
     const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
-    const id = typeof o.id === 'string' && /^[\w-]{1,40}$/.test(o.id) ? o.id : null;
-    if (!id || studios.some((s) => s.id === id)) {
-      if (id === LOCAL_ID && typeof o.name === 'string' && o.name.trim()) studios[0]!.name = o.name.trim().slice(0, 60);
-      continue;
-    }
+    const id = typeof o.id === 'string' && /^[A-Za-z0-9-]{1,40}$/.test(o.id) ? o.id : null;
+    if (id === LOCAL_ID && typeof o.name === 'string' && o.name.trim()) studios[0]!.name = o.name.trim().slice(0, 60);
+    if (!id || studios.some((s) => s.id === id)) continue;
+    const name = typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 60) : 'Studio';
+    const taken = studios.map((s) => s.folderName.toLowerCase());
+    let folderName = typeof o.folderName === 'string' && !projectNameError(o.folderName) ? o.folderName.trim() : name;
+    if (projectNameError(folderName) || taken.includes(folderName.toLowerCase())) folderName = `${id}`;
+    const server = (o.server && typeof o.server === 'object' ? o.server : null) as Record<string, unknown> | null;
     studios.push({
       id,
-      name: typeof o.name === 'string' && o.name.trim() ? o.name.trim().slice(0, 60) : 'Studio',
+      name,
       role: o.role === 'member' ? 'member' : 'owner',
       status: STATUSES.includes(o.status as StudioStatus) && o.status !== 'local' ? (o.status as StudioStatus) : 'not-provisioned',
-      url: typeof o.url === 'string' ? o.url : null,
+      url: str(o.url),
       accountId: typeof o.accountId === 'string' && /^[0-9a-f]{32}$/i.test(o.accountId) ? o.accountId.toLowerCase() : null,
-      createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date().toISOString(),
-      note: typeof o.note === 'string' ? o.note : null
+      createdAt: str(o.createdAt) ?? new Date().toISOString(),
+      note: str(o.note),
+      folderName,
+      memberRole: typeof o.memberRole === 'string' && (ROLE_KEYS as readonly string[]).includes(o.memberRole) ? o.memberRole : null,
+      fingerprint: typeof o.fingerprint === 'string' && /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(o.fingerprint) ? o.fingerprint : null,
+      tokenKept: o.tokenKept === true,
+      resources: sanitizeResources(o.resources),
+      server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number } : null
     });
   }
   const activeId = typeof r.activeId === 'string' && studios.some((s) => s.id === r.activeId) ? r.activeId : LOCAL_ID;
@@ -77,6 +99,14 @@ export class StudioRegistry {
       studios: this.data.studios.map((s) => ({ ...s })),
       connected: active.status === 'local' || active.status === 'ready'
     };
+  }
+
+  active(): StudioEntry {
+    return { ...this.entry(this.data.activeId) };
+  }
+
+  get(id: string): StudioEntry {
+    return { ...this.entry(id) };
   }
 
   private entry(id: string): StudioEntry {
@@ -118,17 +148,38 @@ export class StudioRegistry {
     const n = typeof name === 'string' ? name.trim() : '';
     if (!n) return fail('Give the Studio a name.');
     if (n.length > 60) return fail('A Studio name can be at most 60 characters.');
-    if (this.data.studios.some((s) => s.id !== exceptId && s.name.toLowerCase() === n.toLowerCase())) return fail(`There is already a Studio called “${n}”.`);
+    const bad = projectNameError(n); // it becomes a folder name: the characters Windows will not allow are refused here
+    if (bad) return fail(bad);
+    if (this.data.studios.some((s) => s.id !== exceptId && (s.name.toLowerCase() === n.toLowerCase() || s.folderName.toLowerCase() === n.toLowerCase()))) return fail(`There is already a Studio called “${n}”.`);
     return n;
   }
 
+  private add(e: Pick<StudioEntry, 'name' | 'role'> & Partial<StudioEntry>): StudioEntry {
+    const id = `s${randomBytes(5).toString('hex')}`; // letters and digits only: it becomes part of a Worker's name
+    const entry: StudioEntry = { ...localStudio(), id, status: 'not-provisioned', createdAt: new Date().toISOString(), folderName: e.name, ...e };
+    this.data.studios.push(entry);
+    return entry;
+  }
+
+  /** A Studio the person owns, not built yet. Its folder name is its name now and stays that if it is renamed later. */
   create(name: string): StudiosView {
-    const n = this.checkName(name);
-    const id = `s_${randomBytes(5).toString('hex')}`;
-    this.data.studios.push({ id, name: n, role: 'owner', status: 'not-provisioned', url: null, accountId: null, createdAt: new Date().toISOString(), note: null });
+    this.add({ name: this.checkName(name), role: 'owner' });
     return this.save();
   }
 
+  /** Would joining a Studio under this name and address work? Asked before anything is sent, so a name clash cannot leave a half-joined Studio. */
+  checkNewMember(name: string, url: string): string {
+    if (this.data.studios.some((s) => s.url === url)) fail('You are already in that Studio.');
+    return this.checkName(name);
+  }
+
+  /** A Studio the person was invited to and has joined. */
+  addMember(o: { name: string; url: string; fingerprint: string; memberRole: string; studioId: string }): StudiosView {
+    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', url: o.url, fingerprint: o.fingerprint, memberRole: o.memberRole, note: null });
+    return this.save();
+  }
+
+  /** The name only: a Studio's folder keeps the name it was made with, so nothing on disk has to move. */
   rename(id: string, name: string): StudiosView {
     const s = this.owned(id);
     s.name = this.checkName(name, id);
@@ -143,19 +194,19 @@ export class StudioRegistry {
     return this.save();
   }
 
-  /**
-   * Checks the Cloudflare details and records the account. Building the Studio in Cloudflare is not connected yet, so the Studio stays
-   * "not provisioned" with a note saying so. The token is read here and dropped: it is never stored, logged or returned.
-   */
-  provision(id: string, details: { accountId: string; apiToken: string }): StudiosView {
+  /** What the build tells us as it goes. */
+  update(id: string, patch: Partial<Pick<StudioEntry, 'status' | 'url' | 'accountId' | 'note' | 'fingerprint' | 'tokenKept' | 'resources' | 'server'>>): StudiosView {
     const s = this.owned(id);
-    if (s.status === 'local') fail('The Studio on this computer has no server to provision.');
-    const accountId = String(details?.accountId ?? '').trim().toLowerCase();
-    const token = String(details?.apiToken ?? '').trim();
-    if (!/^[0-9a-f]{32}$/.test(accountId)) fail('The Cloudflare account ID is 32 letters and numbers (find it on the Cloudflare dashboard, on the right of any domain’s overview or under Workers & Pages).');
-    if (token.length < 20 || /\s/.test(token)) fail('That does not look like a Cloudflare API token. Paste the whole token, with no spaces.');
-    s.accountId = accountId;
-    s.note = 'Details checked. Building the Studio in Cloudflare is not connected in this build yet, so it has not been created.';
+    Object.assign(s, patch);
     return this.save();
+  }
+
+  /** Syntax of the Cloudflare details, before anything is sent anywhere. */
+  static checkCredentials(details: { accountId: string; apiToken: string }): { accountId: string; apiToken: string } {
+    const accountId = String(details?.accountId ?? '').trim().toLowerCase();
+    const apiToken = String(details?.apiToken ?? '').trim();
+    if (!/^[0-9a-f]{32}$/.test(accountId)) fail('The Cloudflare account ID is 32 letters and numbers (find it on the Cloudflare dashboard, on the right of any domain’s overview or under Workers & Pages).');
+    if (apiToken.length < 20 || /\s/.test(apiToken)) fail('That does not look like a Cloudflare API token. Paste the whole token, with no spaces.');
+    return { accountId, apiToken };
   }
 }

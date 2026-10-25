@@ -65,7 +65,7 @@ export interface WriteHost {
    * Claude's own Node); a host whose server needs its own runtime passes a launcher. `brand` names the kit.
    * Default: Write's own server and the Cadrel Write brand.
    */
-  mcp?: { file: string; kitServer?: () => Promise<Uint8Array>; brand?: KitBrand };
+  mcp?: { file: string; kitServer?: () => Promise<Uint8Array>; brand?: KitBrand; /** More arguments for the server, appended to the ones Write passes (a host pins the server to its own data this way). */ extraArgs?: () => string[] };
   /**
    * When set, the host owns appearance (the Cadrel shell does): the light/dark choice and the custom colours are read from
    * and written to it instead of Write's own settings, and Settings → Appearance points there.
@@ -166,7 +166,7 @@ async function aiServer(): Promise<AiServerInfo | null> {
   const file = host.mcp?.file ?? path.join(app.getAppPath(), 'dist-electron', 'mcp', 'cadrel-write-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
   if (!(await fsp.stat(file).catch(() => null))) return null;
   const root = path.resolve(projectsRoot());
-  const args = [file, '--root', root];
+  const args = [file, '--root', root, ...(host.mcp?.extraArgs?.() ?? [])];
   return app.isPackaged ? { root, command: process.execPath, args, env: { ELECTRON_RUN_AS_NODE: '1' } } : { root, command: 'node', args };
 }
 
@@ -183,6 +183,7 @@ async function exportAiKit(): Promise<string> {
     root: info.root,
     serverPath: path.join(dest, `${brand.id}-mcp.js`),
     brand,
+    extraArgs: host.mcp?.extraArgs?.(),
   });
   for (const f of files) {
     const target = path.join(dest, ...f.path.split('/'));
