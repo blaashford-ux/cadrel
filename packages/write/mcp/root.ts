@@ -14,6 +14,13 @@ export function settingsCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Plat
   return bases.map((b) => path.join(b, 'Cadrel', 'write', 'settings.json'));
 }
 
+/** Where Cadrel's shell keeps its own settings (it records the Cadrel folder there when the person has moved it). */
+export function shellSettingsFile(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, home: string): string {
+  if (env.CADREL_USER_DATA) return path.join(env.CADREL_USER_DATA, 'shell.json');
+  const base = platform === 'win32' ? env.APPDATA ?? path.join(home, 'AppData', 'Roaming') : platform === 'darwin' ? path.join(home, 'Library', 'Application Support') : env.XDG_CONFIG_HOME ?? path.join(home, '.config');
+  return path.join(base, 'Cadrel', 'shell.json');
+}
+
 /** A `--root` / `CADREL_WRITE_ROOT` value that is really "not set": blank, or a placeholder the client never filled in (`${user_config.root_folder}`). */
 const unset = (v: string | undefined): boolean => !v?.trim() || /^\$\{.*\}$/.test(v.trim());
 
@@ -23,8 +30,8 @@ export interface RootCandidate {
 }
 
 /**
- * Every place the projects might be, in order of trust: `--root`, `CADREL_WRITE_ROOT`, the Root Folder chosen in Cadrel Write, then the
- * default (`~/Cadrel`). A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
+ * Every place the projects might be, in order of trust: `--root`, `CADREL_WRITE_ROOT`, the projects folder chosen in Cadrel Write, the
+ * Write folder inside the Cadrel folder (where the person moved it, or `CADREL_FOLDER`), then `~/Cadrel/Write`. A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
  */
 export async function rootCandidates(
   o: { flag?: string; env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; home?: string; fs: FsPort }
@@ -45,7 +52,14 @@ export async function rootCandidates(
       /* not there: try the next */
     }
   }
-  out.push({ root: path.join(home, 'Cadrel'), source: 'default' });
+  try {
+    const moved = (JSON.parse(await o.fs.readText(shellSettingsFile(env, o.platform ?? process.platform, home))) as { cadrelFolder?: unknown }).cadrelFolder;
+    if (typeof moved === 'string' && path.isAbsolute(moved)) out.push({ root: path.join(moved, 'Write'), source: 'the Cadrel folder you chose' });
+  } catch {
+    /* the Cadrel folder is where it started */
+  }
+  if (!unset(env.CADREL_FOLDER)) out.push({ root: path.join(path.resolve(env.CADREL_FOLDER!.trim()), 'Write'), source: 'CADREL_FOLDER' });
+  out.push({ root: path.join(home, 'Cadrel', 'Write'), source: 'default' });
   return out.filter((c, i) => out.findIndex((d) => path.resolve(d.root) === path.resolve(c.root)) === i);
 }
 

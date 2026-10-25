@@ -27,7 +27,7 @@ import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
-import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig } from '../src/shared/projects';
+import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig, type ProjectTemplate } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore } from './settings';
 import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
@@ -71,6 +71,11 @@ export interface WriteHost {
    * and written to it instead of Write's own settings, and Settings → Appearance points there.
    */
   theme?: { get(): { source: ThemeSource; custom?: ThemeCustom }; set(change: { source?: ThemeSource; custom?: ThemeCustom | null }): void };
+  /**
+   * Where projects live when the person has not chosen a folder of their own: the host's default (Cadrel puts it at <Cadrel folder>/Write).
+   * When set, Write needs no first-run setup, and the folder is created if it is missing.
+   */
+  defaultRoot?: () => string;
   /** When set, Cadrel Write's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
 }
@@ -213,10 +218,29 @@ const SYNC_TRIGGERS = new Set([
   'projects:create', 'projects:update', 'projects:rename', 'projects:duplicate', 'projects:delete', 'projects:convert', 'projects:progress', 'projects:addMissing'
 ]);
 
-const projectsRoot = () => settings.projects().rootFolder ?? defaultRootFolder(app.getPath('home'));
+const defaultRoot = () => host?.defaultRoot?.() ?? defaultRootFolder(app.getPath('home'));
+const projectsRoot = () => settings.projects().rootFolder ?? defaultRoot();
 const dirExists = (p: string) => fsp.stat(p).then((st) => st.isDirectory(), () => false);
 
 /** A path that is a direct child of the Root Folder (a project), or the folder currently open. */
+/** Makes a project folder from a template. The same call serves Write's own IPC and a host (Cadrel's Projects page). */
+async function createProjectFolder(name: string, templateId: string) {
+  const template = settings.projects().templates.find((t) => t.id === templateId);
+  if (!template) throw new Error('That template no longer exists.');
+  await fsp.mkdir(projectsRoot(), { recursive: true });
+  return projects.createProject(projectsRoot(), String(name), template, { app: settings.appDefaults() });
+}
+
+async function renameProjectFolder(p: string, name: string): Promise<string> {
+  const from = projectPath(p);
+  const to = await projects.renameProject(from, String(name));
+  if (openRoot && (openRoot === from || openRoot.startsWith(from + path.sep))) openRoot = to + openRoot.slice(from.length);
+  return to;
+}
+
+/** A project the host asked Write to open, held until Write's page is there to take it. */
+let pendingProject: string | null = null;
+
 function projectPath(p: string): string {
   const full = path.resolve(p);
   const root = path.resolve(projectsRoot());
@@ -443,7 +467,7 @@ function registerIpc(): void {
   });
 
   // --- projects ---
-  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), root: projectsRoot(), defaultRoot: defaultRootFolder(app.getPath('home')), rootExists: await dirExists(projectsRoot()) });
+  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), setupDone: settings.projects().setupDone || !!host.defaultRoot, root: projectsRoot(), defaultRoot: defaultRoot(), rootExists: await dirExists(projectsRoot()) });
   handle('projects:config', config);
   handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
     const next = sanitizeProjectsSettings({ ...settings.projects(), ...(patch && typeof patch === 'object' ? patch : {}) });
@@ -457,19 +481,10 @@ function registerIpc(): void {
     return config();
   });
   handle('projects:list', () => projects.listProjects(projectsRoot()));
-  handle('projects:create', async (_e, name: string, templateId: string) => {
-    const template = settings.projects().templates.find((t) => t.id === templateId);
-    if (!template) throw new Error('That template no longer exists.');
-    return projects.createProject(projectsRoot(), String(name), template, { app: settings.appDefaults() });
-  });
+  handle('projects:create', (_e, name: string, templateId: string) => createProjectFolder(name, templateId));
   handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
   handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
-  handle('projects:rename', async (_e, p: string, name: string) => {
-    const from = projectPath(p);
-    const to = await projects.renameProject(from, String(name));
-    if (openRoot && (openRoot === from || openRoot.startsWith(from + path.sep))) openRoot = to + openRoot.slice(from.length);
-    return to;
-  });
+  handle('projects:rename', (_e, p: string, name: string) => renameProjectFolder(p, name));
   handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));
   handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
   handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
@@ -528,6 +543,11 @@ function registerIpc(): void {
 
   // Markdown files named on the command line (double-click / "Open with") are queued here until the
   // renderer collects them, so none are lost if they arrive before the UI is ready.
+  handle('app:takeOpenProject', () => {
+    const p = pendingProject;
+    pendingProject = null;
+    return p;
+  });
   handle('app:takeLaunchFiles', async () => {
     const files = pendingFiles.splice(0);
     const ok: string[] = [];
@@ -616,6 +636,24 @@ export interface WriteModule {
   hasUnsaved(): boolean;
   /** The projects in the Root Folder (for a host's overview). */
   listProjects(): ReturnType<typeof projects.listProjects>;
+  /** The folder the projects live in (the person's choice, else the host's default). */
+  projectsRoot(): string;
+  ensureRoot(): Promise<void>;
+  templates(): ProjectTemplate[];
+  createProject(name: string, templateId: string): ReturnType<typeof projects.createProject>;
+  renameProject(path: string, name: string): Promise<string>;
+  duplicateProject(path: string, name: string): ReturnType<typeof projects.duplicateProject>;
+  deleteProject(path: string): ReturnType<typeof projects.deleteProject>;
+  updateProject(path: string, patch: Record<string, unknown>): ReturnType<typeof projects.updateMeta>;
+  readProject(path: string): ReturnType<typeof projects.readMeta>;
+  convertFolder(path: string): ReturnType<typeof projects.convertToProject>;
+  addMissingTemplateParts(path: string, templateId: string): ReturnType<typeof projects.addMissingTemplateParts>;
+  /** True while Write follows the host's default folder (the person has not chosen one of their own). */
+  usesDefaultRoot(): boolean;
+  /** Moves every project from one projects folder to another (used when the host's default folder moves). */
+  moveProjects(oldRoot: string, newRoot: string): ReturnType<typeof projects.moveProjects>;
+  /** Asks Write to open a project (Write holds the request until its page is ready). */
+  openProject(path: string): void;
   /** Asks the editor to resolve unsaved edits (save / discard / cancel). Resolves true if the window may close. */
   requestClose(): Promise<boolean>;
   /** Wires up what belongs to Write's page: F1 opens Help, and coming back to the window syncs. */
@@ -656,6 +694,7 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
   setChromeTheme(h.theme ? h.theme.get().custom : settings.get().prefs?.themeCustom);
 
   registerIpc();
+  if (host.defaultRoot && !settings.projects().rootFolder) await fsp.mkdir(projectsRoot(), { recursive: true }).catch(() => undefined);
   void aiRemote.load(); // comes back up only if the user left it on
   registerWindowChrome(() => host.getWindow(), () => host.getContents());
   installMenu(
@@ -667,6 +706,27 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     queueFile,
     hasUnsaved: () => dirtyFiles.length > 0,
     listProjects: () => projects.listProjects(projectsRoot()),
+    projectsRoot,
+    ensureRoot: async () => void (await fsp.mkdir(projectsRoot(), { recursive: true })),
+    templates: () => settings.projects().templates,
+    createProject: createProjectFolder,
+    renameProject: renameProjectFolder,
+    duplicateProject: (p, name) => projects.duplicateProject(projectPath(p), String(name)),
+    deleteProject: (p) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)),
+    updateProject: (p, patch) => projects.updateMeta(projectPath(p), patch as never),
+    readProject: (p) => projects.readMeta(path.resolve(p)),
+    convertFolder: (p) => projects.convertToProject(projectPath(p)),
+    addMissingTemplateParts: (p, templateId) => {
+      const t = settings.projects().templates.find((x) => x.id === templateId);
+      if (!t) throw new Error('That template no longer exists.');
+      return projects.addMissingTemplateParts(projectPath(p), t);
+    },
+    usesDefaultRoot: () => !settings.projects().rootFolder,
+    moveProjects: (from, to) => projects.moveProjects(path.resolve(from), path.resolve(to)),
+    openProject(p) {
+      pendingProject = path.resolve(p);
+      host.getContents()?.send('app:openProject');
+    },
     requestClose,
     themeChanged(custom) {
       setChromeTheme(custom);

@@ -120,7 +120,17 @@ describe('when the projects folder is wrong', () => {
 
   it('lists each place once, in order', async () => {
     const c = await rootCandidates({ flag: '/data/books', env: { CADREL_WRITE_ROOT: '/y' }, platform: 'linux', home, fs: seeded() });
-    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/Cadrel']);
+    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/Cadrel/Write']);
+  });
+
+  it('follows the Cadrel folder when the person moved it, then CADREL_FOLDER, then the default', async () => {
+    const f = new MemoryFs();
+    f.seed('/home/me/.config/Cadrel/shell.json', JSON.stringify({ cadrelFolder: '/d/Docs/Cadrel' }));
+    const moved = await rootCandidates({ env: { CADREL_FOLDER: '/e/Cadrel' }, platform: 'linux', home, fs: f });
+    expect(moved.map((x) => x.root)).toEqual(['/d/Docs/Cadrel/Write', '/e/Cadrel/Write', '/home/me/Cadrel/Write']);
+    expect(moved[0]!.source).toMatch(/Cadrel folder you chose/);
+    // nothing recorded: the default alone
+    expect((await rootCandidates({ env: {}, platform: 'linux', home, fs: new MemoryFs() })).map((x) => x.root)).toEqual(['/home/me/Cadrel/Write']);
   });
 
   it('falls back to a later folder that has projects, and keeps the first when none do', async () => {

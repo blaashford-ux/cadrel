@@ -40,7 +40,9 @@ const api: CadrelApi = {
     }
   },
   prefs: {
-    folders: () => ipcRenderer.invoke('shell:prefs:folders')
+    folders: () => ipcRenderer.invoke('shell:prefs:folders'),
+    chooseCadrelFolder: () => studioCall('shell:prefs:chooseCadrelFolder'),
+    resetCadrelFolder: () => studioCall('shell:prefs:resetCadrelFolder')
   },
   studio: {
     state: () => studioCall('studio:state'),

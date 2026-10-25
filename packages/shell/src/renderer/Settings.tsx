@@ -17,6 +17,22 @@ export function Settings() {
   const [theme, setTheme] = useState<ThemeState | null>(null);
   const [folders, setFolders] = useState<AppFolders | null>(null);
   const [info, setInfo] = useState<ShellInfo | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+
+  /** Runs a folder change, shows a refusal as text, and refreshes what is shown. */
+  const act = async (job: () => Promise<AppFolders | null>) => {
+    setError(null);
+    setMoving(true);
+    try {
+      const r = await job();
+      if (r) setFolders(r);
+    } catch (e) {
+      setError(String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+    } finally {
+      setMoving(false);
+    }
+  };
 
   useEffect(() => {
     void api.theme.get().then(setTheme);
@@ -44,16 +60,28 @@ export function Settings() {
 
       <section className="card" aria-labelledby="s-where">
         <h3 id="s-where">Where things are kept</h3>
+        <p className="muted small">Everything you work with lives in one Cadrel folder, in your home folder unless you move it. Write’s projects and Market’s library are inside it, ready to use: nothing to set up.</p>
         <dl className="kv">
-          <dt>Manuscripts (Write)</dt>
-          <dd>{folders?.writeRoot ?? <span className="muted">not chosen yet (set it in Write → Settings → Projects)</span>}</dd>
-          <dt>Market library</dt>
-          <dd>{folders?.marketLibrary ?? <span className="muted">not chosen yet (choose it in Market)</span>}</dd>
+          <dt>Cadrel folder</dt>
+          <dd>
+            {folders?.cadrelFolder}
+            <div className="row">
+              <button type="button" onClick={() => void act(() => api.prefs.chooseCadrelFolder())}>Change…</button>
+              {folders && !folders.cadrelFolderIsDefault && <button type="button" onClick={() => void act(() => api.prefs.resetCadrelFolder())}>Use the default</button>}
+              {moving && <span role="status" className="muted">Moving…</span>}
+            </div>
+            {error && <div className="banner error" role="alert">{error}</div>}
+          </dd>
+          <dt>Projects (Write)</dt>
+          <dd>{folders?.writeRoot} {folders?.writeIsCustom && <span className="chip">chosen separately</span>}</dd>
+          <dt>Library (Market)</dt>
+          <dd>{folders?.marketLibrary ?? '…'} {folders?.marketIsCustom && <span className="chip">chosen separately</span>}</dd>
           <dt>Projects and notes</dt>
           <dd>{folders?.studioFile}</dd>
           <dt>App settings</dt>
           <dd>{folders?.settingsFolder}</dd>
         </dl>
+        <p className="muted small">Moving the Cadrel folder moves Write’s projects and Market’s library with it. A folder you chose for Write or for Market on its own is left where it is.</p>
       </section>
 
       <section className="card" aria-labelledby="s-about">

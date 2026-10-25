@@ -142,6 +142,59 @@ async function kitLauncher(): Promise<Uint8Array> {
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
 const authorName = () => userCache?.displayName || os.userInfo().username || 'Me';
 
+// ---- the Cadrel folder ----------------------------------------------------------------------------
+// Everything a person works with lives in one folder, <home>\Cadrel by default (wherever their home folder is, so a profile kept on
+// another drive is followed): Write's projects in Cadrel\Write and Market's library in Cadrel\Market. Neither needs setting up. The
+// whole folder can be moved, and Write and Market can each be given a folder of their own, which Cadrel then leaves alone.
+const defaultCadrelFolder = () => process.env.CADREL_FOLDER ?? path.join(app.getPath('home'), 'Cadrel');
+const cadrelFolder = () => settings.get().cadrelFolder ?? defaultCadrelFolder();
+const writeDefault = () => path.join(cadrelFolder(), 'Write');
+const marketDefault = () => path.join(cadrelFolder(), 'Market');
+
+async function folders(): Promise<AppFolders> {
+  const w = await write.listProjects().catch(() => null);
+  const m = market.service.status().libraryRoot;
+  return {
+    cadrelFolder: cadrelFolder(),
+    cadrelFolderIsDefault: !settings.get().cadrelFolder,
+    writeRoot: w?.root ?? write.projectsRoot(),
+    writeIsCustom: !write.usesDefaultRoot(),
+    marketLibrary: m ?? null,
+    marketIsCustom: !!m && path.resolve(m) !== path.resolve(marketDefault()),
+    studioFile: path.join(app.getPath('userData'), 'studio.json'),
+    settingsFolder: app.getPath('userData')
+  };
+}
+
+/** Moves the Cadrel folder (null: back to the default). Only what follows the default moves; a folder the person chose for Write or Market stays. */
+async function moveCadrelFolder(next: string | null): Promise<AppFolders> {
+  const from = cadrelFolder();
+  const to = path.resolve(next ?? defaultCadrelFolder());
+  if (path.resolve(from) === to) return folders();
+  if (!path.isAbsolute(to)) throw new Error('Choose a full folder path.');
+  if (to.startsWith(path.resolve(from) + path.sep) || path.resolve(from).startsWith(to + path.sep)) throw new Error('The new Cadrel folder cannot be inside the old one, or the other way round.');
+  const marketFollows = !!market.service.status().libraryRoot && path.resolve(market.service.status().libraryRoot!) === path.resolve(marketDefault());
+  const writeFollows = write.usesDefaultRoot();
+  await fsp.mkdir(to, { recursive: true });
+  if (writeFollows) {
+    const r = await write.moveProjects(path.join(from, 'Write'), path.join(to, 'Write'));
+    if (r.failed.length) throw new Error(`Some projects could not be moved (${r.failed.map((f) => f.name).join(', ')}): ${r.failed[0]!.error}`);
+  }
+  if (marketFollows) {
+    // The library is copied, not renamed, so an earlier move leaves the old copy behind. If one is in the way, put it aside (never delete it).
+    const dest = path.join(to, 'Market');
+    if (await fsp.readdir(dest).then((f) => f.length > 0, () => false)) await fsp.rename(dest, `${dest} (old copy ${new Date().toISOString().slice(0, 10)}-${Date.now() % 100000})`);
+    await fsp.mkdir(dest, { recursive: true });
+    await market.service.moveTo(dest);
+  }
+  settings.update((s) => {
+    if (next === null) delete s.cadrelFolder;
+    else s.cadrelFolder = to;
+  });
+  await write.ensureRoot();
+  return folders();
+}
+
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
 const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(here, 'resources'));
 
@@ -430,11 +483,15 @@ function registerShellIpc(): void {
     const img = nativeImage.createFromPath(p);
     return img.isEmpty() ? null : img.resize({ width: 128, quality: 'best' }).toDataURL();
   });
-  ipcMain.handle('shell:prefs:folders', guard(async (): Promise<AppFolders> => {
-    const w = await write.listProjects().catch(() => null);
-    const m = market.service.status().libraryRoot;
-    return { writeRoot: w?.root ?? null, marketLibrary: m ?? null, studioFile: path.join(app.getPath('userData'), 'studio.json'), settingsFolder: app.getPath('userData') };
+  ipcMain.handle('shell:prefs:folders', guard(() => folders()));
+  ipcMain.handle('shell:prefs:chooseCadrelFolder', guard(async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Choose where the Cadrel folder goes', properties: ['openDirectory', 'createDirectory'], defaultPath: path.dirname(cadrelFolder()) });
+    if (r.canceled || !r.filePaths[0]) return null;
+    // The person picks the folder to keep Cadrel's things in; a folder not already called Cadrel gets one inside it.
+    const picked = path.resolve(r.filePaths[0]);
+    return moveCadrelFolder(path.basename(picked).toLowerCase() === 'cadrel' ? picked : path.join(picked, 'Cadrel'));
   }));
+  ipcMain.handle('shell:prefs:resetCadrelFolder', guard(() => moveCadrelFolder(null)));
   ipcMain.handle('shell:info', guard(() => ({ version: app.getVersion(), electron: process.versions.electron, platform: process.platform })));
 }
 
@@ -490,6 +547,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       getWindow: () => win,
       getContents: () => views.write?.webContents ?? null,
       standalone: false,
+      defaultRoot: writeDefault,
       theme: { get: themeState, set: setTheme },
       dataDir: writeData,
       assetsDir: path.join(here, 'assets'),
@@ -508,6 +566,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       willQuit: () => {
         quitting = true;
       },
+      defaultLibrary: marketDefault,
       mcpLaunch,
       mcpBrand: CADREL_MCP,
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'

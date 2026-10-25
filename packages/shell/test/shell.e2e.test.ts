@@ -30,11 +30,11 @@ let home: string;
 let userData: string;
 const running: ElectronApplication[] = [];
 
-async function launch(): Promise<{ app: ElectronApplication; shell: Page }> {
+async function launch(over: { userData?: string; home?: string } = {}): Promise<{ app: ElectronApplication; shell: Page }> {
   const app = await electron.launch({
     executablePath: PACKAGED ?? electronBin,
     args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
-    env: { ...process.env, CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
+    env: { ...process.env, CADREL_TEST: '1', CADREL_USER_DATA: over.userData ?? userData, HOME: over.home ?? home, USERPROFILE: over.home ?? home }
   });
   running.push(app);
   const shell = await app.firstWindow();
@@ -100,7 +100,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     expect(await write.evaluate(() => [typeof (window as any).cadrelWrite, typeof (window as any).cadrel, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
 
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
@@ -144,7 +144,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     await write.evaluate(async () => {
       const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
@@ -172,7 +172,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
 
     // Write: the AI server settings and the kit it saves for Claude Desktop.
     const server = await write.evaluate(() => (window as any).cadrelWrite.getAiServer());
@@ -213,7 +213,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // A manuscript made in Write, to link.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     await write.evaluate(async () => {
       const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
@@ -272,7 +272,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
@@ -467,8 +467,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
-    await write.getByRole('button', { name: 'Get started' }).click();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     // Make a project the way a person does: the Novel template, with a name.
     await write.getByRole('button', { name: /New Project/ }).first().click();
     await write.getByRole('dialog', { name: 'New project' }).getByLabel('Template').selectOption('novel');
@@ -505,11 +504,69 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 120_000);
 
+  it('The Cadrel folder: Write and Market start inside it with nothing to set up, and moving it takes them along', async () => {
+    const h = path.join(tmp, 'fresh-home');
+    const ud = path.join(tmp, 'fresh-userdata');
+    fs.mkdirSync(h, { recursive: true });
+    const { app, shell } = await launch({ home: h, userData: ud });
+
+    // Nothing was set up, yet both have a place under <home>/Cadrel.
+    await shell.getByRole('button', { name: 'Settings', exact: true }).click();
+    await shell.locator('.kv dd', { hasText: path.join(h, 'Cadrel') }).first().waitFor();
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'Write'))).toBe(true);
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'Market'))).toBe(true);
+    expect(await shell.getByText('chosen separately').count()).toBe(0);
+
+    // Write shows its projects straight away (no welcome dialog), and Market is already working on its library.
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    expect(await write.getByText('Welcome to Cadrel Write').count()).toBe(0);
+    await shell.getByRole('button', { name: 'Market', exact: true }).click();
+    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    expect(await market.getByText('Welcome to Cadrel Market').count()).toBe(0);
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'Market'));
+
+    // A project in Write's folder, then the whole Cadrel folder moves (say, to another drive): both follow, with their contents.
+    fs.mkdirSync(path.join(h, 'Cadrel', 'Write', 'Moving Book', '.cadrel'), { recursive: true });
+    fs.writeFileSync(path.join(h, 'Cadrel', 'Write', 'Moving Book', '.cadrel', 'project.json'), JSON.stringify({ version: 1, id: 'p1', name: 'Moving Book' }));
+    fs.writeFileSync(path.join(h, 'Cadrel', 'Write', 'Moving Book', 'Draft.md'), '# One\n');
+    const other = path.join(tmp, 'other-drive');
+    fs.mkdirSync(other);
+    await app.evaluate(({ dialog }, d) => {
+      (dialog as any).showOpenDialog = async () => ({ canceled: false, filePaths: [d] });
+    }, other);
+    await shell.getByRole('button', { name: 'Settings', exact: true }).click();
+    await shell.getByRole('button', { name: 'Change…' }).click();
+    await shell.locator('.kv dd', { hasText: path.join(other, 'Cadrel') }).first().waitFor();
+    expect(fs.readFileSync(path.join(other, 'Cadrel', 'Write', 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'Write', 'Moving Book'))).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(other, 'Cadrel', 'Market'));
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'shell.json'), 'utf8')).cadrelFolder).toBe(path.join(other, 'Cadrel'));
+
+    // The AI server finds the moved folder on its own (it reads the same record).
+    const { rootCandidates } = await import('@cadrel/write/mcp/root');
+    const { nodeFs } = await import('@cadrel/write/electron/nodeFs');
+    const found = await rootCandidates({ env: { CADREL_USER_DATA: ud }, platform: 'linux', home: h, fs: nodeFs });
+    expect(found[0]!.root).toBe(path.join(other, 'Cadrel', 'Write'));
+
+    // And back to the default.
+    await shell.getByRole('button', { name: 'Use the default' }).click();
+    await shell.locator('.kv dd', { hasText: path.join(h, 'Cadrel') }).first().waitFor();
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'Write', 'Moving Book', 'Draft.md'))).toBe(true);
+    // the library came along too; the stale copy from the first move was set aside, not deleted
+    expect(fs.existsSync(path.join(h, 'Cadrel', 'Market', 'scout.db'))).toBe(true);
+    expect(fs.readdirSync(path.join(h, 'Cadrel')).some((n) => n.startsWith('Market (old copy'))).toBe(true);
+    expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'Market'));
+    await app.close();
+  }, 120_000);
+
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to Cadrel Write').waitFor();
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
     // Write's own page answers the question (it really has nothing unsaved, so it says yes). To observe the moment
     // between the question and the close, the test holds the final close from the main process.
     await app.evaluate(({ BrowserWindow }) => {

@@ -314,6 +314,9 @@ export interface DesktopApi {
 
   /** Markdown files given on the command line (double-click / "Open with"); each is returned once. */
   takeLaunchFiles(): Promise<string[]>;
+  /** A project the host app (Cadrel's Projects page) asked Write to open, once; null when there is none. */
+  takeOpenProject?(): Promise<string | null>;
+  onOpenProject?(cb: () => void): () => void;
   /** Fires when another launch hands a file to this running instance. */
   onLaunchFiles(cb: () => void): () => void;
   /** The host app changed the colours (only a host that manages the theme sends this). */

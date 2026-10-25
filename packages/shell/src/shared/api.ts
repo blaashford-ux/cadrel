@@ -130,8 +130,15 @@ export type { Attachment };
 
 /** Where everything lives, for the Settings page. */
 export interface AppFolders {
+  /** The Cadrel folder: where the working folders below default to. */
+  cadrelFolder: string;
+  /** False when the person has put it somewhere of their own. */
+  cadrelFolderIsDefault: boolean;
   writeRoot: string | null;
+  /** True when Write's projects folder is a choice of its own, not <Cadrel folder>/Write. */
+  writeIsCustom: boolean;
   marketLibrary: string | null;
+  marketIsCustom: boolean;
   studioFile: string;
   settingsFolder: string;
 }
@@ -146,6 +153,10 @@ export interface CadrelApi {
   user: UserApi;
   prefs: {
     folders(): Promise<AppFolders>;
+    /** Opens a folder picker and moves the Cadrel folder there; null if cancelled. Write and Market follow it unless they were given folders of their own. */
+    chooseCadrelFolder(): Promise<AppFolders | null>;
+    /** Back to the default (a Cadrel folder in the home folder). */
+    resetCadrelFolder(): Promise<AppFolders>;
   };
   navigate(page: Page): Promise<void>;
   current(): Promise<Page>;

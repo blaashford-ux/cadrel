@@ -17,6 +17,8 @@ export interface ShellSettings {
   page: Page;
   /** Who notes written in the app are by; empty means the Windows user name. */
   author?: string;
+  /** Where Cadrel keeps its working folders (Write, Market). Absent means the default: a Cadrel folder in the person's home folder. */
+  cadrelFolder?: string;
   /** Light, dark or follow Windows. Applies to the whole app. */
   theme?: ThemeSource;
   /** Colours the user changed; the rest stay as shipped. */
@@ -30,6 +32,7 @@ export function sanitizeSettings(raw: unknown): ShellSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const out: ShellSettings = { page: isPage(r.page) ? r.page : 'home' };
   if (typeof r.author === 'string' && r.author.trim()) out.author = r.author.trim().slice(0, 80);
+  if (typeof r.cadrelFolder === 'string' && path.isAbsolute(r.cadrelFolder)) out.cadrelFolder = r.cadrelFolder;
   if (isThemeSource(r.theme) && r.theme !== 'system') out.theme = r.theme;
   const custom = sanitizeThemeCustom(r.themeCustom);
   if (custom) out.themeCustom = custom;
