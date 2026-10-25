@@ -88,7 +88,7 @@ Notes on the defaults:
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.
-- **Guest** is the freelancer or beta-reader role: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
+- **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant). Beta readers with no account do not get a role at all: they read and comment through a Google Drive review package (see [FILES.md](FILES.md)). Guest: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
 
 ## 5. Flexible by design: what admins can configure

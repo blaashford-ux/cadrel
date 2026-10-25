@@ -35,6 +35,8 @@ Lessons from the import, kept as rules: dependencies are found through Node reso
 
 ## 2. Desktop first, with a vault (the PDM model)
 
+> Files, **file kinds** (manuscript, character, worldbuilding, outline, premise…), the per-user *active manuscript* flag, SQLite's three roles, and who may share what are in [FILES.md](FILES.md).
+
 Cadrel is a normal desktop app working on **real files in real folders**, the way SolidWorks PDM does. A server **vault** holds the master copy of every controlled file, its version history and its metadata; each person has a **local working folder** (a cache of the vault). The server decides who may change what.
 
 ```
@@ -121,7 +123,7 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 
 **Notes** (built, `@cadrel/kernel` `notes.ts`)
 - MDEdit's Notes (comments and suggestions; people and AI; topics; replies; resolve; the 1,000-open-AI-notes cap) generalised: a note is about a `NoteTarget(module, kind, id, label, optional text anchor)` on a project, so any module gets Notes by naming its records. Market categories and books, a cover brief or a royalty statement need no Notes code of their own.
-- Write keeps its manuscript notes in the review files beside the manuscript, because they are shared with reviewers through Google Drive. The studio-wide list **reads** them (they carry `source: module`) rather than copying them; they are changed in Write, everything else is changed in the shared Notes panel. A note on a record that is linked to a project belongs to that project.
+- Today Write keeps its manuscript notes in review files beside the manuscript. That is an interim state: Google Drive is only for **beta readers** (people with no Cadrel account), and sharing among Cadrel people is by roles, so manuscript notes move into the Notes store, anchored by file id, and the review-file format becomes the exchange format with beta readers (see [FILES.md](FILES.md)). The studio-wide list **reads** them (they carry `source: module`) rather than copying them; they are changed in Write, everything else is changed in the shared Notes panel. A note on a record that is linked to a project belongs to that project.
 - One Notes panel (`NotesPanel`) serves a project, a record and the whole studio.
 
 **Global controllers in the shell.** Things that belong to the whole app are set once, in the shell, and pushed into the modules: the **MCP server** (one, `@cadrel/mcp`), **projects and notes**, the **appearance** (light/dark and colours; Write already spoke this model, Market has its colours mapped onto its own variable names), the **name on notes**, and where data lives. Write's own Appearance settings point to Cadrel's. Candidates for the same treatment later: Google Drive account, update channel, the capture server, the audit log.
