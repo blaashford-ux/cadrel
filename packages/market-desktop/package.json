@@ -22,11 +22,13 @@
     "tesseract.js": "^6.0.0"
   },
   "devDependencies": {
+    "@cadrel/kernel": "*",
     "@cadrel/market-core": "*",
     "@cadrel/market-embedder": "*",
     "@cadrel/market-library": "*",
     "@cadrel/market-server": "*",
     "@cadrel/market-text": "*",
+    "@cadrel/ui": "*",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "@types/node": "^22.0.0",
     "@types/pdfkit": "^0.13.0",

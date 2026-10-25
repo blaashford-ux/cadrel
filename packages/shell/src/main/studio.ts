@@ -39,7 +39,22 @@ export class StudioService {
   link = (projectId: string, module: string, ref: string) => this.studio.link(projectId, module, ref);
   unlink = (module: string, ref: string) => this.studio.unlink(module, ref);
 
-  addNote(o: { projectId: string | null; body: string; target?: NoteTarget | null; category?: string }) {
+  /** The notes written on one record of a module (a Market category, a book), whichever project it belongs to. */
+  async recordNotes(module: string, kind: string, id: string): Promise<NoteView[]> {
+    return (await this.state()).notes.filter((n) => n.target?.module === module && n.target.kind === kind && n.target.id === id);
+  }
+
+  addRecordNote(o: { module: string; kind: string; id: string; label: string; body: string; category?: string }) {
+    return this.addNote({ projectId: undefined, body: o.body, category: o.category, target: { module: o.module, kind: o.kind, id: o.id, label: o.label } });
+  }
+
+  /** Only notes on records of `module` may be changed through that module's page. */
+  async ownedBy(module: string, noteId: string): Promise<void> {
+    const n = (await this.studio.read()).notes.find((x) => x.id === noteId);
+    if (!n || n.target?.module !== module) throw new Error('That note does not belong to this page.');
+  }
+
+  addNote(o: { projectId?: string | null; body: string; target?: NoteTarget | null; category?: string }) {
     return this.studio.addNote({ projectId: o.projectId, target: o.target ?? null, body: o.body, category: o.category, author: this.o.author(), origin: 'human' });
   }
   setNoteStatus = (id: string, status: NoteStatus) => this.studio.setNoteStatus(id, status);

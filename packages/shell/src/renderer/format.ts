@@ -5,19 +5,7 @@ export const formatWords = (n: number): string => n.toLocaleString('en-US');
 /** A project's word count for display: "no active manuscript" rather than a misleading 0 when none is chosen. */
 export const wordsLabel = (n: number | null): string => (n === null ? 'no active manuscript' : `${formatWords(n)} words`);
 
-/** "3 days ago", "just now", or "never" when there is no time. `now` is passed in so the result is reproducible. */
-export function ago(ms: number | null, now: number): string {
-  if (ms === null) return 'not started';
-  const s = Math.max(0, Math.round((now - ms) / 1000));
-  if (s < 60) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return `${m} minute${m === 1 ? '' : 's'} ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} hour${h === 1 ? '' : 's'} ago`;
-  const d = Math.round(h / 24);
-  if (d < 60) return `${d} day${d === 1 ? '' : 's'} ago`;
-  return `${Math.round(d / 30)} months ago`;
-}
+export { ago } from '@cadrel/ui';
 
 /** 0–100, or null when there is no goal. Capped at 100 so a finished project does not overflow its bar. */
 export function percent(words: number | null, goal: number | null): number | null {

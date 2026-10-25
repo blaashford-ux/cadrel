@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BookDetail, OwnBookRow } from '../../shared/api.js';
 import { TextCard } from './TextCard.js';
+import { NotesButton } from '../NotesButton.js';
 
 const api = window.bookscout;
 
@@ -98,6 +99,7 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
         <button onClick={() => api.openBook(asin)}>Open on Amazon</button>
         <button onClick={() => api.revealBook(asin)}>Show files</button>
         <button onClick={() => void toggleOwn(!own)} title={own ? 'This is one of your books' : 'Add it to My Books'}>{own ? '★ Remove from My Books' : '☆ This is my book'}</button>
+        <NotesButton kind="book" id={asin} label={String(L.title ?? asin)} />
       </div>
       {err && <div className="err" role="alert">{err}</div>}
       <div className="detail">

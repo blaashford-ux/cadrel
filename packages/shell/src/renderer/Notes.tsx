@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { outline, subtreeIds, getProject } from '@cadrel/kernel';
 import type { ModuleId, StudioState } from '../shared/api';
-import { NotesPanel } from './NotesPanel';
+import { NotesPanel } from '@cadrel/ui';
+import { projectNotes } from './Projects';
 
 interface Props {
   studio: StudioState | null;
@@ -38,7 +39,8 @@ export function Notes({ studio, error, act, onGo }: Props) {
       <section className="card">
         <NotesPanel
           notes={shown}
-          addTo={{ projectId: project || null, label: project ? name(project) ?? 'this project' : 'the studio' }}
+          api={projectNotes(project || null)}
+          addTo={{ label: project ? name(project) ?? 'this project' : 'the studio' }}
           projectName={name}
           act={act}
           onOpenModule={(m) => onGo(m as ModuleId)}

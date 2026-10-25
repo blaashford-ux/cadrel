@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CategoryReport, CategorySummary, Weights } from '../../shared/api.js';
 import { CommunitySources } from './CommunitySources.js';
+import { NotesButton } from '../NotesButton.js';
 import { CommunityInsightsPanel } from './CommunityInsights.js';
 import { CharactersPanel, ClustersPanel, CompareCategories, OpportunityPanel, ShelvesPanel } from './OpportunityPanels.js';
 import { ChartCard, GroupedBars, HBars, LineChart, Legend, S1, S2, Scatter } from '../charts.js';
@@ -85,6 +86,7 @@ export function AnalysisView({ version }: { version: number }) {
         <label>Top <select value={topN} onChange={(e) => setTopN(Number(e.target.value))} aria-label="Top N">{[5, 10, 20, 30].map((n) => <option key={n} value={n}>{n}</option>)}</select></label>
         <button onClick={async () => { const p = await api.exportCategory(cat, 'csv', topN); setMsg(p ? `Saved ${p}` : ''); }}>Export CSV</button>
         <button onClick={async () => { const p = await api.exportCategory(cat, 'md', topN); setMsg(p ? `Saved ${p}` : ''); }}>Export report</button>
+        <NotesButton kind="category" id={cat} label={cats.find((c) => c.key === cat)?.name ?? cat} />
         <span role="status" className="muted">{msg}</span>
       </div>
       <CommunitySources categoryKey={cat} />

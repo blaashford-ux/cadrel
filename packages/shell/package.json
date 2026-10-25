@@ -24,8 +24,10 @@
   "devDependencies": {
     "@cadrel/kernel": "*",
     "@cadrel/market-desktop": "*",
+    "@cadrel/market-library": "*",
     "@cadrel/market-mcp": "*",
     "@cadrel/studio": "*",
+    "@cadrel/ui": "*",
     "@cadrel/write": "*",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",

@@ -8,7 +8,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from 'playwright-core';
 import { strFromU8, unzipSync } from 'fflate';
+import zlib from 'node:zlib';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Library } from '@cadrel/market-library';
 
 const PKG = path.resolve(__dirname, '..');
 const electronBin = (() => {
@@ -251,10 +253,10 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // A note on the book appears on the series (its subprojects count) and on the Notes page.
     await shell.getByLabel('New note').fill('Check the dragon\'s age against book 2.');
     await shell.getByRole('button', { name: 'Add note' }).click();
-    await shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await shell.locator('.cn-note', { hasText: "dragon's age" }).waitFor();
     await shell.locator('.tree-row', { hasText: 'Dragon Rider' }).first().locator('.count').waitFor();
     await shell.getByRole('button', { name: 'Notes', exact: true }).click();
-    await shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await shell.locator('.cn-note', { hasText: "dragon's age" }).waitFor();
     await app.close();
 
     const second = await launch();
@@ -262,7 +264,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await second.shell.locator('.tree-row', { hasText: 'Book 1' }).waitFor();
     await second.shell.locator('.tree-row', { hasText: 'Book 1' }).click();
     await second.shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
-    await second.shell.locator('.note', { hasText: "dragon's age" }).waitFor();
+    await second.shell.locator('.cn-note', { hasText: "dragon's age" }).waitFor();
     await second.app.close();
   }, 150_000);
 
@@ -307,6 +309,62 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await waitFor(async () => (await dark(again.shell)) && (await css(again.shell, '--accent')) === '#2a7f62', 'the choice to be remembered');
     await again.app.close();
   }, 150_000);
+
+  it('Market: a Notes button beside a category uses the same Notes as everywhere, and the note shows up in the shell', async () => {
+    // A captured bestseller list, so Market has a category to write on.
+    const fixture = path.resolve(PKG, '../../fixtures/amazon-com/bestsellers-kindle-humorous-fantasy.html.gz');
+    const lib = Library.open(path.join(tmp, 'library'));
+    lib.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: zlib.gunzipSync(fs.readFileSync(fixture)).toString('utf8'), capturedAt: '2026-10-17T00:00:00Z' } as never);
+    lib.close();
+
+    const { app, shell } = await launch();
+    await shell.getByRole('button', { name: 'Market', exact: true }).click();
+    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    await market.getByRole('tab', { name: 'Analysis' }).click();
+    await market.getByRole('button', { name: /^Notes/ }).click();
+    const box = market.getByRole('dialog', { name: /Notes on/ });
+    await box.getByLabel('New note').fill('Prices in this category look thin.');
+    await box.getByLabel('Topic').fill('pricing');
+    await box.getByRole('button', { name: 'Add note' }).click();
+    await box.locator('.cn-note', { hasText: 'look thin' }).waitFor();
+    await market.keyboard.press('Escape');
+    await market.getByRole('button', { name: /^Notes/ }).locator('.cn-count').waitFor();
+
+    // Same note, studio-wide: on the shell's Notes page, labelled with the Market category it is about.
+    await shell.getByRole('button', { name: 'Notes', exact: true }).click();
+    const note = shell.locator('.cn-note', { hasText: 'look thin' });
+    await note.waitFor();
+    expect(await note.innerText()).toContain('pricing');
+
+    // Link the category to a project: the note now belongs to it.
+    const key = await market.evaluate(async () => (await (window as any).bookscout.categories())[0].key);
+    await shell.evaluate(async (k) => {
+      const s = (window as any).cadrel.studio;
+      const p = await s.createProject({ name: 'Humorous fantasy line' });
+      await s.link(p.id, 'market', k);
+    }, key);
+    // (a note already written stays where it was written; a new one on a linked record goes to its project)
+    await market.getByRole('button', { name: /^Notes/ }).click();
+    await market.getByRole('dialog').getByLabel('New note').fill('Second note, now linked.');
+    await market.getByRole('dialog').getByRole('button', { name: 'Add note' }).click();
+    await market.getByRole('dialog').locator('.cn-note', { hasText: 'Second note' }).waitFor();
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.locator('.tree-row', { hasText: 'Humorous fantasy line' }).click();
+    await shell.locator('.cn-note', { hasText: 'Second note' }).waitFor();
+
+    // A page can only change notes on its own records: Write's view may not use Market's channels.
+    const refused = await app.evaluate(async ({ ipcMain, BrowserWindow }) => {
+      const h = (ipcMain as any)._invokeHandlers.get('host:notes:list');
+      try {
+        await h({ sender: BrowserWindow.getAllWindows()[0]!.webContents }, { kind: 'category', id: 'x' });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(refused).toBe(true);
+    await app.close();
+  }, 120_000);
 
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();

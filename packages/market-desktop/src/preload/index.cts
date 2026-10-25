@@ -7,6 +7,17 @@ const channels = [
 
 const api: Record<string, unknown> = {};
 for (const ch of channels) api[ch] = (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
+// Notes on a record, when Cadrel hosts this page: its shell keeps them with the studio's projects. A standalone BookScout
+// has no such handler, so `available` says no and the page shows no Notes button.
+const host = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(`host:notes:${ch}`, ...args);
+api.hostNotes = {
+  available: () => ipcRenderer.invoke('host:notes:available').then(() => true, () => false),
+  list: host('list'),
+  add: host('add'),
+  setStatus: host('status'),
+  reply: host('reply'),
+  remove: host('remove')
+};
 api.onCapture = (cb: () => void) => {
   const h = () => cb();
   ipcRenderer.on('capture', h);

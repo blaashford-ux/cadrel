@@ -2,12 +2,21 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   KIND_SUGGESTIONS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, queryNotes, subtreeIds, type Project, type ProjectTree
 } from '@cadrel/kernel';
+import type { NotesApi } from '@cadrel/ui';
 import type { ModuleId, Overview, StudioState } from '../shared/api';
-import { NotesPanel } from './NotesPanel';
+import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent, STATUS_LABEL } from './format';
 import { factsFor } from './projectFacts';
 
 const api = window.cadrel.studio;
+
+/** The shared Notes panel's view of the studio, for notes written on one project. */
+export const projectNotes = (projectId: string | null): NotesApi => ({
+  add: (o) => api.addNote({ projectId, ...o }),
+  setStatus: api.setNoteStatus,
+  reply: api.replyToNote,
+  remove: api.deleteNote
+});
 
 interface Props {
   studio: StudioState | null;
@@ -177,7 +186,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
 
       <section className="card" aria-labelledby="pd-notes">
         <h3 id="pd-notes">Notes{subs.length ? ' (this project and its subprojects)' : ''}</h3>
-        <NotesPanel notes={notes} addTo={{ projectId: p.id, label: p.name }} projectName={nameOf} act={act} onOpenModule={(m) => onGo(m as ModuleId)} />
+        <NotesPanel notes={notes} api={projectNotes(p.id)} addTo={{ label: p.name }} projectName={nameOf} act={act} onOpenModule={(m) => onGo(m as ModuleId)} />
       </section>
     </div>
   );

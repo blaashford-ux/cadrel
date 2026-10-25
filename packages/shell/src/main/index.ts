@@ -309,6 +309,25 @@ function registerShellIpc(): void {
   studioOp('studio:setNoteStatus', (id: string, status: Parameters<StudioService['setNoteStatus']>[1]) => studio.setNoteStatus(id, status));
   studioOp('studio:replyToNote', (id: string, body: string) => studio.replyToNote(id, body));
   studioOp('studio:deleteNote', (id: string) => studio.deleteNote(id));
+  // Notes on Market's records, asked for by Market's own page. The module is decided here from who is asking, never taken from the
+  // page, and a page can only change notes that are on its own records.
+  const fromMarket = (e: Electron.IpcMainInvokeEvent) => !!views.market && e.sender === views.market.webContents;
+  const hostNotes = <A extends unknown[], R>(name: string, fn: (...a: A) => Promise<R> | R) =>
+    ipcMain.handle(`host:notes:${name}`, async (e, ...a: unknown[]) => {
+      if (!fromMarket(e)) throw new Error('not allowed');
+      return fn(...(a as A));
+    });
+  const rec = (v: unknown): { kind: string; id: string } => {
+    const r = v as { kind?: unknown; id?: unknown };
+    if (typeof r?.kind !== 'string' || typeof r.id !== 'string' || !r.kind || !r.id) throw new Error('bad record');
+    return { kind: r.kind, id: r.id };
+  };
+  hostNotes('available', () => true);
+  hostNotes('list', (r: unknown) => studio.recordNotes('market', rec(r).kind, rec(r).id));
+  hostNotes('add', async (o: { kind: string; id: string; label: string; body: string; category?: string }) => ({ id: (await studio.addRecordNote({ module: 'market', ...rec(o), label: String(o.label ?? ''), body: o.body, category: o.category })).id }));
+  hostNotes('status', async (id: string, status: Parameters<StudioService['setNoteStatus']>[1]) => (await studio.ownedBy('market', id), studio.setNoteStatus(id, status)));
+  hostNotes('reply', async (id: string, body: string) => (await studio.ownedBy('market', id), studio.replyToNote(id, body)));
+  hostNotes('remove', async (id: string) => (await studio.ownedBy('market', id), studio.deleteNote(id)));
   ipcMain.handle('shell:theme:get', guard(() => themeState()));
   ipcMain.handle('shell:theme:set', guard((change: { source?: ThemeSource; custom?: ThemeCustom | null }) => setTheme(change ?? {})));
   const prefs = (): AppPrefs => ({ author: authorName(), authorIsDefault: !settings.get().author?.trim() });
