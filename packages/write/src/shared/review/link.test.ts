@@ -8,7 +8,7 @@ describe('invitation links', () => {
     expect(parseInviteLink(buildInviteLink(invite))).toEqual(invite);
   });
 
-  it('accepts an cadrel-write: link and surrounding whitespace', () => {
+  it('accepts a cadrel-write: link and surrounding whitespace', () => {
     const q = new URLSearchParams({ p: invite.packageId, c: invite.commentsId, r: invite.reviewerId, n: 'X' });
     expect(parseInviteLink(`  cadrel-write://join?${q}\n`)?.project).toBe('X');
   });

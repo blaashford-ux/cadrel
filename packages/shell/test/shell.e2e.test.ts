@@ -34,7 +34,7 @@ async function launch(): Promise<{ app: ElectronApplication; shell: Page }> {
   const app = await electron.launch({
     executablePath: PACKAGED ?? electronBin,
     args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
-    env: { ...process.env, CADREL_TEST: '1', CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
+    env: { ...process.env, CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
   });
   running.push(app);
   const shell = await app.firstWindow();

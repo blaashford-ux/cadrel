@@ -31,7 +31,7 @@ beforeEach(() => {
     { id: 'owner', text: reviewFile('owner', 'Me', 1) },
     { id: 'ai-claude-line', text: reviewFile('ai-claude-line', 'Claude · Line edit', 3) },
   ];
-  (window as unknown as { cadrel-write: unknown }).cadrelWrite = {
+  (window as unknown as { cadrelWrite: unknown }).cadrelWrite = {
     getAiServer: async () => ({ root: 'C:\\Users\\me\\Cadrel Write', command: 'C:\\Program Files\\Cadrel Write\\Cadrel Write.exe', args: ['C:\\x\\cadrel-write-mcp.js', '--root', 'C:\\Users\\me\\Cadrel Write'], env: { ELECTRON_RUN_AS_NODE: '1' } }),
     listReviews: async () => files,
     deleteReview,
@@ -107,7 +107,7 @@ describe('AiDialog', () => {
   });
 
   it('says so when the build has no AI connection', async () => {
-    (window as unknown as { cadrel-write: { getAiServer: () => Promise<null> } }).cadrelWrite.getAiServer = async () => null;
+    (window as unknown as { cadrelWrite: { getAiServer: () => Promise<null> } }).cadrelWrite.getAiServer = async () => null;
     const root = createRoot(host);
     await act(async () => root.render(createElement(AiDialog, { project: '/p', projectName: 'P', onClose: () => undefined })));
     await settle();

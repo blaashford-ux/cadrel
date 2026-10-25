@@ -16,7 +16,7 @@ describe('the first-run Welcome dialog', () => {
 
   it('can be finished with the default Root Folder, without picking one', async () => {
     const setProjectsConfig = vi.fn(async () => config);
-    (window as unknown as { cadrel-write: unknown }).cadrelWrite = { setProjectsConfig };
+    (window as unknown as { cadrelWrite: unknown }).cadrelWrite = { setProjectsConfig };
     const onDone = vi.fn();
     const host = document.body.appendChild(document.createElement('div'));
     const r = createRoot(host);

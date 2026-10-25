@@ -13,7 +13,7 @@ export interface HostNotes {
 
 declare global {
   interface Window {
-    cadrel-market: Api & { __opened?: () => Promise<string[]>; hostNotes?: HostNotes };
+    cadrelMarket: Api & { __opened?: () => Promise<string[]>; hostNotes?: HostNotes };
   }
 }
 export {};

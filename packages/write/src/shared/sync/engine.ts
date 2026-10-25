@@ -90,7 +90,7 @@ export interface SyncReport {
   pendingDeletes: string[];
   /** True when any local file or folder changed, so the UI should refresh. */
   changedLocal: boolean;
-  /** No `Cadrel Write` folder was visible in Drive, so a new one was made. On a second device this means it can't see the first device's files. */
+  /** No `Cadrel` folder was visible in Drive, so a new one was made. On a second device this means it can't see the first device's files. */
   rootCreated: boolean;
 }
 
@@ -449,7 +449,7 @@ function actionPath(a: SyncAction): string {
 
 // ---- Drive tree -----------------------------------------------------------------------------------------------
 
-/** The Drive folder that mirrors the Root: the remembered one if it still exists, else the oldest top-level `Cadrel Write` folder. */
+/** The Drive folder that mirrors the Root: the remembered one if it still exists, else the oldest top-level `Cadrel` folder. */
 function findRoot(all: DriveFile[], remembered: string | null): string | null {
   if (remembered && all.some((f) => f.id === remembered && f.isFolder)) return remembered;
   const ids = new Set(all.map((f) => f.id));

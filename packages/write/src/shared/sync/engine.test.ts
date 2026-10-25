@@ -4,7 +4,7 @@ import { md5Hex } from '../md5';
 import { FakeDrive } from './fakeDrive';
 import { emptySyncState, sanitizeSyncState, syncOnce, type SyncReport, type SyncState } from './engine';
 
-const ROOT = '/Cadrel Write';
+const ROOT = '/Cadrel';
 
 /** One phone or PC: its own file system and its own memory of the last sync, sharing one Drive. */
 class Device {
@@ -424,7 +424,7 @@ describe('robustness', () => {
     a.state.files = {};
     const r = await a.sync();
     expect(r.errors).toEqual([]);
-    expect(drive.calls.filter((c) => c === 'createFolder:Cadrel Write')).toHaveLength(1); // no second Cadrel Write folder
+    expect(drive.calls.filter((c) => c === 'createFolder:Cadrel')).toHaveLength(1); // no second Cadrel folder
     expect(md5Hex(drive.read(CH)!)).toBe(md5Hex('x'));
   });
 });

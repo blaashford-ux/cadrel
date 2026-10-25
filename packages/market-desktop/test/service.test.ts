@@ -166,7 +166,7 @@ describe('AppService', () => {
     it('builds copy-paste settings for each client', () => {
       const m = buildMcpSnippets({ command: 'C:\\Program Files\\Cadrel Market\\Cadrel Market.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
       const desktop = JSON.parse(m.claudeDesktop);
-      expect(desktop.mcpServers.cadrel-market).toEqual({ command: 'C:\\Program Files\\Cadrel Market\\Cadrel Market.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
+      expect(desktop.mcpServers['cadrel-market']).toEqual({ command: 'C:\\Program Files\\Cadrel Market\\Cadrel Market.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
       expect(m.claudeCode).toBe('claude mcp add cadrel-market -e ELECTRON_RUN_AS_NODE=1 -- "C:\\Program Files\\Cadrel Market\\Cadrel Market.exe" C:\\r\\main.mjs --library "D:\\My Books"');
       expect(m.codex).toContain('[mcp_servers.cadrel-market]');
       expect(m.codex).toContain('env = { ELECTRON_RUN_AS_NODE = "1" }');

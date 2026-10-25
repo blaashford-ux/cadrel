@@ -134,4 +134,4 @@ const api: WriteApi = {
   }
 };
 
-contextBridge.exposeInMainWorld('cadrel-write', api);
+contextBridge.exposeInMainWorld('cadrelWrite', api);

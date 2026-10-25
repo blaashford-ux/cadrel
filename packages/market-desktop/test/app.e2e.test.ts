@@ -167,7 +167,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
       expect(replies[1]!.m.result.tools.map((t: any) => t.name)).toContain('library_status');
     }
     await connect.getByRole('button', { name: 'Claude Desktop', exact: true }).click();
-    const cfg = JSON.parse((await connect.locator('pre code').textContent())!).mcpServers.cadrel-market as { command: string; args: string[]; env?: Record<string, string> };
+    const cfg = JSON.parse((await connect.locator('pre code').textContent())!).mcpServers['cadrel-market'] as { command: string; args: string[]; env?: Record<string, string> };
     expect(cfg.args).toContain(path.join(tmp, 'lib'));
 
     const client = new Client({ name: 'e2e', version: '0' });

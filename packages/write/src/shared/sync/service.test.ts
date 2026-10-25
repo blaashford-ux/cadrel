@@ -4,7 +4,7 @@ import { MemoryFs } from '../memoryFs';
 import { FakeDrive } from './fakeDrive';
 import { SyncService } from './service';
 
-const ROOT = '/Cadrel Write';
+const ROOT = '/Cadrel';
 let fs: MemoryFs;
 let drive: FakeDrive;
 let authorizeCalls: number;
@@ -165,7 +165,7 @@ describe('SyncService', () => {
     expect(JSON.parse(await fs.readText('/state/sync.json'))).toMatchObject({ connected: false, state: { files: {} } });
   });
 
-  it('says when it had to create a new Cadrel Write folder in Drive', async () => {
+  it('says when it had to create a new Cadrel folder in Drive', async () => {
     fs.seed(`${ROOT}/a.md`, 'x');
     const s = make();
     await s.load();

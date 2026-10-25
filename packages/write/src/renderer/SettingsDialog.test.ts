@@ -12,7 +12,7 @@ const DEFAULT = 'C:\\Users\\me\\Cadrel Write';
 
 async function open(config: { setupDone: boolean; rootExists: boolean }) {
   const setProjectsConfig = vi.fn(async () => ({}));
-  (window as unknown as { cadrel-write: unknown }).cadrelWrite = {
+  (window as unknown as { cadrelWrite: unknown }).cadrelWrite = {
     getAppDefaults: async () => defaultAppDefaults(),
     getPrefs: async () => ({}),
     getProjectsConfig: async () => ({ ...defaultProjectsSettings(), ...config, root: DEFAULT, defaultRoot: DEFAULT }),

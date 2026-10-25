@@ -15,7 +15,7 @@ describe('config snippets', () => {
   });
 
   it('writes valid JSON for Claude Desktop', () => {
-    expect(JSON.parse(aiConfigSnippets(win).claudeDesktop)).toEqual({ mcpServers: { cadrel-write: { command: win.command, args: win.args, env: win.env } } });
+    expect(JSON.parse(aiConfigSnippets(win).claudeDesktop)).toEqual({ mcpServers: { cadrelWrite: { command: win.command, args: win.args, env: win.env } } });
   });
 
   it('writes TOML with literal strings for Codex, and leaves out empty env', () => {

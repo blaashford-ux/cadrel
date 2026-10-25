@@ -47,4 +47,4 @@ api.onIndex = (cb: () => void) => {
 };
 if (process.env.CADREL_TEST === '1') api.__opened = () => ipcRenderer.invoke('__opened');
 
-contextBridge.exposeInMainWorld('cadrel-market', api);
+contextBridge.exposeInMainWorld('cadrelMarket', api);

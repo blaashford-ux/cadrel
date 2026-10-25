@@ -30,8 +30,8 @@ const newLog = () => ({ calls: {} as Record<string, number>, inFlight: {} as Rec
 
 async function library(files: number) {
   const mem = new MemoryFs();
-  await mem.mkdir('/Cadrel Write', { recursive: true });
-  for (let i = 0; i < files; i++) mem.seed(`/Cadrel Write/Project ${i % 3}/Part ${i % 4}/Chapter ${i}.md`, `# Chapter ${i}\n${'word '.repeat(50)}`);
+  await mem.mkdir('/Cadrel', { recursive: true });
+  for (let i = 0; i < files; i++) mem.seed(`/Cadrel/Project ${i % 3}/Part ${i % 4}/Chapter ${i}.md`, `# Chapter ${i}\n${'word '.repeat(50)}`);
   return mem;
 }
 
@@ -43,12 +43,12 @@ describe('sync performance', () => {
     let state: SyncState = emptySyncState();
     const store = { load: async () => state, save: async (s: SyncState) => void (state = JSON.parse(JSON.stringify(s))) };
     const progress: number[] = [];
-    await syncOnce({ fs: mem, root: '/Cadrel Write', drive: metered(drive, 4, log), store, device: 'Pixel', onProgress: (p) => p.phase === 'syncing' && progress.push(p.done) });
+    await syncOnce({ fs: mem, root: '/Cadrel', drive: metered(drive, 4, log), store, device: 'Pixel', onProgress: (p) => p.phase === 'syncing' && progress.push(p.done) });
 
     expect(log.calls.createFile).toBe(40);
     expect(log.maxInFlight.createFile).toBeGreaterThan(1); // parallel…
     expect(log.maxInFlight.createFile).toBeLessThanOrEqual(4); // …but bounded
-    expect(log.calls.createFolder).toBe(1 + 3 + 3 * 4); // Cadrel Write + 3 projects + 12 part folders: parallel uploads never duplicate a folder
+    expect(log.calls.createFolder).toBe(1 + 3 + 3 * 4); // Cadrel + 3 projects + 12 part folders: parallel uploads never duplicate a folder
     expect(progress[progress.length - 1]).toBe(40);
     expect(progress).toEqual([...progress].sort((a, b) => a - b)); // counts only go up
   });
@@ -58,11 +58,11 @@ describe('sync performance', () => {
     const drive = new FakeDrive();
     let state: SyncState = emptySyncState();
     const store = { load: async () => state, save: async (s: SyncState) => void (state = JSON.parse(JSON.stringify(s))) };
-    await syncOnce({ fs: mem, root: '/Cadrel Write', drive, store, device: 'Pixel' });
+    await syncOnce({ fs: mem, root: '/Cadrel', drive, store, device: 'Pixel' });
 
     const fsLog = newLog();
     const driveLog = newLog();
-    const r = await syncOnce({ fs: metered(mem, 0, fsLog), root: '/Cadrel Write', drive: metered(drive, 0, driveLog), store, device: 'Pixel' });
+    const r = await syncOnce({ fs: metered(mem, 0, fsLog), root: '/Cadrel', drive: metered(drive, 0, driveLog), store, device: 'Pixel' });
     expect(r).toMatchObject({ uploaded: [], downloaded: [], errors: [] });
     expect(fsLog.calls.readText ?? 0).toBe(0); // nothing re-read
     expect(fsLog.calls.stat ?? 0).toBe(0); // and no per-file stat: sizes and times come with the listing
@@ -76,11 +76,11 @@ describe('sync performance', () => {
       let state: SyncState = emptySyncState();
       return { load: async () => state, save: async (s: SyncState) => void (state = JSON.parse(JSON.stringify(s))) };
     };
-    await syncOnce({ fs: first, root: '/Cadrel Write', drive, store: mk(), device: 'Laptop' });
+    await syncOnce({ fs: first, root: '/Cadrel', drive, store: mk(), device: 'Laptop' });
     const second = new MemoryFs();
-    await second.mkdir('/Cadrel Write', { recursive: true });
+    await second.mkdir('/Cadrel', { recursive: true });
     const log = newLog();
-    const r = await syncOnce({ fs: metered(second, 2, log), root: '/Cadrel Write', drive: metered(drive, 4, newLog()), store: mk(), device: 'Pixel' });
+    const r = await syncOnce({ fs: metered(second, 2, log), root: '/Cadrel', drive: metered(drive, 4, newLog()), store: mk(), device: 'Pixel' });
     expect(r.downloaded).toHaveLength(24);
     expect(log.maxInFlight.writeText).toBeGreaterThan(1);
   });
@@ -91,7 +91,7 @@ describe('sync performance', () => {
       let state: SyncState = emptySyncState();
       return { load: async () => state, save: async (s: SyncState) => void (state = JSON.parse(JSON.stringify(s))) };
     })();
-    const r = await syncOnce({ fs: mem, root: '/Cadrel Write', drive: metered(new FakeDrive(), 3, newLog()), store, device: 'Pixel' });
+    const r = await syncOnce({ fs: mem, root: '/Cadrel', drive: metered(new FakeDrive(), 3, newLog()), store, device: 'Pixel' });
     expect(r.uploaded).toEqual([...r.uploaded].sort());
   });
 });
