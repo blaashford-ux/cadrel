@@ -154,7 +154,9 @@ describe.skipIf(!ready)('walkthrough: extension in Chromium + the desktop app', 
   it('the analysis, search index and library check work on what was captured', async () => {
     await win.getByRole('button', { name: '← Back' }).click();
     await win.getByRole('tab', { name: 'Analysis' }).click();
-    await win.getByRole('heading', { name: 'Category analysis' }).waitFor();
+    // Analysis opens on its Category Analysis section; what the books' own text says is in the Text Analysis section.
+    await win.getByLabel('Read this first').waitFor();
+    await win.getByRole('button', { name: 'Text Analysis' }).click();
     await win.getByRole('heading', { name: 'Inside the books' }).waitFor();
     await win.getByRole('tab', { name: 'Settings' }).click();
     const card = win.getByLabel('Search index');
