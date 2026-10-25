@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, appendFileSync, readFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
@@ -16,7 +16,7 @@ import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/l
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
 import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
-import { isModule, isPage, type AppFolders, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
+import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
 import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
@@ -26,8 +26,11 @@ import { StudioService } from './studio';
 import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
+import { spawn } from 'node:child_process';
 import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
 import { UserStore } from '@cadrel/studio';
+import { AdminError, AdminStore, canAdminister, type Role } from './admin';
+import { Updater } from './updater';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -49,6 +52,10 @@ let win: BrowserWindow | null = null;
 let settings: SettingsStore;
 let studio: StudioService;
 let users: UserStore;
+let admin: AdminStore;
+let updater: Updater;
+/** A verified installer to start once the app has exited. */
+let installerToRun: string | null = null;
 let manager: ProjectManager;
 let userCache: UserProfile | null = null;
 
@@ -168,57 +175,139 @@ function writeFolders(): WriteFolders {
   };
 }
 
+// ---- updating -------------------------------------------------------------------------------------
+
+/** One line per update step in <data folder>\update.log, so a failed update can be diagnosed afterwards. */
+function updateLog(line: string): void {
+  try {
+    appendFileSync(path.join(userData, 'update.log'), `${new Date().toISOString()} v${app.getVersion()} ${line}\n`);
+  } catch {
+    /* logging must never get in the way of updating */
+  }
+}
+
+/** For tests: answers GitHub's release questions from a JSON file (an array of releases) so no network is needed. */
+function fakeReleases(file: string): typeof fetch {
+  return (async (url: string | URL | Request) => {
+    const all = JSON.parse(readFileSync(file, 'utf8')) as { prerelease?: boolean }[];
+    const body = String(url).includes('/releases/latest') ? all.find((r) => !r.prerelease) : all;
+    return body ? { ok: true, status: 200, json: async () => body } : { ok: false, status: 404, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+}
+
+/** Looks for an update now and then, and tells the page when there is one (the rail and Settings show it). */
+function watchForUpdates(): void {
+  const look = () => void updater.check().then((st) => st.available && win && !win.isDestroyed() && win.webContents.send('shell:update:available', st), () => undefined);
+  if (!TEST || process.env.CADREL_TEST_RELEASES) setTimeout(look, TEST ? 500 : 15_000);
+  if (!TEST) setInterval(look, 6 * 60 * 60 * 1000).unref();
+}
+
 // ---- the Cadrel folder ----------------------------------------------------------------------------
 // Everything a person works with lives in one folder, <home>\Cadrel by default (wherever their home folder is, so a profile kept on
-// another drive is followed): Write's projects in Cadrel\Write and Market's library in Cadrel\Market. Neither needs setting up. The
-// whole folder can be moved, and Write and Market can each be given a folder of their own, which Cadrel then leaves alone.
+// another drive is followed): project folders in Cadrel\Projects, Write's own folder in Cadrel\Write and Market's library in Cadrel\Market.
+// None needs setting up. The whole Cadrel folder can be moved, and each of the three can be given a place of its own, which a move of the
+// Cadrel folder then leaves alone.
 const defaultCadrelFolder = () => process.env.CADREL_FOLDER ?? path.join(app.getPath('home'), 'Cadrel');
 const cadrelFolder = () => settings.get().cadrelFolder ?? defaultCadrelFolder();
+const projectsDefault = () => path.join(cadrelFolder(), 'Projects');
 const writeDefault = () => path.join(cadrelFolder(), 'Write');
 const marketDefault = () => path.join(cadrelFolder(), 'Market');
+const projectsFolder = () => settings.get().projectsFolder ?? projectsDefault();
+const writeFolder = () => settings.get().writeFolder ?? writeDefault();
+const sameDir = (a: string, b: string) => path.resolve(a) === path.resolve(b);
 
 async function folders(): Promise<AppFolders> {
-  const w = await write.listProjects().catch(() => null);
   const m = market.service.status().libraryRoot;
   return {
     cadrelFolder: cadrelFolder(),
     cadrelFolderIsDefault: !settings.get().cadrelFolder,
-    writeRoot: w?.root ?? write.projectsRoot(),
-    writeIsCustom: !write.usesDefaultRoot(),
+    projectsFolder: projectsFolder(),
+    projectsIsCustom: !!settings.get().projectsFolder,
+    writeFolder: writeFolder(),
+    writeIsCustom: !!settings.get().writeFolder,
     marketLibrary: m ?? null,
-    marketIsCustom: !!m && path.resolve(m) !== path.resolve(marketDefault()),
+    marketIsCustom: !!m && !sameDir(m, marketDefault()),
     studioFile: path.join(app.getPath('userData'), 'studio.json'),
     settingsFolder: app.getPath('userData')
   };
 }
 
-/** Moves the Cadrel folder (null: back to the default). Only what follows the default moves; a folder the person chose for Write or Market stays. */
+/** Moves a whole folder to a new place (a rename, or a copy then delete across drives). The new place must be new or empty. */
+async function relocate(from: string, to: string): Promise<void> {
+  if (sameDir(from, to)) return;
+  if (!path.isAbsolute(to)) throw new Error('Choose a full folder path.');
+  if (to.startsWith(path.resolve(from) + path.sep) || path.resolve(from).startsWith(to + path.sep)) throw new Error('The new place cannot be inside the old one, or the other way round.');
+  const there = await fsp.readdir(to).catch(() => null);
+  if (there && there.length) throw new Error(`${to} is not empty. Choose a new or empty folder.`);
+  const here = await fsp.stat(from).then((st) => st.isDirectory(), () => false);
+  await fsp.mkdir(path.dirname(to), { recursive: true });
+  if (!here) return void (await fsp.mkdir(to, { recursive: true }));
+  if (there) await fsp.rmdir(to);
+  try {
+    await fsp.rename(from, to);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== 'EXDEV') throw new Error(`Could not move ${from}: ${(e as Error).message} (is something open in it?)`);
+    await fsp.cp(from, to, { recursive: true });
+    await fsp.rm(from, { recursive: true, force: true });
+  }
+}
+
+/** Market copies its library; an earlier move leaves the old copy behind, so one in the way is put aside (never deleted). */
+async function moveMarket(dest: string): Promise<void> {
+  if (await fsp.readdir(dest).then((f) => f.length > 0, () => false)) await fsp.rename(dest, `${dest} (old copy ${new Date().toISOString().slice(0, 10)}-${Date.now() % 100000})`);
+  await fsp.mkdir(dest, { recursive: true });
+  await market.service.moveTo(dest);
+}
+
+/** Moving anything out from under the editor with changes unsaved would lose them. */
+function mustBeIdle(): void {
+  if (write.hasUnsaved()) throw new Error('Save your changes in Write first, then move the folder.');
+}
+
+/** Moves the Cadrel folder (null: back to the default). What follows the default moves with it; a folder the person placed themselves stays. */
 async function moveCadrelFolder(next: string | null): Promise<AppFolders> {
   const from = cadrelFolder();
   const to = path.resolve(next ?? defaultCadrelFolder());
-  if (path.resolve(from) === to) return folders();
+  if (sameDir(from, to)) return folders();
   if (!path.isAbsolute(to)) throw new Error('Choose a full folder path.');
   if (to.startsWith(path.resolve(from) + path.sep) || path.resolve(from).startsWith(to + path.sep)) throw new Error('The new Cadrel folder cannot be inside the old one, or the other way round.');
-  const marketFollows = !!market.service.status().libraryRoot && path.resolve(market.service.status().libraryRoot!) === path.resolve(marketDefault());
-  const writeFollows = write.usesDefaultRoot();
+  mustBeIdle();
+  const marketFollows = !!market.service.status().libraryRoot && sameDir(market.service.status().libraryRoot!, marketDefault());
   await fsp.mkdir(to, { recursive: true });
-  if (writeFollows) {
-    const r = await write.moveProjects(path.join(from, 'Write'), path.join(to, 'Write'));
-    if (r.failed.length) throw new Error(`Some projects could not be moved (${r.failed.map((f) => f.name).join(', ')}): ${r.failed[0]!.error}`);
-  }
-  if (marketFollows) {
-    // The library is copied, not renamed, so an earlier move leaves the old copy behind. If one is in the way, put it aside (never delete it).
-    const dest = path.join(to, 'Market');
-    if (await fsp.readdir(dest).then((f) => f.length > 0, () => false)) await fsp.rename(dest, `${dest} (old copy ${new Date().toISOString().slice(0, 10)}-${Date.now() % 100000})`);
-    await fsp.mkdir(dest, { recursive: true });
-    await market.service.moveTo(dest);
-  }
+  if (!settings.get().projectsFolder) await relocate(path.join(from, 'Projects'), path.join(to, 'Projects'));
+  if (!settings.get().writeFolder) await relocate(path.join(from, 'Write'), path.join(to, 'Write'));
+  if (marketFollows) await moveMarket(path.join(to, 'Market'));
   settings.update((s) => {
     if (next === null) delete s.cadrelFolder;
     else s.cadrelFolder = to;
   });
-  await write.ensureRoot();
+  await ensureFolders();
   return folders();
+}
+
+/** Puts one of the folders in a new place (null: back inside the Cadrel folder). */
+async function moveFolder(which: FolderKey, next: string | null): Promise<AppFolders> {
+  if (which === 'cadrel') return moveCadrelFolder(next);
+  mustBeIdle();
+  const key = which === 'projects' ? 'projectsFolder' : which === 'write' ? 'writeFolder' : null;
+  if (which === 'market') {
+    await moveMarket(path.resolve(next ?? marketDefault()));
+    return folders();
+  }
+  const from = which === 'projects' ? projectsFolder() : writeFolder();
+  const to = path.resolve(next ?? (which === 'projects' ? projectsDefault() : writeDefault()));
+  await relocate(from, to);
+  settings.update((s) => {
+    if (next === null || sameDir(to, which === 'projects' ? projectsDefault() : writeDefault())) delete s[key!];
+    else s[key!] = to;
+  });
+  await ensureFolders();
+  return folders();
+}
+
+/** The folders exist from the first launch, so there is nothing to set up and nothing missing to explain. */
+async function ensureFolders(): Promise<void> {
+  await Promise.all([projectsFolder(), writeFolder()].map((d) => fsp.mkdir(d, { recursive: true }).catch(() => undefined)));
 }
 
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
@@ -284,6 +373,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 function showPage(next: Page): void {
+  if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
   if (!win || win.isDestroyed()) return;
   page = next;
   for (const id of ['write', 'market'] as const) views[id]?.setVisible(false);
@@ -354,6 +444,7 @@ function createWindow(): void {
     showPage('write');
     void write.requestClose().then((ok) => {
       waiting = false;
+      if (!ok) installerToRun = null; // the person backed out of closing, so the update in progress is off
       if (ok) {
         confirmed = true;
         w.close();
@@ -417,7 +508,17 @@ function registerShellIpc(): void {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
     });
-  manageOp('templates', async () => write.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
+  /** Like manageOp, for any channel name: every refusal reaches the page as text. */
+  const manageLike = <A extends unknown[], R>(name: string, fn: (...a: A) => Promise<R>) =>
+    ipcMain.handle(`shell:${name}`, async (e, ...a: unknown[]) => {
+      if (!fromShell(e)) throw new Error('not allowed');
+      try {
+        return await fn(...(a as A));
+      } catch (err) {
+        return { __error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
   manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
   manageOp('rename', (id: string, name: string) => manager.rename(id, name));
@@ -541,14 +642,55 @@ function registerShellIpc(): void {
     return img.isEmpty() ? null : img.resize({ width: 128, quality: 'best' }).toDataURL();
   });
   ipcMain.handle('shell:prefs:folders', guard(() => folders()));
-  ipcMain.handle('shell:prefs:chooseCadrelFolder', guard(async () => {
-    const r = await dialog.showOpenDialog(win!, { title: 'Choose where the Cadrel folder goes', properties: ['openDirectory', 'createDirectory'], defaultPath: path.dirname(cadrelFolder()) });
+  const isKey = (k: unknown): k is FolderKey => k === 'cadrel' || k === 'projects' || k === 'write' || k === 'market';
+  const TITLES: Record<FolderKey, string> = { cadrel: 'Choose where the Cadrel folder goes', projects: 'Choose where your project folders go', write: 'Choose Write’s own folder', market: 'Choose where Market’s library goes' };
+  const CURRENT = (k: FolderKey) => (k === 'cadrel' ? cadrelFolder() : k === 'projects' ? projectsFolder() : k === 'write' ? writeFolder() : market.service.status().libraryRoot ?? marketDefault());
+  ipcMain.handle('shell:prefs:choose', guard(async (which: unknown) => {
+    if (!isKey(which)) throw new Error('unknown folder');
+    const r = await dialog.showOpenDialog(win!, { title: TITLES[which], properties: ['openDirectory', 'createDirectory'], defaultPath: path.dirname(CURRENT(which)) });
     if (r.canceled || !r.filePaths[0]) return null;
-    // The person picks the folder to keep Cadrel's things in; a folder not already called Cadrel gets one inside it.
     const picked = path.resolve(r.filePaths[0]);
-    return moveCadrelFolder(path.basename(picked).toLowerCase() === 'cadrel' ? picked : path.join(picked, 'Cadrel'));
+    // The Cadrel folder is the one the person points at, or a Cadrel folder inside what they picked; the others are used exactly as chosen.
+    return moveFolder(which, which === 'cadrel' ? (path.basename(picked).toLowerCase() === 'cadrel' ? picked : path.join(picked, 'Cadrel')) : picked);
   }));
-  ipcMain.handle('shell:prefs:resetCadrelFolder', guard(() => moveCadrelFolder(null)));
+  ipcMain.handle('shell:prefs:reset', guard((which: unknown) => {
+    if (!isKey(which)) throw new Error('unknown folder');
+    return moveFolder(which, null);
+  }));
+  // Administration. Anyone can read the templates (making a project needs them); changing them is refused to anyone who is not an administrator.
+  const roleNow = (): Role => settings.get().role ?? 'owner';
+  const adminView = () => ({ isAdmin: admin.isAdmin(), role: roleNow(), templates: admin.get().templates, defaultTemplateId: admin.get().defaultTemplateId });
+  manageLike('admin:get', async () => adminView());
+  manageLike('admin:save', async (change: { templates: unknown; defaultTemplateId: string }) => {
+    await admin.save(change ?? { templates: [], defaultTemplateId: '' });
+    return adminView();
+  });
+  manageLike('admin:fonts', async () => {
+    const { listInstalledFonts } = await import('@cadrel/write/electron/fonts');
+    return listInstalledFonts();
+  });
+  manageLike('admin:fontPreview', async (family: string) => write.fontPreview(String(family)));
+  // AI assistants: one server for Write and Market, files to download, and the online door for ChatGPT.
+  manageLike('assistants:get', async () => {
+    const server = await write.ai.server();
+    const snippets = market.service.mcpConfig();
+    return { available: !!server, projectsFolder: projectsFolder(), claudeDesktop: snippets.claudeDesktop, claudeCode: snippets.claudeCode, codex: snippets.codex, remote: server ? await write.ai.remote.status() : null };
+  });
+  manageLike('assistants:saveKit', () => write.ai.saveKit());
+  manageLike('assistants:saveExtension', async () => {
+    const { file } = await market.service.buildClaudeExtension();
+    const dest = path.join(app.getPath('downloads'), path.basename(file));
+    await fsp.mkdir(path.dirname(dest), { recursive: true });
+    await fsp.copyFile(file, dest);
+    if (!TEST) shell.showItemInFolder(dest);
+    return dest;
+  });
+  manageLike('assistants:setRemote', (on: boolean) => write.ai.remote.setEnabled(on === true));
+  manageLike('assistants:resetRemoteToken', () => write.ai.remote.resetToken());
+  // Updating.
+  manageLike('update:check', () => updater.check());
+  manageLike('update:last', async () => updater.last());
+  manageLike('update:install', () => updater.install());
   ipcMain.handle('shell:info', guard(() => ({ version: app.getVersion(), electron: process.versions.electron, platform: process.platform })));
 }
 
@@ -579,6 +721,22 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    admin = new AdminStore(path.join(app.getPath('userData'), 'admin.json'), () => settings.get().role ?? 'owner');
+    await admin.load();
+    await ensureFolders();
+    updater = new Updater({
+      version: TEST && process.env.CADREL_TEST_VERSION ? process.env.CADREL_TEST_VERSION : app.getVersion(),
+      platform: process.platform,
+      fetchFn: TEST && process.env.CADREL_TEST_RELEASES ? fakeReleases(process.env.CADREL_TEST_RELEASES) : fetch,
+      dir: path.join(os.tmpdir(), 'cadrel-update'),
+      log: updateLog,
+      onProgress: (p) => win?.webContents.send('shell:update:progress', p),
+      // Quitting goes through the usual unsaved-changes prompt in Write; if that is cancelled the installer is dropped (see win 'close').
+      runAfterQuit: (file) => {
+        installerToRun = file;
+        app.quit();
+      }
+    });
     users = new UserStore(path.join(app.getPath('userData'), 'user'));
     await refreshUser();
     // The name used to be a setting; it belongs to the profile now.
@@ -605,7 +763,9 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       getWindow: () => win,
       getContents: () => views.write?.webContents ?? null,
       standalone: false,
-      defaultRoot: writeDefault,
+      defaultRoot: projectsDefault,
+      projectsFolder,
+      templates: () => admin.templates(),
       theme: { get: themeState, set: setTheme },
       dataDir: writeData,
       assetsDir: path.join(here, 'assets'),
@@ -631,6 +791,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     await market.start();
     registerShellIpc();
+    watchForUpdates();
 
     const launchFile = fileFromArgv(process.argv.slice(1), process.cwd());
     if (launchFile) {
@@ -663,6 +824,14 @@ app.on('before-quit', (e) => {
     e.preventDefault();
     void Promise.race([sync.syncNow(), new Promise((resolve) => setTimeout(resolve, 10_000))]).finally(() => app.quit());
   }
+});
+
+app.on('quit', () => {
+  if (!installerToRun) return;
+  updateLog(`starting ${installerToRun}`);
+  // Started the way a double-click starts it, through the shell: started directly it has failed its own integrity check now and then.
+  const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [installerToRun]] : [installerToRun, []];
+  spawn(cmd, args, { detached: true, stdio: 'ignore' }).on('error', (e) => updateLog(`start failed: ${e.message}`)).unref();
 });
 
 app.on('window-all-closed', () => {

@@ -218,3 +218,9 @@ input[type='checkbox'] { padding: 0; }
 .tp-button { padding: 4px 10px; border-radius: var(--radius); background: var(--raised); }
 .tp-button.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .tp-dirty { color: var(--gold); margin-left: auto; }
+
+.rail-btn { position: relative; }
+.rail-dot { position: absolute; top: 6px; right: 14px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
+.snippet { overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 6px 0; white-space: pre-wrap; }
+.subtabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
+.subtabs button[aria-selected='true'], .subtabs button.active { background: var(--selected); color: var(--accent); }

@@ -76,6 +76,10 @@ export interface WriteHost {
    * When set, Write needs no first-run setup, and the folder is created if it is missing.
    */
   defaultRoot?: () => string;
+  /** When set, the host decides where projects are kept, whatever Write's own Root Folder setting says (Cadrel's Projects folder). */
+  projectsFolder?: () => string;
+  /** When set, the project templates are the host's (Cadrel's Admin page governs them); Write's own are ignored and not editable. */
+  templates?: () => ProjectTemplate[];
   /** When set, Cadrel Write's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
 }
@@ -219,16 +223,25 @@ const SYNC_TRIGGERS = new Set([
 ]);
 
 const defaultRoot = () => host?.defaultRoot?.() ?? defaultRootFolder(app.getPath('home'));
-const projectsRoot = () => settings.projects().rootFolder ?? defaultRoot();
+const projectsRoot = () => host?.projectsFolder?.() ?? settings.projects().rootFolder ?? defaultRoot();
+const templatesList = (): ProjectTemplate[] => host?.templates?.() ?? settings.projects().templates;
 const dirExists = (p: string) => fsp.stat(p).then((st) => st.isDirectory(), () => false);
 
 /** A path that is a direct child of the Root Folder (a project), or the folder currently open. */
 /** Makes a project folder from a template. The same call serves Write's own IPC and a host (Cadrel's Projects page). */
 async function createProjectFolder(name: string, templateId: string) {
-  const template = settings.projects().templates.find((t) => t.id === templateId);
+  const template = templatesList().find((t) => t.id === templateId);
   if (!template) throw new Error('That template no longer exists.');
   await fsp.mkdir(projectsRoot(), { recursive: true });
   return projects.createProject(projectsRoot(), String(name), template, { app: settings.appDefaults() });
+}
+
+/** A bundled font as a data URL for the preview line (null for a font that is not bundled). */
+async function fontPreview(family: string): Promise<string | null> {
+  const b = bundledFont(String(family));
+  if (!b) return null;
+  const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, 'Regular.ttf')).catch(() => null);
+  return data ? `data:font/ttf;base64,${data.toString('base64')}` : null;
 }
 
 async function renameProjectFolder(p: string, name: string): Promise<string> {
@@ -446,12 +459,7 @@ function registerIpc(): void {
     }
   });
   handle('fonts:installed', () => listInstalledFonts());
-  handle('fonts:preview', async (_e, family: string) => {
-    const b = bundledFont(String(family));
-    if (!b) return null;
-    const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, 'Regular.ttf')).catch(() => null);
-    return data ? `data:font/ttf;base64,${data.toString('base64')}` : null;
-  });
+  handle('fonts:preview', (_e, family: string) => fontPreview(family));
   handle('export:pickCover', async (e) => {
     const win = winOf(e);
     const opts = { properties: ['openFile' as const], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }] };
@@ -467,7 +475,7 @@ function registerIpc(): void {
   });
 
   // --- projects ---
-  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), setupDone: settings.projects().setupDone || !!host.defaultRoot, root: projectsRoot(), defaultRoot: defaultRoot(), rootExists: await dirExists(projectsRoot()) });
+  const config = async (): Promise<ProjectsConfig> => ({ ...settings.projects(), templates: templatesList(), defaultTemplateId: templatesList().some((t) => t.id === settings.projects().defaultTemplateId) ? settings.projects().defaultTemplateId : templatesList()[0]!.id, setupDone: settings.projects().setupDone || !!host.defaultRoot, root: projectsRoot(), defaultRoot: defaultRoot(), rootExists: await dirExists(projectsRoot()) });
   handle('projects:config', config);
   handle('projects:setConfig', async (_e, patch: Record<string, unknown>) => {
     const next = sanitizeProjectsSettings({ ...settings.projects(), ...(patch && typeof patch === 'object' ? patch : {}) });
@@ -489,7 +497,7 @@ function registerIpc(): void {
   handle('projects:delete', (_e, p: string) => projects.deleteProject(projectPath(p), (x) => shell.trashItem(x)));
   handle('projects:convert', (_e, p: string) => projects.convertToProject(projectPath(p)));
   handle('projects:addMissing', (_e, p: string, templateId: string) => {
-    const t = settings.projects().templates.find((x) => x.id === templateId);
+    const t = templatesList().find((x) => x.id === templateId);
     if (!t) throw new Error('That template no longer exists.');
     return projects.addMissingTemplateParts(projectPath(p), t);
   });
@@ -664,6 +672,14 @@ export interface WriteModule {
   syncService(): SyncService | null;
   /** A downloaded installer to run once the app has exited, if the user chose to update. */
   takeInstaller(): string | null;
+  /** For a host page that edits templates: the font list and a bundled font's preview. */
+  fontPreview(family: string): Promise<string | null>;
+  /** The AI connection: how an AI app launches the server, the kit saved to Downloads, and the online door for ChatGPT. For a host's AI Assistants page. */
+  ai: {
+    server(): Promise<AiServerInfo | null>;
+    saveKit(): Promise<string>;
+    remote: { status(): ReturnType<AiRemote['status']>; setEnabled(on: boolean): ReturnType<AiRemote['setEnabled']>; resetToken(): ReturnType<AiRemote['resetToken']> };
+  };
   flush(): Promise<void>;
   stop(): void;
 }
@@ -694,7 +710,7 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
   setChromeTheme(h.theme ? h.theme.get().custom : settings.get().prefs?.themeCustom);
 
   registerIpc();
-  if (host.defaultRoot && !settings.projects().rootFolder) await fsp.mkdir(projectsRoot(), { recursive: true }).catch(() => undefined);
+  if ((host.defaultRoot && !settings.projects().rootFolder) || host.projectsFolder) await fsp.mkdir(projectsRoot(), { recursive: true }).catch(() => undefined);
   void aiRemote.load(); // comes back up only if the user left it on
   registerWindowChrome(() => host.getWindow(), () => host.getContents());
   installMenu(
@@ -708,7 +724,7 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     listProjects: () => projects.listProjects(projectsRoot()),
     projectsRoot,
     ensureRoot: async () => void (await fsp.mkdir(projectsRoot(), { recursive: true })),
-    templates: () => settings.projects().templates,
+    templates: templatesList,
     createProject: createProjectFolder,
     renameProject: renameProjectFolder,
     duplicateProject: (p, name) => projects.duplicateProject(projectPath(p), String(name)),
@@ -717,11 +733,17 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     readProject: (p) => projects.readMeta(path.resolve(p)),
     convertFolder: (p) => projects.convertToProject(projectPath(p)),
     addMissingTemplateParts: (p, templateId) => {
-      const t = settings.projects().templates.find((x) => x.id === templateId);
+      const t = templatesList().find((x) => x.id === templateId);
       if (!t) throw new Error('That template no longer exists.');
       return projects.addMissingTemplateParts(projectPath(p), t);
     },
     usesDefaultRoot: () => !settings.projects().rootFolder,
+    fontPreview,
+    ai: {
+      server: aiServer,
+      saveKit: exportAiKit,
+      remote: { status: () => aiRemote.status(), setEnabled: (on) => aiRemote.setEnabled(on === true), resetToken: () => aiRemote.resetToken() }
+    },
     moveProjects: (from, to) => projects.moveProjects(path.resolve(from), path.resolve(to)),
     openProject(p) {
       pendingProject = path.resolve(p);

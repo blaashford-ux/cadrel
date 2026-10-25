@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, expectedSha256, fetchLatestRelease, isReleaseDownloadUrl, parseRelease } from './update';
+import { compareVersions, expectedSha256, fetchLatestRelease, fetchReleaseFor, isDevBuild, isReleaseDownloadUrl, parseRelease } from './update';
 
 const release = {
   tag_name: 'v0.5.0',
@@ -64,5 +64,35 @@ describe('download safety', () => {
     expect(expectedSha256(sums, 'Cadrel-Setup-0.5.0.exe')).toBe(h);
     expect(expectedSha256(sums, 'Cadrel-Write-0.5.0.apk')).toBe('b'.repeat(64));
     expect(expectedSha256(sums, 'other.exe')).toBeNull();
+  });
+});
+
+describe('development builds follow development releases', () => {
+  it('knows a dev build and orders dev numbers as numbers', () => {
+    expect(isDevBuild('0.2.0-dev.14')).toBe(true);
+    expect(isDevBuild('0.2.0')).toBe(false);
+    expect(compareVersions('0.2.0-dev.10', '0.2.0-dev.9')).toBeGreaterThan(0);
+    expect(compareVersions('0.2.0-dev.3', '0.2.0')).toBeLessThan(0);
+    expect(compareVersions('0.2.0-dev.3', '0.1.9')).toBeGreaterThan(0);
+  });
+
+  const rel = (tag: string, prerelease: boolean, draft = false) => ({ tag_name: tag, prerelease, draft, html_url: `https://x/${tag}`, assets: [{ name: `Cadrel-Setup-${tag}.exe`, browser_download_url: `https://github.com/blaashford-ux/cadrel/releases/download/${tag}/Cadrel-Setup.exe`, size: 1 }] });
+  const fetchWith = (list: unknown[]) => (async (url: string) => (String(url).includes('/releases/latest') ? { ok: true, status: 200, json: async () => rel('v0.1.0', false) } : { ok: true, status: 200, json: async () => list })) as unknown as typeof fetch;
+
+  it('a dev build is offered the newest dev release, never a stable one or a draft', async () => {
+    const f = fetchWith([rel('v0.3.0', false), rel('v0.2.0-dev.9', true), rel('v0.2.0-dev.12', true), rel('v0.2.0-dev.99', true, true)]);
+    const info = await fetchReleaseFor(f, 'windows', '0.2.0-dev.9');
+    expect(info.latest).toBe('0.2.0-dev.12');
+    expect(info.available).toBe(true);
+    expect((await fetchReleaseFor(f, 'windows', '0.2.0-dev.12')).available).toBe(false);
+  });
+
+  it('a stable build looks only at the latest stable release', async () => {
+    const info = await fetchReleaseFor(fetchWith([rel('v0.2.0-dev.12', true)]), 'windows', '0.0.9');
+    expect(info.latest).toBe('0.1.0');
+  });
+
+  it('says so when no dev release exists', async () => {
+    await expect(fetchReleaseFor(fetchWith([rel('v0.3.0', false)]), 'windows', '0.2.0-dev.1')).rejects.toThrow(/No development release/);
   });
 });

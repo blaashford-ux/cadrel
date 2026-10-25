@@ -46,11 +46,29 @@ const ASSET_PATTERN: Record<UpdatePlatform, RegExp> = {
   android: /^Cadrel-.*\.apk$/i
 };
 
-/** [major, minor, patch] plus whether it carries a pre-release suffix ("0.5.0-beta.1"). Null if it isn't a version. */
-function parseVersion(v: string): { nums: number[]; pre: boolean } | null {
-  const m = /^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(\+.*)?$/.exec(v.trim());
+/** [major, minor, patch] plus the pre-release suffix ("beta.1" in "0.5.0-beta.1"), if any. Null if it isn't a version. */
+function parseVersion(v: string): { nums: number[]; pre: string | null } | null {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(\+.*)?$/.exec(v.trim());
   if (!m) return null;
-  return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: !!m[4] };
+  return { nums: [Number(m[1]), Number(m[2]), Number(m[3])], pre: m[4] ?? null };
+}
+
+/** Pre-release parts compared the semver way: numbers as numbers ("dev.10" is after "dev.9"), words as text, a longer list after a shorter. */
+function comparePre(a: string, b: string): number {
+  const x = a.split('.');
+  const y = b.split('.');
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    if (x[i] === undefined) return -1;
+    if (y[i] === undefined) return 1;
+    const nx = /^\d+$/.test(x[i]) ? Number(x[i]) : null;
+    const ny = /^\d+$/.test(y[i]) ? Number(y[i]) : null;
+    if (nx !== null && ny !== null) {
+      if (nx !== ny) return nx - ny;
+    } else if (nx !== null) return -1;
+    else if (ny !== null) return 1;
+    else if (x[i] !== y[i]) return x[i] < y[i] ? -1 : 1;
+  }
+  return 0;
 }
 
 /** Negative if a < b, 0 if equal, positive if a > b. Unparseable versions compare as equal. */
@@ -59,8 +77,14 @@ export function compareVersions(a: string, b: string): number {
   const y = parseVersion(b);
   if (!x || !y) return 0;
   for (let i = 0; i < 3; i++) if (x.nums[i] !== y.nums[i]) return x.nums[i] - y.nums[i];
-  return x.pre === y.pre ? 0 : x.pre ? -1 : 1; // 1.0.0-beta is before 1.0.0
+  if (x.pre === y.pre) return 0;
+  if (x.pre === null) return 1; // 1.0.0-beta is before 1.0.0
+  if (y.pre === null) return -1;
+  return comparePre(x.pre, y.pre);
 }
+
+/** A development build ("0.2.0-dev.14"): it follows the development releases, not the stable ones. */
+export const isDevBuild = (version: string): boolean => /-dev(\.|$)/.test(version);
 
 /** Reads GitHub's "latest release" JSON into what the About dialog needs. Throws if it isn't a usable release. */
 export function parseRelease(json: unknown, platform: UpdatePlatform, current: string): UpdateInfo {
@@ -105,4 +129,24 @@ export function expectedSha256(sums: string, fileName: string): string | null {
     if (m && m[2] === fileName) return m[1].toLowerCase();
   }
   return null;
+}
+
+export const RELEASES_URL = `https://api.github.com/repos/${RELEASES_REPO}/releases?per_page=40`;
+
+/**
+ * The release a build should offer: a development build looks only at development releases (pre-releases tagged "-dev.N"), the newest
+ * one; a stable build looks only at the newest stable release. Neither is ever offered the other kind.
+ */
+export async function fetchReleaseFor(fetchFn: typeof fetch, platform: UpdatePlatform, current: string): Promise<UpdateInfo> {
+  if (!isDevBuild(current)) return fetchLatestRelease(fetchFn, platform, current);
+  const res = await fetchFn(RELEASES_URL, { headers: { Accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`GitHub answered ${res.status} when asking for the development releases.`);
+  const list = (await res.json()) as unknown;
+  const dev = (Array.isArray(list) ? list : []).filter((r): r is Record<string, unknown> => {
+    const o = r as { draft?: unknown; prerelease?: unknown; tag_name?: unknown };
+    return o.draft !== true && o.prerelease === true && typeof o.tag_name === 'string' && isDevBuild(o.tag_name.replace(/^v/, ''));
+  });
+  if (!dev.length) throw new Error('No development release has been published yet.');
+  const newest = dev.reduce((a, b) => (compareVersions(String(b.tag_name), String(a.tag_name)) > 0 ? b : a));
+  return parseRelease(newest, platform, current);
 }

@@ -31,7 +31,7 @@ export interface RootCandidate {
 
 /**
  * Every place the projects might be, in order of trust: `--root`, `CADREL_WRITE_ROOT`, the projects folder chosen in Cadrel Write, the
- * Write folder inside the Cadrel folder (where the person moved it, or `CADREL_FOLDER`), then `~/Cadrel/Write`. A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
+ * Write folder inside the Cadrel folder (where the person moved it, or `CADREL_FOLDER`), then `~/Cadrel/Projects`. A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
  */
 export async function rootCandidates(
   o: { flag?: string; env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; home?: string; fs: FsPort }
@@ -52,14 +52,17 @@ export async function rootCandidates(
       /* not there: try the next */
     }
   }
+  let cadrel: string | null = null;
   try {
-    const moved = (JSON.parse(await o.fs.readText(shellSettingsFile(env, o.platform ?? process.platform, home))) as { cadrelFolder?: unknown }).cadrelFolder;
-    if (typeof moved === 'string' && path.isAbsolute(moved)) out.push({ root: path.join(moved, 'Write'), source: 'the Cadrel folder you chose' });
+    const shellSettings = JSON.parse(await o.fs.readText(shellSettingsFile(env, o.platform ?? process.platform, home))) as { cadrelFolder?: unknown; projectsFolder?: unknown };
+    if (typeof shellSettings.projectsFolder === 'string' && path.isAbsolute(shellSettings.projectsFolder)) out.push({ root: shellSettings.projectsFolder, source: 'the Projects folder you chose' });
+    if (typeof shellSettings.cadrelFolder === 'string' && path.isAbsolute(shellSettings.cadrelFolder)) cadrel = shellSettings.cadrelFolder;
   } catch {
     /* the Cadrel folder is where it started */
   }
-  if (!unset(env.CADREL_FOLDER)) out.push({ root: path.join(path.resolve(env.CADREL_FOLDER!.trim()), 'Write'), source: 'CADREL_FOLDER' });
-  out.push({ root: path.join(home, 'Cadrel', 'Write'), source: 'default' });
+  if (cadrel) out.push({ root: path.join(cadrel, 'Projects'), source: 'the Cadrel folder you chose' });
+  if (!unset(env.CADREL_FOLDER)) out.push({ root: path.join(path.resolve(env.CADREL_FOLDER!.trim()), 'Projects'), source: 'CADREL_FOLDER' });
+  out.push({ root: path.join(home, 'Cadrel', 'Projects'), source: 'default' });
   return out.filter((c, i) => out.findIndex((d) => path.resolve(d.root) === path.resolve(c.root)) === i);
 }
 

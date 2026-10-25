@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Overview, Page, WindowInfo } from '../shared/api';
+import type { Overview, Page, UpdateStatus, WindowInfo } from '../shared/api';
 import { shellCss } from '../shared/theme';
+import { Admin } from './Admin';
+import { Assistants } from './Assistants';
 import { Dashboard } from './Dashboard';
 import { Home } from './Home';
 import { Notes } from './Notes';
@@ -11,9 +13,9 @@ import { Settings } from './Settings';
 import { useStudio } from './useStudio';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', assistants: 'AI Assistants', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
-const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'profile', 'settings']);
+const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'assistants', 'admin', 'profile', 'settings']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'projects', 'notes', 'dashboard']);
 
@@ -44,6 +46,13 @@ export function App() {
     }
   });
   const studio = useStudio(NEEDS_STUDIO.has(page));
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [update, setUpdate] = useState<UpdateStatus | null>(null);
+  useEffect(() => {
+    void api.admin.get().then((v) => setIsAdmin(v.isAdmin), () => undefined);
+    void api.update.last().then(setUpdate, () => undefined);
+    return api.update.onAvailable(setUpdate);
+  }, []);
 
   useEffect(() => {
     void api.current().then(setPage);
@@ -84,7 +93,7 @@ export function App() {
 
   return (
     <div className="shell">
-      <Rail page={page} onGo={go} />
+      <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} />
       <main className={`content${own ? '' : ' hidden'}`} aria-label={TITLES[page]}>
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
         <header className={`strip${win?.overlay ? ' overlay' : ''}`}>
@@ -97,6 +106,8 @@ export function App() {
           )}
           {page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
           {page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {page === 'assistants' && <Assistants />}
+          {page === 'admin' && <Admin />}
           {page === 'profile' && <Profile />}
           {page === 'settings' && <Settings />}
         </div>

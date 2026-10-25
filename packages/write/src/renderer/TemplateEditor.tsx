@@ -23,6 +23,8 @@ interface Props {
   app: AppDefaults;
   /** Projects currently in the Root Folder (for the "move them" choice). */
   projectCount: number;
+  /** The Root Folder section (the phone has it; inside Cadrel, Settings and the Projects page own folders). */
+  showRoot?: boolean;
 }
 
 const newId = (name: string, taken: string[]) => {
@@ -33,7 +35,7 @@ const newId = (name: string, taken: string[]) => {
 };
 
 /** Settings → Projects: the Root Folder and the project templates. */
-export function TemplateEditor({ config, draft, setDraft, app, projectCount }: Props) {
+export function TemplateEditor({ config, draft, setDraft, app, projectCount, showRoot = false }: Props) {
   const [selected, setSelected] = useState(draft.defaultTemplateId);
   const t = draft.templates.find((x) => x.id === selected) ?? draft.templates[0];
   const root = draft.rootFolder ?? config.defaultRoot;
@@ -50,7 +52,7 @@ export function TemplateEditor({ config, draft, setDraft, app, projectCount }: P
 
   return (
     <div className="projects-settings">
-      {window.cadrelWrite.capabilities.folderPicker && window.cadrelWrite.capabilities.manageProjects && (
+      {showRoot && (
         <section>
           <h4>Root Folder</h4>
           <p className="muted small">Your projects live here, one folder each. Anything you can do in File Explorer still works.</p>

@@ -57,8 +57,36 @@ const api: CadrelApi = {
   },
   prefs: {
     folders: () => ipcRenderer.invoke('shell:prefs:folders'),
-    chooseCadrelFolder: () => studioCall('shell:prefs:chooseCadrelFolder'),
-    resetCadrelFolder: () => studioCall('shell:prefs:resetCadrelFolder')
+    choose: (which) => studioCall('shell:prefs:choose', which),
+    reset: (which) => studioCall('shell:prefs:reset', which)
+  },
+  admin: {
+    get: () => studioCall('shell:admin:get'),
+    save: (change) => studioCall('shell:admin:save', change),
+    fonts: () => studioCall('shell:admin:fonts'),
+    fontPreview: (family) => studioCall('shell:admin:fontPreview', family)
+  },
+  assistants: {
+    get: () => studioCall('shell:assistants:get'),
+    saveKit: () => studioCall('shell:assistants:saveKit'),
+    saveExtension: () => studioCall('shell:assistants:saveExtension'),
+    setRemote: (on) => studioCall('shell:assistants:setRemote', on),
+    resetRemoteToken: () => studioCall('shell:assistants:resetRemoteToken')
+  },
+  update: {
+    check: () => studioCall('shell:update:check'),
+    install: () => studioCall('shell:update:install'),
+    last: () => studioCall('shell:update:last'),
+    onProgress: (cb) => {
+      const h = (_e: unknown, p: { received: number; total: number }) => cb(p);
+      ipcRenderer.on('shell:update:progress', h);
+      return () => ipcRenderer.removeListener('shell:update:progress', h);
+    },
+    onAvailable: (cb) => {
+      const h = (_e: unknown, s: Parameters<typeof cb>[0]) => cb(s);
+      ipcRenderer.on('shell:update:available', h);
+      return () => ipcRenderer.removeListener('shell:update:available', h);
+    }
   },
   studio: {
     state: () => studioCall('studio:state'),

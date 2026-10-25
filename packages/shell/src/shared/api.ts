@@ -1,12 +1,14 @@
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
+import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
+import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
 import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -178,13 +180,81 @@ export interface AppFolders {
   cadrelFolder: string;
   /** False when the person has put it somewhere of their own. */
   cadrelFolderIsDefault: boolean;
-  writeRoot: string | null;
-  /** True when Write's projects folder is a choice of its own, not <Cadrel folder>/Write. */
+  /** Where project folders are made and kept. */
+  projectsFolder: string;
+  /** True when it is a choice of its own, not <Cadrel folder>/Projects. */
+  projectsIsCustom: boolean;
+  /** Write's own folder. */
+  writeFolder: string;
   writeIsCustom: boolean;
   marketLibrary: string | null;
   marketIsCustom: boolean;
   studioFile: string;
   settingsFolder: string;
+}
+
+export type FolderKey = 'cadrel' | 'projects' | 'write' | 'market';
+
+/** What administrators govern for the whole studio. Anyone can read it (creating a project needs the templates); only an administrator can change it. */
+export interface AdminView {
+  isAdmin: boolean;
+  role: 'owner' | 'admin' | 'member';
+  templates: ProjectTemplate[];
+  defaultTemplateId: string;
+}
+
+export interface AdminApi {
+  get(): Promise<AdminView>;
+  save(change: { templates: ProjectTemplate[]; defaultTemplateId: string }): Promise<AdminView>;
+  /** For the font pickers in the template editor. */
+  fonts(): Promise<string[]>;
+  fontPreview(family: string): Promise<string | null>;
+}
+
+/** How an AI app connects to Cadrel: one server for Write and Market. */
+export interface AssistantsView {
+  /** False when this build has no AI server. */
+  available: boolean;
+  /** The folder the assistant reads manuscripts from. */
+  projectsFolder: string;
+  claudeDesktop: string;
+  claudeCode: string;
+  codex: string;
+  remote: AiRemoteStatus | null;
+}
+
+export interface AssistantsApi {
+  get(): Promise<AssistantsView>;
+  /** Saves the AI Kit (the Claude extension, the editing skills, the server, the steps) into Downloads and shows it; resolves to the folder. */
+  saveKit(): Promise<string>;
+  /** Saves just the Claude Desktop extension (Cadrel.mcpb) into Downloads and shows it; resolves to the file. */
+  saveExtension(): Promise<string>;
+  setRemote(on: boolean): Promise<AiRemoteStatus>;
+  resetRemoteToken(): Promise<AiRemoteStatus>;
+}
+
+export interface UpdateStatus {
+  current: string;
+  /** 'dev' builds follow development releases only; 'stable' follows stable ones. */
+  channel: 'dev' | 'stable';
+  latest: string | null;
+  available: boolean;
+  notes: string;
+  pageUrl: string;
+  /** Windows installers only; elsewhere the update is a download link. */
+  canInstall: boolean;
+  /** Why it could not check (offline, no release yet), in a sentence. */
+  error: string | null;
+}
+
+export interface UpdateApi {
+  check(): Promise<UpdateStatus>;
+  /** Downloads, verifies and runs the installer; the app closes to let it. */
+  install(): Promise<void>;
+  onProgress(cb: (p: { received: number; total: number }) => void): () => void;
+  /** The last check's answer without asking again (null before the first). */
+  last(): Promise<UpdateStatus | null>;
+  onAvailable(cb: (s: UpdateStatus) => void): () => void;
 }
 
 export interface CadrelApi {
@@ -199,10 +269,13 @@ export interface CadrelApi {
   prefs: {
     folders(): Promise<AppFolders>;
     /** Opens a folder picker and moves the Cadrel folder there; null if cancelled. Write and Market follow it unless they were given folders of their own. */
-    chooseCadrelFolder(): Promise<AppFolders | null>;
-    /** Back to the default (a Cadrel folder in the home folder). */
-    resetCadrelFolder(): Promise<AppFolders>;
+    choose(which: FolderKey): Promise<AppFolders | null>;
+    /** Back to the default place inside the Cadrel folder. */
+    reset(which: FolderKey): Promise<AppFolders>;
   };
+  admin: AdminApi;
+  assistants: AssistantsApi;
+  update: UpdateApi;
   navigate(page: Page): Promise<void>;
   current(): Promise<Page>;
   onPage(cb: (page: Page) => void): () => void;

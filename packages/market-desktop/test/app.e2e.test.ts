@@ -130,13 +130,12 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     expect(m[1]).toBe(m[2]);
     expect(Number(m[1]!.replace(/,/g, ''))).toBeGreaterThan(0);
 
-    const connect = page.getByLabel('Connect an AI');
-    await connect.getByRole('button', { name: 'Claude Code' }).click();
-    expect(await connect.locator('code').first().textContent()).toMatch(/^claude mcp add cadrel-market /);
-    // one click writes Cadrel Market.mcpb and shows it in its folder, with the steps (recorded, not shown, under test)
-    await connect.getByRole('button', { name: 'Install in Claude Desktop' }).click();
-    await connect.getByRole('status').filter({ hasText: /Created Cadrel Market\.mcpb/ }).waitFor();
-    await connect.getByLabel('How to install the extension').getByText(/Settings → Extensions/).waitFor();
+    // The connection itself is offered on Cadrel's AI Assistants page; Market still builds the same file and settings for it.
+    expect(await page.getByLabel('Connect an AI').count()).toBe(0);
+    const cfg = await page.evaluate(() => (window as any).cadrelMarket.mcpConfig());
+    expect(cfg.claudeCode).toMatch(/^claude mcp add cadrel-market /);
+    // writes Cadrel Market.mcpb (recorded, not shown, under test)
+    await page.evaluate(() => (window as any).cadrelMarket.installClaudeExtension());
     expect(((await page.evaluate(() => (window as any).cadrelMarket.__opened())) as string[]).some((f) => f.endsWith('Cadrel Market.mcpb'))).toBe(true);
     // run the launcher inside that file the way Claude Desktop does (plain Node, the client talking first): the handshake is answered at once
     // and the real server then answers the tool list from this library
@@ -166,12 +165,11 @@ describe.skipIf(!have)('desktop app in Electron', () => {
       expect(replies[1]!.m.id).toBe(1);
       expect(replies[1]!.m.result.tools.map((t: any) => t.name)).toContain('library_status');
     }
-    await connect.getByRole('button', { name: 'Claude Desktop', exact: true }).click();
-    const cfg = JSON.parse((await connect.locator('pre code').textContent())!).mcpServers['cadrel-market'] as { command: string; args: string[]; env?: Record<string, string> };
-    expect(cfg.args).toContain(path.join(tmp, 'lib'));
+    const server = JSON.parse(cfg.claudeDesktop).mcpServers['cadrel-market'] as { command: string; args: string[]; env?: Record<string, string> };
+    expect(server.args).toContain(path.join(tmp, 'lib'));
 
     const client = new Client({ name: 'e2e', version: '0' });
-    await client.connect(new StdioClientTransport({ command: cfg.command, args: cfg.args, env: { ...(process.env as Record<string, string>), ...(cfg.env ?? {}) }, stderr: 'ignore' }));
+    await client.connect(new StdioClientTransport({ command: server.command, args: server.args, env: { ...(process.env as Record<string, string>), ...(server.env ?? {}) }, stderr: 'ignore' }));
     const status = JSON.parse(((await client.callTool({ name: 'library_status', arguments: {} })) as any).content[0].text);
     expect(status).toMatchObject({ books_captured: 1, categories: 1 });
     const found = JSON.parse(((await client.callTool({ name: 'search_book_text', arguments: { query: 'forgotten gods' } })) as any).content[0].text);

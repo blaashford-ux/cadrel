@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SalesCalibration } from './SalesCalibration.js';
-import type { AppSettings, CategorySummary, IndexStatus, MaintenanceStatus, McpSnippets, Status, VerifyReport } from '../../shared/api.js';
+import type { AppSettings, CategorySummary, IndexStatus, MaintenanceStatus, Status, VerifyReport } from '../../shared/api.js';
 
 const api = window.cadrelMarket;
 
@@ -177,51 +177,10 @@ function SearchIndexCard() {
 }
 
 function ConnectCard() {
-  const [m, setM] = useState<McpSnippets | null>(null);
-  const [which, setWhich] = useState<'claudeDesktop' | 'claudeCode' | 'codex'>('claudeDesktop');
-  const [copied, setCopied] = useState('');
-  const [ext, setExt] = useState('');
-  const [extFile, setExtFile] = useState('');
-  useEffect(() => { void api.mcpConfig().then(setM); }, []);
-  if (!m) return null;
-  const labels = { claudeDesktop: 'Claude Desktop', claudeCode: 'Claude Code', codex: 'Codex' } as const;
-  const where = {
-    claudeDesktop: 'Add this to claude_desktop_config.json (Settings → Developer → Edit Config), then restart Claude Desktop.',
-    claudeCode: 'Run this in a terminal.',
-    codex: 'Add this to ~/.codex/config.toml.',
-  } as const;
   return (
-    <div className="card" aria-label="Connect an AI">
-      <h2>Connect Claude or GPT</h2>
-      <p className="muted">Cadrel Market offers your library to AI apps on this computer through MCP.</p>
-      <div className="row">
-        <button className="primary" onClick={async () => {
-          try {
-            const r = await api.installClaudeExtension();
-            setExtFile(r.file);
-            setExt(`Created Cadrel Market.mcpb and showed it in its folder (${r.file}).`);
-          } catch (e) { setExt((e as Error).message); setExtFile(''); }
-        }}>Install in Claude Desktop</button>
-        <span role="status" className="muted">{ext}</span>
-      </div>
-      {extFile && (
-        <ol className="muted" aria-label="How to install the extension">
-          <li>In Claude Desktop open <b>Settings → Extensions</b> and drag <b>Cadrel Market.mcpb</b> into the window (or use <b>Advanced settings → Install Extension…</b> and choose it; menu names vary between versions).</li>
-          <li>Click <b>Install</b> in the dialog it shows, then restart Claude Desktop.</li>
-          <li>Do not open the file with “Claude” from a list of programs: that attaches it to a chat instead of installing it.</li>
-          <li>If it will not start, the extension writes what happened to <code>logs\mcp-launcher.log</code> in Cadrel Market's settings folder (<button className="link" onClick={() => void api.openLogs()}>open the logs folder</button>).</li>
-        </ol>
-      )}
-      <p className="muted">Or set it up by hand: pick your app and copy the setting.</p>
-      <div className="row">
-        {(Object.keys(labels) as (keyof typeof labels)[]).map((k) => (
-          <button key={k} className="tab" aria-selected={which === k} onClick={() => setWhich(k)}>{labels[k]}</button>
-        ))}
-      </div>
-      <div className="muted">{where[which]}</div>
-      <pre style={{ overflow: 'auto', background: 'var(--bg)', border: '1px solid var(--line)', borderRadius: 6, padding: 8 }}><code>{m[which]}</code></pre>
-      <button onClick={() => navigator.clipboard.writeText(m[which]).then(() => setCopied(labels[which]))}>Copy</button>
-      <span role="status" className="muted"> {copied && `Copied ${copied} setting`}</span>
+    <div className="card" aria-label="AI assistants">
+      <h2>AI assistants</h2>
+      <p className="muted">Connecting Claude or GPT to your library, and everything to download for it, is on the <b>AI Assistants</b> page in Cadrel’s left bar.</p>
     </div>
   );
 }

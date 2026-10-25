@@ -1,6 +1,6 @@
 /**
  * Creating and managing projects: the part of the old Write that is now Cadrel's Projects page. A project in Cadrel's tree may have a
- * manuscript folder, a project folder inside Write's projects folder (<Cadrel>/Write/<name>). This joins the two: it keeps the
+ * manuscript folder, a project folder inside the Projects folder (<Cadrel>/Projects/<name>). This joins the two: it keeps the
  * tree (@cadrel/studio) and the folders (Write) in step, so creating, renaming, archiving or deleting a project does the same to its
  * folder, and Write only has to open the folder and let the person write in it.
  *
@@ -43,7 +43,7 @@ export class ProjectManager {
     return l ? { ref: l.ref, dir: path.join(this.write.projectsRoot(), l.ref) } : null;
   }
 
-  /** A folder name free in Write's projects folder (the project's own name when it can be). */
+  /** A folder name free in the Projects folder (the project's own name when it can be). */
   private async freeFolderName(name: string): Promise<string> {
     const { projects, others } = await this.write.listFolders();
     const taken = [...projects, ...others].map((f) => f.name);
@@ -160,7 +160,7 @@ export class ProjectManager {
   }
 
   /**
-   * Folders in Write's projects folder that no project in the tree owns yet: Write projects made outside Cadrel (or by an older
+   * Folders in the Projects folder that no project in the tree owns yet: Write projects made outside Cadrel (or by an older
    * version), and plain folders. Each can be brought in as a project of its own.
    */
   async unfiled(): Promise<{ projects: { name: string }[]; folders: { name: string }[] }> {

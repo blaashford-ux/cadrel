@@ -61,7 +61,7 @@ function NameDialog({ title, initialName, initialKind, askKind, templates, defau
               <option value="">None yet (just the project)</option>
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}: {t.description}</option>)}
             </select>
-            <span className="field-hint">A folder in your Write folder, set up from this template, for the writing. Write opens it from here.</span>
+            <span className="field-hint">A folder in your Projects folder, set up from this template (the templates are set by your studio’s administrators). Write opens it from here.</span>
           </label>
         )}
         <div className="modal-actions">
@@ -278,7 +278,7 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
   useEffect(() => {
     void manage.templates().then(setTemplates, () => undefined);
   }, []);
-  // Folders in the Write folder that the tree does not know yet (made outside Cadrel, or by an older version).
+  // Folders in the Projects folder that the tree does not know yet (made outside Cadrel, or by an older version).
   useEffect(() => {
     void manage.unfiled().then(setUnfiled, () => undefined);
   }, [studio]);
@@ -336,8 +336,8 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
           </ul>
         )}
         {(unfiled.projects.length > 0 || unfiled.folders.length > 0) && (
-          <div className="unfiled" aria-label="Folders in your Write folder that are not projects yet">
-            <h4>In your Write folder</h4>
+          <div className="unfiled" aria-label="Folders in your Projects folder that are not projects yet">
+            <h4>In your Projects folder</h4>
             <p className="muted small">Not part of a project yet.</p>
             <ul>
               {[...unfiled.projects, ...unfiled.folders].map((f) => (
