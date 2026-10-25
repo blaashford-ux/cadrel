@@ -57,6 +57,50 @@ export interface Overview {
   };
 }
 
+/** The statuses a manuscript project can be in (Write's own list). */
+export const MANUSCRIPT_STATUSES = ['planning', 'drafting', 'revising', 'editing', 'published', 'paused'] as const;
+
+/** What a project's manuscript folder says about itself. */
+export interface ManuscriptMeta {
+  status: string;
+  notes: string;
+  archived: boolean;
+  templateName: string;
+  createdAt: string;
+}
+
+/** A way to start a manuscript folder: Novel, Series, Short Story, Blank, or one of the person's own. */
+export interface ManuscriptTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Creating and managing projects. This is the one place projects are made and looked after (not in Write): a project may have a
+ * manuscript folder, and these keep the project and its folder in step.
+ */
+export interface ManageApi {
+  templates(): Promise<ManuscriptTemplate[]>;
+  /** A project, and with `template` its manuscript folder too. */
+  create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null }): Promise<{ id: string; folder: string | null }>;
+  addManuscript(projectId: string, template: string): Promise<string>;
+  rename(projectId: string, name: string): Promise<void>;
+  archive(projectId: string, archived: boolean): Promise<void>;
+  /** Deletes the project, its subprojects and notes, and moves their manuscript folders to the recycle bin. */
+  remove(projectId: string): Promise<string[]>;
+  duplicate(projectId: string): Promise<string>;
+  manuscript(projectId: string): Promise<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null>;
+  setManuscript(projectId: string, patch: { status?: string; notes?: string }): Promise<void>;
+  addMissingParts(projectId: string): Promise<string[]>;
+  /** Opens the project's manuscript folder in Write. */
+  open(projectId: string): Promise<void>;
+  /** Show the folder in the file manager. */
+  reveal(projectId: string): Promise<void>;
+  unfiled(): Promise<{ projects: { name: string }[]; folders: { name: string }[] }>;
+  adopt(folderName: string, parentId?: string | null): Promise<string>;
+}
+
 /** Everything the Projects and Notes pages need, in one read. */
 export interface StudioState {
   tree: ProjectTree;
@@ -145,6 +189,7 @@ export interface AppFolders {
 
 export interface CadrelApi {
   studio: StudioApi;
+  manage: ManageApi;
   theme: {
     get(): Promise<ThemeState>;
     set(change: { source?: ThemeSource; custom?: ThemeCustom | null }): Promise<ThemeState>;

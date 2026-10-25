@@ -23,6 +23,7 @@ import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } 
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
 import { StudioService } from './studio';
+import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
@@ -48,6 +49,7 @@ let win: BrowserWindow | null = null;
 let settings: SettingsStore;
 let studio: StudioService;
 let users: UserStore;
+let manager: ProjectManager;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -141,6 +143,30 @@ async function kitLauncher(): Promise<Uint8Array> {
 
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
 const authorName = () => userCache?.displayName || os.userInfo().username || 'Me';
+
+/** Write, as the project manager needs it. */
+function writeFolders(): WriteFolders {
+  return {
+    projectsRoot: () => write.projectsRoot(),
+    templates: () => write.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })),
+    listFolders: async () => {
+      const l = await write.listProjects();
+      return { projects: l.projects.map((p) => ({ name: p.name, path: p.path })), others: l.folders };
+    },
+    createProject: (name, template) => write.createProject(name, template),
+    renameProject: (p, name) => write.renameProject(p, name),
+    duplicateProject: (p, name) => write.duplicateProject(p, name),
+    deleteProject: (p) => write.deleteProject(p),
+    readProject: async (p) => {
+      const m = await write.readProject(p);
+      return m ? { status: m.status, notes: m.notes, archived: m.archived, templateName: m.templateName, createdAt: m.createdAt, templateId: m.templateId } : null;
+    },
+    updateProject: (p, patch) => write.updateProject(p, patch),
+    convertFolder: (p) => write.convertFolder(p),
+    addMissingTemplateParts: (p, id) => write.addMissingTemplateParts(p, id),
+    openProject: (p) => write.openProject(p)
+  };
+}
 
 // ---- the Cadrel folder ----------------------------------------------------------------------------
 // Everything a person works with lives in one folder, <home>\Cadrel by default (wherever their home folder is, so a profile kept on
@@ -381,6 +407,37 @@ function registerShellIpc(): void {
         throw err;
       }
     });
+  // Creating and managing projects. Write's own messages (a name Windows will not allow) are meant to be read, so any refusal reaches the page as text.
+  const manageOp = <A extends unknown[], R>(name: string, fn: (...a: A) => Promise<R>) =>
+    ipcMain.handle(`shell:manage:${name}`, async (e, ...a: unknown[]) => {
+      if (!fromShell(e)) throw new Error('not allowed');
+      try {
+        return await fn(...(a as A));
+      } catch (err) {
+        return { __error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+  manageOp('templates', async () => write.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
+  manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
+  manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
+  manageOp('rename', (id: string, name: string) => manager.rename(id, name));
+  manageOp('archive', (id: string, archived: boolean) => manager.archive(id, archived === true));
+  manageOp('remove', (id: string) => manager.remove(id));
+  manageOp('duplicate', (id: string) => manager.duplicate(id));
+  manageOp('manuscript', (id: string) => manager.manuscript(id));
+  manageOp('setManuscript', (id: string, patch: { status?: string; notes?: string }) => manager.setManuscript(id, patch ?? {}));
+  manageOp('addMissingParts', (id: string) => manager.addMissingParts(id));
+  manageOp('open', async (id: string) => {
+    await manager.open(id);
+    showPage('write');
+  });
+  manageOp('reveal', async (id: string) => {
+    const m = await manager.manuscript(id);
+    if (!m) throw new Error('That project has no manuscript folder.');
+    if (!TEST) shell.showItemInFolder(m.folder);
+  });
+  manageOp('unfiled', () => manager.unfiled());
+  manageOp('adopt', (name: string, parentId?: string | null) => manager.adopt(name, parentId));
   studioOp('studio:state', () => studio.state());
   studioOp('studio:createProject', async (o: Parameters<StudioService['createProject']>[0]) => ({ id: (await studio.createProject(o)).id }));
   studioOp('studio:updateProject', (id: string, c: { name?: string; kind?: string }) => studio.updateProject(id, c));
@@ -542,6 +599,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       fs: nodeFs
     });
+    manager = new ProjectManager(studio, writeFolders());
 
     write = await createWriteModule({
       getWindow: () => win,
