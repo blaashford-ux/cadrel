@@ -40,6 +40,14 @@ import { createReviewHost } from '../src/shared/review/host';
 import type { ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
+/**
+ * Shows a file in the system's file manager. Not done under test: on a machine with no file manager (a CI runner) the request can wait
+ * for an answer that never comes, which hung the AI Kit test for its whole timeout there.
+ */
+const revealInFolder = (p: string): void => {
+  if (process.env.CADREL_TEST !== '1') shell.showItemInFolder(p);
+};
+
 export interface WriteHost {
   /** The window that owns Write's view (the shell window, or Write's own window when standalone). */
   getWindow(): BrowserWindow | null;
@@ -172,7 +180,7 @@ async function exportAiKit(): Promise<string> {
     await fsp.mkdir(path.dirname(target), { recursive: true });
     await fsp.writeFile(target, f.data);
   }
-  shell.showItemInFolder(path.join(dest, 'README.txt'));
+  revealInFolder(path.join(dest, 'README.txt'));
   return dest;
 }
 
@@ -381,7 +389,7 @@ function registerIpc(): void {
   });
   ipcMain.on('export:cancel', () => exportAbort?.abort());
   ipcMain.on('export:reveal', (_e, p: string) => {
-    if (exportedFiles.has(path.resolve(p))) shell.showItemInFolder(path.resolve(p));
+    if (exportedFiles.has(path.resolve(p))) revealInFolder(path.resolve(p));
   });
   handle('export:open', (_e, p: string) => (exportedFiles.has(path.resolve(p)) ? shell.openPath(path.resolve(p)) : Promise.resolve('Not an exported file')));
   handle('report:save', async (e, kind: string, suggested: string, html: string) => {
@@ -428,7 +436,7 @@ function registerIpc(): void {
   });
   ipcMain.on('shell:reveal', (_e, p: string) => {
     try {
-      shell.showItemInFolder(inRoot(p, { allowRoot: true }));
+      revealInFolder(inRoot(p, { allowRoot: true }));
     } catch {
       // ignore bad paths
     }
