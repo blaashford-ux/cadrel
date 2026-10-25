@@ -4,9 +4,7 @@ name: release
 #   push to main -> release  vX.Y.Z           (X.Y.Z from the VERSION file)
 #   push to dev  -> pre-release vX.Y.Z-dev.N  (N = this workflow's run number)
 # The installer is also on the run page as the "Cadrel-windows-installer" artifact.
-# The studio server (Cloudflare Worker) is deployed in the same run: dev -> cadrel-api-dev, main -> cadrel-api, after
-# applying D1 migrations. It needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; without them
-# the deploy is skipped with a warning and the release still publishes.
+# Studios are not deployed here: the app builds each one in its owner's own Cloudflare account (docs/STUDIOS.md).
 on:
   push:
     branches: [main, dev]
