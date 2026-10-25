@@ -1,2 +1,8 @@
 dist/
 node_modules/
+.wrangler/
+.dev.vars
+dist-electron/
+release/
+**/assets/vendor/
+*.log

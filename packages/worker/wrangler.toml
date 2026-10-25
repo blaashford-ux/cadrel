@@ -1,0 +1,36 @@
+# The Cadrel studio server. Production is deployed from main, "dev" from dev, by .github/workflows/release.yml.
+# Resources are Cadrel's own (cadrel-*); nothing here touches the account's other projects.
+name = "cadrel-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+ENVIRONMENT = "production"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "cadrel-db"
+database_id = "55424eb6-fb9d-48c1-a479-04a76e6a8bf2"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "cadrel-files"
+
+[env.dev]
+name = "cadrel-api-dev"
+workers_dev = true
+
+[env.dev.vars]
+ENVIRONMENT = "dev"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "cadrel-dev-db"
+database_id = "6f4c6635-e089-4857-b6a4-6cc710e67c8d"
+migrations_dir = "migrations"
+
+[[env.dev.r2_buckets]]
+binding = "FILES"
+bucket_name = "cadrel-dev-files"

@@ -1,0 +1,5 @@
+{
+  "a":       { "client_id": "...apps.googleusercontent.com", "client_secret": "..." },
+  "b":       { "client_id": "...apps.googleusercontent.com", "client_secret": "..." },
+  "control": { "client_id": "...apps.googleusercontent.com", "client_secret": "..." }
+}

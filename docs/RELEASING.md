@@ -33,3 +33,9 @@ Builds are always downloadable without a release: open the run in the **Actions*
 - Default branch: `main`.
 - Settings → Branches: protect `main` and `dev`; require a pull request and the **build / build** status check before merging.
 - Settings → Actions → General → Workflow permissions: allow workflows to create releases (the `release` workflow requests `contents: write` itself, which works unless the org restricts the token to read-only).
+
+## Web pages (GitHub Pages)
+
+`.github/workflows/pages.yml` publishes `packages/write/site/` (today the beta-reader invitation page) when it changes on `main` or `dev`. A repository has one Pages site, so every run assembles it from both branches: `main` at `https://blaashford-ux.github.io/cadrel/` (the app links to `/join/`) and `dev` under `/dev/`.
+
+One-time repository settings: **Settings → Pages → Source: GitHub Actions**; **Settings → Environments → github-pages → Deployment branches**: allow `main` and `dev`; **Settings → Actions → General → Workflow permissions**: read and write. The workflow only starts once it exists on `main` or `dev`, so the first publish happens when this work is merged. Until a branch has `packages/write/site`, it contributes nothing, and a run where neither does fails with a clear message.

@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.market.json",
+  "include": ["src", "test"]
+}

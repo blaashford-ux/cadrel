@@ -2,6 +2,24 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased
+
+- **M0: one app.** MDEdit 0.8.5 and BookScout 0.6.3 are imported (`@cadrel/write`, `@cadrel/market-*`) and run together in a new shell (`@cadrel/shell`): left rail, Home, Dashboard, Write and Market in their own views. Electron 44 and a single pdf.js across the workspace. Windows installer, packaged-app smoke test and CI to build and publish them.
+
+- **Names, from the start:** the apps are Cadrel Write and Cadrel Market everywhere, including on disk (`%APPDATA%\Cadrel\write` and `\market`, `.cadrel` project folders, `window.cadrelWrite` / `window.cadrelMarket`, `CADREL_*` variables, `cadrel-*` skills). No migration from the old names is built. The default projects folder is `<home>\Cadrel`.
+- **The assistant can read the user's attached files** (`studio_user_file`), with an opt-out for all files, a switch per file, and a log of what it opened.
+- **The user** (`window.cadrel.user`): a profile (name, email, pen names, about me, photo) and files attached to it, at the shell level, with a Profile page and the photo in the rail. The name replaces the old "name on notes" setting. The assistant can read name, pen names and about-me, never email or files.
+- **Export acts on one chosen file only**: from the open file or by right-click on any file. No marking step, no automatic pick, no file picker in the dialog.
+- **File kinds** (`@cadrel/kernel`): the built-in kind registry, including `image`, with suggestions from folder and extension. Design in `docs/FILES.md`; not yet wired into the catalog.
+- **Projects with subprojects** are the structure everything hangs from (`@cadrel/kernel`, `@cadrel/studio`, the Projects page): a Series is a project and each Book a subproject by convention, not by rule. Manuscripts and market categories are linked to a project; words, goals and open notes roll up from its subtree; permission scopes follow the tree. The AI server gains `studio_*` tools (it can organise projects but not delete them).
+- **Notes across modules**: MDEdit's Notes generalised to any record in any module, one shared panel, one studio-wide Notes page that also lists the review notes inside manuscripts.
+- **The shell as global controller**: one appearance setting (light/dark and colours) for Home, Write and Market, the name on notes, folders overview; Write's own Appearance settings point to Cadrel's.
+- **Cadrel look**: the supplied emblem as the app, installer and rail icon; slate-and-stone palette on MDEdit's design language.
+- **One assistant connection.** A single MCP server (`@cadrel/mcp`, name `cadrel`) carries all of Write's tools, resources and editing prompts plus Market's tools. Write's AI Kit and Market's Claude connection both produce the same one `cadrel` Claude Desktop extension. `search_book_text` is Market's former `search_text` (Write keeps `search_text`). The HTTP door serves Write only unless started with `--with-market`.
+- Kernel (`@cadrel/kernel`): capability catalogue, the twelve default roles (tested cell for cell against `docs/PERMISSIONS.md`), the permission engine (`can` / `explain`, scopes, teams, expiry, confidential projects, workflow-state denial), role guardrails, and the vault check-out / check-in / undo / force-release logic.
+- Studio server (`@cadrel/worker`) skeleton on Cloudflare with D1 and R2 (`cadrel-dev-*` for dev, `cadrel-*` for production), vault migration, and a health endpoint; deployed from the release workflow.
+- Plan: PDM-style vault, Cloudflare, shared captures, Windows only, roles and permissions design.
+
 ## 0.1.0
 
 - Repository set up: `main` and `dev` branches, build on every pull request, release from `main`, pre-release from `dev`, versioning document.
