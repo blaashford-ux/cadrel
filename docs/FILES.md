@@ -92,7 +92,8 @@ Built-in kinds (a starting set; extendable):
 | `style` | style sheet, voice notes | yes | no | no | no | canon |
 | `brief` | cover, blurb, campaign briefs | yes | no | no | no | assets / launch |
 | `copy` | blurbs, descriptions, ad text | yes | no | no | no | launch |
-| `asset` | art, covers, images, fonts, PSD | no | no | no | no | assets |
+| `image` | a picture: cover art, a map, character art, a reference or inspiration image, a photo (PNG, JPG, GIF, WebP, SVG, TIFF) | no | no | no | no | assets |
+| `asset` | a production file that is not a plain picture: layered art (PSD), fonts, design files | no | no | no | no | assets |
 | `export` | generated EPUB, PDF, DOCX | no | no | no | no | manuscripts |
 | `reference` | an imported file kept as is (a Word draft, a PDF) | no | no | no | no | canon |
 | `other` | not classified yet | no | no | no | no | none until sorted |
@@ -116,6 +117,14 @@ A file's front matter, if it has one (`kind: character`, or Obsidian-style tags)
 
 What it does **not** mean: it is not the file that exports, not the one Preflight checks, and not what the assistant reads by default. Those use **explicit choices** (the file you picked) or, when a book has several manuscripts, the file whose **workflow state** says it is current (*Approved* or *Current draft*), and fall back to the only manuscript when there is one. To the assistant, the active manuscript is just a field on `list_files` (`active: true` for the person it is acting for).
 
+### Export works on one chosen file
+
+Export is never an automated pick. It exports **the file you ask for**:
+- **from the open file**: Export… in the toolbar, File → Export, or Ctrl+E, all acting on the file you are in; or
+- **from the tree**: right-click any file (it does not have to be open or focused) and choose Export…
+
+If nothing is open, Ctrl+E says so instead of choosing a manuscript. The dialog states which file it is exporting and does not offer to switch. There is no "mark for export" step: a file's export settings (book details, outputs) are created the first time it is exported or its Book Details are opened. This is independent of the *active manuscript*, which has no effect on export. Today it applies to Markdown files in Write; once kinds exist, Export is offered on kinds that are `exportable` (manuscript, matter).
+
 ## 5. Shared state and personal state
 
 | Shared (vault records, synced, permissioned) | Personal (local database, never synced) |
@@ -127,8 +136,19 @@ What it does **not** mean: it is not the file that exports, not the one Prefligh
 | Notes and replies | sidebar width, panel layout, filters |
 | project data: status, template, book details, overrides | appearance (until a studio default exists) |
 | references and where-used | which files I keep downloaded |
+| | my **profile** and the files attached to it, until I join a studio (§5a) |
 
 MDEdit keeps every item above in one synced `project.json`, which is why the active manuscript there collides between people.
+
+### 5a. The user (profile and attached files)
+
+The **user** is one object at the shell level: the person using this copy of Cadrel. Every module can ask it who is acting; none of them owns it.
+
+- **Profile:** display name (the name on notes, comments and approvals), email (for sign-in and invitations; never shown on notes), pen names, a short "about me", and a photo.
+- **Attached files:** any file can be attached to the user (a photo, an author bio, a signed contract, a tax form). They are **copied** into Cadrel's own folder under their own ids (the original is untouched), carry a note saying what they are for, are checked against their hash so a missing or changed copy is reported, and can be opened, shown in the folder or removed. A picture can be chosen as the photo.
+- **Today (local):** `user.json` and `attachments/` beside the app's settings. The shell exposes it as `window.cadrel.user`; the rail shows the photo; the **Profile** page edits it. The name replaces the old "name on notes" setting.
+- **In a studio (M2):** the profile becomes the person's `person` record and the attachments become vault files that only that person and people holding `people.read` can open (contracts and tax forms are sensitive: opening them is audited like finance data). Attachments are *not* part of any project and are never exported or sent to a beta reader.
+- **The assistant** may read the name, pen names and about-me (`studio_user`) so it can sign things and write in the person's voice. It never receives the email or the attached files.
 
 ## 6. SQLite
 

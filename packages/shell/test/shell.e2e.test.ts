@@ -85,7 +85,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').allInnerTexts()).toEqual(['Home', 'Projects', 'Notes', 'Dashboard', 'Write', 'Market', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'Projects', 'Notes', 'Dashboard', 'Write', 'Market', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -363,6 +363,112 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
       }
     });
     expect(refused).toBe(true);
+    await app.close();
+  }, 120_000);
+
+  it('Profile: the user object holds the name, pen names and attached files, and its name goes on notes everywhere', async () => {
+    const doc = path.join(tmp, 'Author bio.txt');
+    fs.writeFileSync(doc, 'Blake writes fantasy.');
+    const first = await launch();
+    const { app, shell } = first;
+    await shell.getByRole('button', { name: 'Profile', exact: true }).click();
+    await shell.getByLabel('Name', { exact: true }).fill('Blake Ashford');
+    await shell.getByLabel('Pen names').fill('Ashe Wilder, Loric Thorne');
+    await shell.getByLabel('Email').fill('not an email');
+    await shell.getByRole('button', { name: 'Save' }).click();
+    await shell.getByRole('alert').getByText(/email/).waitFor();
+    await shell.getByLabel('Email').fill('blake@example.com');
+    await shell.getByRole('button', { name: 'Save' }).click();
+    await shell.getByRole('status').getByText('Saved').waitFor();
+
+    // Attach files as the page would after a drop (the native picker cannot be driven): a document and a picture.
+    const attach = (p: string) =>
+      app.evaluate(async ({ ipcMain, BrowserWindow }, file) => {
+        const h = (ipcMain as any)._invokeHandlers.get('shell:user:attachPaths');
+        return h({ sender: BrowserWindow.getAllWindows()[0]!.webContents }, [file]);
+      }, p);
+    await attach(doc);
+    await attach(path.join(PKG, 'build', 'icon.png'));
+    await shell.locator('.attachments li', { hasText: 'Author bio.txt' }).waitFor();
+    const pic = shell.locator('.attachments li', { hasText: 'icon.png' });
+    await pic.waitFor();
+    expect(await shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByRole('button', { name: 'Use as photo' }).count()).toBe(0); // only pictures can be the photo
+    await shell.getByLabel('Note on Author bio.txt').fill('Short bio for covers');
+    await shell.getByLabel('Note on Author bio.txt').blur();
+    await pic.getByRole('button', { name: 'Use as photo' }).click();
+    await shell.locator('.rail .avatar img').waitFor(); // the photo is in the rail, with no restart
+
+    // The name is what notes are written under, in the shell and in Market.
+    await shell.getByRole('button', { name: 'Notes', exact: true }).click();
+    await shell.getByLabel('New note').fill('Written as me.');
+    await shell.getByRole('button', { name: 'Add note' }).click();
+    await shell.locator('.cn-note', { hasText: 'Written as me.' }).locator('.cn-meta strong', { hasText: 'Blake Ashford' }).waitFor();
+    await app.close();
+
+    // Everything is still there after a restart; the attached file's content is a copy under Cadrel's folder, the original untouched.
+    const second = await launch();
+    await second.shell.getByRole('button', { name: 'Profile', exact: true }).click();
+    await second.shell.getByLabel('Name', { exact: true }).waitFor();
+    expect(await second.shell.getByLabel('Name', { exact: true }).inputValue()).toBe('Blake Ashford');
+    expect(await second.shell.getByLabel('Pen names').inputValue()).toBe('Ashe Wilder, Loric Thorne');
+    expect(await second.shell.getByLabel('Note on Author bio.txt').inputValue()).toBe('Short bio for covers');
+    await second.shell.locator('.rail .avatar img').waitFor();
+    expect(fs.readFileSync(doc, 'utf8')).toBe('Blake writes fantasy.');
+    const stored = fs.readdirSync(path.join(userData, 'user', 'attachments'));
+    expect(stored).toHaveLength(2);
+    // Only the shell's own page may use the user bridge.
+    const refused = await second.app.evaluate(async ({ ipcMain, BrowserWindow }) => {
+      const h = (ipcMain as any)._invokeHandlers.get('shell:user:get');
+      const other = BrowserWindow.getAllWindows()[0]!.contentView.children[0] as any;
+      try {
+        await h({ sender: other?.webContents ?? {} });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(refused).toBe(true);
+    await second.app.close();
+  }, 120_000);
+
+  it('Write: Export works on the file you choose, from the tree by right-click or from the open file, and nothing is picked for you', async () => {
+    const { app, shell } = await launch();
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByRole('button', { name: 'Get started' }).click();
+    // Make a project the way a person does: the Novel template, with a name.
+    await write.getByRole('button', { name: /^Novel/ }).click();
+    await write.getByRole('dialog', { name: 'New project' }).getByPlaceholder('The Lost King').fill('Export Test');
+    await write.getByRole('dialog', { name: 'New project' }).getByRole('button', { name: /Create/ }).click();
+    await write.getByRole('treeitem', { name: /Manuscript/ }).click();
+    const draft = write.getByRole('treeitem', { name: /Draft\.md/ });
+    await draft.waitFor();
+    await write.locator('.toolbar, header').first().waitFor();
+
+    // Nothing is open: the toolbar's Export is off, and Ctrl+E says why rather than picking a file.
+    expect(await write.getByRole('button', { name: 'Export…' }).isDisabled()).toBe(true);
+    await write.keyboard.press('Control+e');
+    await write.getByText(/Open the file you want to export/).waitFor();
+
+    // Right-click a file that is not open or focused: Export… is there, and there is no "Mark for Export".
+    await draft.click({ button: 'right' });
+    const menu = write.getByRole('menu');
+    await menu.getByRole('menuitem', { name: 'Export…' }).waitFor();
+    expect(await menu.getByRole('menuitem', { name: /Mark for Export|Unmark/ }).count()).toBe(0);
+    await menu.getByRole('menuitem', { name: 'Export…' }).click();
+    const dialog = write.getByRole('dialog', { name: 'Export' });
+    await dialog.getByText('Exporting').waitFor();
+    expect(await dialog.innerText()).toContain('Draft.md');
+    expect(await dialog.getByLabel('Book', { exact: true }).count()).toBe(0); // no picker of other files
+    await write.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+
+    // From the open file: open it, then Ctrl+E exports that file.
+    await draft.click();
+    await write.getByRole('button', { name: 'Export…' }).waitFor();
+    await write.keyboard.press('Control+e');
+    await write.getByRole('dialog', { name: 'Export' }).getByText('Draft.md').waitFor();
     await app.close();
   }, 120_000);
 

@@ -4,7 +4,7 @@ import {
   ProjectError, NoteError, STANDARD_TOPICS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, pathOf, queryNotes, subtreeIds,
   type Note, type NoteView, type ProjectTree
 } from '@cadrel/kernel';
-import { readWriteNotes, type Studio } from '@cadrel/studio';
+import { readWriteNotes, type Studio, type UserStore } from '@cadrel/studio';
 import type { FsPort } from '@cadrel/write/src/shared/fsPort';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import type { McpModule } from '../server.js';
@@ -17,6 +17,8 @@ export const STUDIO_INSTRUCTIONS =
 
 export interface StudioToolOptions {
   studio: Studio;
+  /** The person's profile, if this computer has one: the assistant may read their name, pen names and bio (never their email or files). */
+  user?: UserStore;
   /** Where Write's manuscripts are, so their review notes are listed too. */
   write?: { fs: FsPort; root: string };
 }
@@ -73,6 +75,21 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
   const who = () => agentFromClient(server.server.getClientVersion()?.name).agentName;
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
   const projectRef = z.string().describe('A project: its id, or its name or path such as "Dragon Rider / Book 1".');
+
+  server.registerTool(
+    'studio_user',
+    {
+      description: 'Who you are acting for: their name, the pen names they write under, and their own short "about me". Use it to sign things and to write in their voice. Their email and attached files are private and are not available.',
+      inputSchema: {},
+      annotations: readOnly
+    },
+    () =>
+      guarded(async () => {
+        if (!o.user) return { message: 'No profile is set up on this computer.' };
+        const u = await o.user.read();
+        return { name: u.displayName || null, penNames: u.penNames, about: u.bio || null };
+      })
+  );
 
   server.registerTool(
     'studio_projects',

@@ -3,7 +3,7 @@ import { flattenMarkdown } from '../shared/agent/flatten';
 import { locateAnchor } from '../shared/review/comments';
 import type { MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
-import { collectFiles, collectOrphans, findNode } from '../shared/tree';
+import { collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
 import { applyThemeCustom } from './applyTheme';
 import { BookDetailsDialog } from './BookDetailsDialog';
@@ -281,7 +281,6 @@ export function App() {
       ? dir.children.filter((c) => c.kind === 'file' && c.marked === undefined && !c.exportBlocked).map((c) => ({ name: c.name, path: c.path }))
       : [];
   }, [relink, s.root]);
-  const markedFiles = useMemo(() => (s.root ? collectFiles(s.root, (f) => f.marked === true).map((f) => f.path) : []), [s.root]);
   const dirtyFiles = useMemo(() => new Set(s.tabs.filter((t) => t.draft !== null).map((t) => t.file)), [s.tabs]);
 
   // ---- lifecycle -------------------------------------------------------------------------
@@ -501,9 +500,27 @@ export function App() {
     if (idx !== null) setFocusKey(chapterKey(row.path, idx));
   };
 
-  /** Marks a file for export and opens its Book Details so the title and author can be filled in. */
-  const markAndEdit = async (file: string) => {
-    if (await ws.setMarked(file, true)) setBookFile(file);
+  /**
+   * Export acts on one file, the one it is asked about: the open file (toolbar, Ctrl+E, menu) or a file right-clicked in the tree,
+   * which need not be open or focused. Nothing is picked automatically. A file's first export (or Book Details) is what creates its
+   * export settings, so there is no separate step before it.
+   */
+  const withExportSettings = async (file: string): Promise<boolean> => {
+    const node = s.root ? findNode(s.root, file) : undefined;
+    if (node && node.kind === 'file') {
+      if (node.exportBlocked) {
+        ws.setError('Another file with this name already owns the export settings, so this file cannot be exported until one is renamed.');
+        return false;
+      }
+      if (node.marked === true) return true;
+    }
+    return ws.setMarked(file, true);
+  };
+  const exportFileNow = async (file: string) => {
+    if (await withExportSettings(file)) setExportFile(file);
+  };
+  const editBookDetails = async (file: string) => {
+    if (await withExportSettings(file)) setBookFile(file);
   };
 
   const deleteRow = (row: Row) => {
@@ -545,14 +562,11 @@ export function App() {
     }
     if (row.kind === 'file') {
       const exportItems: MenuItem[] = row.exportBlocked
-        ? [{ label: 'Can’t mark: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
-        : row.marked
-          ? [
-              { label: 'Export…', onClick: () => setExportFile(row.path) },
-              { label: 'Book Details…', onClick: () => setBookFile(row.path) },
-              { label: 'Unmark for Export', onClick: () => void ws.setMarked(row.path, false) }
-            ]
-          : [{ label: 'Mark for Export', onClick: () => void markAndEdit(row.path) }];
+        ? [{ label: 'Can’t export: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
+        : [
+            { label: 'Export…', onClick: () => void exportFileNow(row.path) },
+            { label: 'Book Details…', onClick: () => void editBookDetails(row.path) }
+          ];
       const active = !!s.project && s.project.meta.activeManuscript === relativeTo(s.project.path, row.path);
       const manuscriptItems: MenuItem[] = s.project
         ? [
@@ -824,9 +838,8 @@ export function App() {
       else ws.setMode(activeTab.id, activeTab.mode === 'visual' ? 'source' : 'visual');
     },
     export: () => {
-      const target = activeTab && markedFiles.includes(activeTab.file) ? activeTab.file : markedFiles[0];
-      if (target) setExportFile(target);
-      else ws.setError('Mark a file for export first: right-click it in the tree and choose “Mark for Export”.');
+      if (activeTab) void exportFileNow(activeTab.file);
+      else ws.setError('Open the file you want to export, or right-click it in the tree and choose Export…');
     },
     'focus-filter': () => filterRef.current?.focus()
   };
@@ -992,7 +1005,7 @@ export function App() {
             <Icon name="refresh" /> {toolbarBusy ? 'Refreshing…' : 'Refresh'}
           </button>
           {caps.export && (
-            <button onClick={() => actions.export()} disabled={!s.root} title="Export marked books for KDP (Ctrl+E)">
+            <button onClick={() => actions.export()} disabled={!activeTab} title="Export the open file for KDP (Ctrl+E); or right-click any file in the tree">
               <Icon name="download" /> Export…
             </button>
           )}
@@ -1340,7 +1353,6 @@ export function App() {
       )}
       {exportFile && (
         <ExportDialog
-          files={markedFiles}
           chapterLevel={s.chapterLevel}
           initialFile={exportFile}
           dirtyFiles={dirtyFiles}

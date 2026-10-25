@@ -225,7 +225,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
           {(tab === 'title' || tab === 'front' || tab === 'back') && (
             <p className="muted small">
               {tab === 'title' ? 'These are the starting values' : 'This is the starting layout'} for each <em>new</em> book, i.e. a file the first time you
-              choose “Mark for Export”. Books you have already set up keep their own details.
+              export it or open its Book Details. Books you have already set up keep their own details.
             </p>
           )}
           {tab === 'title' && <TitleCopyrightForm template details={book} set={setBook} />}

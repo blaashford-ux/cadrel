@@ -1,4 +1,5 @@
 import type { Page } from '../shared/api';
+import { Avatar } from './Avatar';
 import { Emblem } from './brand/Emblem';
 
 interface Item {
@@ -43,7 +44,15 @@ export function Rail({ page, onGo }: { page: Page; onGo: (p: Page) => void }) {
       <ul>{TOP.map(item)}</ul>
       <hr className="rail-sep" />
       <ul>{MODULES.map(item)}</ul>
-      <ul className="rail-foot">{item(SETTINGS)}</ul>
+      <ul className="rail-foot">
+        <li>
+          <button type="button" className="rail-btn" aria-label="Profile" aria-current={page === 'profile' ? 'page' : undefined} title="Your profile" onClick={() => onGo('profile')}>
+            <Avatar size={26} />
+            <span className="rail-label">Profile</span>
+          </button>
+        </li>
+        {item(SETTINGS)}
+      </ul>
     </nav>
   );
 }

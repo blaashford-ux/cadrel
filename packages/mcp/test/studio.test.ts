@@ -5,23 +5,25 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { Studio } from '@cadrel/studio';
+import { Studio, UserStore } from '@cadrel/studio';
 import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { createCadrelServer, studioModule, writeModule } from '../src/index.js';
 
-const NAMES = ['studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project'];
+const NAMES = ['studio_user', 'studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project'];
 
 let studio: Studio;
+let user: UserStore;
 let mem: MemoryFs;
 beforeEach(() => {
   studio = new Studio(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-studio-mcp-')), 'studio.json'));
+  user = new UserStore(path.join(path.dirname(studio.file), 'user'));
   mem = new MemoryFs();
   mem.seed('/books/DR1/.mdedit/project.json', '{"status":"editing"}');
   mem.seed('/books/DR1/Book.md', '# One\n\nShe walked slowly to the door.\n');
 });
 
 async function connect(clientName = 'claude-ai') {
-  const server = createCadrelServer({ modules: [studioModule({ studio, write: { fs: mem, root: '/books' } }), writeModule({ fs: mem, root: '/books' })] });
+  const server = createCadrelServer({ modules: [studioModule({ studio, user, write: { fs: mem, root: '/books' } }), writeModule({ fs: mem, root: '/books' })] });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: clientName, version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -34,6 +36,14 @@ async function connect(clientName = 'claude-ai') {
 }
 
 describe('studio tools', () => {
+  it('studio_user gives the assistant the person’s name, pen names and bio, never email or files', async () => {
+    const { call } = await connect();
+    await user.update({ displayName: 'Blake Ashford', email: 'blake@example.com', penNames: ['Ashe Wilder'], bio: 'Writes fantasy.' });
+    const r = await call('studio_user');
+    expect(r.json()).toEqual({ name: 'Blake Ashford', penNames: ['Ashe Wilder'], about: 'Writes fantasy.' });
+    expect(r.text).not.toContain('blake@example.com');
+  });
+
   it('sit beside Write’s tools without clashing', async () => {
     const { client } = await connect();
     const names = (await client.listTools()).tools.map((t) => t.name);

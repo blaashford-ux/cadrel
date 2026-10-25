@@ -6,7 +6,8 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, Menu, WebContentsView, ipcMain, nativeTheme, screen } from 'electron';
+import { promises as fsp } from 'node:fs';
+import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
@@ -15,7 +16,7 @@ import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/l
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
 import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
-import { isModule, isPage, type AppFolders, type AppPrefs, type ModuleId, type Overview, type Page, type ThemeState } from '../shared/api';
+import { isModule, isPage, type AppFolders, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
 import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
@@ -24,7 +25,8 @@ import { SettingsStore } from './settings';
 import { StudioService } from './studio';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
-import { NoteError, ProjectError } from '@cadrel/kernel';
+import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { UserStore } from '@cadrel/studio';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -44,6 +46,34 @@ const marketData = process.env.CADREL_USER_DATA ? path.join(appData, 'market') :
 let win: BrowserWindow | null = null;
 let settings: SettingsStore;
 let studio: StudioService;
+let users: UserStore;
+let userCache: UserProfile | null = null;
+
+async function refreshUser(): Promise<UserProfile> {
+  userCache = await users.read();
+  return userCache;
+}
+
+async function userView(): Promise<UserView> {
+  const profile = await refreshUser();
+  return { profile, name: authorName(), nameIsDefault: !profile.displayName, problems: await users.verify() };
+}
+
+/** Attaches each file in turn; one that cannot be attached does not stop the rest, and the first refusal is reported after. */
+async function attachAll(paths: string[]): Promise<UserView> {
+  let first: unknown;
+  for (const p of paths) {
+    try {
+      await users.attach(p);
+    } catch (e) {
+      first ??= e;
+    }
+  }
+  const v = await userView();
+  win?.webContents.send('shell:user', v);
+  if (first) throw first;
+  return v;
+}
 let write: WriteModule;
 let market: MarketModule;
 let page: Page = 'home';
@@ -108,8 +138,8 @@ async function kitLauncher(): Promise<Uint8Array> {
   return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData, 'logs', 'mcp-launcher.log') }), 'utf8');
 }
 
-/** Who a note written in the app is by: the name chosen in Settings, else the Windows user. */
-const authorName = () => settings.get().author?.trim() || os.userInfo().username || 'Me';
+/** Who a note written in the app is by: the profile's name, else the Windows user. */
+const authorName = () => userCache?.displayName || os.userInfo().username || 'Me';
 
 const iconPath = () => (app.isPackaged ? path.join(process.resourcesPath, 'icon.png') : path.join(here, 'assets', 'icon.png'));
 const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(here, 'resources'));
@@ -330,16 +360,58 @@ function registerShellIpc(): void {
   hostNotes('remove', async (id: string) => (await studio.ownedBy('market', id), studio.deleteNote(id)));
   ipcMain.handle('shell:theme:get', guard(() => themeState()));
   ipcMain.handle('shell:theme:set', guard((change: { source?: ThemeSource; custom?: ThemeCustom | null }) => setTheme(change ?? {})));
-  const prefs = (): AppPrefs => ({ author: authorName(), authorIsDefault: !settings.get().author?.trim() });
-  ipcMain.handle('shell:prefs:get', guard(prefs));
-  ipcMain.handle('shell:prefs:setAuthor', guard((name: unknown) => {
-    settings.update((s) => {
-      const t = typeof name === 'string' ? name.trim().slice(0, 80) : '';
-      if (t) s.author = t;
-      else delete s.author;
+  // The user: profile and attached files. A rule that was broken ("that is not an email") reaches the page as a message.
+  const userOp = <A extends unknown[], R>(channel: string, fn: (...a: A) => Promise<R>) =>
+    ipcMain.handle(channel, async (e, ...a: unknown[]) => {
+      if (!fromShell(e)) throw new Error('not allowed');
+      try {
+        return await fn(...(a as A));
+      } catch (err) {
+        if (err instanceof UserError) return { __error: err.message };
+        throw err;
+      }
     });
-    return prefs();
-  }));
+  /** After a change: tell the page (so the rail's photo and the name update everywhere) and give the view back. */
+  const changed = async (): Promise<UserView> => {
+    const v = await userView();
+    win?.webContents.send('shell:user', v);
+    return v;
+  };
+  userOp('shell:user:get', userView);
+  userOp('shell:user:update', async (patch: Parameters<UserStore['update']>[0]) => (await users.update(patch ?? {}), changed()));
+  userOp('shell:user:attach', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Attach files to your profile', properties: ['openFile', 'multiSelections'] });
+    if (r.canceled || r.filePaths.length === 0) return null;
+    return attachAll(r.filePaths);
+  });
+  userOp('shell:user:attachPaths', async (paths: unknown) => attachAll(Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string') : []));
+  userOp('shell:user:editAttachment', async (id: string, patch: { note?: string; name?: string }) => (await users.editAttachment(id, patch ?? {}), changed()));
+  userOp('shell:user:removeAttachment', async (id: string) => (await users.removeAttachment(id), changed()));
+  userOp('shell:user:setAvatar', async (id: string | null) => (await users.setAvatar(id ?? null), changed()));
+  userOp('shell:user:open', async (id: string) => {
+    const p = await users.pathOf(id);
+    if (!p) throw new UserError('That file is not there any more.');
+    const name = (await users.read()).attachments.find((a) => a.id === id)!.name;
+    // Opened from a copy named as the person knows it, so the program shows a sensible title and picks the right app by extension.
+    const dir = path.join(app.getPath('temp'), 'cadrel-open', id);
+    await fsp.mkdir(dir, { recursive: true });
+    const copy = path.join(dir, name);
+    await fsp.copyFile(p, copy);
+    const err = await shell.openPath(copy);
+    if (err) throw new UserError(`Could not open it: ${err}`);
+  });
+  userOp('shell:user:reveal', async (id: string) => {
+    const p = await users.pathOf(id);
+    if (!p) throw new UserError('That file is not there any more.');
+    shell.showItemInFolder(p);
+  });
+  userOp('shell:user:avatar', async () => {
+    const u = await users.read();
+    const p = u.avatarId ? await users.pathOf(u.avatarId) : null;
+    if (!p) return null;
+    const img = nativeImage.createFromPath(p);
+    return img.isEmpty() ? null : img.resize({ width: 128, quality: 'best' }).toDataURL();
+  });
   ipcMain.handle('shell:prefs:folders', guard(async (): Promise<AppFolders> => {
     const w = await write.listProjects().catch(() => null);
     const m = market.service.status().libraryRoot;
@@ -375,6 +447,17 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    users = new UserStore(path.join(app.getPath('userData'), 'user'));
+    await refreshUser();
+    // The name used to be a setting; it belongs to the profile now.
+    const legacy = settings.get().author?.trim();
+    if (legacy) {
+      if (!userCache?.displayName) await users.update({ displayName: legacy });
+      settings.update((s) => {
+        delete s.author;
+      });
+      await refreshUser();
+    }
     studio = new StudioService({
       file: path.join(app.getPath('userData'), 'studio.json'),
       author: authorName,

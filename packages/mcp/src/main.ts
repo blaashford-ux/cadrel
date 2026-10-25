@@ -21,7 +21,8 @@ import { resolveLibraryRoot } from '@cadrel/market-mcp/src/config.js';
 import { capabilitiesOf, composeInstructions, createCadrelServer, SERVER_NAME, type McpModule } from './server.js';
 import { writeModule } from './modules/write.js';
 import { studioModule } from './modules/studio.js';
-import { Studio, studioFile } from '@cadrel/studio';
+import path from 'node:path';
+import { Studio, studioFile, UserStore } from '@cadrel/studio';
 
 const VERSION = process.env.CADREL_VERSION || '0.0.0';
 
@@ -38,8 +39,11 @@ const say = (m: string) => process.stderr.write(`${m}\n`);
 type Found<T> = { ok: true; value: T } | { ok: false; reason: string };
 
 /** The projects and notes: always there, because they need nothing but their own file. */
-const studio = new Studio(studioFile(process.argv.slice(2), process.env));
-const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+const studioPath = studioFile(process.argv.slice(2), process.env);
+const studio = new Studio(studioPath);
+/** The profile sits beside the studio file, in a folder of its own. */
+const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
+const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, user, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 
 /** Write: the folder that holds the projects, by MDEdit's own rules (--root, MDEDIT_ROOT, MDEdit's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {

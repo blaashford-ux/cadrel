@@ -5,14 +5,12 @@ import { formatBytes } from '../shared/export/outputs';
 import { basename } from '../shared/paths';
 import { countWords } from '../shared/words';
 import { OutputsForm, TextForm, KINDS } from './exportForms';
-import { Select, Toggle } from './formParts';
+import { Toggle } from './formParts';
 import { LayerProvider, LayerTag, SettingsReview } from './layerEditor';
 import { useBookLayers } from './useBookLayers';
 import { useEscape } from './useEscape';
 
 interface Props {
-  /** Files currently marked for export. */
-  files: string[];
   /** The heading level that starts a chapter. */
   chapterLevel: number;
   initialFile: string;
@@ -28,8 +26,9 @@ interface Props {
 
 type Phase = 'form' | 'running' | 'done';
 
-export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, saveFile, onEditDetails, detailsVersion, onClose }: Props) {
-  const [file, setFile] = useState(initialFile);
+export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, onEditDetails, detailsVersion, onClose }: Props) {
+  // The dialog exports the one file it was opened for; to export another, close it and ask for that file.
+  const file = initialFile;
   const { layer, dirty, error: loadError, save: saveLayers } = useBookLayers(file, detailsVersion);
   const details = layer?.details ?? null;
   const [chapters, setChapters] = useState<{ title: string; words: number }[]>([]);
@@ -147,9 +146,7 @@ export function ExportDialog({ files, chapterLevel, initialFile, dirtyFiles, sav
 
         {phase === 'form' && (
           <div className="dialog-body">
-            {files.length > 1 && (
-              <Select<string> label="Book" value={file} options={files.map((f) => ({ value: f, label: basename(f) }))} onChange={setFile} />
-            )}
+            <p className="muted small">Exporting <strong>{basename(file)}</strong></p>
 
             <section className="readback" aria-label="Confirm title and author">
               <h4>Check these are exactly right</h4>

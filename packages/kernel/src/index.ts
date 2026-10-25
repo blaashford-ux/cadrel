@@ -5,3 +5,5 @@ export * from './guardrails';
 export * from './vault';
 export * from './projects';
 export * from './notes';
+export * from './kinds';
+export * from './user';

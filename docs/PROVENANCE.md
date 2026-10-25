@@ -37,6 +37,7 @@ Beyond the mechanical import, these are the places where Cadrel's copy of MDEdit
 - *One AI server:* `mcp/server.ts` exposes `registerWriteTools` and `WRITE_INSTRUCTIONS` so Cadrel's single server can carry MDEdit's tools and prompts unchanged; `src/shared/agent/kit.ts` and `config.ts` can brand the AI Kit (`KitBrand`) so it builds the one `cadrel` Claude Desktop extension. `search_text` keeps its name.
 - *Appearance owned by the host:* with `host.theme` set (the shell does), the light/dark choice and custom colours are read from and written to the host, `prefs:get` reports `themeManaged`, Settings → Appearance points to Cadrel's Settings, and a `theme:custom` event recolours the page. Standalone behaviour is unchanged.
 - *Look:* the shipped palette (`DEFAULT_THEMES` in `src/shared/theme.ts` and the matching variables in `src/renderer/styles.css`) is Cadrel's slate and stone instead of MDEdit's indigo and cyan. MDEdit's presets are kept. This is the one change that makes Write look different from standalone MDEdit.
+- *Export acts on one chosen file*: the open file (toolbar, Ctrl+E) or any file right-clicked in the tree. The "mark for export" step, the Book picker in the dialog and the automatic choice of the first marked file are gone; a file's export settings are created on first use.
 - Updates are disabled with a reason when hosted.
 
 **BookScout (`packages/market-*`)**

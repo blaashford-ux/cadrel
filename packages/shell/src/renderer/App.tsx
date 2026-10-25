@@ -4,15 +4,16 @@ import { shellCss } from '../shared/theme';
 import { Dashboard } from './Dashboard';
 import { Home } from './Home';
 import { Notes } from './Notes';
+import { Profile } from './Profile';
 import { Projects } from './Projects';
 import { Rail } from './Rail';
 import { Settings } from './Settings';
 import { useStudio } from './useStudio';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
-const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'settings']);
+const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'profile', 'settings']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'projects', 'notes', 'dashboard']);
 
@@ -96,6 +97,7 @@ export function App() {
           )}
           {page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
           {page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {page === 'profile' && <Profile />}
           {page === 'settings' && <Settings />}
         </div>
       </main>

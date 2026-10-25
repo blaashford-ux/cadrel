@@ -145,6 +145,23 @@ input[type='checkbox'] { padding: 0; }
 
 
 
+/* ---- profile ---- */
+.profile { max-width: 760px; margin: 0 auto; }
+.profile-head { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+.profile-head h3 { margin: 0; font-size: 20px; }
+.profile-head p { margin: 2px 0 0; }
+.profile-form { display: flex; flex-direction: column; gap: 12px; }
+.avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.drop.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.attachments { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.attachments li { background: var(--bg); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.att-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.att-name { word-break: break-all; }
+.att-note { width: 100%; }
+.att-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.att-actions button { padding: 3px 10px; font-size: 12.5px; }
+
 /* ---- dialogs and forms ---- */
 .modal-backdrop { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 50; }
 .modal { background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-pop); padding: 20px 24px; width: min(440px, 92vw); display: flex; flex-direction: column; gap: 12px; }

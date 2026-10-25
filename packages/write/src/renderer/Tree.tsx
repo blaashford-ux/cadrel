@@ -116,7 +116,7 @@ export function Tree(p: Props) {
               </span>
             )}
             {r.marked && (
-              <span className="book-badge" title="Marked for export" aria-label="marked for export">
+              <span className="book-badge" title="Has export settings" aria-label="has export settings">
                 <Icon name="book" size={14} />
               </span>
             )}

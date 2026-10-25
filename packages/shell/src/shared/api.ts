@@ -1,11 +1,12 @@
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
+import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'projects', 'notes', 'dashboard', 'write', 'market', 'settings'] as const;
+export const PAGES = ['home', 'projects', 'notes', 'dashboard', 'write', 'market', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -94,13 +95,34 @@ export interface ThemeState {
   custom?: ThemeCustom;
 }
 
-/** Things that belong to the whole app rather than one module, set in Cadrel's Settings. */
-export interface AppPrefs {
-  /** Who notes written in the app are by. */
-  author: string;
-  /** True when `author` is only the Windows user name because none was chosen. */
-  authorIsDefault: boolean;
+/** The signed-in person: their profile, and the name that goes on what they write. */
+export interface UserView {
+  profile: UserProfile;
+  /** The name notes are written under: the profile's display name, or the Windows user name until one is set. */
+  name: string;
+  nameIsDefault: boolean;
+  /** Attached files whose copy has gone missing or changed on disk. */
+  problems: { id: string; name: string; problem: 'missing' | 'changed' }[];
 }
+
+export interface UserApi {
+  get(): Promise<UserView>;
+  update(patch: ProfilePatch): Promise<UserView>;
+  /** Opens the file picker and attaches what is chosen; null if cancelled. */
+  attach(): Promise<UserView | null>;
+  /** Attaches dropped files (the page passes the File objects; the bridge turns them into paths). */
+  attachDropped(files: File[]): Promise<UserView>;
+  editAttachment(id: string, patch: { note?: string; name?: string }): Promise<UserView>;
+  removeAttachment(id: string): Promise<UserView>;
+  setAvatar(id: string | null): Promise<UserView>;
+  open(id: string): Promise<void>;
+  reveal(id: string): Promise<void>;
+  /** The photo as a small data URL, or null. */
+  avatar(): Promise<string | null>;
+  onChange(cb: (v: UserView) => void): () => void;
+}
+
+export type { Attachment };
 
 /** Where everything lives, for the Settings page. */
 export interface AppFolders {
@@ -117,9 +139,8 @@ export interface CadrelApi {
     set(change: { source?: ThemeSource; custom?: ThemeCustom | null }): Promise<ThemeState>;
     onChange(cb: (t: ThemeState) => void): () => void;
   };
+  user: UserApi;
   prefs: {
-    get(): Promise<AppPrefs>;
-    setAuthor(name: string): Promise<AppPrefs>;
     folders(): Promise<AppFolders>;
   };
   navigate(page: Page): Promise<void>;

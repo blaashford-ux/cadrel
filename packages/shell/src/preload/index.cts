@@ -1,5 +1,5 @@
-import { contextBridge, ipcRenderer } from 'electron';
-import type { CadrelApi, Page, ThemeState, WindowInfo } from '../shared/api';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import type { CadrelApi, Page, ThemeState, UserView, WindowInfo } from '../shared/api';
 
 /** Studio calls come back as {__error} when a rule was broken (a duplicate name, a move into itself); the page gets a normal rejection with that message. */
 const studioCall = async (channel: string, ...args: unknown[]) => {
@@ -19,9 +19,25 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:theme', h);
     }
   },
+  user: {
+    get: () => studioCall('shell:user:get'),
+    update: (patch) => studioCall('shell:user:update', patch),
+    attach: () => studioCall('shell:user:attach'),
+    // A dropped File has no path in the page; Electron can tell the bridge where it came from.
+    attachDropped: (files) => studioCall('shell:user:attachPaths', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
+    editAttachment: (id, patch) => studioCall('shell:user:editAttachment', id, patch),
+    removeAttachment: (id) => studioCall('shell:user:removeAttachment', id),
+    setAvatar: (id) => studioCall('shell:user:setAvatar', id),
+    open: (id) => studioCall('shell:user:open', id),
+    reveal: (id) => studioCall('shell:user:reveal', id),
+    avatar: () => studioCall('shell:user:avatar'),
+    onChange: (cb) => {
+      const h = (_e: unknown, v: UserView) => cb(v);
+      ipcRenderer.on('shell:user', h);
+      return () => ipcRenderer.removeListener('shell:user', h);
+    }
+  },
   prefs: {
-    get: () => ipcRenderer.invoke('shell:prefs:get'),
-    setAuthor: (name) => ipcRenderer.invoke('shell:prefs:setAuthor', name),
     folders: () => ipcRenderer.invoke('shell:prefs:folders')
   },
   studio: {

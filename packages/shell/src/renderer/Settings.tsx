@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppearanceForm } from '@cadrel/write/src/renderer/AppearanceForm';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
-import type { AppFolders, AppPrefs, ShellInfo, ThemeState } from '../shared/api';
+import type { AppFolders, ShellInfo, ThemeState } from '../shared/api';
 import type { ThemeSource } from '../shared/theme';
 
 const api = window.cadrel;
@@ -15,14 +15,11 @@ const MODES: { id: ThemeSource; label: string }[] = [
 /** What belongs to the whole app rather than to Write or Market: how it looks, who you are in notes, where things are kept. */
 export function Settings() {
   const [theme, setTheme] = useState<ThemeState | null>(null);
-  const [prefs, setPrefs] = useState<AppPrefs | null>(null);
-  const [name, setName] = useState('');
   const [folders, setFolders] = useState<AppFolders | null>(null);
   const [info, setInfo] = useState<ShellInfo | null>(null);
 
   useEffect(() => {
     void api.theme.get().then(setTheme);
-    void api.prefs.get().then((p) => (setPrefs(p), setName(p.authorIsDefault ? '' : p.author)));
     void api.prefs.folders().then(setFolders);
     void api.info().then(setInfo);
     return api.theme.onChange(setTheme);
@@ -43,21 +40,6 @@ export function Settings() {
           ))}
         </div>
         {theme && <AppearanceForm custom={theme.custom} onChange={changeColours} />}
-      </section>
-
-      <section className="card" aria-labelledby="s-you">
-        <h3 id="s-you">You</h3>
-        <label className="field">
-          <span className="field-label">Name on your notes</span>
-          <input
-            value={name}
-            maxLength={80}
-            placeholder={prefs?.authorIsDefault ? prefs.author : 'Your name'}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={() => void api.prefs.setAuthor(name).then(setPrefs)}
-          />
-          <span className="field-hint">{prefs?.authorIsDefault ? 'Using your Windows user name until you choose one.' : 'Shown on notes you write anywhere in Cadrel.'}</span>
-        </label>
       </section>
 
       <section className="card" aria-labelledby="s-where">
