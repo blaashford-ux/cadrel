@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  assistantVisibleFiles, recordAssistantRead, setAssistantFiles,
+  assistantVisibleFiles, recordAssistantRead,
   ATTACHMENT_LIMIT, ATTACHMENT_MAX_BYTES, addAttachment, cleanFileName, editAttachment, mimeFor, nameOf, newUser, removeAttachment, sanitizeUser, setAvatar, updateProfile
 } from '../src/user';
 
@@ -61,18 +61,18 @@ describe('user profile', () => {
     expect(setAvatar(withPhoto, null).avatarId).toBeNull();
   });
 
-  it('the assistant sees attached files unless the person opted out or hid that file', () => {
+  it('the assistant sees the attached files the person has not hidden, file by file', () => {
     let { user, attachment } = add(newUser(), 'bio.md');
     const b = add(user, 'tax.pdf');
     user = b.user;
-    expect(user.assistant.files).toBe(true);
     expect(assistantVisibleFiles(user).map((a) => a.name)).toEqual(['bio.md', 'tax.pdf']);
     expect(b.attachment).toMatchObject({ origin: 'user', assistant: true });
     user = editAttachment(user, b.attachment.id, { assistant: false });
     expect(assistantVisibleFiles(user).map((a) => a.name)).toEqual(['bio.md']);
-    user = setAssistantFiles(user, false);
-    expect(assistantVisibleFiles(user)).toEqual([]);
-    expect(setAssistantFiles(user, true).assistant.files).toBe(true);
+    user = editAttachment(user, attachment.id, { assistant: false });
+    expect(assistantVisibleFiles(user)).toEqual([]); // each file is its own choice; there is no master switch
+    user = editAttachment(user, b.attachment.id, { assistant: true });
+    expect(assistantVisibleFiles(user).map((a) => a.name)).toEqual(['tax.pdf']);
     void attachment;
   });
 
@@ -85,9 +85,8 @@ describe('user profile', () => {
 
   it('defaults for a profile saved before these settings: access on, files not hidden', () => {
     const u = sanitizeUser({ id: 'u', attachments: [{ id: 'a', name: 'x.md' }] });
-    expect(u.assistant).toEqual({ files: true });
     expect(u.attachments[0]).toMatchObject({ assistant: true, origin: 'user' });
-    expect(sanitizeUser({ assistant: { files: false }, attachments: [{ id: 'a', name: 'x.md', assistant: false, origin: 'assistant' }] })).toMatchObject({ assistant: { files: false }, attachments: [{ assistant: false, origin: 'assistant' }] });
+    expect(sanitizeUser({ attachments: [{ id: 'a', name: 'x.md', assistant: false, origin: 'assistant' }] })).toMatchObject({ attachments: [{ assistant: false, origin: 'assistant' }] });
   });
 
   it('sanitizeUser survives garbage and keeps only what makes sense', () => {

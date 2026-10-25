@@ -27,7 +27,7 @@ export interface Attachment {
   note: string;
   /** Who put it here: the person, or the assistant (it will be able to add files; they are always marked). */
   origin: 'user' | 'assistant';
-  /** May the assistant read this file? On by default; turning it off hides it from the assistant altogether. */
+  /** May the assistant read this file? On by default; turning it off hides this file from the assistant altogether. The opt-out is per file. */
   assistant: boolean;
 }
 
@@ -56,11 +56,6 @@ export interface UserProfile {
   /** The attachment used as the photo, or null. Must be an image. */
   avatarId: string | null;
   attachments: Attachment[];
-  /**
-   * What the assistant (the AI that connects through MCP) may do with this profile. `files: false` is the opt-out: the assistant
-   * then cannot see that any file is attached. Name, pen names and about-me stay available either way; the email never is.
-   */
-  assistant: { files: boolean };
   /** The most recent times the assistant read a file, newest last. */
   assistantReads: AssistantRead[];
   createdAt: string;
@@ -94,7 +89,7 @@ export function cleanFileName(raw: string): string {
 }
 
 export function newUser(now = new Date().toISOString(), id = newId('u')): UserProfile {
-  return { version: USER_VERSION, id, displayName: '', email: '', penNames: [], bio: '', avatarId: null, attachments: [], assistant: { files: true }, assistantReads: [], createdAt: now, updatedAt: now };
+  return { version: USER_VERSION, id, displayName: '', email: '', penNames: [], bio: '', avatarId: null, attachments: [], assistantReads: [], createdAt: now, updatedAt: now };
 }
 
 const line = (v: unknown, max: number): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
@@ -187,14 +182,9 @@ function sanitizeReads(raw: unknown): AssistantRead[] {
   return out.slice(-ASSISTANT_LOG_LIMIT);
 }
 
-/** Turns the assistant's access to the attached files on or off. */
-export function setAssistantFiles(u: UserProfile, on: boolean): UserProfile {
-  return { ...u, assistant: { ...u.assistant, files: on === true }, updatedAt: new Date().toISOString() };
-}
-
-/** What the assistant may see of the attached files right now: nothing when the person has opted out, else the files not hidden from it. */
+/** What the assistant may see of the attached files: the ones the person has not hidden from it (the opt-out is per file, on each file). */
 export function assistantVisibleFiles(u: UserProfile): Attachment[] {
-  return u.assistant.files ? u.attachments.filter((a) => a.assistant) : [];
+  return u.attachments.filter((a) => a.assistant);
 }
 
 export function recordAssistantRead(u: UserProfile, read: AssistantRead): UserProfile {
@@ -239,7 +229,6 @@ export function sanitizeUser(raw: unknown, now = new Date().toISOString()): User
     bio: typeof r.bio === 'string' ? r.bio.slice(0, BIO_LIMIT) : '',
     avatarId: avatar && IMAGE_MIME.test(avatar.mime) ? avatar.id : null,
     attachments,
-    assistant: { files: (r.assistant as { files?: unknown } | undefined)?.files !== false },
     assistantReads: sanitizeReads(r.assistantReads),
     createdAt: isStr(r.createdAt) ? r.createdAt : now,
     updatedAt: isStr(r.updatedAt) ? r.updatedAt : now

@@ -44,7 +44,7 @@ describe('studio tools', () => {
     expect(r.text).not.toContain('blake@example.com');
   });
 
-  it('the assistant sees the attached files and can open them; the person can opt out, or hide one file', async () => {
+  it('the assistant sees the attached files and can open them; the person can hide any file, one by one', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-att-'));
     const bio = path.join(dir, 'Author bio.md');
     const secret = path.join(dir, 'Tax form.txt');
@@ -78,17 +78,17 @@ describe('studio tools', () => {
     expect(denied.isError).toBe(true);
     expect(denied.text).toMatch(/no such file/);
 
-    // the opt-out: the assistant is told access is off, learns nothing about the files, and cannot open any
-    await user.setAssistantFiles(false);
-    const off = (await call('studio_user')).json();
-    expect(off.files).toMatch(/turned off/);
-    expect(JSON.stringify(off)).not.toContain('Author bio');
+    // hiding every file leaves the assistant with the profile only: no list, nothing to open, and nothing logged
+    for (const f of (await user.read()).attachments) await user.editAttachment(f.id, { assistant: false });
+    const none = (await call('studio_user')).json();
+    expect(none.files).toEqual([]);
+    expect(JSON.stringify(none)).not.toContain('Author bio');
     expect((await call('studio_user_file', { id: a.id })).isError).toBe(true);
-    expect((await user.read()).assistantReads).toHaveLength(2); // nothing was read while off
+    expect((await user.read()).assistantReads).toHaveLength(2);
 
-    // and back on
-    await user.setAssistantFiles(true);
-    expect(((await call('studio_user')).json().files as unknown[]).length).toBe(3);
+    // and one file shown again is the only one it sees
+    await user.editAttachment(a.id, { assistant: true });
+    expect(((await call('studio_user')).json().files as { id: string }[]).map((f) => f.id)).toEqual([a.id]);
   });
 
   it('sit beside Write’s tools without clashing', async () => {

@@ -1,6 +1,8 @@
 import { d1Db } from './d1';
+import { ensureSchema } from './schema';
+import { studioRoutes, type StudioEnv } from './studio';
 
-export interface Env {
+export interface Env extends Partial<StudioEnv> {
   DB: D1Database;
   FILES: R2Bucket;
   ENVIRONMENT: string;
@@ -17,6 +19,7 @@ const json = (body: unknown, status = 200) =>
 export async function health(env: Env): Promise<Response> {
   const checks: Record<string, string> = {};
   try {
+    await ensureSchema(env.DB);
     await d1Db(env.DB).first('SELECT COUNT(*) AS n FROM vault_file');
     checks.database = 'ok';
   } catch {
@@ -36,6 +39,11 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === 'GET' && url.pathname === '/v1/health') return health(env);
+    // A Studio built by the app has an owner key; the Worker deployed by hand for development does not, and serves health only.
+    if (env.OWNER_KEY && env.STUDIO_ID) {
+      const r = await studioRoutes(request, env as StudioEnv);
+      if (r) return r;
+    }
     return json({ error: 'not found' }, 404);
   }
 } satisfies ExportedHandler<Env>;

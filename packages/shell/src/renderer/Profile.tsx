@@ -64,7 +64,7 @@ export function Profile() {
 
       <section className="card" aria-labelledby="pf-you">
         <div className="profile-head">
-          <Avatar size={72} />
+          <Avatar size={72} onClick={() => void run(() => api.chooseAvatar())} />
           <div>
             <h3 id="pf-you">{view.name}</h3>
             <p className="muted small">{view.nameIsDefault ? 'Using your Windows user name until you set one below.' : 'This is the name on your notes, comments and approvals.'}</p>
@@ -95,28 +95,17 @@ export function Profile() {
         </form>
       </section>
 
-      <section className="card" aria-labelledby="pf-ai">
-        <h3 id="pf-ai">AI assistant</h3>
-        <label className="check-row">
-          <input type="checkbox" checked={p.assistant.files} onChange={(e) => void run(() => api.setAssistantFiles(e.target.checked))} />{' '}
-          Let the AI assistant see and read my attached files
-        </label>
-        <p className="muted small">
-          {p.assistant.files
-            ? 'On: through Cadrel’s AI connection the assistant can list your attached files and open the ones you have not hidden, to sign things and write in your voice. Your email is never shared. Turn it off and it cannot tell you have any files.'
-            : 'Off: the assistant is told only that you have turned this off. Your name, pen names and about-me are still available to it.'}
-        </p>
-        {p.assistantReads.length > 0 && (
-          <details>
-            <summary className="small">Recently opened by the assistant ({p.assistantReads.length})</summary>
-            <ul className="reads">
-              {[...p.assistantReads].reverse().slice(0, 20).map((r, i) => (
-                <li key={i} className="small"><strong>{r.by}</strong> opened {r.name} <span className="muted">· {new Date(r.at).toLocaleString()}</span></li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </section>
+      {p.assistantReads.length > 0 && (
+        <section className="card" aria-labelledby="pf-ai">
+          <h3 id="pf-ai">Opened by the AI assistant</h3>
+          <p className="muted small">Through Cadrel’s AI connection the assistant can read the attached files you have not hidden from it. Every time it opens one, it is listed here.</p>
+          <ul className="reads">
+            {[...p.assistantReads].reverse().slice(0, 20).map((r, i) => (
+              <li key={i} className="small"><strong>{r.by}</strong> opened {r.name} <span className="muted">· {new Date(r.at).toLocaleString()}</span></li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section
         className={`card drop${over ? ' over' : ''}`}
@@ -134,7 +123,7 @@ export function Profile() {
           <h3 id="pf-files">Your files</h3>
           <button type="button" onClick={() => void run(() => api.attach())}>Attach files…</button>
         </div>
-        <p className="muted small">A photo, an author bio, a signed contract, a tax form. They are copied into Cadrel; the originals stay where they are. Drop files here too.</p>
+        <p className="muted small">A photo, an author bio, a signed contract, a tax form. They are copied into Cadrel; the originals stay where they are. Drop files here too, and Download saves a copy wherever you choose. Your photo is kept here as well: click your picture at the top to choose it.</p>
         {p.attachments.length === 0 ? (
           <p className="muted">Nothing attached yet.</p>
         ) : (
@@ -158,9 +147,10 @@ export function Profile() {
                 />
                 <div className="att-actions">
                   <button type="button" onClick={() => void run(() => api.open(a.id))}>Open</button>
+                  <button type="button" onClick={() => void run(async () => void (await api.download(a.id)))}>Download</button>
                   <button type="button" onClick={() => void run(() => api.reveal(a.id))}>Show in folder</button>
-                  <label className="inline small" title={p.assistant.files ? 'Untick to hide this file from the assistant' : 'The assistant cannot see any of your files while access is off'}>
-                    <input type="checkbox" checked={a.assistant} disabled={!p.assistant.files} onChange={(e) => void run(() => api.editAttachment(a.id, { assistant: e.target.checked }))} /> AI can read
+                  <label className="inline small" title="Untick to hide this file from the AI assistant. A hidden file is not listed to it and cannot be opened by it.">
+                    <input type="checkbox" checked={a.assistant} onChange={(e) => void run(() => api.editAttachment(a.id, { assistant: e.target.checked }))} /> AI can read
                   </label>
                   {IMAGE_MIME.test(a.mime) && (p.avatarId === a.id ? (
                     <button type="button" onClick={() => void run(() => api.setAvatar(null))}>Remove as photo</button>

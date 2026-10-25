@@ -39,8 +39,7 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
     {
       label: '&File',
       submenu: [
-        { label: 'New Project…\tCtrl+Alt+N', click: send('new-project') },
-        { label: 'Projects Home', click: send('projects-home') },
+        { label: 'Open Project…', click: send('projects-home') },
         { label: 'Switch Project…\tCtrl+K', click: send('switch-project') },
         { type: 'separator' },
         { label: 'New File…\tCtrl+N', click: send('new-file') },

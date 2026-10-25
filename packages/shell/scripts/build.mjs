@@ -77,6 +77,20 @@ const files = {};
 })(extOut);
 fs.writeFileSync(path.join(dist, 'resources', 'cadrel-market-extension.zip'), zipSync(files, { level: 9 }));
 
+// ---- the Studio server, which the app uploads to a person's own Cloudflare account when they build a Studio ----
+await esbuild({
+  entryPoints: [path.join(pkgs, 'worker', 'src', 'index.ts')],
+  outfile: path.join(dist, 'studio-worker.mjs'),
+  bundle: true,
+  platform: 'neutral',
+  format: 'esm',
+  target: 'es2022',
+  conditions: ['workerd', 'worker', 'browser'],
+  mainFields: ['module', 'main'],
+  minify: false,
+  logLevel: 'warning'
+});
+
 // ---- the shell ----
 await esbuild({
   entryPoints: [path.join(root, 'src', 'main', 'index.ts')],

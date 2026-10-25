@@ -28,6 +28,11 @@ export interface MarketHost {
   version: string;
   /** Called just before the app quits so an installer can replace its files. */
   willQuit(): void;
+  /**
+   * Where the library goes when the person has not chosen one (Cadrel puts it at <Cadrel folder>/Market). When set, Market needs no first-run
+   * choice of folder; the person can still move it in Settings.
+   */
+  defaultLibrary?: () => string;
   /** When set, the self-updater is off and shows this message (the shell is updated as a whole). */
   updatesDisabledReason?: string;
   /** The MCP server's name and the Claude Desktop extension's wording. Default: Cadrel Market's. */
@@ -384,6 +389,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     service.onText(send('text'));
     service.onMaintenance(send('maintenance'));
     applySettings();
+    if (host.defaultLibrary) service.useDefaultLibrary(host.defaultLibrary());
     await service.start();
     if (service.status().serverError) log.warn('ingest server:', service.status().serverError);
   }

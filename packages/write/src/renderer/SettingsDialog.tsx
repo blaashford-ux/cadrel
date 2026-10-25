@@ -183,7 +183,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
               ['export', 'Export'],
               ['projects', 'Projects']
             ] as const
-          ).map(([k, label]) => (
+          ).filter(([k]) => k !== 'projects' || window.cadrelWrite.capabilities.manageProjects).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
               {label}
             </button>
@@ -234,7 +234,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
 
           {tab === 'projects' &&
             (config && pdraft ? (
-              <TemplateEditor config={config} draft={pdraft} setDraft={setPdraft} app={defaults} projectCount={projectCount} />
+              <TemplateEditor config={config} draft={pdraft} setDraft={setPdraft} app={defaults} projectCount={projectCount} showRoot={window.cadrelWrite.capabilities.folderPicker} />
             ) : (
               <p className="muted">Loading…</p>
             ))}

@@ -12,7 +12,7 @@ interface Props {
   openedOrder: string[];
   onOpen(path: string): void;
   onHome(): void;
-  onNew(): void;
+  onNew?(): void;
   /** Absent where the app can't open arbitrary folders (the phone). */
   onOpenFolder?(): void;
   onSettings(): void;
@@ -71,9 +71,11 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, opened
           <button type="button" role="menuitem" onClick={() => (setOpen(false), onHome())}>
             All projects…
           </button>
-          <button type="button" role="menuitem" onClick={() => (setOpen(false), onNew())}>
-            New project…
-          </button>
+          {onNew && (
+            <button type="button" role="menuitem" onClick={() => (setOpen(false), onNew())}>
+              New project…
+            </button>
+          )}
           {onOpenFolder && (
             <button type="button" role="menuitem" onClick={() => (setOpen(false), onOpenFolder())}>
               Open folder…

@@ -9,7 +9,7 @@ interface Props {
   openedOrder: string[];
   onOpen(path: string): void;
   onHome(): void;
-  onNew(): void;
+  onNew?(): void;
   onClose(): void;
 }
 
@@ -40,7 +40,7 @@ export function QuickSwitcher({ projects, currentPath, openedOrder, onOpen, onHo
       run: () => onOpen(p.path)
     }));
     if ('projects home all projects'.includes(q) || q === '') list.push({ key: '#home', label: 'All projects…', run: onHome });
-    if ('new project'.includes(q) || q === '') list.push({ key: '#new', label: 'New project…', run: onNew });
+    if (onNew && ('new project'.includes(q) || q === '')) list.push({ key: '#new', label: 'New project…', run: onNew });
     return list;
   }, [projects, query, currentPath, onOpen, onHome, onNew]);
 

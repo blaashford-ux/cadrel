@@ -10,17 +10,18 @@ interface Props {
   listing: RootListing | null;
   loading: boolean;
   onOpen(path: string): void;
-  onNew(): void;
+  /** Absent where Cadrel's Projects page creates and manages projects. */
+  onNew?(): void;
   onChangeRoot?(): void;
   onOpenFolder?(): void;
   onRetry(): void;
-  onConvert(path: string): void;
-  onRename(p: ProjectSummary): void;
-  onDuplicate(p: ProjectSummary): void;
-  onDelete(p: ProjectSummary): void;
-  onArchive(p: ProjectSummary, archived: boolean): void;
-  onStatus(p: ProjectSummary, status: ProjectStatus): void;
-  onProperties(p: ProjectSummary): void;
+  onConvert?(path: string): void;
+  onRename?(p: ProjectSummary): void;
+  onDuplicate?(p: ProjectSummary): void;
+  onDelete?(p: ProjectSummary): void;
+  onArchive?(p: ProjectSummary, archived: boolean): void;
+  onStatus?(p: ProjectSummary, status: ProjectStatus): void;
+  onProperties?(p: ProjectSummary): void;
   onReveal?(path: string): void;
   /** Projects other people shared with this person (only where sharing is available). */
   shared?: SharedProject[];
@@ -66,13 +67,13 @@ export function ProjectsHome(p: Props) {
 
   const items = (x: ProjectSummary): MenuItem[] => [
     { label: 'Open', onClick: () => p.onOpen(x.path) },
-    { label: 'Project settings…', onClick: () => p.onProperties(x) },
-    { label: 'Rename…', onClick: () => p.onRename(x) },
-    { label: 'Duplicate…', onClick: () => p.onDuplicate(x) },
-    ...STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus(x, s) })),
-    { label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive(x, !x.meta.archived) },
+    ...(p.onProperties ? [{ label: 'Project settings…', onClick: () => p.onProperties!(x) }] : []),
+    ...(p.onRename ? [{ label: 'Rename…', onClick: () => p.onRename!(x) }] : []),
+    ...(p.onDuplicate ? [{ label: 'Duplicate…', onClick: () => p.onDuplicate!(x) }] : []),
+    ...(p.onStatus ? STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus!(x, s) })) : []),
+    ...(p.onArchive ? [{ label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive!(x, !x.meta.archived) }] : []),
     ...(p.onReveal ? [{ label: 'Show in File Explorer', onClick: () => p.onReveal!(x.path) }] : []),
-    { label: 'Delete…', danger: true, onClick: () => p.onDelete(x) }
+    ...(p.onDelete ? [{ label: 'Delete…', danger: true, onClick: () => p.onDelete!(x) }] : [])
   ];
 
   const missingRoot = p.listing && !p.listing.exists;
@@ -111,16 +112,18 @@ export function ProjectsHome(p: Props) {
                 Sharing
               </button>
             )}
-            <button type="button" className="primary big" onClick={p.onNew}>
-              <Icon name="plus" /> New Project
-            </button>
+            {p.onNew && (
+              <button type="button" className="primary big" onClick={p.onNew}>
+                <Icon name="plus" /> New Project
+              </button>
+            )}
           </div>
         </header>
 
         {missingRoot && (
           <div className="banner warn" role="alert">
             The Root Folder <code className="path">{p.config?.root}</code> can’t be found (renamed, on a drive that isn’t connected, or not created yet).{' '}
-            {p.onChangeRoot && <button onClick={p.onChangeRoot}>Choose Root Folder…</button>} <button onClick={p.onRetry}>Try again</button> <button onClick={p.onNew}>Create it with a new project</button>
+            {p.onChangeRoot && <button onClick={p.onChangeRoot}>Choose Root Folder…</button>} <button onClick={p.onRetry}>Try again</button> {p.onNew && <button onClick={p.onNew}>Create it with a new project</button>}
           </div>
         )}
 
@@ -152,16 +155,22 @@ export function ProjectsHome(p: Props) {
 
         {p.listing?.exists && all.length === 0 && (
           <div className="home-empty">
-            <h2>Start your first project</h2>
-            <p className="muted">A project is a folder with the structure you choose: manuscript, characters, research and exports. Pick a template to begin.</p>
-            <div className="template-tiles">
-              {(p.config?.templates ?? []).map((t) => (
-                <button key={t.id} type="button" className="template-tile" onClick={p.onNew}>
-                  <strong>{t.name}</strong>
-                  <span className="muted small">{t.description}</span>
-                </button>
-              ))}
-            </div>
+            <h2>{p.onNew ? 'Start your first project' : 'Nothing to write in yet'}</h2>
+            {p.onNew ? (
+              <>
+                <p className="muted">A project is a folder with the structure you choose: manuscript, characters, research and exports. Pick a template to begin.</p>
+                <div className="template-tiles">
+                  {(p.config?.templates ?? []).map((t) => (
+                    <button key={t.id} type="button" className="template-tile" onClick={p.onNew}>
+                      <strong>{t.name}</strong>
+                      <span className="muted small">{t.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="muted">Projects are created and managed on the Projects page. Create one there and choose Open in Write.</p>
+            )}
           </div>
         )}
 
@@ -179,7 +188,7 @@ export function ProjectsHome(p: Props) {
                 onClick={() => !justLongPressed() && p.onOpen(x.path)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') p.onOpen(x.path);
-                  else if (e.key === 'F2') p.onRename(x);
+                  else if (e.key === 'F2') p.onRename?.(x);
                   else if (e.key === 'ContextMenu') setMenu({ x: 200, y: 200, project: x });
                 }}
                 {...longPressProps((mx, my) => setMenu({ x: mx, y: my, project: x }))}
@@ -226,13 +235,15 @@ export function ProjectsHome(p: Props) {
         {(p.listing?.folders.length ?? 0) > 0 && (
           <section className="other-folders">
             <h3>Other folders in the Root Folder</h3>
-            <p className="muted small">These aren’t projects yet. Converting one only adds a hidden marker; your files aren’t touched.</p>
+            <p className="muted small">{p.onConvert ? 'These aren’t projects yet. Converting one only adds a hidden marker; your files aren’t touched.' : 'These aren’t projects yet. Adopt one on the Projects page to manage it there.'}</p>
             {p.listing!.folders.map((f) => (
               <div className="other-folder" key={f.path}>
                 <Icon name="folder" size={15} className="kind-dir" /> <span className="grow-text">{f.name}</span>
-                <button type="button" onClick={() => p.onConvert(f.path)}>
-                  Convert to project
-                </button>
+                {p.onConvert && (
+                  <button type="button" onClick={() => p.onConvert!(f.path)}>
+                    Convert to project
+                  </button>
+                )}
                 <button type="button" onClick={() => p.onOpen(f.path)} title="Open it as a plain folder">
                   Open
                 </button>

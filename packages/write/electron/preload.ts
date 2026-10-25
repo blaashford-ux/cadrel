@@ -73,6 +73,12 @@ const api: WriteApi = {
   openOutput: (p) => ipcRenderer.invoke('export:open', p),
   saveReport: (kind, name, html) => ipcRenderer.invoke('report:save', kind, name, html),
   takeLaunchFiles: () => ipcRenderer.invoke('app:takeLaunchFiles'),
+  takeOpenProject: () => ipcRenderer.invoke('app:takeOpenProject'),
+  onOpenProject: (cb) => {
+    const handler = () => cb();
+    ipcRenderer.on('app:openProject', handler);
+    return () => ipcRenderer.removeListener('app:openProject', handler);
+  },
   onThemeCustom: (cb) => {
     const h = (_e: unknown, custom: ThemeCustom | undefined) => cb(custom);
     ipcRenderer.on('theme:custom', h);

@@ -292,8 +292,11 @@ export function App() {
       const cfg = await window.cadrelWrite.getProjectsConfig().catch(() => null);
       if (cfg) setPConfig(cfg);
       const lastFolder = await window.cadrelWrite.getLastFolder().catch(() => null);
+      const pendingOpen = (await window.cadrelWrite.takeOpenProject?.().catch(() => null)) ?? null;
       if (cfg && !cfg.setupDone && !caps.folderPicker) await window.cadrelWrite.setProjectsConfig({ setupDone: true }).then(setPConfig);
-      else if (cfg && !cfg.setupDone) setWelcome({ lastFolder });
+      else if (cfg && !cfg.setupDone && caps.manageProjects) setWelcome({ lastFolder });
+      else if (cfg && !cfg.setupDone) await window.cadrelWrite.setProjectsConfig({ setupDone: true }).then(setPConfig);
+      else if (pendingOpen) await ws.openProject(pendingOpen);
       else if (cfg?.reopenLast && cfg.lastProject) await ws.openProject(cfg.lastProject);
       else if (lastFolder && !cfg?.lastProject) await ws.openPath(lastFolder, true);
       setStarted(true);
@@ -302,12 +305,17 @@ export function App() {
     // Files handed over later by another launch (double-clicking a second .md).
     const stopLaunch = window.cadrelWrite.onLaunchFiles(() => void ws.openLaunchFiles());
     const stopTheme = window.cadrelWrite.onThemeCustom?.(applyThemeCustom);
+    // Cadrel's Projects page asked for a project to be opened here.
+    const stopOpen = window.cadrelWrite.onOpenProject?.(() => {
+      void window.cadrelWrite.takeOpenProject?.().then(async (p) => { if (p) await ws.openProject(p); });
+    });
     const stopClose = window.cadrelWrite.onCloseRequested(() => {
       void ws.handleCloseRequest().then((ok) => window.cadrelWrite.reportCloseDecision(ok));
     });
     return () => {
       stopLaunch();
       stopTheme?.();
+      stopOpen?.();
       stopClose();
     };
   }, [ws]);
@@ -656,6 +664,7 @@ export function App() {
         }
       }
     });
+  const manage = caps.manageProjects;
   const homeProps = {
     config: pConfig,
     listing,
@@ -665,15 +674,15 @@ export function App() {
     onOpenShared: (dir: string) => void openProject(dir),
     onJoin: caps.review ? () => setShowJoin(true) : undefined,
     onSharing: caps.review ? () => setShowSharingHome(true) : undefined,
-    onNew: () => setShowNewProject(true),
+    onNew: manage ? () => setShowNewProject(true) : undefined,
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
-    onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
+    onChangeRoot: caps.folderPicker && manage ? () => void changeRoot() : undefined,
     onRetry: () => void reloadListing(),
-    onConvert: (p: string) => void projectCall(() => window.cadrelWrite.convertFolder(p)),
-    onRename: (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.cadrelWrite.renameProject(p.path, n)),
-    onDuplicate: (p: ProjectSummary) =>
-      promptProjectName('Duplicate project', uniqueName(`${p.name} copy`, existingNames), 'Duplicate', (n) => window.cadrelWrite.duplicateProject(p.path, n)),
-    onDelete: (p: ProjectSummary) =>
+    onConvert: manage ? (p: string) => void projectCall(() => window.cadrelWrite.convertFolder(p)) : undefined,
+    onRename: manage ? (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.cadrelWrite.renameProject(p.path, n)) : undefined,
+    onDuplicate: manage ? (p: ProjectSummary) =>
+      promptProjectName('Duplicate project', uniqueName(`${p.name} copy`, existingNames), 'Duplicate', (n) => window.cadrelWrite.duplicateProject(p.path, n)) : undefined,
+    onDelete: manage ? (p: ProjectSummary) =>
       setPrompt({
         title: `Delete “${p.name}”?`,
         hint: `Its folder and everything in it (${p.files} file${p.files === 1 ? '' : 's'}) goes to the Recycle Bin.`,
@@ -690,10 +699,10 @@ export function App() {
             return cleanError(e);
           }
         }
-      }),
-    onArchive: (p: ProjectSummary, archived: boolean) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { archived })),
-    onStatus: (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { status })),
-    onProperties: (p: ProjectSummary) => setProjectSettings(p.path),
+      }) : undefined,
+    onArchive: manage ? (p: ProjectSummary, archived: boolean) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { archived })) : undefined,
+    onStatus: manage ? (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { status })) : undefined,
+    onProperties: manage ? (p: ProjectSummary) => setProjectSettings(p.path) : undefined,
     onReveal: caps.folderPicker ? (p: string) => ws.reveal(p) : undefined
   };
 
@@ -804,7 +813,7 @@ export function App() {
 
   // Shortcuts and the native menu share the same actions. The ref keeps listeners stable.
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
-    'new-project': () => setShowNewProject(true),
+    'new-project': () => manage && setShowNewProject(true),
     'projects-home': () => void goHome(),
     sync: () => caps.sync && setShowSync(true),
     about: () => setShowAbout(true),
@@ -853,7 +862,7 @@ export function App() {
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       let name: keyof typeof actions | null = null;
-      if (mod && e.altKey && !e.shiftKey && k === 'n') name = 'new-project';
+      if (manage && mod && e.altKey && !e.shiftKey && k === 'n') name = 'new-project';
       else if (mod && !e.shiftKey && !e.altKey && k === 'k') name = 'switch-project';
       else if (mod && !e.shiftKey && k === 's') name = 'save';
       else if (mod && k === 'o') name = 'change-folder';
@@ -992,7 +1001,7 @@ export function App() {
             openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
-            onNew={() => setShowNewProject(true)}
+            onNew={manage ? () => setShowNewProject(true) : undefined}
             onOpenFolder={caps.folderPicker ? () => void ws.openFolder() : undefined}
             onSettings={() => s.project && setProjectSettings(s.project.path)}
             onProgress={() => setShowProgress(true)}
@@ -1440,7 +1449,7 @@ export function App() {
         openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}
         onHome={() => void goHome()}
-        onNew={() => (setShowQuick(false), setShowNewProject(true))}
+        onNew={manage ? () => (setShowQuick(false), setShowNewProject(true)) : undefined}
         onClose={() => setShowQuick(false)}
       />
     )}

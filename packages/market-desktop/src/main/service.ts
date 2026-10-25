@@ -369,6 +369,14 @@ export class AppService {
     return { libraryRoot: this.config.libraryRoot, port: this.config.port, serverRunning: !!this.server, serverError: this.serverError };
   }
 
+  /** The library to use when none has been chosen: made if it is missing, and remembered. Does nothing once a library is set. Call before `start`. */
+  useDefaultLibrary(root: string): void {
+    if (this.config.libraryRoot) return;
+    fs.mkdirSync(root, { recursive: true });
+    this.config.libraryRoot = root;
+    this.saveConfig();
+  }
+
   async setLibrary(root: string): Promise<void> {
     if (typeof root !== 'string') throw new Error('bad folder');
     if (root.startsWith('\\\\') || root.startsWith('//')) throw new Error('a network share cannot be used as the library: its database needs a local disk');

@@ -3,12 +3,14 @@ import {
   KIND_SUGGESTIONS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, queryNotes, subtreeIds, type Project, type ProjectTree
 } from '@cadrel/kernel';
 import type { NotesApi } from '@cadrel/ui';
-import type { ModuleId, Overview, StudioState } from '../shared/api';
+import { MANUSCRIPT_STATUSES, type ManuscriptMeta, type ManuscriptTemplate, type ModuleId, type Overview, type StudioState } from '../shared/api';
 import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent, STATUS_LABEL } from './format';
 import { factsFor } from './projectFacts';
 
 const api = window.cadrel.studio;
+const manage = window.cadrel.manage;
+const STATUS_NAMES: Record<string, string> = { planning: 'Planning', drafting: 'Drafting', revising: 'Revising', editing: 'Editing', published: 'Published', paused: 'On hold' };
 
 /** The shared Notes panel's view of the studio, for notes written on one project. */
 export const projectNotes = (projectId: string | null): NotesApi => ({
@@ -32,12 +34,13 @@ interface Props {
 
 type Dialog = { kind: 'new'; parentId: string | null } | { kind: 'rename'; id: string } | { kind: 'delete'; id: string } | null;
 
-function NameDialog({ title, initialName, initialKind, askKind, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; action: string; onSubmit(name: string, kind: string): void; onCancel(): void }) {
+function NameDialog({ title, initialName, initialKind, askKind, templates, defaultTemplate, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; templates?: ManuscriptTemplate[]; defaultTemplate?: string | null; action: string; onSubmit(name: string, kind: string, template: string | null): void; onCancel(): void }) {
   const [name, setName] = useState(initialName);
   const [kind, setKind] = useState(initialKind);
+  const [template, setTemplate] = useState<string>(defaultTemplate ?? '');
   return (
     <div className="modal-backdrop" onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
-      <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={(e) => (e.preventDefault(), onSubmit(name, kind))}>
+      <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={(e) => (e.preventDefault(), onSubmit(name, kind, template || null))}>
         <h3>{title}</h3>
         <label className="field">
           <span className="field-label">Name</span>
@@ -49,6 +52,16 @@ function NameDialog({ title, initialName, initialKind, askKind, action, onSubmit
             <input list="project-kinds" value={kind} onChange={(e) => setKind(e.target.value)} maxLength={30} placeholder="Series, Book, Campaign…" />
             <datalist id="project-kinds">{KIND_SUGGESTIONS.map((k) => <option key={k} value={k} />)}</datalist>
             <span className="field-hint">A label for you. A project can hold subprojects whatever it is called.</span>
+          </label>
+        )}
+        {templates && (
+          <label className="field">
+            <span className="field-label">Manuscript folder</span>
+            <select value={template} onChange={(e) => setTemplate(e.target.value)} aria-label="Manuscript folder">
+              <option value="">None yet (just the project)</option>
+              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}: {t.description}</option>)}
+            </select>
+            <span className="field-hint">A folder in your Projects folder, set up from this template (the templates are set by your studio’s administrators). Write opens it from here.</span>
           </label>
         )}
         <div className="modal-actions">
@@ -64,6 +77,68 @@ function NameDialog({ title, initialName, initialKind, askKind, action, onSubmit
 function moveTargets(tree: ProjectTree, id: string): { id: string | null; label: string }[] {
   const inside = new Set(subtreeIds(tree, id));
   return [{ id: null, label: 'Top level' }, ...outline(tree).filter((r) => !inside.has(r.project.id)).map((r) => ({ id: r.project.id, label: `${' '.repeat(r.depth)}${r.project.name}` }))];
+}
+
+/** What the project's manuscript folder is: its status and notes, and the way into Write (which only opens it and lets you write). */
+function ManuscriptCard({ p, linked, act }: { p: Project; linked: boolean; act: Props['act'] }) {
+  const [m, setM] = useState<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null | undefined>(undefined);
+  const [notes, setNotes] = useState('');
+  const [templates, setTemplates] = useState<ManuscriptTemplate[]>([]);
+  const [template, setTemplate] = useState('novel');
+  const [added, setAdded] = useState('');
+  useEffect(() => {
+    let live = true;
+    setM(undefined);
+    setAdded('');
+    void manage.manuscript(p.id).then((x) => live && (setM(x), setNotes(x?.meta.notes ?? '')), () => live && setM(null));
+    return () => {
+      live = false;
+    };
+  }, [p.id, linked]);
+  useEffect(() => {
+    void manage.templates().then(setTemplates, () => undefined);
+  }, []);
+
+  if (m === undefined) return null;
+  if (!m) {
+    return (
+      <section className="card" aria-labelledby="pd-ms">
+        <h3 id="pd-ms">Manuscript folder</h3>
+        <p className="muted">This project has no folder to write in yet. Add one and Write can open it.</p>
+        <div className="row">
+          <select value={template} onChange={(e) => setTemplate(e.target.value)} aria-label="Template for the manuscript folder">
+            {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <button type="button" className="primary" onClick={() => void act(() => manage.addManuscript(p.id, template))}>Add a manuscript folder</button>
+        </div>
+      </section>
+    );
+  }
+  const save = (patch: { status?: string; notes?: string }) => void act(() => manage.setManuscript(p.id, patch)).then(() => manage.manuscript(p.id).then(setM));
+  return (
+    <section className="card" aria-labelledby="pd-ms">
+      <div className="card-head">
+        <h3 id="pd-ms">Manuscript folder</h3>
+        <button type="button" className="primary" onClick={() => void act(() => manage.open(p.id))}>Open in Write</button>
+      </div>
+      <p className="muted small" title={m.folder}>{m.folder} · made from {m.meta.templateName}</p>
+      <div className="row">
+        <label className="inline">
+          <span className="muted small">Status</span>
+          <select value={m.meta.status} onChange={(e) => save({ status: e.target.value })} aria-label="Status">
+            {MANUSCRIPT_STATUSES.map((s) => <option key={s} value={s}>{STATUS_NAMES[s] ?? s}</option>)}
+          </select>
+        </label>
+        <button type="button" onClick={() => void act(() => manage.reveal(p.id))}>Show folder</button>
+        <button type="button" title="Create any folders from the template that this project is missing" onClick={() => void act(() => manage.addMissingParts(p.id).then((a) => setAdded(a.length ? `Added ${a.join(', ')}.` : 'Nothing was missing.')))}>Add missing folders</button>
+        {added && <span role="status" className="muted small">{added}</span>}
+      </div>
+      <label className="field">
+        <span className="field-label">Notes about the project</span>
+        <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} onBlur={() => notes !== m.meta.notes && save({ notes })} placeholder="Where it stands, what comes next…" />
+      </label>
+    </section>
+  );
 }
 
 function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: Project; studio: StudioState; overview: Overview | null; act: Props['act']; onGo: Props['onGo']; onSelect: Props['onSelect']; openDialog: (d: Dialog) => void }) {
@@ -109,6 +184,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
       <div className="actions">
         <button type="button" className="primary" disabled={p.status === 'archived'} onClick={() => openDialog({ kind: 'new', parentId: p.id })}>Add subproject</button>
         <button type="button" onClick={() => openDialog({ kind: 'rename', id: p.id })}>Rename</button>
+        <button type="button" onClick={() => void act(() => manage.duplicate(p.id))}>Duplicate</button>
         <label className="inline">
           <span className="muted small">Move to</span>
           <select
@@ -123,9 +199,11 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
             {moveTargets(tree, p.id).filter((t) => t.id !== p.parentId).map((t) => <option key={t.id ?? 'top'} value={t.id ?? '__top'}>{t.label}</option>)}
           </select>
         </label>
-        <button type="button" onClick={() => void act(() => api.archiveProject(p.id, p.status !== 'archived'))}>{p.status === 'archived' ? 'Restore' : 'Archive'}</button>
+        <button type="button" onClick={() => void act(() => manage.archive(p.id, p.status !== 'archived'))}>{p.status === 'archived' ? 'Restore' : 'Archive'}</button>
         <button type="button" className="quiet" onClick={() => openDialog({ kind: 'delete', id: p.id })}>Delete…</button>
       </div>
+
+      <ManuscriptCard p={p} linked={mine.some((l) => l.module === 'write')} act={act} />
 
       <section className="card" aria-labelledby="pd-sum">
         <h3 id="pd-sum">At a glance</h3>
@@ -195,6 +273,15 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
 export function Projects({ studio, overview, error, clearError, act, onGo, selected, onSelect }: Props) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const [archived, setArchived] = useState(false);
+  const [templates, setTemplates] = useState<ManuscriptTemplate[]>([]);
+  const [unfiled, setUnfiled] = useState<{ projects: { name: string }[]; folders: { name: string }[] }>({ projects: [], folders: [] });
+  useEffect(() => {
+    void manage.templates().then(setTemplates, () => undefined);
+  }, []);
+  // Folders in the Projects folder that the tree does not know yet (made outside Cadrel, or by an older version).
+  useEffect(() => {
+    void manage.unfiled().then(setUnfiled, () => undefined);
+  }, [studio]);
 
   const rows = useMemo(() => (studio ? outline(studio.tree, { archived }) : []), [studio, archived]);
   const current = studio && selected ? getProject(studio.tree, selected) : undefined;
@@ -206,17 +293,17 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
   if (!studio) return <p className="muted">Loading…</p>;
   const active = current ?? (rows[0]?.project as Project | undefined);
 
-  const submit = async (name: string, kind: string) => {
+  const submit = async (name: string, kind: string, template: string | null) => {
     const d = dialog;
     if (!d) return;
     if (d.kind === 'new') {
-      const r = await act(() => api.createProject({ name, parentId: d.parentId, kind: kind || undefined }));
+      const r = await act(() => manage.create({ name, parentId: d.parentId, kind: kind || undefined, template }));
       if (r.ok) {
         onSelect(r.value.id);
         setDialog(null);
       }
     } else if (d.kind === 'rename') {
-      const r = await act(() => api.updateProject(d.id, { name }));
+      const r = await act(() => manage.rename(d.id, name));
       if (r.ok) setDialog(null);
     }
   };
@@ -248,6 +335,20 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
             ))}
           </ul>
         )}
+        {(unfiled.projects.length > 0 || unfiled.folders.length > 0) && (
+          <div className="unfiled" aria-label="Folders in your Projects folder that are not projects yet">
+            <h4>In your Projects folder</h4>
+            <p className="muted small">Not part of a project yet.</p>
+            <ul>
+              {[...unfiled.projects, ...unfiled.folders].map((f) => (
+                <li key={f.name}>
+                  <span className="tree-name" title={f.name}>{f.name}</span>
+                  <button type="button" onClick={() => void act(() => manage.adopt(f.name, current?.id ?? null)).then((r) => r.ok && onSelect(r.value))}>Add</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </aside>
       <section className="detail-pane">
         {error && (
@@ -265,8 +366,10 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
           initialName={dialog.kind === 'rename' ? getProject(studio.tree, dialog.id)?.name ?? '' : ''}
           initialKind=""
           askKind={dialog.kind === 'new'}
+          templates={dialog.kind === 'new' ? templates : undefined}
+          defaultTemplate={dialog.kind === 'new' ? (dialog.parentId ? 'novel' : 'series') : null}
           action={dialog.kind === 'rename' ? 'Rename' : 'Create'}
-          onSubmit={(n, k) => void submit(n, k)}
+          onSubmit={(n, k, t) => void submit(n, k, t)}
           onCancel={() => setDialog(null)}
         />
       )}
@@ -275,12 +378,12 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
           <div className="modal" role="alertdialog" aria-modal="true" aria-label="Delete project">
             <h3>Delete “{del.name}”?</h3>
             <p>
-              {delKids > 0 ? `This also deletes its ${delKids} subproject${delKids === 1 ? '' : 's'}, ` : 'This '}and every note written on {delKids > 0 ? 'them' : 'it'}. Manuscripts and market research are not touched; they just stop belonging to a project.
+              {delKids > 0 ? `This also deletes its ${delKids} subproject${delKids === 1 ? '' : 's'}, ` : 'This '}and every note written on {delKids > 0 ? 'them' : 'it'}. Their manuscript folders go to the recycle bin, so nothing is lost for good. Market research is not touched; it just stops belonging to a project.
             </p>
             <p className="muted small">Archive instead if you may want it back.</p>
             <div className="modal-actions">
               <button type="button" onClick={() => setDialog(null)} autoFocus>Keep it</button>
-              <button type="button" className="danger" onClick={() => void act(() => api.deleteProject(del.id, true)).then((r) => r.ok && (setDialog(null), onSelect(null)))}>Delete</button>
+              <button type="button" className="danger" onClick={() => void act(() => manage.remove(del.id)).then((r) => r.ok && (setDialog(null), onSelect(null)))}>Delete</button>
             </div>
           </div>
         </div>

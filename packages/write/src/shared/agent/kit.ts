@@ -44,6 +44,8 @@ export interface KitInput {
   serverPath: string;
   /** Default: Cadrel Write. */
   brand?: KitBrand;
+  /** More arguments for the server in the settings snippets (a host pins the server to one Studio's data). */
+  extraArgs?: string[];
 }
 
 export interface KitFile {
@@ -120,7 +122,7 @@ function readme(i: KitInput): string {
 }
 
 function settings(i: KitInput, b: KitBrand): string {
-  const s = aiConfigSnippets({ root: i.root, command: 'node', args: [i.serverPath, '--root', i.root] }, b.id);
+  const s = aiConfigSnippets({ root: i.root, command: 'node', args: [i.serverPath, '--root', i.root, ...(i.extraArgs ?? [])] }, b.id);
   return [
     'These run the server file saved next to this one. They need Node.js 20 or newer.',
     '(For Claude Desktop, use cadrel-write.mcpb instead: it needs no Node.js.)',

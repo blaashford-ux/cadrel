@@ -13,7 +13,7 @@ export const STUDIO_INSTRUCTIONS =
   'Projects are how the studio is organised: a project can hold subprojects to any depth (usually a Series holds its Books, but it is the author\'s choice). ' +
   'Everything else, manuscripts and market research included, is linked to a project. Start with studio_projects to see the tree and what is linked where. ' +
   'Notes are the same everywhere: studio_notes lists them across all modules (including the review notes in manuscripts), and studio_add_note leaves one on a project or on any record of a module. ' +
-  'studio_user says who you are acting for and lists the files they attached to their profile, which you may open with studio_user_file unless they turned that off (never go looking if it says so). You can organise projects (create, rename, move, link, archive) but you cannot delete them. Never invent a project: ask the author if the right one is unclear.';
+  'studio_user says who you are acting for and lists the files they attached to their profile, which you may open with studio_user_file (only the files they have not hidden from you are listed). You can organise projects (create, rename, move, link, archive) but you cannot delete them. Never invent a project: ask the author if the right one is unclear.';
 
 export interface StudioToolOptions {
   studio: Studio;
@@ -80,7 +80,7 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     'studio_user',
     {
       description:
-        'Who you are acting for: their name, the pen names they write under, their own short "about me", and the files they have attached to their profile (author bio, photo, contracts…) with what each is for. Use it to sign things and to write in their voice; open a file with studio_user_file. The person can turn file access off, in which case `files` says so and nothing more. Their email is private and never available.',
+        'Who you are acting for: their name, the pen names they write under, their own short "about me", and the files they have attached to their profile (author bio, photo, contracts…) with what each is for. Use it to sign things and to write in their voice; open a file with studio_user_file. The person can hide any file from you, and a hidden file is simply not listed. Their email is private and never available.',
       inputSchema: {},
       annotations: readOnly
     },
@@ -88,14 +88,12 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
       guarded(async () => {
         if (!o.user) return { message: 'No profile is set up on this computer.' };
         const u = await o.user.read();
-        const f = await o.user.filesForAssistant();
+        const files = await o.user.filesForAssistant();
         return {
           name: u.displayName || null,
           penNames: u.penNames,
           about: u.bio || null,
-          files: f.allowed
-            ? f.files.map((a) => ({ id: a.id, name: a.name, type: a.mime, bytes: a.size, for: a.note || null, addedBy: a.origin === 'assistant' ? 'AI' : 'the person', added: a.addedAt }))
-            : 'The person has turned off assistant access to their files.'
+          files: files.map((a) => ({ id: a.id, name: a.name, type: a.mime, bytes: a.size, for: a.note || null, addedBy: a.origin === 'assistant' ? 'AI' : 'the person', added: a.addedAt }))
         };
       })
   );
