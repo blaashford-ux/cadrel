@@ -8,9 +8,9 @@ describe('invitation links', () => {
     expect(parseInviteLink(buildInviteLink(invite))).toEqual(invite);
   });
 
-  it('accepts an mdedit: link and surrounding whitespace', () => {
+  it('accepts an cadrel-write: link and surrounding whitespace', () => {
     const q = new URLSearchParams({ p: invite.packageId, c: invite.commentsId, r: invite.reviewerId, n: 'X' });
-    expect(parseInviteLink(`  mdedit://join?${q}\n`)?.project).toBe('X');
+    expect(parseInviteLink(`  cadrel-write://join?${q}\n`)?.project).toBe('X');
   });
 
   it('rejects anything that is not an invitation', () => {

@@ -4,10 +4,10 @@ import { NotesPanel } from '@cadrel/ui';
 
 /**
  * "Notes" beside a category or a book: the same Notes panel as everywhere in Cadrel, kept with the studio's projects. Only shown
- * when Cadrel hosts this page (a standalone BookScout has nowhere to keep them).
+ * when Cadrel hosts this page (a standalone Cadrel Market has nowhere to keep them).
  */
 export function NotesButton({ kind, id, label }: { kind: 'category' | 'book'; id: string; label: string }) {
-  const host = window.bookscout.hostNotes;
+  const host = window.cadrelMarket.hostNotes;
   const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState<NoteView[]>([]);

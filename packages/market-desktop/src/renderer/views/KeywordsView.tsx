@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { OwnBookRow, CategorySummary, KeywordHistoryRow, KeywordIdea, KeywordString, KeywordJob, KeywordLookupResult, KeywordRow, KeywordTable, SuggestSource } from '../../shared/api.js';
 import { DataTable, type Column } from './DataTable.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const LABEL: Record<SuggestSource, string> = { amazon: 'Amazon', google: 'Google', bing: 'Bing' };
 const day = (iso: string) => iso.slice(0, 10);
 const fmt = (v: number | null) => (v === null ? '–' : v.toLocaleString('en-US', { maximumFractionDigits: v < 10 ? 1 : 0 }));

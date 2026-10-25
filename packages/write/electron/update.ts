@@ -62,7 +62,7 @@ export function downloadInstaller(info: UpdateInfo, deps: DownloadDeps): Promise
 async function download(info: UpdateInfo, deps: DownloadDeps): Promise<string> {
   const asset = info.asset!;
   if (!isReleaseDownloadUrl(asset.url) || (info.sumsUrl && !isReleaseDownloadUrl(info.sumsUrl))) {
-    throw new Error('Refusing to download from outside the MDEdit releases.');
+    throw new Error('Refusing to download from outside the Cadrel Write releases.');
   }
   if (path.basename(asset.name) !== asset.name) throw new Error('The installer has an unexpected name.');
 

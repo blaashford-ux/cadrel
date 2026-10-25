@@ -12,7 +12,7 @@ let base: string;
 
 beforeEach(async () => {
   fs = new MemoryFs();
-  fs.seed('/books/Novel/.mdedit/project.json', '{"status":"editing"}');
+  fs.seed('/books/Novel/.cadrel/project.json', '{"status":"editing"}');
   fs.seed('/books/Novel/Book.md', BOOK);
   srv = await startHttp({ fs, root: '/books', token: TOKEN, port: 0 });
   base = `http://127.0.0.1:${srv.port}`;
@@ -67,8 +67,8 @@ describe('hostile requests', () => {
   });
 
   it('cannot be steered outside the project through the REST routes', async () => {
-    for (const p of ['..', '%2E%2E', 'Novel%2F..%2F..', '.mdedit', 'Novel%5C..']) expect([400, 404], p).toContain((await get(`/api/projects/${p}/files`)).status); // refused, never 200
-    for (const file of ['../Other.md', '/etc/passwd', 'a%2F..%2F..%2Fb.md', '.mdedit/project.json']) expect([400, 404], file).toContain((await get(`/api/projects/Novel/chapters?file=${file}`)).status);
+    for (const p of ['..', '%2E%2E', 'Novel%2F..%2F..', '.cadrel', 'Novel%5C..']) expect([400, 404], p).toContain((await get(`/api/projects/${p}/files`)).status); // refused, never 200
+    for (const file of ['../Other.md', '/etc/passwd', 'a%2F..%2F..%2Fb.md', '.cadrel/project.json']) expect([400, 404], file).toContain((await get(`/api/projects/Novel/chapters?file=${file}`)).status);
     const r = await post('/api/projects/Novel/notes', { notes: [{ file: '../../x.md', kind: 'comment', quote: 'a', body: 'b' }] });
     expect((await r.json())[0]).toMatchObject({ ok: false });
   });
@@ -95,8 +95,8 @@ describe('REST', () => {
     expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
   });
 
-  it('names the caller from the x-mdedit-agent header', async () => {
-    await post('/api/projects/Novel/notes', { notes: [{ file: 'Book.md', kind: 'comment', quote: 'river', body: 'Cold how?' }] }, { ...auth, 'x-mdedit-agent': 'claude' });
+  it('names the caller from the x-cadrel-agent header', async () => {
+    await post('/api/projects/Novel/notes', { notes: [{ file: 'Book.md', kind: 'comment', quote: 'river', body: 'Cold how?' }] }, { ...auth, 'x-cadrel-agent': 'claude' });
     expect((await (await get('/api/projects/Novel/notes')).json())[0].reviewer).toBe('Claude');
   });
 });

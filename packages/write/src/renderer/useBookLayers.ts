@@ -14,7 +14,7 @@ export function useBookLayers(file: string, reloadKey?: unknown) {
     let live = true;
     setLoaded(null);
     setState(null);
-    window.mdedit
+    window.cadrelWrite
       .getBookDetails(file)
       .then((r) => {
         if (!live) return;
@@ -38,7 +38,7 @@ export function useBookLayers(file: string, reloadKey?: unknown) {
   /** Writes the book's settings; its own fields are exactly those that were set or changed here. */
   const save = async () => {
     if (!layer || !state) return;
-    await window.mdedit.saveBookDetails(file, layer.details, Object.keys(state.overrides));
+    await window.cadrelWrite.saveBookDetails(file, layer.details, Object.keys(state.overrides));
     setInitial(JSON.stringify(state));
   };
 

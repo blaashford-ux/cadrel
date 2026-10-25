@@ -12,13 +12,13 @@ const PKG = path.resolve(__dirname, '..');
 const EXT_SRC = path.resolve(__dirname, '../../market-extension');
 const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const gz = (n: string) => zlib.gunzipSync(fs.readFileSync(path.join(FIX, n)));
-const PACKAGED = process.env.BOOKSCOUT_PACKAGED_BIN;
+const PACKAGED = process.env.CADREL_MARKET_PACKAGED_BIN;
 const electronBin = PACKAGED ?? path.resolve(PKG, '../../node_modules/electron/dist/electron');
 const PORT = 48210;
 const FIRST = 'B0C1R52V2J';
 
 function findChrome(): string | undefined {
-  const c = [process.env.BOOKSCOUT_CHROMIUM, chromium.executablePath()];
+  const c = [process.env.CADREL_MARKET_CHROMIUM, chromium.executablePath()];
   try { c.push(...fs.readdirSync('/opt/pw-browsers').filter((d) => /^chromium-\d+$/.test(d)).map((d) => `/opt/pw-browsers/${d}/chrome-linux/chrome`)); } catch { /* none */ }
   return c.find((x) => x && fs.existsSync(x));
 }
@@ -46,7 +46,7 @@ describe.skipIf(!ready)('walkthrough: extension in Chromium + the desktop app', 
     app = await electron.launch({
       executablePath: electronBin,
       args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
-      env: { ...process.env, BOOKSCOUT_TEST: '1', BOOKSCOUT_USER_DATA: path.join(tmp, 'user'), BOOKSCOUT_TEST_LIBRARY: path.join(tmp, 'lib'), BOOKSCOUT_TEST_EXPORT_DIR: tmp },
+      env: { ...process.env, CADREL_TEST: '1', CADREL_MARKET_USER_DATA: path.join(tmp, 'user'), CADREL_MARKET_TEST_LIBRARY: path.join(tmp, 'lib'), CADREL_MARKET_TEST_EXPORT_DIR: tmp },
     });
     win = await app.firstWindow();
 
@@ -108,7 +108,7 @@ describe.skipIf(!ready)('walkthrough: extension in Chromium + the desktop app', 
 
   it('"Open next" names the book to visit; capturing it from the browser takes it off the queue', async () => {
     await win.getByRole('button', { name: 'Open next' }).click();
-    const [url] = await win.evaluate(() => (window as any).bookscout.__opened());
+    const [url] = await win.evaluate(() => (window as any).cadrelMarket.__opened());
     expect(url).toBe(`https://www.amazon.com/dp/${FIRST}`);
     const page = await ctx.newPage();
     await page.goto(url);

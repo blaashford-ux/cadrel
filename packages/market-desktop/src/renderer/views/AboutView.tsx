@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { AppInfo, TokenStatus, UpdateState } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 function TokenBox({ onChange }: { onChange: () => void }) {
@@ -17,8 +17,8 @@ function TokenBox({ onChange }: { onChange: () => void }) {
     <div className="card" aria-label="GitHub access">
       <h2 style={{ marginTop: 0 }}>GitHub access</h2>
       <p className="muted">
-        BookScout’s releases are in a private GitHub repository, so checking for updates needs a read-only token. Create a fine-grained personal access token for the
-        BookScout repository with the single permission <b>Contents: read</b>. The token is stored encrypted by your operating system and is sent only to github.com.
+        Cadrel Market’s releases are in a private GitHub repository, so checking for updates needs a read-only token. Create a fine-grained personal access token for the
+        Cadrel Market repository with the single permission <b>Contents: read</b>. The token is stored encrypted by your operating system and is sent only to github.com.
       </p>
       <div className="row">
         <input type="password" autoComplete="off" placeholder={st.saved ? 'A token is saved' : 'Paste token'} value={value} onChange={(e) => setValue(e.target.value)} aria-label="GitHub token" style={{ width: 320 }} disabled={!st.canSave} />
@@ -26,8 +26,8 @@ function TokenBox({ onChange }: { onChange: () => void }) {
         <button disabled={!st.saved} onClick={() => run(() => api.setGithubToken(null), 'Token removed')}>Remove token</button>
         <span role="status" className="muted">{msg}</span>
       </div>
-      {st.fromEnvironment && <div className="muted">A token from the BOOKSCOUT_GITHUB_TOKEN environment variable is in use.</div>}
-      {!st.canSave && <div className="err">This computer cannot encrypt the token, so BookScout will not store it. Set the BOOKSCOUT_GITHUB_TOKEN environment variable instead.</div>}
+      {st.fromEnvironment && <div className="muted">A token from the CADREL_MARKET_GITHUB_TOKEN environment variable is in use.</div>}
+      {!st.canSave && <div className="err">This computer cannot encrypt the token, so Cadrel Market will not store it. Set the CADREL_MARKET_GITHUB_TOKEN environment variable instead.</div>}
     </div>
   );
 }
@@ -50,7 +50,7 @@ export function AboutView() {
   const i = u?.info;
   return (
     <>
-      <h1>About BookScout</h1>
+      <h1>About Cadrel Market</h1>
       <div className="card">
         {info && (
           <table style={{ width: 'auto', border: 'none' }}>
@@ -80,7 +80,7 @@ export function AboutView() {
               {i.installer && info?.canInstall && <button className="primary" onClick={install} disabled={busy}>Update now</button>}
               <button onClick={() => void api.openReleasePage()}>View release on GitHub</button>
             </div>
-            {i.installer && info?.canInstall && <div className="muted">Downloads {i.installer.name} ({mb(i.installer.size)}), checks it, then starts the installer and closes BookScout. Your library and settings are kept.</div>}
+            {i.installer && info?.canInstall && <div className="muted">Downloads {i.installer.name} ({mb(i.installer.size)}), checks it, then starts the installer and closes Cadrel Market. Your library and settings are kept.</div>}
             {i.installer && info && !info.canInstall && <div className="muted">Installing from inside the app works in the installed Windows app only; open the release to download the installer.</div>}
             {!i.installer && <div className="muted">This release has no Windows installer attached.</div>}
           </>
@@ -90,7 +90,7 @@ export function AboutView() {
             <progress value={u.progress.done} max={u.progress.total || 1} style={{ width: 320 }} /> {mb(u.progress.done)} of {mb(u.progress.total)}
           </div>
         )}
-        {u?.phase === 'launching' && <div role="status">Installer started. BookScout will close so it can be replaced.</div>}
+        {u?.phase === 'launching' && <div role="status">Installer started. Cadrel Market will close so it can be replaced.</div>}
       </div>
 
       <TokenBox onChange={() => setU((s) => (s?.phase === 'error' ? { ...s, phase: 'idle', error: null } : s))} />

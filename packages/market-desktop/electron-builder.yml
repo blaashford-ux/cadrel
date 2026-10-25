@@ -1,7 +1,7 @@
 electronVersion: 44.9.0 # electron-builder cannot read a ^range; keep equal to the installed electron
-appId: app.bookscout.desktop
-productName: BookScout
-copyright: BookScout
+appId: app.cadrel-market.desktop
+productName: Cadrel Market
+copyright: Cadrel Market
 directories:
   output: release
   buildResources: build
@@ -32,8 +32,8 @@ extraResources:
     to: extension/manifest.json
   - from: ../market-extension/src
     to: extension/src
-  - from: dist/bookscout-extension.zip
-    to: bookscout-extension.zip
+  - from: dist/cadrel-market-extension.zip
+    to: cadrel-market-extension.zip
 npmRebuild: false
 nodeGypRebuild: false
 win:
@@ -46,8 +46,8 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
-  artifactName: BookScout-Setup-${version}.${ext}
+  artifactName: Cadrel-Setup-${version}.${ext}
 linux:
   target: dir
-  executableName: bookscout
+  executableName: cadrel-market
   category: Office

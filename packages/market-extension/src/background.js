@@ -1,7 +1,7 @@
 import { DEFAULT_PORT, asinOf, wantsAutoCapture, withoutHash, classifyUrl, decideSample, describeResult, extForType, extractCoverUrl, isCaptureQuotaError, isImageHost, sessionId, shotWait, toBase64 } from './lib.js';
 import { preparePage, sampleLoop } from './page.js';
 
-const MENU_ID = 'bookscout-send';
+const MENU_ID = 'cadrel-market-send';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -326,7 +326,7 @@ export async function finishSample(tabId) {
 }
 
 chrome.runtime.onConnect.addListener((port) => {
-  if (port.name !== 'bookscout-sample') return;
+  if (port.name !== 'cadrel-market-sample') return;
   const tabId = port.sender?.tab?.id;
   if (tabId == null) return;
   port.onMessage.addListener((m) => {

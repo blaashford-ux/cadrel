@@ -9,14 +9,14 @@ interface Props {
   dirty: boolean;
 }
 
-const control = (action: 'minimize' | 'maximize' | 'close') => window.mdedit.windowControl(action);
+const control = (action: 'minimize' | 'maximize' | 'close') => window.cadrelWrite.windowControl(action);
 
 /** The window's own title bar: logo, menus, the open document, and (off Windows) the window buttons. */
 export function TitleBar({ title, dirty }: Props) {
   const [info, setInfo] = useState<WindowInfo | null>(null);
   useEffect(() => {
-    void window.mdedit.windowInfo().then(setInfo);
-    return window.mdedit.onWindowState(setInfo);
+    void window.cadrelWrite.windowInfo().then(setInfo);
+    return window.cadrelWrite.onWindowState(setInfo);
   }, []);
 
   return (

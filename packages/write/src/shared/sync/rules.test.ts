@@ -8,20 +8,20 @@ describe('classify', () => {
   });
 
   it('knows the small config files', () => {
-    expect(classify('Novel/.mdedit/project.json')).toBe('meta');
+    expect(classify('Novel/.cadrel/project.json')).toBe('meta');
     expect(classify('Novel/Manuscript/Book.export.json')).toBe('meta');
-    expect(classify('.mdedit/settings.json')).toBe('meta');
-    expect(classify('Novel/.mdedit/progress.json')).toBe('progress');
-    expect(classify('Novel/.mdedit/progress-3fa9c01b22de.json')).toBe('progress');
+    expect(classify('.cadrel/settings.json')).toBe('meta');
+    expect(classify('Novel/.cadrel/progress.json')).toBe('progress');
+    expect(classify('Novel/.cadrel/progress-3fa9c01b22de.json')).toBe('progress');
   });
 
-  it('syncs reviewers’ notes files, and nothing else in .mdedit/review', () => {
-    expect(classify('Novel/.mdedit/review/owner.json')).toBe('notes');
-    expect(classify('Novel/.mdedit/review/ai-claude-line-edit.json')).toBe('notes');
-    expect(classify('Novel/.mdedit/review/owner.json.bak')).toBeNull();
-    expect(classify('Novel/.mdedit/review/sub/x.json')).toBeNull();
-    expect(classify('Novel/.mdedit/review/notes.txt')).toBeNull();
-    expect(classify('Shared With Me/Novel/.mdedit/review/owner.json')).toBeNull();
+  it('syncs reviewers’ notes files, and nothing else in .cadrel/review', () => {
+    expect(classify('Novel/.cadrel/review/owner.json')).toBe('notes');
+    expect(classify('Novel/.cadrel/review/ai-claude-line-edit.json')).toBe('notes');
+    expect(classify('Novel/.cadrel/review/owner.json.bak')).toBeNull();
+    expect(classify('Novel/.cadrel/review/sub/x.json')).toBeNull();
+    expect(classify('Novel/.cadrel/review/notes.txt')).toBeNull();
+    expect(classify('Shared With Me/Novel/.cadrel/review/owner.json')).toBeNull();
   });
 
   it('syncs other small files as assets', () => {
@@ -29,14 +29,14 @@ describe('classify', () => {
   });
 
   it('never syncs temp, backup and OS files', () => {
-    for (const p of ['Novel/a.md.mdedit-1234.tmp', 'Novel/.mdedit/project.json.bak', 'Novel/a.md.bak', 'Novel/Thumbs.db', 'Novel/desktop.ini', 'Novel/.DS_Store', 'Novel/~$a.md', 'Novel/.~lock.a.md#']) {
+    for (const p of ['Novel/a.md.cadrel-1234.tmp', 'Novel/.cadrel/project.json.bak', 'Novel/a.md.bak', 'Novel/Thumbs.db', 'Novel/desktop.ini', 'Novel/.DS_Store', 'Novel/~$a.md', 'Novel/.~lock.a.md#']) {
       expect(classify(p), p).toBeNull();
     }
   });
 
-  it('keeps per-device data inside .mdedit local', () => {
-    expect(classify('Novel/.mdedit/drafts/x.json')).toBeNull();
-    expect(classify('Novel/.mdedit/cache.json')).toBeNull();
+  it('keeps per-device data inside .cadrel local', () => {
+    expect(classify('Novel/.cadrel/drafts/x.json')).toBeNull();
+    expect(classify('Novel/.cadrel/cache.json')).toBeNull();
   });
 
   it('skips hidden folders such as .git', () => {
@@ -57,6 +57,6 @@ describe('classify', () => {
 
 describe('edited-chapter marks', () => {
   it('travel and are merged', () => {
-    expect(classify('Novel/.mdedit/edited.json')).toBe('marks');
+    expect(classify('Novel/.cadrel/edited.json')).toBe('marks');
   });
 });

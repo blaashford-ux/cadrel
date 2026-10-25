@@ -18,7 +18,7 @@ beforeEach(() => {
   studio = new Studio(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-studio-mcp-')), 'studio.json'));
   user = new UserStore(path.join(path.dirname(studio.file), 'user'));
   mem = new MemoryFs();
-  mem.seed('/books/DR1/.mdedit/project.json', '{"status":"editing"}');
+  mem.seed('/books/DR1/.cadrel/project.json', '{"status":"editing"}');
   mem.seed('/books/DR1/Book.md', '# One\n\nShe walked slowly to the door.\n');
 });
 

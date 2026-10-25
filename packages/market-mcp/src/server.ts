@@ -6,7 +6,7 @@ export { SERVER_INSTRUCTIONS };
 const MAX_CHARS = 60000;
 
 /** What the server says about itself in `initialize`. The Claude Desktop extension's launcher answers the handshake with these (from `--print-handshake`) while the server is still starting. */
-export const SERVER_INFO = { name: 'bookscout', version: '0.6.3' };
+export const SERVER_INFO = { name: 'cadrel-market', version: '0.6.3' };
 export const SERVER_CAPABILITIES = { tools: { listChanged: true } };
 
 export function createServer(ctx: ToolContext): McpServer {

@@ -20,10 +20,10 @@ const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const ASIN = 'B0G7R6X55V';
 const TOKEN = 'e2e-token-'.padEnd(43, 'x');
 /**
- * BOOKSCOUT_CHROMIUM, else the Chromium Playwright installed (`npx playwright install chromium`), else the one in /opt/pw-browsers.
+ * CADREL_MARKET_CHROMIUM, else the Chromium Playwright installed (`npx playwright install chromium`), else the one in /opt/pw-browsers.
  * Not CHROME_BIN: CI runners set it to branded Google Chrome, which ignores --load-extension, so the extension never loads. */
 function findChrome(): string | undefined {
-  const candidates = [process.env.BOOKSCOUT_CHROMIUM, chromium.executablePath()];
+  const candidates = [process.env.CADREL_MARKET_CHROMIUM, chromium.executablePath()];
   try {
     candidates.push(...fs.readdirSync('/opt/pw-browsers').filter((d) => /^chromium-\d+$/.test(d)).map((d) => `/opt/pw-browsers/${d}/chrome-linux/chrome`));
   } catch {
@@ -277,7 +277,7 @@ describe.skipIf(!haveBrowser)('extension in Chromium', () => {
 
   it('registers the right-click menu item', async () => {
     const ok = await worker.evaluate(
-      () => new Promise<boolean>((res) => chrome.contextMenus.update('bookscout-send', {}, () => res(!chrome.runtime.lastError))),
+      () => new Promise<boolean>((res) => chrome.contextMenus.update('cadrel-market-send', {}, () => res(!chrome.runtime.lastError))),
     );
     expect(ok).toBe(true);
   });

@@ -10,7 +10,7 @@ import {
 
 let root: string;
 beforeEach(async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'mdedit-proj-'));
+  root = await mkdtemp(path.join(tmpdir(), 'cadrel-proj-'));
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
@@ -24,7 +24,7 @@ describe('createProject', () => {
   it('builds the template’s folders, starter files and metadata', async () => {
     const r = await createProject(root, 'The Lost King', novel(), { now: at('2026-10-05T10:00:00'), uuid: () => 'id-1' });
     expect(r.path).toBe(path.join(root, 'The Lost King'));
-    expect(await names(r.path)).toEqual(['.mdedit', 'Characters', 'Exports', 'Manuscript', 'Research', 'Worldbuilding']);
+    expect(await names(r.path)).toEqual(['.cadrel', 'Characters', 'Exports', 'Manuscript', 'Research', 'Worldbuilding']);
     expect(await readFile(path.join(r.path, 'Manuscript', 'Draft.md'), 'utf8')).toBe('# Chapter 1\n\n');
     const meta = await readMeta(r.path);
     expect(meta).toMatchObject({ id: 'id-1', name: 'The Lost King', templateName: 'Novel', status: 'planning' });
@@ -62,7 +62,7 @@ describe('createProject', () => {
   });
 
   it('creates the Root Folder if it does not exist yet', async () => {
-    const deep = path.join(root, 'nested', 'MDEdit');
+    const deep = path.join(root, 'nested', 'Cadrel Write');
     await createProject(deep, 'P', blank());
     expect(await isProject(path.join(deep, 'P'))).toBe(true);
   });
@@ -96,10 +96,10 @@ describe('listProjects', () => {
   });
   it('a damaged marker still lists the project (named after its folder) and is repaired', async () => {
     const a = await createProject(root, 'Alpha', blank());
-    await writeFile(path.join(a.path, '.mdedit', 'project.json'), '{ not json');
+    await writeFile(path.join(a.path, '.cadrel', 'project.json'), '{ not json');
     const l = await listProjects(root);
     expect(l.projects[0].name).toBe('Alpha');
-    expect(JSON.parse(await readFile(path.join(a.path, '.mdedit', 'project.json'), 'utf8')).name).toBe('Alpha');
+    expect(JSON.parse(await readFile(path.join(a.path, '.cadrel', 'project.json'), 'utf8')).name).toBe('Alpha');
   });
 });
 
@@ -107,11 +107,11 @@ describe('countProject', () => {
   it('skips excluded folders at any depth, hidden folders and non-Markdown files', async () => {
     const d = path.join(root, 'p');
     await mkdir(path.join(d, 'A', 'Sub'), { recursive: true });
-    await mkdir(path.join(d, '.mdedit'), { recursive: true });
+    await mkdir(path.join(d, '.cadrel'), { recursive: true });
     await writeFile(path.join(d, 'A', 'one.md'), 'a b c');
     await writeFile(path.join(d, 'A', 'Sub', 'two.md'), 'd e');
     await writeFile(path.join(d, 'A', 'x.txt'), 'nope nope');
-    await writeFile(path.join(d, '.mdedit', 'hid.md'), 'nope nope nope');
+    await writeFile(path.join(d, '.cadrel', 'hid.md'), 'nope nope nope');
     expect((await countProject(d)).words).toBe(5);
     expect((await countProject(d, ['a/sub'])).words).toBe(3);
     expect((await countProject(d, ['A'])).words).toBe(0);
@@ -161,7 +161,7 @@ describe('renameProject / duplicateProject / delete / convert', () => {
     await writeFile(path.join(d, 'a.md'), 'one two three four');
     const meta = await convertToProject(d, { now: at('2026-10-05T10:00:00'), uuid: () => 'id-c' });
     expect(meta).toMatchObject({ id: 'id-c', name: 'Old Work', templateId: 'blank', excludedFolders: [] });
-    expect(await names(d)).toEqual(['.mdedit', 'a.md']);
+    expect(await names(d)).toEqual(['.cadrel', 'a.md']);
     expect((await readProgress(d)).days['2026-10-05']).toEqual({ start: 4, end: 4 });
     await expect(convertToProject(d)).rejects.toThrow(/already/);
   });
@@ -176,7 +176,7 @@ describe('progress recording', () => {
     let r = await recordProgress(a.path, at('2026-10-05T12:00:00'));
     expect(r.total).toBe(100);
     expect(r.progress.days['2026-10-05']).toEqual({ start: 100, end: 100 }); // the first sighting is the baseline
-    const history = path.join(a.path, '.mdedit', (await readdir(path.join(a.path, '.mdedit'))).find((f) => /^progress-.*\.json$/.test(f))!);
+    const history = path.join(a.path, '.cadrel', (await readdir(path.join(a.path, '.cadrel'))).find((f) => /^progress-.*\.json$/.test(f))!);
     const mtime = (await stat(history)).mtimeMs;
     await new Promise((res) => setTimeout(res, 20));
     await recordProgress(a.path, at('2026-10-05T12:30:00')); // nothing changed
@@ -197,8 +197,8 @@ describe('progress recording', () => {
     await writeFile(path.join(a.path, 'Book.md'), 'a few words');
     await updateMeta(a.path, { activeManuscript: 'Book.md' });
     await recordProgress(a.path, at('2026-10-05T09:00:00'));
-    const history = (await readdir(path.join(a.path, '.mdedit'))).find((f) => /^progress-.*\.json$/.test(f))!;
-    await writeFile(path.join(a.path, '.mdedit', history), 'garbage');
+    const history = (await readdir(path.join(a.path, '.cadrel'))).find((f) => /^progress-.*\.json$/.test(f))!;
+    await writeFile(path.join(a.path, '.cadrel', history), 'garbage');
     expect((await recordProgress(a.path, at('2026-10-05T12:00:00'))).progress.days['2026-10-05']).toBeDefined();
   });
 });
@@ -286,21 +286,21 @@ describe('active manuscript', () => {
 
 
 describe('edited chapter marks', () => {
-  it('are kept in .mdedit/edited.json, not project.json, and read back with the project', async () => {
+  it('are kept in .cadrel/edited.json, not project.json, and read back with the project', async () => {
     const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
     const meta = await updateMeta(a.path, { editedChapters: { 'Manuscript/Draft.md': ['One'] } }, at('2026-10-05T09:00:00'));
     expect(meta.editedChapters).toEqual({ 'Manuscript/Draft.md': ['One'] });
-    const stored = JSON.parse(await readFile(path.join(a.path, '.mdedit', 'edited.json'), 'utf8'));
+    const stored = JSON.parse(await readFile(path.join(a.path, '.cadrel', 'edited.json'), 'utf8'));
     expect(stored.files['Manuscript/Draft.md'].One.edited).toBe(true);
-    expect(JSON.parse(await readFile(path.join(a.path, '.mdedit', 'project.json'), 'utf8')).editedChapters).toEqual({});
+    expect(JSON.parse(await readFile(path.join(a.path, '.cadrel', 'project.json'), 'utf8')).editedChapters).toEqual({});
     expect((await readMeta(a.path))!.editedChapters).toEqual({ 'Manuscript/Draft.md': ['One'] });
     await updateMeta(a.path, { editedChapters: {} }, at('2026-10-05T10:00:00'));
     expect((await readMeta(a.path))!.editedChapters).toEqual({});
-    expect(JSON.parse(await readFile(path.join(a.path, '.mdedit', 'edited.json'), 'utf8')).files['Manuscript/Draft.md'].One).toMatchObject({ edited: false });
+    expect(JSON.parse(await readFile(path.join(a.path, '.cadrel', 'edited.json'), 'utf8')).files['Manuscript/Draft.md'].One).toMatchObject({ edited: false });
   });
   it('marks an older project.json still carried are moved across once', async () => {
     const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T08:00:00') });
-    const file = path.join(a.path, '.mdedit', 'project.json');
+    const file = path.join(a.path, '.cadrel', 'project.json');
     const raw = JSON.parse(await readFile(file, 'utf8'));
     await writeFile(file, JSON.stringify({ ...raw, editedChapters: { 'Book.md': ['Two'] } }));
     expect((await readMeta(a.path))!.editedChapters).toEqual({ 'Book.md': ['Two'] });

@@ -7,7 +7,7 @@ const channels = [
 
 const api: Record<string, unknown> = {};
 for (const ch of channels) api[ch] = (...args: unknown[]) => ipcRenderer.invoke(ch, ...args);
-// Notes on a record, when Cadrel hosts this page: its shell keeps them with the studio's projects. A standalone BookScout
+// Notes on a record, when Cadrel hosts this page: its shell keeps them with the studio's projects. A standalone Cadrel Market
 // has no such handler, so `available` says no and the page shows no Notes button.
 const host = (ch: string) => (...args: unknown[]) => ipcRenderer.invoke(`host:notes:${ch}`, ...args);
 api.hostNotes = {
@@ -45,6 +45,6 @@ api.onIndex = (cb: () => void) => {
   ipcRenderer.on('index', h);
   return () => ipcRenderer.off('index', h);
 };
-if (process.env.BOOKSCOUT_TEST === '1') api.__opened = () => ipcRenderer.invoke('__opened');
+if (process.env.CADREL_TEST === '1') api.__opened = () => ipcRenderer.invoke('__opened');
 
-contextBridge.exposeInMainWorld('bookscout', api);
+contextBridge.exposeInMainWorld('cadrel-market', api);

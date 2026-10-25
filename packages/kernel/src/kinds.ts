@@ -102,7 +102,7 @@ export function suggestKind(path: string, folderKinds: Record<string, string> = 
   return { kind: OTHER_KIND, reason: 'nothing says what it is', confidence: 'guess' };
 }
 
-/** The folder names a template uses, mapped to kinds (so adopting an MDEdit project can set folder defaults). */
+/** The folder names a template uses, mapped to kinds (so adopting a Cadrel Write project can set folder defaults). */
 export function folderKindByName(name: string, kinds: Map<string, FileKind> = kindRegistry()): string | null {
   const n = name.trim().toLowerCase();
   const alias: Record<string, string> = { manuscripts: 'manuscript', characters: 'character', 'series bible': 'world', images: 'image', pictures: 'image', art: 'asset', outlines: 'outline' };

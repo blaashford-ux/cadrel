@@ -97,7 +97,7 @@ interface Meta {
   active?: string | null;
 }
 
-export const reviewKey = new PluginKey<State>('mdedit-review');
+export const reviewKey = new PluginKey<State>('cadrel-review');
 
 function compute(doc: PmNode, notes: NoteMark[], active: string | null): State {
   const flat = flatten(doc);

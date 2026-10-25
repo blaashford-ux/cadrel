@@ -5,7 +5,7 @@ import {
 
 describe('complianceError', () => {
   it('accepts ordinary names', () => {
-    for (const n of ['Chapter 1.md', 'The Lost King', 'notes.v2.md', '.mdedit', 'é.md']) expect(complianceError(n)).toBeNull();
+    for (const n of ['Chapter 1.md', 'The Lost King', 'notes.v2.md', '.cadrel', 'é.md']) expect(complianceError(n)).toBeNull();
   });
 
   it('rejects illegal characters, reserved names, trailing dots and spaces', () => {

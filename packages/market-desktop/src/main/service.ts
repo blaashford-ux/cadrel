@@ -104,13 +104,13 @@ export interface TokenStatus {
   saved: boolean;
   /** False where the system cannot encrypt the token, so it cannot be saved. */
   canSave: boolean;
-  /** The token comes from the BOOKSCOUT_GITHUB_TOKEN environment variable. */
+  /** The token comes from the CADREL_MARKET_GITHUB_TOKEN environment variable. */
   fromEnvironment: boolean;
 }
 
 /** What the MCP server is called in settings and in the Claude Desktop extension. A host app that carries one server for several modules passes its own. */
 export interface McpBrand {
-  /** The server's name in settings: "bookscout", "cadrel". */
+  /** The server's name in settings: "cadrel-market", "cadrel". */
   id: string;
   /** Display name: "Cadrel Market", "Cadrel". */
   name: string;
@@ -119,14 +119,14 @@ export interface McpBrand {
   /** The extension file's name. */
   file: string;
 }
-export const BOOKSCOUT_BRAND: McpBrand = {
-  id: 'bookscout',
+export const MARKET_BRAND: McpBrand = {
+  id: 'cadrel-market',
   name: 'Cadrel Market',
   description: 'Search and analyse the Kindle categories, books, reviews, texts and Reddit threads in your Cadrel Market library.',
   file: 'Cadrel Market.mcpb'
 };
 
-export function buildMcpSnippets(launch: { command: string; args: string[]; env: Record<string, string> }, id = 'bookscout'): McpSnippets {
+export function buildMcpSnippets(launch: { command: string; args: string[]; env: Record<string, string> }, id = 'cadrel-market'): McpSnippets {
   const entry: Record<string, unknown> = { command: launch.command, args: launch.args };
   if (Object.keys(launch.env).length) entry.env = launch.env;
   const q = (s: string) => JSON.stringify(s);
@@ -193,7 +193,7 @@ export class AppService {
   }
 
   private githubToken(): string | null {
-    const env = process.env.BOOKSCOUT_GITHUB_TOKEN?.trim();
+    const env = process.env.CADREL_MARKET_GITHUB_TOKEN?.trim();
     if (env) return env;
     try {
       const sec = this.opts.secrets;
@@ -206,7 +206,7 @@ export class AppService {
   }
 
   githubTokenStatus(): TokenStatus {
-    return { saved: fs.existsSync(this.tokenFileEnc), canSave: !!this.opts.secrets?.available(), fromEnvironment: !!process.env.BOOKSCOUT_GITHUB_TOKEN?.trim() };
+    return { saved: fs.existsSync(this.tokenFileEnc), canSave: !!this.opts.secrets?.available(), fromEnvironment: !!process.env.CADREL_MARKET_GITHUB_TOKEN?.trim() };
   }
 
   /** Save (or, with null, remove) a read-only GitHub token used to see releases of a private repository. */
@@ -219,7 +219,7 @@ export class AppService {
     const t = token.trim();
     if (!/^[A-Za-z0-9_-]{20,255}$/.test(t)) throw new Error('That does not look like a GitHub token (letters, digits, "_" and "-" only).');
     const sec = this.opts.secrets;
-    if (!sec?.available()) throw new Error('This computer cannot encrypt the token, so Cadrel Market will not store it. Set the BOOKSCOUT_GITHUB_TOKEN environment variable instead.');
+    if (!sec?.available()) throw new Error('This computer cannot encrypt the token, so Cadrel Market will not store it. Set the CADREL_MARKET_GITHUB_TOKEN environment variable instead.');
     fs.mkdirSync(this.opts.userData, { recursive: true });
     fs.writeFileSync(this.tokenFileEnc, sec.encrypt(t), { mode: 0o600 });
     this.ulog('info', 'GitHub token saved (encrypted)');
@@ -572,7 +572,7 @@ export class AppService {
   async openAmazonSearch(keyword: string): Promise<void> {
     const q = String(keyword).trim();
     if (q.length < 2 || q.length > 80) throw new Error('type a phrase of 2-80 characters');
-    await this.opts.openExternal(`https://www.amazon.com/s?${new URLSearchParams({ k: q, i: 'digital-text' }).toString()}#bookscout-capture`);
+    await this.opts.openExternal(`https://www.amazon.com/s?${new URLSearchParams({ k: q, i: 'digital-text' }).toString()}#cadrel-market-capture`);
   }
 
   // ---- sales calibration: the author's own KDP sales against rank, to fit the rank-to-sales curve ---------------------------
@@ -763,8 +763,8 @@ export class AppService {
     const slug = (report.category.name ?? report.category.key).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const day = new Date().toISOString().slice(0, 10);
     return kind === 'csv'
-      ? { filename: `bookscout-${slug}-${day}.csv`, content: '\ufeff' + categoryCsv(lib.db, report.category.key) } // BOM so Excel reads UTF-8
-      : { filename: `bookscout-${slug}-${day}.md`, content: reportMarkdown(report) };
+      ? { filename: `cadrel-market-${slug}-${day}.csv`, content: '\ufeff' + categoryCsv(lib.db, report.category.key) } // BOM so Excel reads UTF-8
+      : { filename: `cadrel-market-${slug}-${day}.md`, content: reportMarkdown(report) };
   }
 
   successWeights(): Weights {
@@ -1204,7 +1204,7 @@ export class AppService {
   mcpConfig(): McpSnippets {
     const root = this.need().root;
     const base = this.opts.mcpLaunch?.() ?? { command: 'node', args: [path.resolve('packages/market-mcp/dist/main.mjs')], env: {} };
-    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? BOOKSCOUT_BRAND).id);
+    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
   }
 
   /**
@@ -1218,7 +1218,7 @@ export class AppService {
     // Claude Desktop wants the handshake answered within a fraction of a second; the server takes longer than that to start, so the launcher
     // answers it from what the server itself reports and hands over when the server is ready (see launcher.ts)
     const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : readHandshake(c));
-    const brand = this.opts.mcpBrand ?? BOOKSCOUT_BRAND;
+    const brand = this.opts.mcpBrand ?? MARKET_BRAND;
     const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
     const manifest = {
       manifest_version: '0.2',

@@ -21,7 +21,7 @@ import { normalizeKeyword } from './keywords/suggest.js';
  * Left out on purpose: book text and samples (often someone else's copyright), the queue, notes and tags, "My Books", sales
  * figures, API tokens and the settings. The search index's vectors are not shipped either: they are rebuilt on the importing computer.
  */
-export const PACK_FORMAT = 'bookscout-data-pack';
+export const PACK_FORMAT = 'cadrel-market-data-pack';
 export const PACK_VERSION = 2;
 
 export interface PackManifest {

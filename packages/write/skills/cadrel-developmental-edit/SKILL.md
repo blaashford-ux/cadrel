@@ -1,5 +1,5 @@
 ---
-name: mdedit-developmental-edit
+name: cadrel-developmental-edit
 description: "Developmental (big-picture) edit of fiction or narrative nonfiction chapters in a Cadrel Write project, leaving the feedback as comments in the author's Notes panel. Use when the user asks for a developmental edit, structure, pacing, plot, character, continuity or arc feedback, or whether a chapter or scene is working, and the Cadrel Write tools (list_projects, read_chapter, add_notes) are available."
 ---
 

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { launcherSource, type Handshake } from '../src/main/launcher.js';
 
 const HS: Handshake = {
-  serverInfo: { name: 'bookscout', version: '9.9.9' },
+  serverInfo: { name: 'cadrel-market', version: '9.9.9' },
   capabilities: { tools: { listChanged: true } },
   instructions: 'Be careful with text fields.',
   protocolVersions: ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'],
@@ -70,7 +70,7 @@ describe('the extension launcher', () => {
     L.send(init(0));
     await L.until(() => L.out.length >= 1);
     expect(L.out[0]!.at).toBeLessThan(1000); // well before the server could have answered
-    expect(L.out[0]!.msg).toMatchObject({ id: 0, result: { protocolVersion: '2025-06-18', serverInfo: { name: 'bookscout', version: '9.9.9' }, capabilities: { tools: { listChanged: true } }, instructions: 'Be careful with text fields.' } });
+    expect(L.out[0]!.msg).toMatchObject({ id: 0, result: { protocolVersion: '2025-06-18', serverInfo: { name: 'cadrel-market', version: '9.9.9' }, capabilities: { tools: { listChanged: true } }, instructions: 'Be careful with text fields.' } });
     // the client carries on straight away: these wait for the server
     L.send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     L.send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });

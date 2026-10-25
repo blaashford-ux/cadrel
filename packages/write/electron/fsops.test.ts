@@ -6,7 +6,7 @@ import { createFile, createFolder, renameNode } from './fsops';
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'mdedit-'));
+  dir = await mkdtemp(path.join(tmpdir(), 'cadrel-'));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });

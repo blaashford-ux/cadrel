@@ -32,7 +32,7 @@ const when = (iso: string): string => {
 
 /** Manage a project's reviewers: one link per person. Copy the plain link or a short invitation message, or withdraw it. */
 export function ShareDialog({ project, projectName, manuscript: given, sync, onConnect, onClose }: Props) {
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const [loaded, setLoaded] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     if (given === undefined) void api.getProjectMeta(project).then((m) => setLoaded(m?.activeManuscript ?? null)).catch(() => setLoaded(null));
@@ -138,7 +138,7 @@ export function ShareDialog({ project, projectName, manuscript: given, sync, onC
               )}
               Each person gets their own link. A <strong>reviewer</strong> can read the active manuscript and leave comments and suggestions; they can’t change your text, and they can’t see each other’s notes.
               A <strong>collaborator</strong> gets every Markdown file in the project, can edit them and create new ones: their changes and yours are merged each time either of you syncs, and anything you both changed is kept side by side for you to settle.
-              <strong> Copy link</strong> gives just the link; <strong>Copy invitation</strong> adds a short note with where to download MDEdit.
+              <strong> Copy link</strong> gives just the link; <strong>Copy invitation</strong> adds a short note with where to download Cadrel Write.
             </p>
             <ul className="share-list">
               {status?.reviewers.length === 0 && <li className="muted">No reviewers yet.</li>}

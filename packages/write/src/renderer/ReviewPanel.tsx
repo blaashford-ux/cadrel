@@ -28,7 +28,7 @@ interface Props {
 const excerpt = (s: string, n = 90) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** Comments and suggestions on the open chapter's file. */
-const CHAPTER_ONLY_KEY = 'mdedit.notes.chapterOnly';
+const CHAPTER_ONLY_KEY = 'cadrel-write.notes.chapterOnly';
 const readChapterOnly = (): boolean => {
   try {
     return localStorage.getItem(CHAPTER_ONLY_KEY) === '1';

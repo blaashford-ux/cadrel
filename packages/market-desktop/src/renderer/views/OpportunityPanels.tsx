@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CategoryReport, Opportunity, OpportunityWeights, SalesCurve } from '../../shared/api.js';
 import { ChartCard, GroupedBars, Legend, S1 } from '../charts.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const num = (v: number | null | undefined, d = 1) => (v == null ? '–' : Number(v.toFixed(d)).toLocaleString('en-US'));
 const pct = (v: number | null | undefined) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const trunc = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s);

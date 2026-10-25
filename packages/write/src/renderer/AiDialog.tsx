@@ -19,7 +19,7 @@ const copy = async (text: string): Promise<boolean> => {
 
 /** Connect an AI app (Claude, GPT…) so it can review this project, and see or remove the notes it has left. */
 export function AiDialog({ project, projectName, onClose }: Props) {
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const [server, setServer] = useState<AiServerInfo | null | undefined>(undefined);
   const [reviewers, setReviewers] = useState<AiReviewerSummary[]>([]);
   const [confirm, setConfirm] = useState<string | null>(null);

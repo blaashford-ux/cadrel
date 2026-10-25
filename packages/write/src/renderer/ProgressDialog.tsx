@@ -216,7 +216,7 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
         </div>
         <p className="muted small">
           Written is the net change in the project’s word count each day: deleting more than you write shows as 0. History is stored in the project’s hidden
-          .mdedit folder.
+          .cadrel folder.
         </p>
         <div className="modal-actions">
           {goal && <button onClick={onSetGoal}>Change goal…</button>}

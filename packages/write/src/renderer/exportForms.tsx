@@ -62,7 +62,7 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                           <button
                             type="button"
                             onClick={async () => {
-                              const p = await window.mdedit.pickCoverImage();
+                              const p = await window.cadrelWrite.pickCoverImage();
                               if (p) edit((d) => void (d.export.epub.coverImage = p));
                             }}
                           >

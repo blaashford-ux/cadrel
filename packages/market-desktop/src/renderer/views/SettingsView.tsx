@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { SalesCalibration } from './SalesCalibration.js';
 import type { AppSettings, CategorySummary, IndexStatus, MaintenanceStatus, McpSnippets, Status, VerifyReport } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 function PairCard() {
   const [c, setC] = useState<{ code: string; expiresAt: number } | null>(null);

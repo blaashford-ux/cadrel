@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CommunityJob, CommunitySource, SyncResult } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const n = (v: number) => v.toLocaleString('en-US');
 const day = (iso: string | null) => (iso ? iso.slice(0, 10) : '–');
 

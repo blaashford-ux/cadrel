@@ -11,7 +11,7 @@ import { AppService, type McpBrand } from './service.js';
 import { CHANNELS } from '../shared/api.js';
 
 // Tests run the real app but must not open a real browser or a real folder dialog.
-export const TEST = process.env.BOOKSCOUT_TEST === '1';
+export const TEST = process.env.CADREL_TEST === '1';
 
 export interface MarketHost {
   /** The window that owns Market's view (the shell window, or Market's own window when standalone). */
@@ -91,8 +91,8 @@ export function createMarketModule(host: MarketHost): MarketModule {
   }
 
   async function chooseLibrary(): Promise<boolean> {
-    if (TEST && process.env.BOOKSCOUT_TEST_LIBRARY) {
-      await service.setLibrary(process.env.BOOKSCOUT_TEST_LIBRARY);
+    if (TEST && process.env.CADREL_MARKET_TEST_LIBRARY) {
+      await service.setLibrary(process.env.CADREL_MARKET_TEST_LIBRARY);
       return true;
     }
     const r = await dialog.showOpenDialog(host.getWindow()!, {
@@ -105,7 +105,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
   }
 
   async function pickFolder(title: string): Promise<string | null> {
-    if (TEST && process.env.BOOKSCOUT_TEST_FOLDER) return process.env.BOOKSCOUT_TEST_FOLDER;
+    if (TEST && process.env.CADREL_MARKET_TEST_FOLDER) return process.env.CADREL_MARKET_TEST_FOLDER;
     const r = await dialog.showOpenDialog(host.getWindow()!, { title, properties: ['openDirectory', 'createDirectory'] });
     return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
   }
@@ -121,9 +121,9 @@ export function createMarketModule(host: MarketHost): MarketModule {
   }
 
   async function exportData(categoryKeys: string[] | null) {
-    const name = `bookscout-data-${new Date().toISOString().slice(0, 10)}.pack`;
+    const name = `cadrel-market-data-${new Date().toISOString().slice(0, 10)}.pack`;
     let target: string;
-    if (TEST && process.env.BOOKSCOUT_TEST_EXPORT_DIR) target = path.join(process.env.BOOKSCOUT_TEST_EXPORT_DIR, name);
+    if (TEST && process.env.CADREL_MARKET_TEST_EXPORT_DIR) target = path.join(process.env.CADREL_MARKET_TEST_EXPORT_DIR, name);
     else {
       const r = await dialog.showSaveDialog(host.getWindow()!, { title: 'Save the data pack', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'Cadrel Market data pack', extensions: ['pack'] }] });
       if (r.canceled || !r.filePath) return null;
@@ -134,7 +134,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
 
   async function importData() {
     let file: string | undefined;
-    if (TEST && process.env.BOOKSCOUT_TEST_PACK) file = process.env.BOOKSCOUT_TEST_PACK;
+    if (TEST && process.env.CADREL_MARKET_TEST_PACK) file = process.env.CADREL_MARKET_TEST_PACK;
     else {
       const r = await dialog.showOpenDialog(host.getWindow()!, { title: 'Choose a Cadrel Market data pack', properties: ['openFile'], filters: [{ name: 'Cadrel Market data pack', extensions: ['pack'] }] });
       file = r.canceled ? undefined : r.filePaths[0];
@@ -154,7 +154,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
   }
 
   async function exportStatement(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: 'paid' | 'earned' = 'paid'): Promise<string | null> {
-    const testDir = TEST ? process.env.BOOKSCOUT_TEST_EXPORT_DIR : undefined;
+    const testDir = TEST ? process.env.CADREL_MARKET_TEST_EXPORT_DIR : undefined;
     if (kind === 'pdf' && payee === null) {
       // one PDF per author, in a folder the user picks
       const s = service.statement(from, to, basis);
@@ -181,7 +181,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
 
   /** Write a generated file (CSV, or a PDF printed from HTML) where the user chooses; `many` writes one PDF per author into a chosen folder. */
   async function saveGenerated(kind: 'csv' | 'pdf', make: (payee: string | null) => { filename: string; content: string }, payee: string | null, everyone: () => string[]): Promise<string | null> {
-    const testDir = TEST ? process.env.BOOKSCOUT_TEST_EXPORT_DIR : undefined;
+    const testDir = TEST ? process.env.CADREL_MARKET_TEST_EXPORT_DIR : undefined;
     if (kind === 'pdf' && payee === null) {
       const dir = testDir ?? (await pickFolder('Choose a folder for the statements'));
       if (!dir) return null;
@@ -208,7 +208,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
 
   async function attachManuscript(asin: string) {
     let file: string | undefined;
-    if (TEST && process.env.BOOKSCOUT_TEST_MANUSCRIPT) file = process.env.BOOKSCOUT_TEST_MANUSCRIPT;
+    if (TEST && process.env.CADREL_MARKET_TEST_MANUSCRIPT) file = process.env.CADREL_MARKET_TEST_MANUSCRIPT;
     else {
       const r = await dialog.showOpenDialog(host.getWindow()!, {
         title: 'Choose the book file (PDF, EPUB, Word or text)',
@@ -223,7 +223,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
   async function exportCategory(categoryKey: string, kind: 'csv' | 'md', topN: number): Promise<string | null> {
     const { filename, content } = await service.exportContent(categoryKey, kind, topN);
     let target: string;
-    if (TEST && process.env.BOOKSCOUT_TEST_EXPORT_DIR) target = path.join(process.env.BOOKSCOUT_TEST_EXPORT_DIR, filename);
+    if (TEST && process.env.CADREL_MARKET_TEST_EXPORT_DIR) target = path.join(process.env.CADREL_MARKET_TEST_EXPORT_DIR, filename);
     else {
       const r = await dialog.showSaveDialog(host.getWindow()!, { defaultPath: path.join(app.getPath('documents'), filename), filters: [{ name: kind === 'csv' ? 'Spreadsheet (CSV)' : 'Markdown report', extensions: [kind] }] });
       if (r.canceled || !r.filePath) return null;

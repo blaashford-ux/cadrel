@@ -8,11 +8,11 @@ import { SettingsDialog } from './SettingsDialog';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const DEFAULT = 'C:\\Users\\me\\MDEdit';
+const DEFAULT = 'C:\\Users\\me\\Cadrel Write';
 
 async function open(config: { setupDone: boolean; rootExists: boolean }) {
   const setProjectsConfig = vi.fn(async () => ({}));
-  (window as unknown as { mdedit: unknown }).mdedit = {
+  (window as unknown as { cadrel-write: unknown }).cadrelWrite = {
     getAppDefaults: async () => defaultAppDefaults(),
     getPrefs: async () => ({}),
     getProjectsConfig: async () => ({ ...defaultProjectsSettings(), ...config, root: DEFAULT, defaultRoot: DEFAULT }),

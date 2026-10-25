@@ -26,7 +26,7 @@ export async function runSmokeTest(outFile: string): Promise<number> {
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
   let result: unknown = null;
   try {
-    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdedit-smoke-'));
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cadrel-smoke-'));
     const md = path.join(dir, 'smoke.md');
     await fs.writeFile(md, SAMPLE);
     const details = sanitizeBookDetails({ title: 'Smoke Test Book', author: 'Cadrel Write', export: { outputs: { epub: true, pdf: true, docx: true }, outputDir: 'out' } });

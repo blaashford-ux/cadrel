@@ -1,5 +1,5 @@
 /**
- * Which chapters are marked as edited, kept in a small file of their own (`.mdedit/edited.json`) so two devices can
+ * Which chapters are marked as edited, kept in a small file of their own (`.cadrel/edited.json`) so two devices can
  * merge their marks instead of one overwriting the other. Every chapter remembers when it was last marked or unmarked,
  * and the newest answer wins per chapter: a mark made on one device and a different mark made on the other both
  * survive (a union), and an unmark is kept as a note so the mark does not come back from the other device.

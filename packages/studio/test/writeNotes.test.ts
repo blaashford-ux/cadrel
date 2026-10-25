@@ -11,8 +11,8 @@ describe('reading Write’s notes into the studio list', () => {
   it('maps a Write project’s notes, attaching them to the linked studio project', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'cadrel-wn-'));
     const proj = path.join(root, 'Dragon Rider 1');
-    await mkdir(path.join(proj, '.mdedit'), { recursive: true });
-    await writeFile(path.join(proj, '.mdedit', 'project.json'), JSON.stringify({ status: 'drafting' }));
+    await mkdir(path.join(proj, '.cadrel'), { recursive: true });
+    await writeFile(path.join(proj, '.cadrel', 'project.json'), JSON.stringify({ status: 'drafting' }));
     await writeFile(path.join(proj, 'book.md'), '# Chapter One\n\nThe dragon flew over the hills and far away.\n');
     const ctx = { fs: nodeFs, root, agent: 'claude', agentName: 'Claude' };
     const res = await addNotes(ctx, 'Dragon Rider 1', undefined, [{ file: 'book.md', kind: 'comment', quote: 'flew over the hills', body: 'Vary the verb.', category: 'style' }]);

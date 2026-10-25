@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { BookText } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const pct = (v: number | null | undefined) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const n = (v: number | null | undefined, d = 1) => (v == null ? '–' : Number(v.toFixed(d)).toLocaleString('en-US'));
 

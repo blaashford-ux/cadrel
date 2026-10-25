@@ -17,7 +17,7 @@ const detail = (a: string) => lib.ingest({ kind: 'detail', url: `https://www.ama
 const asins = () => categoryBooks(lib.db, KEY).map((b) => b.asin);
 
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-rm-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-rm-'));
   lib = Library.open(root);
   listPage();
   for (const a of CAPTURED) detail(a);

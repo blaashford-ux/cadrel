@@ -1,6 +1,6 @@
 /** Self-update from GitHub Releases: finding the newest release and the file that fits this platform. */
 
-export const RELEASES_REPO = 'blaashford-ux/MDEdit';
+export const RELEASES_REPO = 'blaashford-ux/cadrel';
 export const LATEST_RELEASE_URL = `https://api.github.com/repos/${RELEASES_REPO}/releases/latest`;
 const DOWNLOAD_PREFIX = `https://github.com/${RELEASES_REPO}/releases/download/`.toLowerCase();
 
@@ -42,8 +42,8 @@ interface ReleaseJson {
 }
 
 const ASSET_PATTERN: Record<UpdatePlatform, RegExp> = {
-  windows: /^MDEdit-Setup-.*\.exe$/i,
-  android: /^MDEdit-.*\.apk$/i
+  windows: /^Cadrel-Setup-.*\.exe$/i,
+  android: /^Cadrel-.*\.apk$/i
 };
 
 /** [major, minor, patch] plus whether it carries a pre-release suffix ("0.5.0-beta.1"). Null if it isn't a version. */

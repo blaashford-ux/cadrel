@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.blaashford.mdedit',
-  appName: 'MDEdit',
+  appId: 'com.blaashford.cadrel',
+  appName: 'Cadrel Write',
   webDir: 'dist-mobile',
   server: {
     androidScheme: 'https',

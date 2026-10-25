@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CategorySummary, Exclusion, QueueItem } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 export function QueueView({ version }: { version: number }) {
   const [items, setItems] = useState<QueueItem[]>([]);

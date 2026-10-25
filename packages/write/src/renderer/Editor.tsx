@@ -54,7 +54,7 @@ interface Props {
 }
 
 /** The phone: no window chrome, so no mouse hover to hang floating menus on. */
-const TOUCH = typeof window !== 'undefined' && window.mdedit?.capabilities?.windowChrome === false;
+const TOUCH = typeof window !== 'undefined' && window.cadrelWrite?.capabilities?.windowChrome === false;
 
 export function Editor({ initial, restore, onChange, saved, onNav, firstLine, readOnly, onContextMenu }: Props) {
   const wrap = useRef<HTMLDivElement>(null);

@@ -1,5 +1,5 @@
 /**
- * Standalone entry: BookScout as a whole application, with its own window and tray. The application logic lives in
+ * Standalone entry: Cadrel Market as a whole application, with its own window and tray. The application logic lives in
  * ./module.ts, which the Cadrel shell also hosts inside its own window.
  */
 import path from 'node:path';
@@ -8,10 +8,10 @@ import { app, BrowserWindow, Menu, Tray, nativeImage } from 'electron';
 import { createMarketModule, TEST } from './module.js';
 
 // The MCP server finds this app's settings by this name, so it must not depend on the package name.
-app.setName('BookScout');
+app.setName('Cadrel Market');
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-if (process.env.BOOKSCOUT_USER_DATA) app.setPath('userData', process.env.BOOKSCOUT_USER_DATA);
+if (process.env.CADREL_MARKET_USER_DATA) app.setPath('userData', process.env.CADREL_MARKET_USER_DATA);
 
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -36,7 +36,7 @@ const { service, log } = market;
 const applySettings = market.applySettings;
 log.info('starting', app.getVersion(), process.platform, process.versions.electron);
 
-// One BookScout at a time: a second copy would fight over the port and the library.
+// One Cadrel Market at a time: a second copy would fight over the port and the library.
 if (!TEST && !app.requestSingleInstanceLock()) {
   log.info('another instance is running; exiting');
   app.quit();
@@ -58,9 +58,9 @@ function ensureTray() {
     log.warn('no tray icon', e);
     return;
   }
-  tray.setToolTip('BookScout');
+  tray.setToolTip('Cadrel Market');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Open BookScout', click: () => { win?.show(); win?.focus(); } },
+    { label: 'Open Cadrel Market', click: () => { win?.show(); win?.focus(); } },
     { type: 'separator' },
     { label: 'Quit', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -81,7 +81,7 @@ function buildMenu() {
     { role: 'editMenu' },
     { role: 'viewMenu' },
     { role: 'windowMenu' },
-    { id: 'about-menu', label: 'About', submenu: [{ id: 'about', label: 'About BookScout', click: showAbout }] },
+    { id: 'about-menu', label: 'About', submenu: [{ id: 'about', label: 'About Cadrel Market', click: showAbout }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -90,7 +90,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1180,
     height: 780,
-    title: 'BookScout',
+    title: 'Cadrel Market',
     webPreferences: {
       preload: path.join(here, 'preload.cjs'),
       contextIsolation: true,

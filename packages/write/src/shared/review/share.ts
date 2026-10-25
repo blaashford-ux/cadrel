@@ -85,7 +85,7 @@ export function findReviewsFolder(all: DriveFile[]): string | null {
 }
 
 /** Name of the file in the reviews folder that carries the owner's shares between their devices. */
-export const SHARES_FILE_NAME = 'mdedit-shares.json';
+export const SHARES_FILE_NAME = 'cadrel-shares.json';
 
 /**
  * Two copies of the owner's shares (this device's and the one in Drive) combined: reviewers are united by id, and anyone
@@ -285,7 +285,7 @@ export class ReviewShare {
     if (rec && stillThere) {
       await this.o.drive().updateFile(rec.packageId, text);
     } else {
-      const file = await this.o.drive().createFile(`${toCompliantName(project)}.mdedit-review.json`, await this.folder(), text);
+      const file = await this.o.drive().createFile(`${toCompliantName(project)}.cadrel-review.json`, await this.folder(), text);
       await this.o.drive().shareByLink(file.id, 'reader');
       rec = { packageId: file.id, packageMd5: null, publishedAt: null, reviewers: rec?.reviewers ?? [], ...(rec?.revoked ? { revoked: rec.revoked } : {}) };
     }
@@ -392,7 +392,7 @@ export class ReviewShare {
       }
       const shown = files.map((f) => (keys && f.path === manuscript ? { path: f.path, text: selectChapters(f.text, { keys, level }) } : f));
       const file = await this.o.drive().createFile(
-        `${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`,
+        `${toCompliantName(project)} - ${toCompliantName(name)}.cadrel-review.json`,
         await this.folder(),
         JSON.stringify({ version: 1, project, publishedAt: this.now().toISOString(), files: shown, chapterLevel: level })
       );
@@ -409,7 +409,7 @@ export class ReviewShare {
         this.state.selections = { ...this.state.selections, [`${project}/${manuscript}`]: keys };
         if (keys.length < all.length) {
           const pkg = await buildPackage(this.o.fs, dir, project, this.now, manuscript, { keys, level: chapters.level });
-          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.mdedit-review.json`, await this.folder(), JSON.stringify(pkg));
+          const file = await this.o.drive().createFile(`${toCompliantName(project)} - ${toCompliantName(name)}.cadrel-review.json`, await this.folder(), JSON.stringify(pkg));
           await this.o.drive().shareByLink(file.id, 'reader');
           subset = { chapters: keys, chapterLevel: chapters.level, packageId: file.id, packageMd5: md5Hex(JSON.stringify({ ...pkg, publishedAt: '' })) };
         }
@@ -598,9 +598,9 @@ export class ReviewJoin {
     const drive = this.o.drive();
     const pkgFile = await drive.getFile(invite.packageId);
     const commentsFile = await drive.getFile(invite.commentsId);
-    if (!pkgFile || !commentsFile) throw new Error('MDEdit can’t open that project yet. Pick both files when Google asks, or ask the owner to send the link again.');
+    if (!pkgFile || !commentsFile) throw new Error('Cadrel Write can’t open that project yet. Pick both files when Google asks, or ask the owner to send the link again.');
     const pkg = parsePackage(await drive.download(invite.packageId));
-    if (!pkg) throw new Error('That file isn’t a MDEdit review package.');
+    if (!pkg) throw new Error('That file isn’t a Cadrel Write review package.');
 
     const dir = await this.folderFor(invite.reviewerId, toCompliantName(pkg.project));
     const previous = (await readMarker(fs, dir))?.files ?? [];

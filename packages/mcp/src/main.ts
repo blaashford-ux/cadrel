@@ -45,7 +45,7 @@ const studio = new Studio(studioPath);
 const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
 const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, user, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 
-/** Write: the folder that holds the projects, by Cadrel Write's own rules (--root, MDEDIT_ROOT, Cadrel Write's settings, the default). */
+/** Write: the folder that holds the projects, by Cadrel Write's own rules (--root, CADREL_WRITE_ROOT, Cadrel Write's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {
   try {
     const candidates = await rootCandidates({ flag: flag('root'), fs: nodeFs });

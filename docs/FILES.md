@@ -1,5 +1,7 @@
 # Files, kinds and sharing
 
+> **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
+
 How Cadrel keeps a project's files, how it knows what each file *is*, and who can share what with whom. Read with [ARCHITECTURE.md](ARCHITECTURE.md) (the vault, §2 and §6), [PERMISSIONS.md](PERMISSIONS.md) and [PLAN.md](PLAN.md).
 
 **Status: design. None of this is built yet.** Today Write still keeps MDEdit's `.mdedit/project.json` and its Google Drive sync, and the shell's project tree only *links* a Write folder. What exists now is called out under [Where we are](#where-we-are).

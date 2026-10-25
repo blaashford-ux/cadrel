@@ -1,5 +1,7 @@
 # Cadrel architecture
 
+> **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
+
 Cadrel is a **desktop-first Windows application** for running a book studio: one app, one installer, one set of shared records, with each discipline (writing, editing, art, launch, market research, sales, business) as a **module** inside it. It is built from [MDEdit](https://github.com/blaashford-ux/MDEdit) and [BookScout](https://github.com/blaashford-ux/bookscout), harmonised, plus new modules. The scope and build order are in [PLAN.md](PLAN.md).
 
 ## 1. Stack (unchanged from MDEdit and BookScout)

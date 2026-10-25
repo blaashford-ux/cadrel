@@ -13,7 +13,7 @@ export interface HostNotes {
 
 declare global {
   interface Window {
-    bookscout: Api & { __opened?: () => Promise<string[]>; hostNotes?: HostNotes };
+    cadrel-market: Api & { __opened?: () => Promise<string[]>; hostNotes?: HostNotes };
   }
 }
 export {};

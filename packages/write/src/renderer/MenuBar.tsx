@@ -31,7 +31,7 @@ export function MenuBar() {
   const [path, setPath] = useState<number[] | null>(null);
   const root = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(() => window.mdedit.getMenu().then(setMenu).catch(() => undefined), []);
+  const refresh = useCallback(() => window.cadrelWrite.getMenu().then(setMenu).catch(() => undefined), []);
   useEffect(() => void refresh(), [refresh]);
 
   const open = useCallback(
@@ -110,7 +110,7 @@ export function MenuBar() {
 
   const activate = (item: MenuNode) => {
     close();
-    window.mdedit.clickMenu(item.id);
+    window.cadrelWrite.clickMenu(item.id);
   };
 
   const renderList = (items: MenuNode[], d: number): JSX.Element => (

@@ -30,7 +30,7 @@ interface Meta {
   current?: number;
 }
 
-export const findKey = new PluginKey<FindState>('mdedit-find');
+export const findKey = new PluginKey<FindState>('cadrel-find');
 
 /** Matches inside each text block (a match never spans two paragraphs). One character = one document position. */
 export function collectMatches(doc: PmNode, compiled: Compiled): PmMatch[] {

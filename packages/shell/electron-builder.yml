@@ -34,8 +34,8 @@ extraResources:
     to: icon.png
   - from: dist/resources/extension
     to: extension
-  - from: dist/resources/bookscout-extension.zip
-    to: bookscout-extension.zip
+  - from: dist/resources/cadrel-market-extension.zip
+    to: cadrel-market-extension.zip
 npmRebuild: false
 nodeGypRebuild: false
 fileAssociations:

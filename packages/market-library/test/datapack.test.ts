@@ -14,7 +14,7 @@ let tmp: string;
 let src: Library;
 let dst: Library;
 beforeEach(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-pack-'));
+  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-pack-'));
   src = Library.open(path.join(tmp, 'src'));
   dst = Library.open(path.join(tmp, 'dst'));
   src.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: read('bestsellers-kindle-humorous-fantasy.html.gz'), capturedAt: '2026-10-18T12:00:00Z' });
@@ -118,7 +118,7 @@ describe('data packs', () => {
   });
 
   it('ignores entries with unexpected paths and damaged pages instead of writing them', async () => {
-    const m = { format: 'bookscout-data-pack', version: 1, id: 'x', createdAt: '', scope: 'all', categories: [], counts: {} };
+    const m = { format: 'cadrel-market-data-pack', version: 1, id: 'x', createdAt: '', scope: 'all', categories: [], counts: {} };
     const evil = zipSync({
       'manifest.json': Buffer.from(JSON.stringify(m)),
       '../evil/capture.json': Buffer.from('{}'),

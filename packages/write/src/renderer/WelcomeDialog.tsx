@@ -22,7 +22,7 @@ export function WelcomeDialog({ config, lastFolder, onDone }: Props) {
   }, [config]);
 
   const pick = async () => {
-    const f = await window.mdedit.pickFolder();
+    const f = await window.cadrelWrite.pickFolder();
     if (f) setRoot(f);
   };
 
@@ -31,12 +31,12 @@ export function WelcomeDialog({ config, lastFolder, onDone }: Props) {
     setBusy(true);
     setError(null);
     try {
-      await window.mdedit.setProjectsConfig({ rootFolder: root, setupDone: true });
+      await window.cadrelWrite.setProjectsConfig({ rootFolder: root, setupDone: true });
       let opened: string | null = null;
       if (lastFolder && adopt) {
-        await window.mdedit.scanFolder(lastFolder); // lets the app work with a folder outside the Root
-        const existing = await window.mdedit.getProjectMeta(lastFolder);
-        if (!existing) await window.mdedit.convertFolder(lastFolder);
+        await window.cadrelWrite.scanFolder(lastFolder); // lets the app work with a folder outside the Root
+        const existing = await window.cadrelWrite.getProjectMeta(lastFolder);
+        if (!existing) await window.cadrelWrite.convertFolder(lastFolder);
         opened = lastFolder;
       }
       await onDone(opened);
@@ -69,7 +69,7 @@ export function WelcomeDialog({ config, lastFolder, onDone }: Props) {
         {lastFolder && (
           <label className="check-row">
             <input type="checkbox" checked={adopt} onChange={(e) => setAdopt(e.target.checked)} /> Also keep working on “{basename(lastFolder)}” as a project
-            <span className="field-hint">It stays where it is; Cadrel Write adds a small hidden .mdedit folder to it.</span>
+            <span className="field-hint">It stays where it is; Cadrel Write adds a small hidden .cadrel folder to it.</span>
           </label>
         )}
         {error && <div className="banner error">{error}</div>}

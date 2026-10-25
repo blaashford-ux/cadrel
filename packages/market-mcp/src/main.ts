@@ -15,7 +15,7 @@ if (process.argv.includes('--print-handshake')) {
 
 const root = resolveLibraryRoot(process.argv.slice(2), process.env);
 if (!root) {
-  console.error('Cadrel Market MCP: no library found. Pass --library <folder>, set BOOKSCOUT_LIBRARY, or choose a library in the Cadrel Market app first.');
+  console.error('Cadrel Market MCP: no library found. Pass --library <folder>, set CADREL_MARKET_LIBRARY, or choose a library in the Cadrel Market app first.');
   process.exit(2);
 }
 const lib = Library.open(root);

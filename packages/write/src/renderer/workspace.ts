@@ -59,7 +59,7 @@ export interface WorkspaceState {
   chapterLevel: number;
   /** Labels of the actions Undo Last Action would reverse, oldest first (at most UNDO_DEPTH). */
   undoLabels: string[];
-  /** The open folder is a project (it carries `.mdedit/project.json`). */
+  /** The open folder is a project (it carries `.cadrel/project.json`). */
   project: { path: string; meta: ProjectMeta } | null;
   /** The open project's word total and day-by-day history (null until counted). */
   progress: { progress: Progress; total: number | null; manuscript: string | null } | null;

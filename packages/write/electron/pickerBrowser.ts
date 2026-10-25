@@ -13,7 +13,7 @@ const TIMEOUT_MS = 10 * 60 * 1000;
  * Resolves to the ids, or null when the picker was cancelled or the wait ran out. `open` shows a URL in the browser.
  */
 export function pickInBrowser(pageUrl: string, open: (url: string) => Promise<void>, timeoutMs = TIMEOUT_MS): Promise<string[] | null> {
-  if (!pageUrl.startsWith(JOIN_PAGE)) return Promise.reject(new Error("Refusing to open a page outside MDEdit's invitation page."));
+  if (!pageUrl.startsWith(JOIN_PAGE)) return Promise.reject(new Error("Refusing to open a page outside Cadrel Write's invitation page."));
   const state = randomBytes(18).toString('base64url');
   return new Promise<string[] | null>((resolve, reject) => {
     let finished = false;
@@ -25,7 +25,7 @@ export function pickInBrowser(pageUrl: string, open: (url: string) => Promise<vo
       }
       const ids = (url.searchParams.get('ids') ?? '').split(',').filter((s) => ID.test(s));
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      res.end('<!doctype html><meta charset="utf-8"><title>MDEdit</title><body style="font:16px system-ui;padding:40px;text-align:center"><h2>Done</h2><p>You can close this tab and go back to MDEdit.</p>');
+      res.end('<!doctype html><meta charset="utf-8"><title>Cadrel Write</title><body style="font:16px system-ui;padding:40px;text-align:center"><h2>Done</h2><p>You can close this tab and go back to Cadrel Write.</p>');
       finish(ids.length ? ids : null);
     });
     const timer = setTimeout(() => finish(null), timeoutMs);

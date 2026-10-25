@@ -16,7 +16,7 @@ function setup() {
   const ownerFs = new MemoryFs();
   ownerFs.seed('/root/Novel/Manuscript/Book.md', '# One\n\nHello there\n');
   ownerFs.seed('/root/Novel/Manuscript/Book.export.json', '{}');
-  ownerFs.seed('/root/Novel/.mdedit/project.json', '{}');
+  ownerFs.seed('/root/Novel/.cadrel/project.json', '{}');
   ownerFs.seed('/root/Novel/Exports/Book.epub', 'x');
   let n = 0;
   const share = new ReviewShare({ fs: ownerFs, drive: () => drive, stateFile: '/state/shares.json', newId: () => `rev${++n}abcdef` });
@@ -33,7 +33,7 @@ describe('sharing a project for review', () => {
     expect(pkg.files.map((f: { path: string }) => f.path)).toEqual(['Manuscript/Book.md']);
     expect(drive.links.get(rec.packageId)).toBe('reader');
     const all = await drive.listAll();
-    expect(all.find((f) => f.id === rec.packageId)?.parentId).toBe(all.find((f) => f.name === 'MDEdit Reviews')?.id);
+    expect(all.find((f) => f.id === rec.packageId)?.parentId).toBe(all.find((f) => f.name === 'Cadrel Reviews')?.id);
   });
 
   it('does not upload again when nothing changed, and updates in place when it did', async () => {
@@ -89,7 +89,7 @@ describe('sharing a project for review', () => {
 
   it('gives the reviewer new text, but never the project’s other files', async () => {
     const { drive, share, ownerFs, readerFs, join } = setup();
-    ownerFs.seed('/root/Novel/.mdedit/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: 'Manuscript/Book.md' }));
+    ownerFs.seed('/root/Novel/.cadrel/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: 'Manuscript/Book.md' }));
     const inv = await share.invite('/root/Novel', 'Novel', 'Sam');
     const invite = parseInviteLink(inv.link)!;
     drive.granted = new Set([invite.packageId, invite.commentsId]);
@@ -119,7 +119,7 @@ describe('sharing a project for review', () => {
   it('revoking closes the reviewer’s file, keeps their notes, and unshares the package with the last one', async () => {
     const { drive, share, ownerFs } = setup();
     const a = await share.invite('/root/Novel', 'Novel', 'Sam');
-    const pkgId = (await share.status('Novel')).reviewers.length && (await drive.listAll()).find((f) => f.name.endsWith('mdedit-review.json'))!.id;
+    const pkgId = (await share.status('Novel')).reviewers.length && (await drive.listAll()).find((f) => f.name.endsWith('cadrel-review.json'))!.id;
     await share.revoke('/root/Novel', 'Novel', a.id);
     expect(drive.links.has(a.commentsId)).toBe(false);
     expect(drive.links.has(pkgId as string)).toBe(false);
@@ -183,7 +183,7 @@ describe('what reviewers can see', () => {
     return t;
   };
   const withActive = (t: ReturnType<typeof setup>, active: string | null) =>
-    t.ownerFs.seed('/root/Novel/.mdedit/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: active }));
+    t.ownerFs.seed('/root/Novel/.cadrel/project.json', JSON.stringify({ version: 1, name: 'Novel', activeManuscript: active }));
 
   it('only the active manuscript goes in the package', async () => {
     const t = twoBooks();
@@ -231,7 +231,7 @@ describe('the owner on two devices', () => {
     const mk = (n: string) => {
       const fs = new MemoryFs();
       fs.seed('/root/Novel/Manuscript/Book.md', '# One\n\nHello there\n');
-      fs.seed('/root/Novel/.mdedit/project.json', '{}');
+      fs.seed('/root/Novel/.cadrel/project.json', '{}');
       let clock = Date.parse('2026-10-12T10:00:00Z');
       let c = 0;
       const share = new ReviewShare({ fs, drive: () => drive, stateFile: `/state-${n}/shares.json`, newId: () => `${n}${++c}abcdefgh`, now: () => new Date((clock += 120_000)) });
@@ -270,7 +270,7 @@ describe('the owner on two devices', () => {
     const phoneShare = new ReviewShare({ fs: phone.fs, drive: () => real, stateFile: '/state-ph/shares.json', newId: () => 'phabcdefgh' });
     await pc.share.invite('/root/Novel', 'Novel', 'Sam');
     expect((await phoneShare.list()).map((x) => x.project)).toEqual(['Novel']);
-    expect((await drive.listAll()).filter((f) => f.isFolder && f.name === 'MDEdit Reviews')).toHaveLength(1);
+    expect((await drive.listAll()).filter((f) => f.isFolder && f.name === 'Cadrel Reviews')).toHaveLength(1);
   });
 
   it('a reviewer removed on one device stays removed on the other', async () => {
@@ -382,7 +382,7 @@ describe('collaboration: editable links', () => {
     const { drive, inv, invite, joined } = await invited();
     expect(inv.role).toBe('edit');
     expect(invite.role).toBe('edit');
-    expect(invite.packageId).not.toBe((await drive.listAll()).find((f) => f.name === 'Novel.mdedit-review.json')?.id);
+    expect(invite.packageId).not.toBe((await drive.listAll()).find((f) => f.name === 'Novel.cadrel-review.json')?.id);
     expect(drive.links.get(invite.packageId)).toBe('writer');
     expect(joined.role).toBe('edit');
   });
@@ -460,7 +460,7 @@ describe('collaboration: editable links', () => {
       const { share, join, ownerFs, readerFs, drive, joined, copy } = await invited();
       ownerFs.seed('/root/Novel/Notes/World.md', '# World\n\nMap notes\n');
       ownerFs.seed('/root/Novel/Exports/Draft.md', '# Exported\n');
-      ownerFs.seed('/root/Novel/.mdedit/project.json', '{"activeManuscript":"Manuscript/Book.md"}');
+      ownerFs.seed('/root/Novel/.cadrel/project.json', '{"activeManuscript":"Manuscript/Book.md"}');
       await share.sync('/root/Novel', 'Novel');
       await join.sync(joined.dir);
       expect(await readerFs.readText(`${joined.dir}/Notes/World.md`)).toContain('Map notes');
@@ -492,10 +492,10 @@ describe('collaboration: editable links', () => {
     it('does not take files from hidden folders or non-Markdown paths from the shared copy', async () => {
       const { share, drive, ownerFs, invite } = await invited();
       const pkg = JSON.parse(await drive.download(invite.packageId));
-      pkg.files.push({ path: '.mdedit/project.json', text: '{"evil":1}' }, { path: 'Exports/x.md', text: 'no' }, { path: 'run.sh', text: 'no' });
+      pkg.files.push({ path: '.cadrel/project.json', text: '{"evil":1}' }, { path: 'Exports/x.md', text: 'no' }, { path: 'run.sh', text: 'no' });
       await drive.updateFile(invite.packageId, JSON.stringify(pkg));
       await share.sync('/root/Novel', 'Novel');
-      expect(await ownerFs.readText('/root/Novel/.mdedit/project.json')).not.toContain('evil');
+      expect(await ownerFs.readText('/root/Novel/.cadrel/project.json')).not.toContain('evil');
       expect(await ownerFs.stat('/root/Novel/Exports/x.md')).toBeNull();
       expect(await ownerFs.stat('/root/Novel/run.sh')).toBeNull();
     });

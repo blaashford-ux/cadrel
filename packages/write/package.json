@@ -7,7 +7,7 @@
     "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build:electron": "npm run build:assets && node scripts/build-electron.mjs",
     "build:renderer": "vite build",
-    "mcp": "node dist-electron/mcp/mdedit-mcp.js",
+    "mcp": "node dist-electron/mcp/cadrel-write-mcp.js",
     "build:skills": "node scripts/skills.mjs",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
@@ -19,8 +19,8 @@
     "android:sync": "npm run build:mobile && cap sync android"
   },
   "build": {
-    "appId": "com.blaashford.mdedit",
-    "productName": "MDEdit",
+    "appId": "com.blaashford.cadrel",
+    "productName": "Cadrel Write",
     "asarUnpack": [
       "dist-electron/mcp/**"
     ],
@@ -44,7 +44,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "MDEdit-Setup-${version}.${ext}"
+      "artifactName": "Cadrel-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -52,7 +52,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "MDEdit",
+      "shortcutName": "Cadrel Write",
       "installerIcon": "build/icon.ico",
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
@@ -116,7 +116,7 @@
     "zod": "^3.25.76"
   },
   "author": "blaashford-ux",
-  "homepage": "https://github.com/blaashford-ux/MDEdit",
+  "homepage": "https://github.com/blaashford-ux/cadrel",
   "private": true,
   "dependencies": {
     "@capacitor/app": "^8.1.2",

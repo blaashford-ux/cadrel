@@ -77,7 +77,7 @@ export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
     async joinReview(link, name) {
       need();
       const invite = parseInviteLink(link);
-      if (!invite) throw new Error('That doesn’t look like a MDEdit invitation link.');
+      if (!invite) throw new Error('That doesn’t look like a Cadrel Write invitation link.');
       return join.join(invite, name.trim() || 'Reviewer');
     },
   };

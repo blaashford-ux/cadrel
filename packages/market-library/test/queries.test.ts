@@ -12,7 +12,7 @@ const LIST = 'amazon.com:kindle:11650864011';
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-q-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-q-'));
   lib = Library.open(root);
   lib.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: read('bestsellers-kindle-humorous-fantasy.html.gz'), capturedAt: '2026-10-18T12:00:00Z' });
 });

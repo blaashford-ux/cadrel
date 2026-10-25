@@ -1,6 +1,6 @@
 /**
  * `FsPort` over Capacitor's Filesystem plugin (the phone's storage). Everything lives under one plugin directory
- * (app-private "Data" storage); paths are "/"-style strings relative to it, e.g. "/MDEdit/The Lost King/Ch 1.md".
+ * (app-private "Data" storage); paths are "/"-style strings relative to it, e.g. "/Cadrel Write/The Lost King/Ch 1.md".
  *
  * The plugin's error messages differ between platforms and versions, so this adapter never relies on them: where the
  * `FsPort` contract promises ENOENT / EEXIST / ENOTEMPTY it checks with `stat` first and raises the error itself.

@@ -6,26 +6,26 @@ const item = (o: Partial<ReviewItem>): ReviewItem => ({ id: 'a', kind: 'comment'
 const file = (id: string, name: string, items: ReviewItem[]) => ({ id, text: serializeReviewFile({ ...newReviewFile('P', { id, name }), items }) });
 
 describe('config snippets', () => {
-  const win = { root: 'C:\\Users\\me\\MDEdit', command: 'C:\\Program Files\\MDEdit\\MDEdit.exe', args: ['C:\\Program Files\\MDEdit\\resources\\app.asar.unpacked\\mdedit-mcp.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
+  const win = { root: 'C:\\Users\\me\\Cadrel Write', command: 'C:\\Program Files\\Cadrel Write\\Cadrel Write.exe', args: ['C:\\Program Files\\Cadrel Write\\resources\\app.asar.unpacked\\cadrel-write-mcp.js'], env: { ELECTRON_RUN_AS_NODE: '1' } };
 
   it('quotes paths with spaces for the command line', () => {
     expect(aiConfigSnippets(win).claudeCode).toBe(
-      'claude mcp add --env ELECTRON_RUN_AS_NODE=1 mdedit -- "C:\\Program Files\\MDEdit\\MDEdit.exe" "C:\\Program Files\\MDEdit\\resources\\app.asar.unpacked\\mdedit-mcp.js"'
+      'claude mcp add --env ELECTRON_RUN_AS_NODE=1 cadrel-write -- "C:\\Program Files\\Cadrel Write\\Cadrel Write.exe" "C:\\Program Files\\Cadrel Write\\resources\\app.asar.unpacked\\cadrel-write-mcp.js"'
     );
   });
 
   it('writes valid JSON for Claude Desktop', () => {
-    expect(JSON.parse(aiConfigSnippets(win).claudeDesktop)).toEqual({ mcpServers: { mdedit: { command: win.command, args: win.args, env: win.env } } });
+    expect(JSON.parse(aiConfigSnippets(win).claudeDesktop)).toEqual({ mcpServers: { cadrel-write: { command: win.command, args: win.args, env: win.env } } });
   });
 
   it('writes TOML with literal strings for Codex, and leaves out empty env', () => {
     expect(aiConfigSnippets(win).codex).toBe(
-      "[mcp_servers.mdedit]\ncommand = 'C:\\Program Files\\MDEdit\\MDEdit.exe'\nargs = ['C:\\Program Files\\MDEdit\\resources\\app.asar.unpacked\\mdedit-mcp.js']\nenv = { ELECTRON_RUN_AS_NODE = '1' }"
+      "[mcp_servers.cadrel]\ncommand = 'C:\\Program Files\\Cadrel Write\\Cadrel Write.exe'\nargs = ['C:\\Program Files\\Cadrel Write\\resources\\app.asar.unpacked\\cadrel-write-mcp.js']\nenv = { ELECTRON_RUN_AS_NODE = '1' }"
     );
-    const plain = aiConfigSnippets({ root: '/r', command: 'node', args: ['/x/mdedit-mcp.js'] });
-    expect(plain.claudeCode).toBe('claude mcp add mdedit -- node /x/mdedit-mcp.js');
+    const plain = aiConfigSnippets({ root: '/r', command: 'node', args: ['/x/cadrel-write-mcp.js'] });
+    expect(plain.claudeCode).toBe('claude mcp add cadrel-write -- node /x/cadrel-write-mcp.js');
     expect(plain.codex).not.toContain('env');
-    expect(JSON.parse(plain.claudeDesktop).mcpServers.mdedit.env).toBeUndefined();
+    expect(JSON.parse(plain.claudeDesktop).mcpServers.cadrel.env).toBeUndefined();
   });
 });
 

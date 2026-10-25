@@ -25,7 +25,7 @@ function interpolate(points: [number, number][], rank: number): number {
 }
 
 export const METHODS: Method[] = [
-  { id: 'bookscout', label: 'Cadrel Market default (fitted by eye)', at: (r) => estimateDailySales(r, DEFAULT_SALES_CURVE) },
+  { id: 'cadrel-market', label: 'Cadrel Market default (fitted by eye)', at: (r) => estimateDailySales(r, DEFAULT_SALES_CURVE) },
   { id: 'automateed', label: 'Automateed power-law fit', at: (r) => (r < 100 ? 7000 / r ** 0.42 : 76900 / r ** 0.94) },
   { id: 'bookwriter', label: 'Bookwriter point estimates', at: (r) => interpolate(bookwriterPoints, r) },
 ];

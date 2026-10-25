@@ -34,7 +34,7 @@ async function launch(): Promise<{ app: ElectronApplication; shell: Page }> {
   const app = await electron.launch({
     executablePath: PACKAGED ?? electronBin,
     args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
-    env: { ...process.env, CADREL_TEST: '1', BOOKSCOUT_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
+    env: { ...process.env, CADREL_TEST: '1', CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home }
   });
   running.push(app);
   const shell = await app.firstWindow();
@@ -72,7 +72,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     userData = path.join(tmp, 'userdata');
     fs.mkdirSync(home);
     fs.mkdirSync(path.join(userData, 'market'), { recursive: true });
-    // A library is needed for BookScout's capture server to start (as in the standalone app).
+    // A library is needed for Cadrel Market's capture server to start (as in the standalone app).
     fs.mkdirSync(path.join(tmp, 'library'));
     fs.writeFileSync(path.join(userData, 'market', 'config.json'), JSON.stringify({ libraryRoot: path.join(tmp, 'library'), port: PORT }));
   }, 180_000);
@@ -101,13 +101,13 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
     await write.getByText('Welcome to Cadrel Write').waitFor();
-    expect(await write.evaluate(() => [typeof (window as any).mdedit, typeof (window as any).cadrel, typeof (window as any).bookscout])).toEqual(['object', 'undefined', 'undefined']);
+    expect(await write.evaluate(() => [typeof (window as any).cadrelWrite, typeof (window as any).cadrel, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
 
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
-    expect(await market.evaluate(() => [typeof (window as any).bookscout, typeof (window as any).cadrel, typeof (window as any).mdedit])).toEqual(['object', 'undefined', 'undefined']);
-    expect(await shell.evaluate(() => [typeof (window as any).cadrel, typeof (window as any).mdedit, typeof (window as any).bookscout])).toEqual(['object', 'undefined', 'undefined']);
+    expect(await market.evaluate(() => [typeof (window as any).cadrelMarket, typeof (window as any).cadrel, typeof (window as any).cadrelWrite])).toEqual(['object', 'undefined', 'undefined']);
+    expect(await shell.evaluate(() => [typeof (window as any).cadrel, typeof (window as any).cadrelWrite, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
 
     // Only the page you are on is showing, and it fills everything beside the rail.
     const v = await views(app);
@@ -146,7 +146,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
     await write.getByText('Welcome to Cadrel Write').waitFor();
     await write.evaluate(async () => {
-      const api = (window as any).mdedit;
+      const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
       await api.createProject('The Lost King', cfg.templates[0].id);
     });
@@ -175,20 +175,20 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await write.getByText('Welcome to Cadrel Write').waitFor();
 
     // Write: the AI server settings and the kit it saves for Claude Desktop.
-    const server = await write.evaluate(() => (window as any).mdedit.getAiServer());
+    const server = await write.evaluate(() => (window as any).cadrelWrite.getAiServer());
     expect(server.args[0]).toMatch(/mcp\.mjs$/);
-    const dest: string = await write.evaluate(() => (window as any).mdedit.exportAiKit());
+    const dest: string = await write.evaluate(() => (window as any).cadrelWrite.exportAiKit());
     expect(path.basename(dest)).toBe('Cadrel AI Kit');
     const files = fs.readdirSync(dest);
     expect(files).toEqual(expect.arrayContaining(['README.txt', 'cadrel.mcpb', 'connect-settings.txt', 'skills']));
-    expect(files).not.toContain('mdedit.mcpb');
+    expect(files).not.toContain('cadrel-write.mcpb');
     const ext = unzipSync(fs.readFileSync(path.join(dest, 'cadrel.mcpb')));
     expect(JSON.parse(strFromU8(ext['manifest.json']!))).toMatchObject({ name: 'cadrel', display_name: 'Cadrel' });
     const launcher = strFromU8(ext['server/index.js']!);
     expect(launcher).toContain("label");
     expect(launcher).toMatch(/"name":"cadrel"/); // it answers Claude's handshake as the one server
     expect(launcher).toMatch(/mcp\.mjs/);
-    expect(fs.readdirSync(path.join(dest, 'skills'))).toContain('mdedit-line-edit.zip');
+    expect(fs.readdirSync(path.join(dest, 'skills'))).toContain('cadrel-line-edit.zip');
     expect(fs.readFileSync(path.join(dest, 'connect-settings.txt'), 'utf8')).toContain('claude mcp add cadrel --');
 
     // Market: its own "connect to Claude" gives the same server under the same name.
@@ -197,11 +197,11 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
       return waitFor(() => moduleView(app, 'market'), 'the Market view');
     })();
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
-    const cfg = await market.evaluate(() => (window as any).bookscout.mcpConfig());
+    const cfg = await market.evaluate(() => (window as any).cadrelMarket.mcpConfig());
     expect(JSON.parse(cfg.claudeDesktop).mcpServers).toHaveProperty('cadrel');
     expect(cfg.args[0]).toBe(server.args[0]);
     expect(cfg.args).toContain('--library');
-    const built = await market.evaluate(() => (window as any).bookscout.installClaudeExtension());
+    const built = await market.evaluate(() => (window as any).cadrelMarket.installClaudeExtension());
     expect(path.basename(built.file)).toBe('Cadrel.mcpb');
     expect(JSON.parse(strFromU8(unzipSync(fs.readFileSync(built.file))['manifest.json']!))).toMatchObject({ name: 'cadrel' });
     await app.close();
@@ -215,7 +215,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
     await write.getByText('Welcome to Cadrel Write').waitFor();
     await write.evaluate(async () => {
-      const api = (window as any).mdedit;
+      const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
       await api.createProject('Dragon Rider 1', cfg.templates[0].id);
     });
@@ -337,7 +337,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(await note.innerText()).toContain('pricing');
 
     // Link the category to a project: the note now belongs to it.
-    const key = await market.evaluate(async () => (await (window as any).bookscout.categories())[0].key);
+    const key = await market.evaluate(async () => (await (window as any).cadrelMarket.categories())[0].key);
     await shell.evaluate(async (k) => {
       const s = (window as any).cadrel.studio;
       const p = await s.createProject({ name: 'Humorous fantasy line' });
@@ -500,8 +500,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     });
     await write.evaluate(() => {
       (window as any).__asked = 0;
-      (window as any).mdedit.onCloseRequested(() => (window as any).__asked++);
-      (window as any).mdedit.setDirtyFiles(['chapter-1.md']); // the shell only asks when Write reports unsaved files
+      (window as any).cadrelWrite.onCloseRequested(() => (window as any).__asked++);
+      (window as any).cadrelWrite.setDirtyFiles(['chapter-1.md']); // the shell only asks when Write reports unsaved files
     });
     await shell.getByRole('button', { name: 'Home', exact: true }).click();
     await waitFor(async () => (await views(app)).every((x) => !x.visible), 'Write to be hidden');

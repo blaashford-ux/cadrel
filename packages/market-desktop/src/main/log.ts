@@ -9,7 +9,7 @@ const KEEP = 3;
 export class Logger {
   readonly file: string;
 
-  constructor(private readonly dir: string, private readonly name = 'bookscout') {
+  constructor(private readonly dir: string, private readonly name = 'cadrel-market') {
     fs.mkdirSync(dir, { recursive: true });
     this.file = path.join(dir, `${name}.log`);
   }

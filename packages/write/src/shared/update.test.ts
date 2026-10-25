@@ -3,12 +3,12 @@ import { compareVersions, expectedSha256, fetchLatestRelease, isReleaseDownloadU
 
 const release = {
   tag_name: 'v0.5.0',
-  html_url: 'https://github.com/blaashford-ux/MDEdit/releases/tag/v0.5.0',
+  html_url: 'https://github.com/blaashford-ux/cadrel/releases/tag/v0.5.0',
   body: 'Notes',
   assets: [
-    { name: 'MDEdit-Setup-0.5.0.exe', browser_download_url: 'https://github.com/blaashford-ux/MDEdit/releases/download/v0.5.0/MDEdit-Setup-0.5.0.exe', size: 100 },
-    { name: 'MDEdit-0.5.0.apk', browser_download_url: 'https://github.com/blaashford-ux/MDEdit/releases/download/v0.5.0/MDEdit-0.5.0.apk', size: 50 },
-    { name: 'SHA256SUMS.txt', browser_download_url: 'https://github.com/blaashford-ux/MDEdit/releases/download/v0.5.0/SHA256SUMS.txt', size: 1 }
+    { name: 'Cadrel-Setup-0.5.0.exe', browser_download_url: 'https://github.com/blaashford-ux/cadrel/releases/download/v0.5.0/Cadrel-Setup-0.5.0.exe', size: 100 },
+    { name: 'Cadrel Write-0.5.0.apk', browser_download_url: 'https://github.com/blaashford-ux/cadrel/releases/download/v0.5.0/Cadrel Write-0.5.0.apk', size: 50 },
+    { name: 'SHA256SUMS.txt', browser_download_url: 'https://github.com/blaashford-ux/cadrel/releases/download/v0.5.0/SHA256SUMS.txt', size: 1 }
   ]
 };
 
@@ -25,8 +25,8 @@ describe('compareVersions', () => {
 
 describe('parseRelease', () => {
   it('picks the file for each platform', () => {
-    expect(parseRelease(release, 'windows', '0.4.3').asset?.name).toBe('MDEdit-Setup-0.5.0.exe');
-    expect(parseRelease(release, 'android', '0.4.3').asset?.name).toBe('MDEdit-0.5.0.apk');
+    expect(parseRelease(release, 'windows', '0.4.3').asset?.name).toBe('Cadrel-Setup-0.5.0.exe');
+    expect(parseRelease(release, 'android', '0.4.3').asset?.name).toBe('Cadrel Write-0.5.0.apk');
   });
   it('says whether it is newer', () => {
     expect(parseRelease(release, 'windows', '0.4.3').available).toBe(true);
@@ -55,14 +55,14 @@ describe('fetchLatestRelease', () => {
 describe('download safety', () => {
   it('only accepts this project’s release downloads', () => {
     expect(isReleaseDownloadUrl(release.assets[0].browser_download_url)).toBe(true);
-    expect(isReleaseDownloadUrl('https://example.com/MDEdit-Setup-9.9.9.exe')).toBe(false);
-    expect(isReleaseDownloadUrl('https://github.com/someone-else/MDEdit/releases/download/v1/x.exe')).toBe(false);
+    expect(isReleaseDownloadUrl('https://example.com/Cadrel-Setup-9.9.9.exe')).toBe(false);
+    expect(isReleaseDownloadUrl('https://github.com/someone-else/Cadrel Write/releases/download/v1/x.exe')).toBe(false);
   });
   it('reads a hash out of SHA256SUMS.txt', () => {
     const h = 'a'.repeat(64);
-    const sums = `${h}  MDEdit-Setup-0.5.0.exe\n${'B'.repeat(64)} *MDEdit-0.5.0.apk\n`;
-    expect(expectedSha256(sums, 'MDEdit-Setup-0.5.0.exe')).toBe(h);
-    expect(expectedSha256(sums, 'MDEdit-0.5.0.apk')).toBe('b'.repeat(64));
+    const sums = `${h}  Cadrel-Setup-0.5.0.exe\n${'B'.repeat(64)} *Cadrel Write-0.5.0.apk\n`;
+    expect(expectedSha256(sums, 'Cadrel-Setup-0.5.0.exe')).toBe(h);
+    expect(expectedSha256(sums, 'Cadrel Write-0.5.0.apk')).toBe('b'.repeat(64));
     expect(expectedSha256(sums, 'other.exe')).toBeNull();
   });
 });

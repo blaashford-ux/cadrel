@@ -79,10 +79,10 @@ describe('AppearanceForm', () => {
 describe('applyThemeCustom', () => {
   it('adds, updates and removes the stylesheet', () => {
     applyThemeCustom({ light: { bg: '#ffffff' } });
-    expect(document.getElementById('mdedit-custom-theme')!.textContent).toContain('--bg: #ffffff');
+    expect(document.getElementById('cadrel-custom-theme')!.textContent).toContain('--bg: #ffffff');
     applyThemeCustom({ light: { bg: '#eeeeee' } });
-    expect(document.querySelectorAll('#mdedit-custom-theme')).toHaveLength(1);
+    expect(document.querySelectorAll('#cadrel-custom-theme')).toHaveLength(1);
     applyThemeCustom(undefined);
-    expect(document.getElementById('mdedit-custom-theme')).toBeNull();
+    expect(document.getElementById('cadrel-custom-theme')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-// Packs the browser extension (manifest + src) into dist/bookscout-extension.zip for sideloading.
+// Packs the browser extension (manifest + src) into dist/cadrel-market-extension.zip for sideloading.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,5 +18,5 @@ const walk = (dir) => {
 };
 walk('src');
 fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
-fs.writeFileSync(path.join(root, 'dist/bookscout-extension.zip'), zipSync(files, { level: 9 }));
+fs.writeFileSync(path.join(root, 'dist/cadrel-market-extension.zip'), zipSync(files, { level: 9 }));
 console.log('extension zip:', Object.keys(files).length, 'files');

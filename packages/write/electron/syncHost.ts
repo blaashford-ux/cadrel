@@ -46,7 +46,7 @@ export function tokenVault(file: string, o: Pick<DesktopSyncOptions, 'encrypt' |
     async save(token) {
       if (token === null) return void (await fs.rm(file, { force: true }));
       const sealed = o.encrypt(token);
-      if (!sealed) throw new Error('Windows can’t protect the Google sign-in on this device, so MDEdit won’t store it.');
+      if (!sealed) throw new Error('Windows can’t protect the Google sign-in on this device, so Cadrel Write won’t store it.');
       await fs.mkdir(path.dirname(file), { recursive: true });
       await fs.writeFile(file, sealed);
     },

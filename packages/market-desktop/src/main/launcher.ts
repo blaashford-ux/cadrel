@@ -35,7 +35,7 @@ const path = require('path');
 const cfg = __CONFIG__;
 const label = cfg.label || 'Cadrel Market';
 const hs = cfg.handshake;
-const HS_ID = '__bookscout_initialize__';
+const HS_ID = '__cadrelMarket_initialize__';
 const started = Date.now();
 
 function log(message) {

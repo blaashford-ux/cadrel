@@ -16,7 +16,7 @@ const bytes = (s: string) => new Uint8Array(Buffer.from(s, 'utf8'));
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-s-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-s-'));
   lib = Library.open(root);
 });
 afterEach(() => {

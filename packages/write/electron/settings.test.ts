@@ -7,7 +7,7 @@ import { existingFolder, sanitizeSettings, SettingsStore } from './settings';
 let dir: string;
 let file: string;
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'mdedit-'));
+  dir = await mkdtemp(path.join(tmpdir(), 'cadrel-'));
   file = path.join(dir, 'settings.json');
 });
 afterEach(async () => {

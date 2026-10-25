@@ -1,5 +1,5 @@
 ---
-name: mdedit-line-edit
+name: cadrel-line-edit
 description: "Line edit of fiction or narrative prose chapters in a Cadrel Write project: sentence craft, rhythm, word choice, repetition, filter words, dialogue mechanics and showing vs. telling, left as comments and one-click suggestions in the author's Notes panel. Use when the user asks for line-level feedback, whether prose reads well, or to tighten a passage, and the Cadrel Write tools (read_chapter, add_notes) are available."
 ---
 

@@ -12,7 +12,7 @@ afterAll(async () => {
 });
 
 fsPortSuite('node', async () => {
-  const root = mkdtempSync(path.join(os.tmpdir(), 'mdedit-fsport-'));
+  const root = mkdtempSync(path.join(os.tmpdir(), 'cadrel-fsport-'));
   made.push(root);
   return { fs: nodeFs, root, join: (...p) => path.join(...p) };
 });

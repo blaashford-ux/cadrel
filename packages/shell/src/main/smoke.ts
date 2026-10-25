@@ -80,8 +80,8 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
 
   // The one MCP server, started the way an AI app starts it: this runtime acting as Node, on a project and a library.
   try {
-    await fs.mkdir(path.join(books, 'Smoke', '.mdedit'), { recursive: true });
-    await fs.writeFile(path.join(books, 'Smoke', '.mdedit', 'project.json'), '{"status":"drafting"}');
+    await fs.mkdir(path.join(books, 'Smoke', '.cadrel'), { recursive: true });
+    await fs.writeFile(path.join(books, 'Smoke', '.cadrel', 'project.json'), '{"status":"drafting"}');
     await fs.writeFile(path.join(books, 'Smoke', 'Book.md'), '# One\n\nShe walked slowly to the door.\n');
     // A project the app makes is one the AI server sees: both read the same studio file.
     const studioFile = path.join(tmp, 'studio.json');

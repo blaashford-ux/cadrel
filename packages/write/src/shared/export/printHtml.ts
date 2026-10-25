@@ -137,7 +137,7 @@ export function printBody(book: BookBuild): string {
   return sections.join('\n');
 }
 
-/** Arguments for window.__mdeditPostLayout: running-head text per side, and the sections that open a page group. */
+/** Arguments for window.__cadrelWritePostLayout: running-head text per side, and the sections that open a page group. */
 export function postLayoutConfig(book: BookBuild): { heads: { recto: string; verso: string } | null; openers: string[] } {
   const rh = book.settings.pdf.runningHead;
   const m = book.meta;
@@ -153,10 +153,10 @@ export function postLayoutConfig(book: BookBuild): { heads: { recto: string; ver
  * Runs after Paged.js has paginated. Numbers the body pages from the first chapter (counting blank
  * versos, like a real book), writes the labels into the footer boxes, and fills in the contents
  * page. Doing this ourselves keeps the footers and the contents list consistent by construction.
- * Also exposes the labels as window.__mdeditLabels for verification.
+ * Also exposes the labels as window.__cadrelWriteLabels for verification.
  */
 export const POST_LAYOUT_SCRIPT = `
-window.__mdeditPostLayout = function (firstBodyId, config) {
+window.__cadrelWritePostLayout = function (firstBodyId, config) {
   var area = document.querySelector('.pagedjs_pages');
   var pages = Array.prototype.slice.call(area.querySelectorAll('.pagedjs_page'));
   var first = area.querySelector('#' + firstBodyId);
@@ -186,7 +186,7 @@ window.__mdeditPostLayout = function (firstBodyId, config) {
       pg.querySelectorAll('.pagedjs_margin-top-center .pagedjs_margin-content').forEach(function (el) { el.setAttribute('data-rh', text); });
     });
   }
-  window.__mdeditLabels = labels;
+  window.__cadrelWriteLabels = labels;
   return pages.length;
 };
 `;

@@ -1,7 +1,7 @@
 import type { FileStamp } from '../api';
 import { errorCode, type FsPort } from '../fsPort';
 
-/** A short number for temp-file names; the digits matter (sync's junk filter looks for `.mdedit-<digits>.tmp`). */
+/** A short number for temp-file names; the digits matter (sync's junk filter looks for `.cadrel-<digits>.tmp`). */
 const randomTempId = () => Math.floor(Math.random() * 1e9);
 
 export function makeFiles(fs: FsPort, tempId: () => number = randomTempId) {
@@ -20,7 +20,7 @@ export function makeFiles(fs: FsPort, tempId: () => number = randomTempId) {
 
   /** Writes via a temp file + rename so a crash mid-write can't leave a truncated .md. */
   async function writeFileAtomic(target: string, content: string): Promise<FileStamp> {
-    const tmp = `${target}.mdedit-${tempId()}.tmp`;
+    const tmp = `${target}.cadrel-${tempId()}.tmp`;
     try {
       await fs.writeText(tmp, content);
       await fs.rename(tmp, target);

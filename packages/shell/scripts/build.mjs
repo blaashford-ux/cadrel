@@ -6,7 +6,7 @@
 //   dist/modules/market/{preload.cjs,renderer/}   Market's view
 //   dist/mcp.mjs                                  the MCP server Claude launches
 //   dist/assets/{fonts,vendor,icon.png}           what Write's print pipeline reads
-//   dist/resources/extension/, bookscout-extension.zip
+//   dist/resources/extension/, cadrel-market-extension.zip
 import { build as esbuild } from 'esbuild';
 import { build as vite } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -75,7 +75,7 @@ const files = {};
     else files[path.relative(extOut, p).split(path.sep).join('/')] = new Uint8Array(fs.readFileSync(p));
   }
 })(extOut);
-fs.writeFileSync(path.join(dist, 'resources', 'bookscout-extension.zip'), zipSync(files, { level: 9 }));
+fs.writeFileSync(path.join(dist, 'resources', 'cadrel-market-extension.zip'), zipSync(files, { level: 9 }));
 
 // ---- the shell ----
 await esbuild({

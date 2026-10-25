@@ -17,20 +17,20 @@ await build({
   external: ['electron'],
   outdir: 'dist-electron/electron',
   sourcemap: true,
-  define: { 'process.env.MDEDIT_GOOGLE_CLIENT_SECRET_BUILD': JSON.stringify(process.env.MDEDIT_GOOGLE_CLIENT_SECRET ?? '') },
+  define: { 'process.env.CADREL_WRITE_GOOGLE_CLIENT_SECRET_BUILD': JSON.stringify(process.env.CADREL_WRITE_GOOGLE_CLIENT_SECRET ?? '') },
   logLevel: 'info',
 });
 
 // The MCP server for AI reviewers: one self-contained file that Claude, GPT and other MCP clients launch with Node.
 await build({
-  entryPoints: { 'mdedit-mcp': 'mcp/main.ts' },
+  entryPoints: { 'cadrel-mcp': 'mcp/main.ts' },
   bundle: true,
   platform: 'node',
   target: 'node20',
   format: 'cjs',
   outdir: 'dist-electron/mcp',
-  define: { 'process.env.MDEDIT_VERSION': JSON.stringify(process.env.npm_package_version ?? '') },
+  define: { 'process.env.CADREL_WRITE_VERSION': JSON.stringify(process.env.npm_package_version ?? '') },
   logLevel: 'info',
 });
 
-if (!process.env.MDEDIT_GOOGLE_CLIENT_SECRET) console.warn('Note: MDEDIT_GOOGLE_CLIENT_SECRET is not set, so Google Drive sync is not configured in this build.');
+if (!process.env.CADREL_WRITE_GOOGLE_CLIENT_SECRET) console.warn('Note: CADREL_WRITE_GOOGLE_CLIENT_SECRET is not set, so Google Drive sync is not configured in this build.');

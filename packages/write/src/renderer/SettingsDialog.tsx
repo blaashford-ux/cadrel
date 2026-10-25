@@ -46,14 +46,14 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
 
   useEffect(() => {
     let live = true;
-    void window.mdedit.getPrefs().then((p) => {
+    void window.cadrelWrite.getPrefs().then((p) => {
       if (!live) return;
       savedTheme.current = p.themeCustom;
       setTheme(p.themeCustom);
       setThemeManaged(p.themeManaged === true);
       setThemeInitial(JSON.stringify(p.themeCustom ?? null));
     });
-    window.mdedit
+    window.cadrelWrite
       .getAppDefaults()
       .then((d) => {
         if (!live) return;
@@ -61,7 +61,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
         setInitial(JSON.stringify(d));
       })
       .catch((e) => live && setError(String(e)));
-    void Promise.all([window.mdedit.getProjectsConfig(), window.mdedit.listProjects()])
+    void Promise.all([window.cadrelWrite.getProjectsConfig(), window.cadrelWrite.listProjects()])
       .then(([c, l]) => {
         if (!live) return;
         const draft: ProjectsDraft = { rootFolder: c.rootFolder, templates: c.templates, defaultTemplateId: c.defaultTemplateId, reopenLast: c.reopenLast, moveProjects: false };
@@ -105,11 +105,11 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
       try {
         if (pdraft.moveProjects && newRoot !== config.root) {
           if (beforeMove && !(await beforeMove())) return setSaving(false);
-          await window.mdedit.setProjectsConfig({ rootFolder: pdraft.rootFolder }); // creates the folder
-          const r = await window.mdedit.moveProjects(newRoot);
+          await window.cadrelWrite.setProjectsConfig({ rootFolder: pdraft.rootFolder }); // creates the folder
+          const r = await window.cadrelWrite.moveProjects(newRoot);
           if (r.failed.length) setError(`Some projects couldn’t be moved: ${r.failed.map((f) => `${f.name} (${f.error})`).join('; ')}`);
         }
-        await window.mdedit.setProjectsConfig({
+        await window.cadrelWrite.setProjectsConfig({
           rootFolder: needsSetup ? newRoot : pdraft.rootFolder, // saves the default too, and creates the folder
           templates: pdraft.templates,
           defaultTemplateId: pdraft.defaultTemplateId,
@@ -126,7 +126,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
     if (ok) {
       if (themeDirty) {
         const saved = sanitizeThemeCustom(theme);
-        window.mdedit.setPrefs({ themeCustom: saved });
+        window.cadrelWrite.setPrefs({ themeCustom: saved });
         savedTheme.current = saved;
       }
       onClose();

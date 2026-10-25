@@ -1,5 +1,5 @@
 /**
- * Notes: one way to leave a comment, a suggestion or a question on anything in any module. MDEdit's Notes (comments and
+ * Notes: one way to leave a comment, a suggestion or a question on anything in any module. Cadrel Write's Notes (comments and
  * suggestions anchored in a manuscript, written by people and by AI reviewers) are the model; here the thing a note is
  * about is a `NoteTarget` rather than a file, so a module that makes records (a Market category, a cover brief, a
  * royalty statement) gets Notes by naming its records, with no Notes code of its own.
@@ -14,13 +14,13 @@ export const NOTES_VERSION = 1;
 export const BODY_MAX = 4000;
 export const REPLY_MAX = 4000;
 export const CATEGORY_MAX = 40;
-/** A cap on notes an AI can leave open on one project, so a runaway assistant cannot bury it (MDEdit uses the same figure). */
+/** A cap on notes an AI can leave open on one project, so a runaway assistant cannot bury it (Cadrel Write uses the same figure). */
 export const AI_OPEN_MAX = 1000;
 
 export type NoteStatus = 'open' | 'resolved' | 'accepted' | 'rejected' | 'deleted';
 export type NoteKind = 'comment' | 'suggestion';
 
-/** The same shape as MDEdit's text anchor, so text notes in any module can be re-found after the text moves. */
+/** The same shape as Cadrel Write's text anchor, so text notes in any module can be re-found after the text moves. */
 export interface NoteAnchor {
   quote: string;
   prefix: string;

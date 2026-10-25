@@ -3,8 +3,8 @@
  * (no MCP, no Electron), so they are tested directly and any transport (MCP now, REST later) can wrap them.
  *
  * The one rule that matters: nothing here ever writes a manuscript file. The only files written are review files under
- * `<project>/.mdedit/review/`, one per agent and editing pass, which Cadrel Write shows beside everyone else's notes, and the
- * project's edited-chapter marks (`<project>/.mdedit/edited.json`), which `set_chapters_edited` can change.
+ * `<project>/.cadrel/review/`, one per agent and editing pass, which Cadrel Write shows beside everyone else's notes, and the
+ * project's edited-chapter marks (`<project>/.cadrel/edited.json`), which `set_chapters_edited` can change.
  */
 import { splitChapters } from '../chapters';
 import type { FsEntry, FsPort } from '../fsPort';
@@ -92,7 +92,7 @@ const SHARED_PREFIX = `${SHARED_WITH_ME}/`;
 /** True when `dir` is a project this person was invited to edit (not just to review), by its marker file. */
 async function isCollaboration(ctx: AgentContext, dir: string): Promise<boolean> {
   try {
-    return (JSON.parse(await ctx.fs.readText(`${dir}/.mdedit/shared.json`)) as { role?: unknown }).role === 'edit';
+    return (JSON.parse(await ctx.fs.readText(`${dir}/.cadrel/shared.json`)) as { role?: unknown }).role === 'edit';
   } catch {
     return false;
   }
@@ -136,7 +136,7 @@ async function manuscriptPath(ctx: AgentContext, project: string, file: string):
 
 async function chapterLevel(ctx: AgentContext, dir: string): Promise<number> {
   try {
-    const level = (JSON.parse(await ctx.fs.readText(`${dir}/.mdedit/project.json`)) as { chapterLevel?: unknown }).chapterLevel;
+    const level = (JSON.parse(await ctx.fs.readText(`${dir}/.cadrel/project.json`)) as { chapterLevel?: unknown }).chapterLevel;
     if (typeof level === 'number' && level >= 1 && level <= 6) return level;
   } catch {
     /* no project file: use the default */
@@ -164,7 +164,7 @@ export async function listProjects(ctx: AgentContext): Promise<{ project: string
     if (!e.isDirectory || e.isSymbolicLink || e.name.startsWith('.') || e.name === 'Shared With Me') continue;
     let status: string | null = null;
     try {
-      const p = JSON.parse(await ctx.fs.readText(`${join(ctx.root, e.name)}/.mdedit/project.json`)) as { status?: unknown };
+      const p = JSON.parse(await ctx.fs.readText(`${join(ctx.root, e.name)}/.cadrel/project.json`)) as { status?: unknown };
       status = typeof p.status === 'string' ? p.status : null;
     } catch {
       continue; // not a project (no project.json)
@@ -208,7 +208,7 @@ export async function listChapters(ctx: AgentContext, project: string, file: str
 
 // ---- edited marks ----------------------------------------------------------------------------
 
-const marksFile = (dir: string) => `${dir}/.mdedit/${EDITED_FILE}`;
+const marksFile = (dir: string) => `${dir}/.cadrel/${EDITED_FILE}`;
 
 /** The project's edited-chapter marks (a damaged or missing file reads as no marks). */
 async function readMarks(ctx: AgentContext, dir: string): Promise<EditedMarks> {
@@ -244,7 +244,7 @@ export function setChaptersEdited(ctx: AgentContext, project: string, file: stri
     }
     if (changed.length) {
       const after = applyMap(before, map, (ctx.now?.() ?? new Date()).getTime());
-      await ctx.fs.mkdir(`${dir}/.mdedit`, { recursive: true });
+      await ctx.fs.mkdir(`${dir}/.cadrel`, { recursive: true });
       const target = marksFile(dir);
       const tmp = `${target}.${Math.floor(Math.random() * 1e9)}.tmp`;
       try {

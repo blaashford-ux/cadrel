@@ -32,7 +32,7 @@ export async function preparePage(kind) {
  * extension where the reader is so it can take a screenshot. Self-contained, like preparePage.
  */
 export function sampleLoop(session) {
-  if (/** @type {any} */ (window).__bookscoutSample) return;
+  if (/** @type {any} */ (window).__cadrelMarketSample) return;
   const bar = document.createElement('div');
   bar.setAttribute('style', 'position:fixed;left:12px;bottom:12px;z-index:2147483647;background:#1d1d1b;color:#fff;font:13px system-ui,sans-serif;padding:8px 12px;border-radius:8px;box-shadow:0 2px 10px #0006;display:flex;gap:10px;align-items:center');
   const label = document.createElement('span');
@@ -60,7 +60,7 @@ export function sampleLoop(session) {
   let timer = /** @type {any} */ (0);
   let done = false;
   const connect = () => {
-    port = chrome.runtime.connect({ name: 'bookscout-sample' });
+    port = chrome.runtime.connect({ name: 'cadrel-market-sample' });
     port.postMessage({ type: 'hello', session });
     port.onMessage.addListener((m) => {
       if (m.type === 'status') label.textContent = m.text;
@@ -74,11 +74,11 @@ export function sampleLoop(session) {
     done = true;
     clearInterval(timer);
     bar.remove();
-    delete /** @type {any} */ (window).__bookscoutSample;
+    delete /** @type {any} */ (window).__cadrelMarketSample;
     try { port && port.disconnect(); } catch { /* already gone */ }
   };
   stop.addEventListener('click', () => { try { port.postMessage({ type: 'finish' }); } catch { /* reconnecting */ } });
-  /** @type {any} */ (window).__bookscoutSample = { end };
+  /** @type {any} */ (window).__cadrelMarketSample = { end };
   connect();
   const note = (event, e) => { try { port.postMessage({ type: 'log', level: 'error', event, detail: String((e && e.message) || e) }); } catch { /* reconnecting */ } };
   timer = setInterval(() => {

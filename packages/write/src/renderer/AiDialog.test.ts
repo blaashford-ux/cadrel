@@ -15,7 +15,7 @@ const reviewFile = (id: string, name: string, n: number) =>
 
 let host: HTMLDivElement;
 let files: { id: string; text: string }[];
-const exportAiKit = vi.fn(async () => 'C:\\Users\\me\\Downloads\\MDEdit AI Kit');
+const exportAiKit = vi.fn(async () => 'C:\\Users\\me\\Downloads\\Cadrel Write AI Kit');
 let remote = { enabled: false, running: false, port: 47831, token: 'tok-0123456789abcdefghij', mcpUrl: 'http://127.0.0.1:47831/mcp', apiUrl: 'http://127.0.0.1:47831/api', openApiUrl: 'http://127.0.0.1:47831/openapi.json', error: null as string | null };
 const setAiRemote = vi.fn(async (enabled: boolean) => (remote = { ...remote, enabled, running: enabled }));
 const resetAiRemoteToken = vi.fn(async () => (remote = { ...remote, token: 'fresh-0123456789abcdefghij' }));
@@ -31,8 +31,8 @@ beforeEach(() => {
     { id: 'owner', text: reviewFile('owner', 'Me', 1) },
     { id: 'ai-claude-line', text: reviewFile('ai-claude-line', 'Claude · Line edit', 3) },
   ];
-  (window as unknown as { mdedit: unknown }).mdedit = {
-    getAiServer: async () => ({ root: 'C:\\Users\\me\\MDEdit', command: 'C:\\Program Files\\MDEdit\\MDEdit.exe', args: ['C:\\x\\mdedit-mcp.js', '--root', 'C:\\Users\\me\\MDEdit'], env: { ELECTRON_RUN_AS_NODE: '1' } }),
+  (window as unknown as { cadrel-write: unknown }).cadrelWrite = {
+    getAiServer: async () => ({ root: 'C:\\Users\\me\\Cadrel Write', command: 'C:\\Program Files\\Cadrel Write\\Cadrel Write.exe', args: ['C:\\x\\cadrel-write-mcp.js', '--root', 'C:\\Users\\me\\Cadrel Write'], env: { ELECTRON_RUN_AS_NODE: '1' } }),
     listReviews: async () => files,
     deleteReview,
     exportAiKit,
@@ -53,9 +53,9 @@ describe('AiDialog', () => {
     await settle();
 
     const text = host.textContent ?? '';
-    expect(text).toContain('C:\\Users\\me\\MDEdit');
+    expect(text).toContain('C:\\Users\\me\\Cadrel Write');
     expect(host.querySelectorAll('pre')).toHaveLength(3);
-    expect(host.querySelector('pre')!.textContent).toContain('claude mcp add --env ELECTRON_RUN_AS_NODE=1 mdedit --');
+    expect(host.querySelector('pre')!.textContent).toContain('claude mcp add --env ELECTRON_RUN_AS_NODE=1 cadrel-write --');
     expect(text).toContain('Claude · Line edit');
     expect(text).toContain('3 open of 3 notes');
     expect(text).not.toContain('Me3'); // the author's own file isn't listed
@@ -76,7 +76,7 @@ describe('AiDialog', () => {
     await act(async () => button(/Save files to Downloads/).click());
     await settle();
     expect(exportAiKit).toHaveBeenCalledOnce();
-    expect(host.textContent).toContain('Saved to C:\\Users\\me\\Downloads\\MDEdit AI Kit');
+    expect(host.textContent).toContain('Saved to C:\\Users\\me\\Downloads\\Cadrel Write AI Kit');
     await act(async () => root.unmount());
   });
 
@@ -107,7 +107,7 @@ describe('AiDialog', () => {
   });
 
   it('says so when the build has no AI connection', async () => {
-    (window as unknown as { mdedit: { getAiServer: () => Promise<null> } }).mdedit.getAiServer = async () => null;
+    (window as unknown as { cadrel-write: { getAiServer: () => Promise<null> } }).cadrelWrite.getAiServer = async () => null;
     const root = createRoot(host);
     await act(async () => root.render(createElement(AiDialog, { project: '/p', projectName: 'P', onClose: () => undefined })));
     await settle();

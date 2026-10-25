@@ -99,7 +99,7 @@ describe('the "This chapter only" switch', () => {
     expect(rows().map((r) => r.dataset.noteId)).toEqual(['a', 'b', 'c']); // off by default
     await act(async () => sw()!.click());
     expect(rows().map((r) => r.dataset.noteId)).toEqual(['b']);
-    expect(localStorage.getItem('mdedit.notes.chapterOnly')).toBe('1');
+    expect(localStorage.getItem('cadrel-write.notes.chapterOnly')).toBe('1');
     await act(async () => root.unmount());
     const again = await mount(items, new Set(['b']));
     expect(sw()!.checked).toBe(true); // still on the next time the panel opens
@@ -108,7 +108,7 @@ describe('the "This chapter only" switch', () => {
   });
 
   it('says so when the chapter has no open notes', async () => {
-    localStorage.setItem('mdedit.notes.chapterOnly', '1');
+    localStorage.setItem('cadrel-write.notes.chapterOnly', '1');
     const root = await mount([note('a')], new Set());
     expect(host.querySelector('.review-empty')?.textContent).toBe('No open notes in this chapter.');
     await act(async () => root.unmount());

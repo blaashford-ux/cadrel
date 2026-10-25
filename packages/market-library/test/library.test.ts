@@ -17,7 +17,7 @@ const listHtml = () => read('bestsellers-kindle-humorous-fantasy.html.gz');
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-'));
   lib = Library.open(root);
 });
 afterEach(() => {

@@ -468,10 +468,10 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type MdeditApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities };
+export type WriteApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities };
 
 declare global {
   interface Window {
-    mdedit: MdeditApi;
+    cadrelWrite: WriteApi;
   }
 }

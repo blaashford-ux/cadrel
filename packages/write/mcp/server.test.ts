@@ -10,7 +10,7 @@ let fs: MemoryFs;
 
 beforeEach(() => {
   fs = new MemoryFs();
-  fs.seed('/books/Novel/.mdedit/project.json', '{"status":"editing"}');
+  fs.seed('/books/Novel/.cadrel/project.json', '{"status":"editing"}');
   fs.seed('/books/Novel/Book.md', BOOK);
 });
 
@@ -90,16 +90,16 @@ describe('the Cadrel Write MCP server', () => {
 });
 
 describe('finding the projects folder', () => {
-  it('prefers --root, then MDEDIT_ROOT, then MDEdit’s own setting, then the default', async () => {
+  it('prefers --root, then CADREL_WRITE_ROOT, then Cadrel Write’s own setting, then the default', async () => {
     const f = new MemoryFs();
     const home = '/home/me';
     const [first] = settingsCandidates({}, 'linux', home);
     f.seed(first, JSON.stringify({ projects: { rootFolder: '/data/books' } }));
     expect((await resolveRoot({ flag: '/x', env: {}, platform: 'linux', home, fs: f })).source).toBe('--root');
-    expect((await resolveRoot({ env: { MDEDIT_ROOT: '/y' }, platform: 'linux', home, fs: f })).source).toBe('MDEDIT_ROOT');
+    expect((await resolveRoot({ env: { CADREL_WRITE_ROOT: '/y' }, platform: 'linux', home, fs: f })).source).toBe('CADREL_WRITE_ROOT');
     expect(await resolveRoot({ env: {}, platform: 'linux', home, fs: f })).toMatchObject({ root: '/data/books' });
     expect((await resolveRoot({ env: {}, platform: 'linux', home, fs: new MemoryFs() })).source).toBe('default');
-    expect(settingsCandidates({ APPDATA: 'C:\\U\\AppData\\Roaming' }, 'win32', 'C:\\U')[0]).toMatch(/MDEdit[\\/]settings\.json$/);
+    expect(settingsCandidates({ APPDATA: 'C:\\U\\AppData\\Roaming' }, 'win32', 'C:\\U')[0]).toMatch(/Cadrel[\\/]write[\\/]settings\.json$/);
   });
 });
 
@@ -119,8 +119,8 @@ describe('when the projects folder is wrong', () => {
   });
 
   it('lists each place once, in order', async () => {
-    const c = await rootCandidates({ flag: '/data/books', env: { MDEDIT_ROOT: '/y' }, platform: 'linux', home, fs: seeded() });
-    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/Cadrel', '/home/me/MDEdit']);
+    const c = await rootCandidates({ flag: '/data/books', env: { CADREL_WRITE_ROOT: '/y' }, platform: 'linux', home, fs: seeded() });
+    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/Cadrel']);
   });
 
   it('falls back to a later folder that has projects, and keeps the first when none do', async () => {
@@ -131,14 +131,14 @@ describe('when the projects folder is wrong', () => {
 
   it('says where it looked when there are no projects', async () => {
     const f = new MemoryFs();
-    const server = createServer({ fs: f, root: '/empty', tried: [{ root: '/empty', source: '--root' }, { root: '/home/me/MDEdit', source: 'default' }] });
+    const server = createServer({ fs: f, root: '/empty', tried: [{ root: '/empty', source: '--root' }, { root: '/home/me/Cadrel Write', source: 'default' }] });
     const [a, b] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'claude-ai', version: '1' });
     await Promise.all([server.connect(a), client.connect(b)]);
     const r = (await client.callTool({ name: 'list_projects', arguments: {} })) as { content: { text: string }[] };
     const out = JSON.parse(r.content[0].text) as { projects: unknown[]; message: string };
     expect(out.projects).toEqual([]);
-    expect(out.message).toMatch(/\/empty \(--root\); \/home\/me\/MDEdit \(default\)/);
+    expect(out.message).toMatch(/\/empty \(--root\); \/home\/me\/Cadrel Write \(default\)/);
     expect(out.message).toMatch(/Open Folder/);
   });
 });

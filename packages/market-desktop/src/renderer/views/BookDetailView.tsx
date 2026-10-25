@@ -3,7 +3,7 @@ import type { BookDetail, OwnBookRow } from '../../shared/api.js';
 import { TextCard } from './TextCard.js';
 import { NotesButton } from '../NotesButton.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 function Spark({ values, label, invert }: { values: (number | null)[]; label: string; invert?: boolean }) {
   const pts = values.map((v, i) => (v == null ? null : ([i, v] as const))).filter((p): p is readonly [number, number] => p !== null);

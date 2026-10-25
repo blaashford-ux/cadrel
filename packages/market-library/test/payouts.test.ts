@@ -14,7 +14,7 @@ const TODAY = new Date('2026-12-20T12:00:00Z');
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-o-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-o-'));
   lib = Library.open(root);
 });
 afterEach(() => {

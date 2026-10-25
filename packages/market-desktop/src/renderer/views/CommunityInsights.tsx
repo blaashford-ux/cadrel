@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CommunityInsights, ThreadRef } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const pct = (v: number | null) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const SIGNAL: Record<string, { label: string; title: string }> = {
   underserved: { label: 'talked about, few books', title: 'Many threads mention it, but few of the books on the lists do' },

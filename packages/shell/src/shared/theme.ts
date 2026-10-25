@@ -1,5 +1,5 @@
 /**
- * Cadrel's look, from one place. MDEdit's theme model (five colours per scheme, everything else worked out from them) is
+ * Cadrel's look, from one place. Cadrel Write's theme model (five colours per scheme, everything else worked out from them) is
  * the model, with Cadrel's own slate-and-stone defaults (set in Write's theme.ts). The shell paints its own page from it
  * and hands the same colours to Write (which already speaks this model) and Market (which has its own variable names).
  */

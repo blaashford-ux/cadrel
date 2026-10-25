@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { CalibrationPreview, ImportSummary, SalesStatus } from '../../shared/api.js';
 import { KdpReportImport, describeImport } from './KdpReportImport.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const n = (v: number | null, d = 0) => (v === null ? '–' : v.toLocaleString('en-US', { maximumFractionDigits: d }));
 const range = (r: { low: number; high: number } | null) => (r === null ? '–' : `${n(r.low, r.low < 10 ? 1 : 0)} – ${n(r.high, r.high < 10 ? 1 : 0)}`);
 const lohi = (lo: number, hi: number) => range({ low: lo, high: hi });

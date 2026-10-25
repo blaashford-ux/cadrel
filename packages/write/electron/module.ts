@@ -19,7 +19,7 @@ import { registerWindowChrome, setChromeTheme } from './windowChrome';
 import { confirmDelete, confirmMarkEdited, confirmOverwrite, confirmRecover, confirmUnsaved } from './prompts';
 import { scanFolder } from './scan';
 import type { AiServerInfo } from '../src/shared/agent/config';
-import { buildKit, KIT_FOLDER, MDEDIT_BRAND, type KitBrand } from '../src/shared/agent/kit';
+import { buildKit, KIT_FOLDER, WRITE_BRAND, type KitBrand } from '../src/shared/agent/kit';
 import { AiRemote } from './aiRemote';
 import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
@@ -101,9 +101,9 @@ function inRoot(p: string, opts: { allowRoot?: boolean } = {}): string {
 }
 
 // ---- Google Drive sync ------------------------------------------------------------------------------
-// The Desktop OAuth client secret is injected when the app is built (scripts/build-electron.mjs); `MDEDIT_GOOGLE_CLIENT_SECRET`
+// The Desktop OAuth client secret is injected when the app is built (scripts/build-electron.mjs); `CADREL_WRITE_GOOGLE_CLIENT_SECRET`
 // works for `npm run dev`. For installed apps Google does not treat it as confidential.
-const GOOGLE_SECRET = process.env.MDEDIT_GOOGLE_CLIENT_SECRET_BUILD || process.env.MDEDIT_GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_SECRET = process.env.CADREL_WRITE_GOOGLE_CLIENT_SECRET_BUILD || process.env.CADREL_WRITE_GOOGLE_CLIENT_SECRET || '';
 
 let sync: SyncService | null = null;
 let syncRoot: string | null = null;
@@ -146,7 +146,7 @@ function ensureSync(): Promise<SyncService> {
 async function aiServer(): Promise<AiServerInfo | null> {
   // Cadrel Write's own server is a plain-JavaScript file that an outside program must be able to read, so it sits outside the asar. A host's server
   // is started by the app's own runtime, which reads inside the asar, and needs its dependencies from there, so its path is used as given.
-  const file = host.mcp?.file ?? path.join(app.getAppPath(), 'dist-electron', 'mcp', 'mdedit-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
+  const file = host.mcp?.file ?? path.join(app.getAppPath(), 'dist-electron', 'mcp', 'cadrel-write-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
   if (!(await fsp.stat(file).catch(() => null))) return null;
   const root = path.resolve(projectsRoot());
   const args = [file, '--root', root];
@@ -157,7 +157,7 @@ async function aiServer(): Promise<AiServerInfo | null> {
 async function exportAiKit(): Promise<string> {
   const info = await aiServer();
   if (!info) throw new Error(`This build of ${host.mcp?.brand?.name ?? 'Cadrel Write'} doesn’t include the AI connection.`);
-  const brand = host.mcp?.brand ?? MDEDIT_BRAND;
+  const brand = host.mcp?.brand ?? WRITE_BRAND;
   const dest = path.join(app.getPath('downloads'), brand.folder);
   const files = buildKit({
     skills: SKILLS,
@@ -399,7 +399,7 @@ function registerIpc(): void {
       await fsp.writeFile(res.filePath, html, 'utf8');
       return res.filePath;
     }
-    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'mdedit-report-'));
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-report-'));
     const printer = new BrowserWindow({ show: false, width: 1000, height: 1400, webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false } });
     try {
       const page = path.join(tmp, 'report.html');
@@ -562,7 +562,7 @@ function registerIpc(): void {
     if (host.updatesDisabledReason) throw new Error(host.updatesDisabledReason);
     const file = await downloadInstaller(info, {
       fetchFn: fetch,
-      dir: path.join(os.tmpdir(), 'mdedit-update'),
+      dir: path.join(os.tmpdir(), 'cadrel-update'),
       onProgress: (p) => {
         if (!e.sender.isDestroyed()) e.sender.send('update:progress', p);
       }

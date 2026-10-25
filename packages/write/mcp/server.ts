@@ -71,7 +71,7 @@ const failure = (message: string) => ({ isError: true, content: [{ type: 'text' 
 export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
   const looked = (o.tried?.length ? o.tried : [{ root: o.root, source: 'the server settings' }]).map((t) => `${t.root} (${t.source})`).join('; ');
   return (
-    `No Cadrel Write projects were found. Looked in: ${looked}. A project is a folder directly inside the projects folder that contains .mdedit/project.json. ` +
+    `No Cadrel Write projects were found. Looked in: ${looked}. A project is a folder directly inside the projects folder that contains .cadrel/project.json. ` +
     'Check that the projects folder is the Root Folder from Cadrel Write (File → Settings → Projects), not a single book\'s folder, and that the book was created in or moved into it. ' +
     'A folder opened with Open Folder from somewhere else is not found here.'
   );
@@ -83,7 +83,7 @@ export const WRITE_INSTRUCTIONS =
   'You cannot change the manuscript; the author reviews your notes in Cadrel Write and accepts or rejects each one. Quote text exactly as read_chapter returns it.';
 
 export function createServer(o: ServerOptions): McpServer {
-  const server = new McpServer({ name: 'mdedit', version: o.version ?? '0.0.0' }, { instructions: WRITE_INSTRUCTIONS });
+  const server = new McpServer({ name: 'cadrel-write', version: o.version ?? '0.0.0' }, { instructions: WRITE_INSTRUCTIONS });
   registerWriteTools(server, o);
   return server;
 }

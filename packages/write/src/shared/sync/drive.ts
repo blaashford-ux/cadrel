@@ -36,7 +36,7 @@ export interface DriveApi {
 }
 
 /** The folder in Drive that holds every project (it mirrors the Root Folder). */
-export const DRIVE_ROOT_NAME = 'MDEdit';
+export const DRIVE_ROOT_NAME = 'Cadrel';
 
 /** Folder (beside the sync root, so it never syncs into the Root Folder) that holds files shared for review. */
-export const DRIVE_REVIEWS_NAME = 'MDEdit Reviews';
+export const DRIVE_REVIEWS_NAME = 'Cadrel Reviews';

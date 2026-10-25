@@ -2,7 +2,7 @@ import type { FsPort } from '../fsPort';
 import { mergeReviewFiles, parseReviewFile, serializeReviewFile } from '../review/comments';
 
 /** Where a project keeps the review files of everyone who has commented on it: one JSON file per reviewer. */
-export const REVIEW_DIR = '.mdedit/review';
+export const REVIEW_DIR = '.cadrel/review';
 
 const safeId = (id: string) => id.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
 

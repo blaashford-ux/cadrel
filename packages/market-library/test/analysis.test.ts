@@ -15,7 +15,7 @@ let root: string;
 let lib: Library;
 const ingestList = (at: string) => lib.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: listHtml, capturedAt: at });
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-a-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-a-'));
   lib = Library.open(root);
   ingestList('2026-10-18T12:00:00Z');
   for (const a of TOP5) lib.ingest({ kind: 'detail', url: `https://www.amazon.com/dp/${a}`, html: read(`detail-kindle-${a}.html.gz`), capturedAt: '2026-10-18T13:00:00Z' });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MdeditApi } from '../shared/api';
+import type { WriteApi } from '../shared/api';
 import {
   newReviewFile,
   normalizeCategory,
@@ -16,7 +16,7 @@ export interface Identity {
   name: string;
 }
 
-const KEY = 'mdedit.reviewer';
+const KEY = 'cadrel-write.reviewer';
 
 /** How often the review files are re-read, to pick up notes written by someone or something else. */
 const POLL_MS = 4000;
@@ -73,7 +73,7 @@ export interface ReviewState {
  * whichever reviewer's file each note lives in.
  */
 export function useReview(
-  api: Pick<MdeditApi, 'listReviews' | 'saveReview'>,
+  api: Pick<WriteApi, 'listReviews' | 'saveReview'>,
   project: string | null,
   file: string | null,
   review: ReviewApi | undefined,

@@ -4,7 +4,7 @@ import { ChartCard, HBars, Legend, SERIES, StackedBars } from '../charts.js';
 import { DataTable, type Column } from './DataTable.js';
 import { currentMonth, int, money, monthName, pct, shiftMonth, shortMonth, usd, SOURCE_NAME } from './moneyUtil.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 export const Tile = ({ n, l, sub }: { n: string; l: string; sub?: string }) => (
   <div className="tile"><div className="n">{n}</div><div className="l">{l}</div>{sub && <div className="l">{sub}</div>}</div>

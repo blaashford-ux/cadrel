@@ -26,7 +26,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
   const attempt = useRef(0);
   const [error, setError] = useState<string | null>(null);
   useEscape(onClose);
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const invite = parseInviteLink(link);
 
   const start = async () => {
@@ -85,7 +85,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
         <h3>Open an invitation</h3>
         {waiting ? (
           <>
-            <p className="modal-hint">{waitingFor > 1 ? 'Google’s file picker is open in your browser. Select both files there' : 'One more file to go: Google’s file picker is open again in your browser. Select the file it shows'}; if the browser doesn’t switch back by itself, come back to MDEdit (on the phone, tap “Return to MDEdit”).</p>
+            <p className="modal-hint">{waitingFor > 1 ? 'Google’s file picker is open in your browser. Select both files there' : 'One more file to go: Google’s file picker is open again in your browser. Select the file it shows'}; if the browser doesn’t switch back by itself, come back to Cadrel Write (on the phone, tap “Return to Cadrel Write”).</p>
             <div className="modal-actions">
               <button type="button" onClick={() => (attempt.current++, setWaiting(false), setBusy(false))}>Cancel</button>
             </div>
@@ -94,13 +94,13 @@ export function JoinDialog({ onJoined, onClose }: Props) {
           <PickerFrame
             token={token}
             ids={[invite.packageId, invite.commentsId]}
-            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish() : (setToken(null), setError('Select both files so MDEdit can open the project and save your notes.')))}
+            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish() : (setToken(null), setError('Select both files so Cadrel Write can open the project and save your notes.')))}
             onCancel={() => setToken(null)}
             onError={() => (setToken(null), setError('Couldn’t load Google’s file picker. Check your connection and try again.'))}
           />
         ) : (
           <>
-            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how MDEdit is allowed to open this one project (and nothing else in your Drive).</p>
+            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how Cadrel Write is allowed to open this one project (and nothing else in your Drive).</p>
             <label>
               Invitation link
               <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" autoFocus aria-invalid={link !== '' && !invite} />
@@ -109,7 +109,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
               Your name (shown on your notes)
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
             </label>
-            {link !== '' && !invite && <div className="modal-error" role="alert">That doesn’t look like a MDEdit invitation.</div>}
+            {link !== '' && !invite && <div className="modal-error" role="alert">That doesn’t look like a Cadrel Write invitation.</div>}
             {error && <div className="modal-error" role="alert">{error}</div>}
             <div className="modal-actions">
               <button type="button" onClick={onClose}>Cancel</button>

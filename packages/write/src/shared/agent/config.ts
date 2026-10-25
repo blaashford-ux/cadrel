@@ -12,7 +12,7 @@ export interface AiServerInfo {
 const quote = (s: string) => (/[\s"]/.test(s) ? `"${s.replace(/"/g, '\\"')}"` : s);
 
 /** Ready-to-paste settings for the AI apps we know. TOML uses literal strings so Windows backslashes need no escaping. */
-export function aiConfigSnippets(s: AiServerInfo, name = 'mdedit'): { claudeCode: string; claudeDesktop: string; codex: string } {
+export function aiConfigSnippets(s: AiServerInfo, name = 'cadrel-write'): { claudeCode: string; claudeDesktop: string; codex: string } {
   const env = Object.entries(s.env ?? {});
   const toml = (v: string) => (v.includes("'") ? JSON.stringify(v) : `'${v}'`);
   return {

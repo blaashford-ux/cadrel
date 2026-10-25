@@ -55,7 +55,7 @@ export const mobileDialogs: Dialogs = {
     return (
       (await ask({
         title: `Recover unsaved changes to ${fileName}?`,
-        detail: 'MDEdit closed unexpectedly last time. These edits were autosaved but never written to the file.',
+        detail: 'Cadrel Write closed unexpectedly last time. These edits were autosaved but never written to the file.',
         buttons: [{ label: 'Recover', value: 'yes', kind: 'primary' }, { label: 'Discard', value: 'no' }],
         cancel: 'no',
       })) === 'yes'

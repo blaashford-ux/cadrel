@@ -5,8 +5,8 @@ export interface ReportMeta {
   generated: string;
 }
 
-const MARK = 'mdedit-analysis v1';
-const RE = /<!-- mdedit-analysis v1 (\{.*\}) -->/;
+const MARK = 'cadrel-analysis v1';
+const RE = /<!-- cadrel-analysis v1 (\{.*\}) -->/;
 
 /**
  * The analysis results as a one-line HTML comment for the end of the Markdown report. The report viewer reads it back,

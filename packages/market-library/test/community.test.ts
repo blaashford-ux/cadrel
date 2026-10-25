@@ -14,7 +14,7 @@ const T = (d: number) => Math.floor(NOW.getTime() / 1000) - d * 86400; // d days
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-c-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-c-'));
   lib = Library.open(root);
   lib.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: zlib.gunzipSync(fs.readFileSync(path.join(FIX, 'bestsellers-kindle-humorous-fantasy.html.gz'))).toString('utf8'), capturedAt: '2026-10-18T12:00:00Z' });
 });

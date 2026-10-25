@@ -6,7 +6,7 @@ import { CommunityInsightsPanel } from './CommunityInsights.js';
 import { CharactersPanel, ClustersPanel, CompareCategories, OpportunityPanel, ShelvesPanel } from './OpportunityPanels.js';
 import { ChartCard, GroupedBars, HBars, LineChart, Legend, S1, S2, Scatter } from '../charts.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const num = (v: number | null | undefined, d = 1) => (v == null ? '–' : Number(v.toFixed(d)).toLocaleString('en-US'));
 const pct = (v: number | null | undefined) => (v == null ? '–' : `${Math.round(v * 100)}%`);
 const share = (rows: { count: number }[]) => {

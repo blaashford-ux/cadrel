@@ -6,11 +6,11 @@ import { isDate, sanitizeGoal, type Goal } from './progress';
 import { validateName } from './paths';
 
 /**
- * Projects: a folder inside the Root Folder that carries `.mdedit/project.json`. Everything here is pure
+ * Projects: a folder inside the Root Folder that carries `.cadrel/project.json`. Everything here is pure
  * (models, defensive parsing, templates, name rules); the file-system side lives in electron/projects.ts.
  */
 
-export const PROJECT_DIR = '.mdedit';
+export const PROJECT_DIR = '.cadrel';
 export const PROJECT_FILE = 'project.json';
 export const PROGRESS_FILE = 'progress.json';
 

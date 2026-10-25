@@ -26,8 +26,8 @@ beforeAll(() => {
   execFileSync('node', ['scripts/build.mjs'], { cwd: PKG, stdio: 'ignore' });
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-mcp-e2e-'));
   projects = path.join(tmp, 'books');
-  fs.mkdirSync(path.join(projects, 'Novel', '.mdedit'), { recursive: true });
-  fs.writeFileSync(path.join(projects, 'Novel', '.mdedit', 'project.json'), '{"status":"drafting"}');
+  fs.mkdirSync(path.join(projects, 'Novel', '.cadrel'), { recursive: true });
+  fs.writeFileSync(path.join(projects, 'Novel', '.cadrel', 'project.json'), '{"status":"drafting"}');
   fs.writeFileSync(path.join(projects, 'Novel', 'Book.md'), '# One\n\nShe walked slowly to the door.\n\n# Two\n\nThe river ran cold.\n');
   library = path.join(tmp, 'library');
   const lib = Library.open(library);
@@ -35,7 +35,7 @@ beforeAll(() => {
   lib.close();
   const home = path.join(tmp, 'home');
   fs.mkdirSync(home);
-  cleanEnv = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'), XDG_CONFIG_HOME: path.join(home, '.config'), MDEDIT_ROOT: '', BOOKSCOUT_LIBRARY: '' };
+  cleanEnv = { ...process.env, HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'), XDG_CONFIG_HOME: path.join(home, '.config'), CADREL_WRITE_ROOT: '', CADREL_MARKET_LIBRARY: '' };
 }, 90_000);
 
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));

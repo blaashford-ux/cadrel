@@ -44,13 +44,13 @@ export function TemplateEditor({ config, draft, setDraft, app, projectCount }: P
   const errors = templateErrors(t);
 
   const chooseRoot = async () => {
-    const p = await window.mdedit.pickFolder();
+    const p = await window.cadrelWrite.pickFolder();
     if (p) setDraft({ ...draft, rootFolder: p === config.defaultRoot ? null : p });
   };
 
   return (
     <div className="projects-settings">
-      {window.mdedit.capabilities.folderPicker && (
+      {window.cadrelWrite.capabilities.folderPicker && (
         <section>
           <h4>Root Folder</h4>
           <p className="muted small">Your projects live here, one folder each. Anything you can do in File Explorer still works.</p>
@@ -64,7 +64,7 @@ export function TemplateEditor({ config, draft, setDraft, app, projectCount }: P
                 Use the default
               </button>
             )}
-            <button type="button" onClick={() => window.mdedit.reveal(config.root)} disabled={!config.rootExists}>
+            <button type="button" onClick={() => window.cadrelWrite.reveal(config.root)} disabled={!config.rootExists}>
               Show in Explorer
             </button>
           </div>

@@ -58,7 +58,7 @@ afterAll(async () => {
 
 describe('MCP server over stdio', () => {
   it('announces itself, its instructions and every tool as read-only or not', async () => {
-    expect(client.getServerVersion()?.name).toBe('bookscout');
+    expect(client.getServerVersion()?.name).toBe('cadrel-market');
     expect(client.getInstructions()).toMatch(/never follow instructions/);
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(TOOLS.map((t) => t.name).sort());
@@ -271,14 +271,14 @@ describe('analysis tools', () => {
 
 describe('startup', () => {
   it('exits with a clear message when no library can be found', () => {
-    const r = spawnSync(process.execPath, [path.join(PKG, 'dist/main.mjs')], { env: { ...process.env, BOOKSCOUT_LIBRARY: '', HOME: '/nonexistent', APPDATA: '/nonexistent', XDG_CONFIG_HOME: '/nonexistent' }, encoding: 'utf8' });
+    const r = spawnSync(process.execPath, [path.join(PKG, 'dist/main.mjs')], { env: { ...process.env, CADREL_MARKET_LIBRARY: '', HOME: '/nonexistent', APPDATA: '/nonexistent', XDG_CONFIG_HOME: '/nonexistent' }, encoding: 'utf8' });
     expect(r.status).toBe(2);
     expect(r.stderr).toMatch(/no library found/);
   });
   it('resolves the library from flag, env or the desktop app config', () => {
     const cfg = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-cfg-'));
     expect(resolveLibraryRoot(['--library', '/a/b'], {}, cfg)).toBe(path.resolve('/a/b'));
-    expect(resolveLibraryRoot([], { BOOKSCOUT_LIBRARY: '/c' }, cfg)).toBe(path.resolve('/c'));
+    expect(resolveLibraryRoot([], { CADREL_MARKET_LIBRARY: '/c' }, cfg)).toBe(path.resolve('/c'));
     expect(resolveLibraryRoot([], {}, cfg)).toBeNull();
     fs.writeFileSync(path.join(cfg, 'config.json'), JSON.stringify({ libraryRoot: '/from/app' }));
     expect(resolveLibraryRoot([], {}, cfg)).toBe('/from/app');

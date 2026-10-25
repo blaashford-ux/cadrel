@@ -86,7 +86,7 @@ export function createDriveRest(o: DriveRestOptions): DriveApi {
     },
 
     async createFile(name, parentId, content) {
-      const boundary = `mdedit${Math.random().toString(36).slice(2)}${Date.now()}`;
+      const boundary = `cadrel-write${Math.random().toString(36).slice(2)}${Date.now()}`;
       const body =
         `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name, parents: [parentId] })}\r\n` +
         `--${boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n${content}\r\n--${boundary}--`;

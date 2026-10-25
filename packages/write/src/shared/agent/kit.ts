@@ -6,7 +6,7 @@ export const KIT_FOLDER = 'Cadrel Write AI Kit';
 
 /** What the kit calls itself. A host app that bundles Cadrel Write (Cadrel) passes its own, so there is one extension, not two. */
 export interface KitBrand {
-  /** Lower-case id used in file names and as the MCP server's name in settings: "mdedit", "cadrel". */
+  /** Lower-case id used in file names and as the MCP server's name in settings: "cadrel-write", "cadrel". */
   id: string;
   /** Display name: "Cadrel Write", "Cadrel". */
   name: string;
@@ -15,13 +15,13 @@ export interface KitBrand {
   /** What the Claude Desktop extension says it does. Default: the writing description. */
   description?: string;
 }
-export const MDEDIT_BRAND: KitBrand = { id: 'mdedit', name: 'Cadrel Write', folder: KIT_FOLDER };
+export const WRITE_BRAND: KitBrand = { id: 'cadrel-write', name: 'Cadrel Write', folder: KIT_FOLDER };
 
 /** Re-words text written for Cadrel Write for another brand. A no-op for Cadrel Write itself. */
-const rebrand = (t: string, b: KitBrand): string => (b.id === 'mdedit' ? t : t.replaceAll('Cadrel Write', b.name).replaceAll('mdedit', b.id));
+const rebrand = (t: string, b: KitBrand): string => (b.id === 'cadrel-write' ? t : t.replaceAll('Cadrel Write', b.name).replaceAll('cadrel-write', b.id));
 
 export interface KitSkill {
-  /** Folder name, e.g. "mdedit-line-edit". */
+  /** Folder name, e.g. "cadrel-line-edit". */
   name: string;
   /** Prompt id, e.g. "line_edit". */
   id: string;
@@ -35,7 +35,7 @@ export interface KitSkill {
 
 export interface KitInput {
   skills: KitSkill[];
-  /** The bundled MCP server (`mdedit-mcp.js`). */
+  /** The bundled MCP server (`cadrel-write-mcp.js`). */
   server: Uint8Array;
   version: string;
   /** The Root Folder, offered as the default projects folder. */
@@ -86,14 +86,14 @@ const skillZip = (s: KitSkill): Uint8Array => zipSync({ [`${s.name}/SKILL.md`]: 
 
 function readme(i: KitInput): string {
   const lines = [
-    'MDEDIT AI KIT',
+    'CADREL WRITE AI KIT',
     '=============',
     '',
     'Everything here lets an AI app review your chapters and leave comments and suggestions in Cadrel Write\'s Notes panel.',
     'The AI cannot change your manuscript. You accept or reject each note. New notes appear in the Notes panel within a few seconds.',
     '',
     'CLAUDE DESKTOP (the easiest)',
-    '  1. Double-click mdedit.mcpb, or drag it into Claude Desktop under Settings > Extensions. Install it, and check the',
+    '  1. Double-click cadrel-write.mcpb, or drag it into Claude Desktop under Settings > Extensions. Install it, and check the',
     `     projects folder it asks for is empty or is: ${i.root} (the folder that holds your book folders, not one book's folder).`,
     '     Empty is best: it follows the Root Folder you set in Cadrel Write.',
     '  2. Add the skills: Settings > Capabilities > Skills > upload each zip in the "skills" folder (three of them).',
@@ -123,7 +123,7 @@ function settings(i: KitInput, b: KitBrand): string {
   const s = aiConfigSnippets({ root: i.root, command: 'node', args: [i.serverPath, '--root', i.root] }, b.id);
   return [
     'These run the server file saved next to this one. They need Node.js 20 or newer.',
-    '(For Claude Desktop, use mdedit.mcpb instead: it needs no Node.js.)',
+    '(For Claude Desktop, use cadrel-write.mcpb instead: it needs no Node.js.)',
     '',
     '--- Claude Code: run this in a terminal ---',
     s.claudeCode,
@@ -139,7 +139,7 @@ function settings(i: KitInput, b: KitBrand): string {
 
 /** The files of the AI Kit. Pure: the app writes them into Downloads. */
 export function buildKit(i: KitInput): KitFile[] {
-  const b = i.brand ?? MDEDIT_BRAND;
+  const b = i.brand ?? WRITE_BRAND;
   return [
     text('README.txt', rebrand(readme(i), b)),
     { path: `${b.id}.mcpb`, data: extension(i, b) },

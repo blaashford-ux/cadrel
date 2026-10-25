@@ -1,5 +1,7 @@
 # Cadrel plan
 
+> **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
+
 Status: plan, no product code yet. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
 
 ## 1. What Cadrel is

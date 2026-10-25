@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { HealthRow, IssueRow, MaintenanceStatus } from '../../shared/api.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 export function IssuesView({ version }: { version: number }) {
   const [rows, setRows] = useState<IssueRow[]>([]);

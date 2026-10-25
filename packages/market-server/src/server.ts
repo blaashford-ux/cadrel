@@ -128,7 +128,7 @@ export function createIngestServer(opts: ServerOptions): http.Server {
 
       const route = (req.url ?? '').split('?')[0];
       if (route === '/v1/ping' && req.method === 'GET') {
-        send(200, { ok: true, app: 'bookscout' }, origin);
+        send(200, { ok: true, app: 'cadrel-market' }, origin);
         return;
       }
       if ((route === '/v1/capture' || route === '/v1/sample/page' || route === '/v1/sample/finish') && opts.library.rebuilding) {

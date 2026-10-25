@@ -90,7 +90,7 @@ export interface SyncReport {
   pendingDeletes: string[];
   /** True when any local file or folder changed, so the UI should refresh. */
   changedLocal: boolean;
-  /** No `MDEdit` folder was visible in Drive, so a new one was made. On a second device this means it can't see the first device's files. */
+  /** No `Cadrel Write` folder was visible in Drive, so a new one was made. On a second device this means it can't see the first device's files. */
   rootCreated: boolean;
 }
 
@@ -428,7 +428,7 @@ export async function syncOnce(o: SyncOptions): Promise<SyncReport> {
       }
       for (const [key, id] of [...folderIds].filter(([k]) => k !== '').sort()) {
         const dir = folderPaths.get(key) ?? key;
-        if (!isCompliantPath(dir) || dir.split('/').some((seg) => seg.startsWith('.') && seg !== '.mdedit')) continue;
+        if (!isCompliantPath(dir) || dir.split('/').some((seg) => seg.startsWith('.') && seg !== '.cadrel')) continue;
         if (!hasLocalKey(dir) && !(await fs.stat(full(dir)))) {
           await ensureLocalDir(dir);
           changed();
@@ -449,7 +449,7 @@ function actionPath(a: SyncAction): string {
 
 // ---- Drive tree -----------------------------------------------------------------------------------------------
 
-/** The Drive folder that mirrors the Root: the remembered one if it still exists, else the oldest top-level `MDEdit` folder. */
+/** The Drive folder that mirrors the Root: the remembered one if it still exists, else the oldest top-level `Cadrel Write` folder. */
 function findRoot(all: DriveFile[], remembered: string | null): string | null {
   if (remembered && all.some((f) => f.id === remembered && f.isFolder)) return remembered;
   const ids = new Set(all.map((f) => f.id));
@@ -538,7 +538,7 @@ async function scanLocal(o: SyncOptions, state: SyncState, report: SyncReport): 
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       const childFull = joinParts(dir, e.name);
       if (e.isDirectory) {
-        if (e.name.startsWith('.') && e.name !== '.mdedit') continue;
+        if (e.name.startsWith('.') && e.name !== '.cadrel') continue;
         dirs.push(childRel);
         subdirs.push({ full: childFull, rel: childRel });
       } else if (e.isFile) {

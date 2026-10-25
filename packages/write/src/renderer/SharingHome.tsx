@@ -23,7 +23,7 @@ interface Row extends ShareSummary {
 
 /** Every project that has share links, with a way into each one's sharing settings (and to share another project). */
 export function SharingHome({ config, listing, sync, onBack, onConnect }: Props) {
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const [shares, setShares] = useState<ShareSummary[] | null>(null);
   const [open, setOpen] = useState<Record<string, number>>({});
   const [managing, setManaging] = useState<{ path: string; name: string } | null>(null);

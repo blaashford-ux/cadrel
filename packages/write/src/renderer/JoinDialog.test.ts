@@ -21,7 +21,7 @@ beforeEach(() => {
   joinReview.mockClear();
   onJoined.mockClear();
   pickInBrowser.mockClear();
-  (window as unknown as { mdedit: unknown }).mdedit = { pickerToken: async () => 'tok', pickInBrowser, joinReview };
+  (window as unknown as { cadrel-write: unknown }).cadrelWrite = { pickerToken: async () => 'tok', pickInBrowser, joinReview };
 });
 afterEach(() => host.remove());
 

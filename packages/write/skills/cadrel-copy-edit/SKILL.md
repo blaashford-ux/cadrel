@@ -1,5 +1,5 @@
 ---
-name: mdedit-copy-edit
+name: cadrel-copy-edit
 description: "Copy edit and proofread chapters in a Cadrel Write project: spelling, grammar, punctuation, consistency of names and terms, doubled words and leftover draft artifacts, left as exact one-click suggestions in the author's Notes panel. Use when the user asks for copy editing, proofreading, a final pass, or to catch typos and consistency errors, and the Cadrel Write tools (read_chapter, search_text, add_notes) are available."
 ---
 

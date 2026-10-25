@@ -105,7 +105,7 @@ export function wrapFences(children: Mdast[]): Mdast[] {
   return out;
 }
 
-export const alignRemark = $remark('mdedit-align-fences', () => () => (tree: unknown) => {
+export const alignRemark = $remark('cadrel-align-fences', () => () => (tree: unknown) => {
   const root = tree as Mdast;
   if (root.children) root.children = wrapFences(root.children);
 });

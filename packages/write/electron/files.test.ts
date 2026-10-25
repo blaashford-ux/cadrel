@@ -6,7 +6,7 @@ import { readWithStamp, statStamp, writeFileAtomic } from './files';
 
 let dir: string;
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'mdedit-'));
+  dir = await mkdtemp(path.join(tmpdir(), 'cadrel-'));
 });
 afterEach(async () => {
   await rm(dir, { recursive: true, force: true });

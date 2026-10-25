@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { DetectedAuthor, OwnBookRow, Person, SplitVersion, Statement, StatementBasis } from '../../shared/api.js';
 import { currentMonth, int, money, monthName, periodRange, periodShortcuts, quarterOf, SOURCE_NAME, usd, type PeriodKind } from './moneyUtil.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const ALL_MONTHS = '0000-00';
 
 // ---------------------------------------------------------------- people

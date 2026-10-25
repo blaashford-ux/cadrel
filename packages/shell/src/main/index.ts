@@ -37,11 +37,12 @@ app.setName('Cadrel');
 if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.cadrel');
 if (process.env.CADREL_USER_DATA) app.setPath('userData', process.env.CADREL_USER_DATA);
 
-// Existing MDEdit and BookScout users keep their settings: each module keeps its original data folder. (BookScout's
-// MCP server finds its config at <appData>/BookScout/config.json, so that name cannot change.)
-const appData = process.env.CADREL_USER_DATA ?? app.getPath('appData');
-const writeData = process.env.CADREL_USER_DATA ? path.join(appData, 'write') : path.join(appData, 'mdedit');
-const marketData = process.env.CADREL_USER_DATA ? path.join(appData, 'market') : path.join(appData, 'BookScout');
+// Everything Cadrel keeps for a person lives under one folder (%APPDATA%\Cadrel): the shell's settings, the studio, the user, and one
+// folder for each module. The AI server finds Market's config at <that folder>/market/config.json and Write's settings at
+// <that folder>/write/settings.json (CADREL_USER_DATA moves the whole folder, for tests).
+const userData = process.env.CADREL_USER_DATA ?? app.getPath('userData');
+const writeData = path.join(userData, 'write');
+const marketData = path.join(userData, 'market');
 
 let win: BrowserWindow | null = null;
 let settings: SettingsStore;
@@ -478,7 +479,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
       mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND },
-      updatesDisabledReason: 'Cadrel is updated as a whole; MDEdit’s own updater is switched off here.'
+      updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     market = createMarketModule({
       getWindow: () => win,
@@ -493,7 +494,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       mcpLaunch,
       mcpBrand: CADREL_MCP,
-      updatesDisabledReason: 'Cadrel is updated as a whole; BookScout’s own updater is switched off here.'
+      updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
     registerShellIpc();

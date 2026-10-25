@@ -59,7 +59,7 @@ describe('a file already in sync', () => {
 });
 
 describe('conflicts in non-prose files', () => {
-  const meta = 'Novel/.mdedit/project.json';
+  const meta = 'Novel/.cadrel/project.json';
   const base = [B(meta, 'm1', 'a')];
   it('last writer wins for settings: local newer uploads', () => {
     expect(run({ local: [L(meta, 'x', 2000)], remote: [R(meta, 'm1', 'y', 1000)], base }).actions).toEqual([{ type: 'upload', path: meta, id: 'm1' }]);
@@ -74,11 +74,11 @@ describe('conflicts in non-prose files', () => {
     expect(actions.some((a) => a.type === 'keepBoth')).toBe(false);
   });
   it('merges edited-chapter marks instead of copying them', () => {
-    const marks = 'Novel/.mdedit/edited.json';
+    const marks = 'Novel/.cadrel/edited.json';
     expect(run({ local: [L(marks, 'x')], remote: [R(marks, 'g1', 'y')], base: [B(marks, 'g1', 'a')] }).actions).toEqual([{ type: 'mergeMarks', path: marks, id: 'g1' }]);
   });
   it('merges progress history instead of copying it', () => {
-    const prog = 'Novel/.mdedit/progress.json';
+    const prog = 'Novel/.cadrel/progress.json';
     expect(run({ local: [L(prog, 'x')], remote: [R(prog, 'g1', 'y')], base: [B(prog, 'g1', 'a')] }).actions).toEqual([{ type: 'mergeProgress', path: prog, id: 'g1' }]);
   });
 });
@@ -138,7 +138,7 @@ describe('renames', () => {
 
 describe('what never syncs', () => {
   it('ignores temp files, per-device data and Exports', () => {
-    const p = run({ local: [L('Novel/a.md.mdedit-9.tmp', 'x'), L('Novel/.mdedit/drafts/d.json', 'x'), L('Novel/Exports/b.epub', 'x')] });
+    const p = run({ local: [L('Novel/a.md.cadrel-9.tmp', 'x'), L('Novel/.cadrel/drafts/d.json', 'x'), L('Novel/Exports/b.epub', 'x')] });
     expect(p.actions).toEqual([]);
     expect(p.skipped).toEqual([]);
   });

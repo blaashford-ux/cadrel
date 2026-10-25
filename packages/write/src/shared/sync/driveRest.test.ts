@@ -24,13 +24,13 @@ const noSleep = async () => undefined;
 describe('Drive REST client', () => {
   it('lists every page and maps files, folders, parents and checksums', async () => {
     const { seen, fetchFn } = script([
-      ok({ files: [{ id: 'f1', name: 'MDEdit', mimeType: 'application/vnd.google-apps.folder', modifiedTime: '2026-10-05T10:00:00.000Z' }], nextPageToken: 'p2' }),
+      ok({ files: [{ id: 'f1', name: 'Cadrel Write', mimeType: 'application/vnd.google-apps.folder', modifiedTime: '2026-10-05T10:00:00.000Z' }], nextPageToken: 'p2' }),
       ok({ files: [{ id: 'f2', name: 'a.md', mimeType: 'text/plain', parents: ['f1'], md5Checksum: 'abc', modifiedTime: '2026-10-05T11:00:00.000Z' }] }),
     ]);
     const { getToken } = tokens();
     const files = await createDriveRest({ getToken, fetch: fetchFn, sleep: noSleep }).listAll();
     expect(files).toEqual([
-      { id: 'f1', name: 'MDEdit', parentId: null, isFolder: true, md5: null, modifiedMs: Date.parse('2026-10-05T10:00:00.000Z') },
+      { id: 'f1', name: 'Cadrel Write', parentId: null, isFolder: true, md5: null, modifiedMs: Date.parse('2026-10-05T10:00:00.000Z') },
       { id: 'f2', name: 'a.md', parentId: 'f1', isFolder: false, md5: 'abc', modifiedMs: Date.parse('2026-10-05T11:00:00.000Z') },
     ]);
     expect(seen).toHaveLength(2);
@@ -65,10 +65,10 @@ describe('Drive REST client', () => {
   });
 
   it('creates a folder, with or without a parent', async () => {
-    const { seen, fetchFn } = script([ok({ id: 'n1', name: 'MDEdit', mimeType: 'application/vnd.google-apps.folder' }), ok({ id: 'n2', name: 'Novel', mimeType: 'application/vnd.google-apps.folder' })]);
+    const { seen, fetchFn } = script([ok({ id: 'n1', name: 'Cadrel Write', mimeType: 'application/vnd.google-apps.folder' }), ok({ id: 'n2', name: 'Novel', mimeType: 'application/vnd.google-apps.folder' })]);
     const drive = createDriveRest({ getToken: tokens().getToken, fetch: fetchFn, sleep: noSleep });
-    expect((await drive.createFolder('MDEdit', null)).isFolder).toBe(true);
-    expect(JSON.parse(String(seen[0].init.body))).toEqual({ name: 'MDEdit', mimeType: 'application/vnd.google-apps.folder' });
+    expect((await drive.createFolder('Cadrel Write', null)).isFolder).toBe(true);
+    expect(JSON.parse(String(seen[0].init.body))).toEqual({ name: 'Cadrel Write', mimeType: 'application/vnd.google-apps.folder' });
     await drive.createFolder('Novel', 'root1');
     expect(JSON.parse(String(seen[1].init.body)).parents).toEqual(['root1']);
   });

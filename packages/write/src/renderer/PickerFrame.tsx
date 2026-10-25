@@ -10,7 +10,7 @@ interface Props {
   onError(): void;
 }
 
-/** The invitation page's address in picker mode. `ret` makes it hand its result back to the app through an `mdedit://` link. */
+/** The invitation page's address in picker mode. `ret` makes it hand its result back to the app through an `cadrel-write://` link. */
 export function pickerUrl(token: string, ids: string[], ret = false): string {
   const q = new URLSearchParams({ mode: 'pick', t: token, p: ids[0] ?? '', c: ids[1] ?? '' });
   if (ret) q.set('ret', '1');
@@ -22,7 +22,7 @@ export function PickerFrame({ token, ids, onPicked, onCancel, onError }: Props) 
   useEffect(() => {
     const origin = new URL(JOIN_PAGE).origin;
     const onMessage = (e: MessageEvent) => {
-      if (e.origin !== origin || e.data?.source !== 'mdedit-picker') return;
+      if (e.origin !== origin || e.data?.source !== 'cadrel-picker') return;
       if (Array.isArray(e.data.picked)) onPicked(e.data.picked.map(String));
       else if (e.data.cancelled) onCancel();
       else if (e.data.error) onError();

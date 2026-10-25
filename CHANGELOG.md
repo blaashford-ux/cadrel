@@ -6,7 +6,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 - **M0: one app.** MDEdit 0.8.5 and BookScout 0.6.3 are imported (`@cadrel/write`, `@cadrel/market-*`) and run together in a new shell (`@cadrel/shell`): left rail, Home, Dashboard, Write and Market in their own views. Electron 44 and a single pdf.js across the workspace. Windows installer, packaged-app smoke test and CI to build and publish them.
 
-- **Names:** MDEdit is Cadrel Write and BookScout is Cadrel Market everywhere a person sees them (see `docs/PROVENANCE.md` for what keeps its old name on purpose). The default projects folder is `<home>\Cadrel`.
+- **Names, from the start:** the apps are Cadrel Write and Cadrel Market everywhere, including on disk (`%APPDATA%\Cadrel\write` and `\market`, `.cadrel` project folders, `window.cadrelWrite` / `window.cadrelMarket`, `CADREL_*` variables, `cadrel-*` skills). No migration from the old names is built. The default projects folder is `<home>\Cadrel`.
 - **The assistant can read the user's attached files** (`studio_user_file`), with an opt-out for all files, a switch per file, and a log of what it opened.
 - **The user** (`window.cadrel.user`): a profile (name, email, pen names, about me, photo) and files attached to it, at the shell level, with a Profile page and the photo in the rail. The name replaces the old "name on notes" setting. The assistant can read name, pen names and about-me, never email or files.
 - **Export acts on one chosen file only**: from the open file or by right-click on any file. No marking step, no automatic pick, no file picker in the dialog.

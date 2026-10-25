@@ -14,7 +14,7 @@ describe('online access for AI apps', () => {
   it('is off until it is turned on, and makes a token of its own', async () => {
     fs = new MemoryFs();
     fs.seed('/data/keep', '');
-    fs.seed('/books/Novel/.mdedit/project.json', '{}');
+    fs.seed('/books/Novel/.cadrel/project.json', '{}');
     const r = make();
     await r.load();
     expect(r.status()).toMatchObject({ enabled: false, running: false, error: null });
@@ -24,7 +24,7 @@ describe('online access for AI apps', () => {
   it('listens only while on, only answers with the token, and remembers the choice', async () => {
     fs = new MemoryFs();
     fs.seed('/data/keep', '');
-    fs.seed('/books/Novel/.mdedit/project.json', '{}');
+    fs.seed('/books/Novel/.cadrel/project.json', '{}');
     const r = make();
     await r.load();
     const on = await r.setEnabled(true);
@@ -46,7 +46,7 @@ describe('online access for AI apps', () => {
   it('a new token locks out the old one', async () => {
     fs = new MemoryFs();
     fs.seed('/data/keep', '');
-    fs.seed('/books/Novel/.mdedit/project.json', '{}');
+    fs.seed('/books/Novel/.cadrel/project.json', '{}');
     const r = make();
     await r.load();
     const first = await r.setEnabled(true);

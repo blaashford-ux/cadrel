@@ -4,7 +4,7 @@ import { BookDetailView } from './BookDetailView.js';
 import { MyBooksView } from './MyBooksView.js';
 import { DataTable, type Column } from './DataTable.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 const TEXT_LABEL = { manuscript: 'book', sample: 'sample' } as const;
 /** Whole days from an ISO capture time to now (never negative). */

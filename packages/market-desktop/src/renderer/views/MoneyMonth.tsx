@@ -4,7 +4,7 @@ import { ChartCard, SERIES, StackedBars } from '../charts.js';
 import { BookTable, Breakdowns, MoneyNotes, Tile, SERIES_KEYS } from './MoneyAnalysis.js';
 import { currentMonth, int, monthName, shiftMonth, usd } from './moneyUtil.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 
 const delta = (now: number, was: number | undefined) => (was === undefined ? undefined : `${now - was >= 0 ? '+' : ''}${usd(now - was)} (${was ? `${now - was >= 0 ? '+' : ''}${Math.round(((now - was) / was) * 100)}%` : 'new'})`);
 

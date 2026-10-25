@@ -2,7 +2,7 @@ import { App as CapacitorApp } from '@capacitor/app';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { createRoot } from 'react-dom/client';
-import { MOBILE_CAPABILITIES, type CoreApi, type MdeditApi, type UpdateApi } from '../shared/api';
+import { MOBILE_CAPABILITIES, type CoreApi, type WriteApi, type UpdateApi } from '../shared/api';
 import { createReviewHost } from '../shared/review/host';
 import { fetchLatestRelease, type UpdateProgress } from '../shared/update';
 import { createCoreApi } from '../shared/backend/coreApi';
@@ -18,7 +18,7 @@ import { pickInBrowser } from './externalBrowser';
 import { seededPreviewFs } from './sampleProject';
 import { desktopOnlyStubs } from './stubs';
 
-const ROOT = '/MDEdit';
+const ROOT = '/Cadrel Write';
 const STATE = '/state';
 
 const native = Capacitor.isNativePlatform();
@@ -82,7 +82,7 @@ async function start(): Promise<void> {
     accessToken: () => sync.accessToken(),
   });
   const core = onChange(backend.api, () => sync.syncSoon());
-  window.mdedit = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...(native ? { pickInBrowser } : {}), ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies MdeditApi;
+  window.cadrelWrite = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...(native ? { pickInBrowser } : {}), ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies WriteApi;
 
   // Keep the latest version available: on start, when the app comes back to the front, and every minute while it is open.
   const visible = () => document.visibilityState === 'visible';

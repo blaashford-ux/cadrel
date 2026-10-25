@@ -14,7 +14,7 @@ const RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i;
 /** The key two names are compared by: NFC and case-folded, because Windows treats "Ch1.md" and "ch1.md" as one file. */
 export const nameKey = (name: string): string => name.normalize('NFC').toLowerCase();
 
-/** Splits "chapter.draft.md" into ["chapter.draft", ".md"]; a leading dot is part of the stem (".mdedit" → [".mdedit", ""]). */
+/** Splits "chapter.draft.md" into ["chapter.draft", ".md"]; a leading dot is part of the stem (".cadrel" → [".cadrel", ""]). */
 function splitExt(name: string): [string, string] {
   const i = name.lastIndexOf('.');
   return i <= 0 ? [name, ''] : [name.slice(0, i), name.slice(i)];

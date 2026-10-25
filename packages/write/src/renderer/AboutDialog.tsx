@@ -17,7 +17,7 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e)).r
 
 /** Help → About (and the ⓘ button on the phone): the version, credits, and updating from the latest GitHub release. */
 export function AboutDialog({ onClose }: { onClose(): void }) {
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const [version, setVersion] = useState('');
   const [state, setState] = useState<State>({ kind: 'idle' });
   useEscape(() => state.kind !== 'installing' && onClose());

@@ -11,7 +11,7 @@ import { existingSidecar, loadDetails, renameSidecar, saveDetails, setMarked } f
 let dir: string;
 let md: string;
 beforeEach(async () => {
-  dir = await mkdtemp(path.join(tmpdir(), 'mdedit-'));
+  dir = await mkdtemp(path.join(tmpdir(), 'cadrel-'));
   md = path.join(dir, 'my-book.md');
   await writeFile(md, '# One\n');
 });

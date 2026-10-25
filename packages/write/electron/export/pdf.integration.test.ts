@@ -27,7 +27,7 @@ beforeAll(async () => {
   // In CI a missing Electron or xvfb is a failure, not a reason to skip the only test that lays out a real PDF.
   if (!haveEnv && process.env.CI) throw new Error('CI needs Electron and xvfb-run for the PDF integration tests');
   if (!haveEnv) return;
-  work = mkdtempSync(path.join(tmpdir(), 'mdedit-pdf-'));
+  work = mkdtempSync(path.join(tmpdir(), 'cadrel-pdf-'));
   harness = path.join(work, 'pdfSmoke.js');
   await build({
     entryPoints: [path.join(root, 'electron/export/pdfSmoke.ts')],

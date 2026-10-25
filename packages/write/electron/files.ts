@@ -7,7 +7,7 @@ export const { statStamp, readWithStamp, writeFileAtomic } = makeFiles(nodeFs, (
 
 /** Like writeFileAtomic, for binary output (EPUB, PDF, DOCX). */
 export async function writeBytesAtomic(target: string, bytes: Uint8Array): Promise<void> {
-  const tmp = `${target}.mdedit-${process.pid}.tmp`;
+  const tmp = `${target}.cadrel-${process.pid}.tmp`;
   try {
     await fs.writeFile(tmp, bytes);
     await fs.rename(tmp, target);

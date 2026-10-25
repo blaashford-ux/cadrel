@@ -103,7 +103,7 @@ function createWindow(): BrowserWindow {
 
 const smokeArg = process.argv.find((a) => a.startsWith('--smoke-test='));
 smokeMode = !!smokeArg;
-if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.mdedit');
+if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.cadrel');
 
 // One window per user: a second launch (e.g. double-clicking another .md) hands its file to the first.
 const firstInstance = smokeMode || app.requestSingleInstanceLock();

@@ -66,9 +66,9 @@ function reportOf(doc: MarkdownDoc): ReturnType<typeof extractAnalysis> {
 const cleanError = (e: unknown) => String(e instanceof Error ? e.message : e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
 
 export function App() {
-  const caps = window.mdedit.capabilities;
+  const caps = window.cadrelWrite.capabilities;
   const [drawer, setDrawer] = useState(false);
-  const [ws] = useState(() => new Workspace(window.mdedit));
+  const [ws] = useState(() => new Workspace(window.cadrelWrite));
   const s = useWorkspace(ws);
   const [filter, setFilter] = useState('');
   const [focusKey, setFocusKey] = useState<string | null>(null);
@@ -130,8 +130,8 @@ export function App() {
   const wasFullscreen = useRef(false); // full screen before Zone Mode, to go back to it
   useEffect(() => {
     if (!caps.windowChrome) return;
-    void window.mdedit.windowInfo().then((i) => setFullscreen(i.fullscreen));
-    return window.mdedit.onWindowState((i) => setFullscreen(i.fullscreen));
+    void window.cadrelWrite.windowInfo().then((i) => setFullscreen(i.fullscreen));
+    return window.cadrelWrite.onWindowState((i) => setFullscreen(i.fullscreen));
   }, [caps.windowChrome]);
   useEffect(() => {
     if (!zone) {
@@ -144,12 +144,12 @@ export function App() {
   const toggleZone = () => {
     if (zone) {
       setZone(false);
-      if (!wasFullscreen.current) window.mdedit.windowControl('windowed');
+      if (!wasFullscreen.current) window.cadrelWrite.windowControl('windowed');
       return;
     }
     wasFullscreen.current = fullscreen;
     setZone(true);
-    if (!fullscreen) window.mdedit.windowControl('fullscreen');
+    if (!fullscreen) window.cadrelWrite.windowControl('fullscreen');
   };
   const [showShare, setShowShare] = useState(false);
   const [showAi, setShowAi] = useState(false);
@@ -170,7 +170,7 @@ export function App() {
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
-    window.mdedit,
+    window.cadrelWrite,
     projectPath,
     reviewFile,
     s.activeId ? navs.current.get(s.activeId)?.review : undefined,
@@ -289,10 +289,10 @@ export function App() {
     // Restore the last project (or folder), then open any file the app was launched with.
     void (async () => {
       await ws.init({ restoreFolder: false });
-      const cfg = await window.mdedit.getProjectsConfig().catch(() => null);
+      const cfg = await window.cadrelWrite.getProjectsConfig().catch(() => null);
       if (cfg) setPConfig(cfg);
-      const lastFolder = await window.mdedit.getLastFolder().catch(() => null);
-      if (cfg && !cfg.setupDone && !caps.folderPicker) await window.mdedit.setProjectsConfig({ setupDone: true }).then(setPConfig);
+      const lastFolder = await window.cadrelWrite.getLastFolder().catch(() => null);
+      if (cfg && !cfg.setupDone && !caps.folderPicker) await window.cadrelWrite.setProjectsConfig({ setupDone: true }).then(setPConfig);
       else if (cfg && !cfg.setupDone) setWelcome({ lastFolder });
       else if (cfg?.reopenLast && cfg.lastProject) await ws.openProject(cfg.lastProject);
       else if (lastFolder && !cfg?.lastProject) await ws.openPath(lastFolder, true);
@@ -300,10 +300,10 @@ export function App() {
       await ws.openLaunchFiles();
     })();
     // Files handed over later by another launch (double-clicking a second .md).
-    const stopLaunch = window.mdedit.onLaunchFiles(() => void ws.openLaunchFiles());
-    const stopTheme = window.mdedit.onThemeCustom?.(applyThemeCustom);
-    const stopClose = window.mdedit.onCloseRequested(() => {
-      void ws.handleCloseRequest().then((ok) => window.mdedit.reportCloseDecision(ok));
+    const stopLaunch = window.cadrelWrite.onLaunchFiles(() => void ws.openLaunchFiles());
+    const stopTheme = window.cadrelWrite.onThemeCustom?.(applyThemeCustom);
+    const stopClose = window.cadrelWrite.onCloseRequested(() => {
+      void ws.handleCloseRequest().then((ok) => window.cadrelWrite.reportCloseDecision(ok));
     });
     return () => {
       stopLaunch();
@@ -315,8 +315,8 @@ export function App() {
   // Google Drive sync status (phone): the button's state, and a refresh whenever a sync changed local files.
   useEffect(() => {
     if (!caps.sync) return;
-    void window.mdedit.getSyncStatus().then(setSyncStatus);
-    const stop = window.mdedit.onSyncStatus(setSyncStatus);
+    void window.cadrelWrite.getSyncStatus().then(setSyncStatus);
+    const stop = window.cadrelWrite.onSyncStatus(setSyncStatus);
     return stop;
   }, [caps.sync]);
 
@@ -334,7 +334,7 @@ export function App() {
   const reloadListing = useCallback(async () => {
     setListingLoading(true);
     try {
-      const [cfg, l] = await Promise.all([window.mdedit.getProjectsConfig(), window.mdedit.listProjects()]);
+      const [cfg, l] = await Promise.all([window.cadrelWrite.getProjectsConfig(), window.cadrelWrite.listProjects()]);
       setPConfig(cfg);
       setListing(l);
     } catch (e) {
@@ -355,13 +355,13 @@ export function App() {
 
   // Projects shared with this person, and the exchange of notes with Drive for the open project.
   const reloadShared = useCallback(() => {
-    if (caps.review) void window.mdedit.listShared().then(setShared).catch(() => undefined);
+    if (caps.review) void window.cadrelWrite.listShared().then(setShared).catch(() => undefined);
   }, [caps.review]);
   useEffect(reloadShared, [reloadShared, atHome]);
 
   const exchange = useCallback(async () => {
     if (!caps.review || !projectPath) return;
-    const r = await window.mdedit.exchangeReviews(projectPath).catch(() => null);
+    const r = await window.cadrelWrite.exchangeReviews(projectPath).catch(() => null);
     if (!r) return;
     setReviewNotice(r.revoked ? 'The owner has stopped sharing this project with you. Your notes stay on this device.' : r.errors[0] ?? null);
     if (r.changed) {
@@ -621,10 +621,10 @@ export function App() {
     if (await ws.closeProject()) void reloadListing();
   };
   const changeRoot = async () => {
-    const folder = await window.mdedit.pickFolder();
+    const folder = await window.cadrelWrite.pickFolder();
     if (!folder) return;
     try {
-      setPConfig(await window.mdedit.setProjectsConfig({ rootFolder: folder }));
+      setPConfig(await window.cadrelWrite.setProjectsConfig({ rootFolder: folder }));
       await reloadListing();
     } catch (e) {
       ws.setError(cleanError(e));
@@ -669,10 +669,10 @@ export function App() {
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
     onChangeRoot: caps.folderPicker ? () => void changeRoot() : undefined,
     onRetry: () => void reloadListing(),
-    onConvert: (p: string) => void projectCall(() => window.mdedit.convertFolder(p)),
-    onRename: (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.mdedit.renameProject(p.path, n)),
+    onConvert: (p: string) => void projectCall(() => window.cadrelWrite.convertFolder(p)),
+    onRename: (p: ProjectSummary) => promptProjectName('Rename project', p.name, 'Rename', (n) => window.cadrelWrite.renameProject(p.path, n)),
     onDuplicate: (p: ProjectSummary) =>
-      promptProjectName('Duplicate project', uniqueName(`${p.name} copy`, existingNames), 'Duplicate', (n) => window.mdedit.duplicateProject(p.path, n)),
+      promptProjectName('Duplicate project', uniqueName(`${p.name} copy`, existingNames), 'Duplicate', (n) => window.cadrelWrite.duplicateProject(p.path, n)),
     onDelete: (p: ProjectSummary) =>
       setPrompt({
         title: `Delete “${p.name}”?`,
@@ -683,7 +683,7 @@ export function App() {
         validate: (v) => (v.trim() === p.name ? null : 'Type the name exactly as shown.'),
         onSubmit: async () => {
           try {
-            await window.mdedit.deleteProject(p.path);
+            await window.cadrelWrite.deleteProject(p.path);
             await reloadListing();
             return null;
           } catch (e) {
@@ -691,8 +691,8 @@ export function App() {
           }
         }
       }),
-    onArchive: (p: ProjectSummary, archived: boolean) => void projectCall(() => window.mdedit.updateProject(p.path, { archived })),
-    onStatus: (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.mdedit.updateProject(p.path, { status })),
+    onArchive: (p: ProjectSummary, archived: boolean) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { archived })),
+    onStatus: (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { status })),
     onProperties: (p: ProjectSummary) => setProjectSettings(p.path),
     onReveal: caps.folderPicker ? (p: string) => ws.reveal(p) : undefined
   };
@@ -846,7 +846,7 @@ export function App() {
   const act = useRef(actions);
   act.current = actions;
 
-  useEffect(() => window.mdedit.onMenuAction((a) => act.current[a]()), []);
+  useEffect(() => window.cadrelWrite.onMenuAction((a) => act.current[a]()), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -1423,7 +1423,7 @@ export function App() {
         onClose={() => setShowNewProject(false)}
         onCreate={async (name, templateId) => {
           try {
-            const made = await window.mdedit.createProject(name, templateId);
+            const made = await window.cadrelWrite.createProject(name, templateId);
             setShowNewProject(false);
             await ws.openProject(made.path);
             return null;

@@ -22,7 +22,7 @@ export function ReportView({ file, report, canSave, onEdit }: Props) {
     setBusy(true);
     setMsg(null);
     try {
-      const saved = await window.mdedit.saveReport(kind, stem, html);
+      const saved = await window.cadrelWrite.saveReport(kind, stem, html);
       setMsg(saved ? `Saved ${basename(saved)}` : null);
     } catch (e) {
       setMsg(`Could not save: ${e instanceof Error ? e.message.replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '') : String(e)}`);

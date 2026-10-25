@@ -114,13 +114,13 @@ describe('screenshot rate', () => {
 
 describe('auto capture', () => {
   it('only fires for tagged amazon search pages', () => {
-    expect(wantsAutoCapture('https://www.amazon.com/s?k=cozy+fantasy&i=digital-text#bookscout-capture')).toBe(true);
+    expect(wantsAutoCapture('https://www.amazon.com/s?k=cozy+fantasy&i=digital-text#cadrel-market-capture')).toBe(true);
     expect(wantsAutoCapture('https://www.amazon.com/s?k=cozy+fantasy&i=digital-text')).toBe(false);
-    expect(wantsAutoCapture('https://www.amazon.com/dp/B0G7R6X55V#bookscout-capture')).toBe(false);
-    expect(wantsAutoCapture('https://evil.example/s?k=x#bookscout-capture')).toBe(false);
+    expect(wantsAutoCapture('https://www.amazon.com/dp/B0G7R6X55V#cadrel-market-capture')).toBe(false);
+    expect(wantsAutoCapture('https://evil.example/s?k=x#cadrel-market-capture')).toBe(false);
   });
   it('strips the fragment', () => {
-    expect(withoutHash('https://www.amazon.com/s?k=a#bookscout-capture')).toBe('https://www.amazon.com/s?k=a');
+    expect(withoutHash('https://www.amazon.com/s?k=a#cadrel-market-capture')).toBe('https://www.amazon.com/s?k=a');
     expect(withoutHash('https://www.amazon.com/s?k=a')).toBe('https://www.amazon.com/s?k=a');
   });
 });

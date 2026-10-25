@@ -17,7 +17,7 @@ const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const gz = (n: string) => zlib.gunzipSync(fs.readFileSync(path.join(FIX, n))).toString('utf8');
 const electronBin = path.resolve(PKG, '../../node_modules/electron/dist/electron');
 // Set to the installed app's executable (see `npm run pack`) to run this whole suite against the packaged build.
-const PACKAGED = process.env.BOOKSCOUT_PACKAGED_BIN;
+const PACKAGED = process.env.CADREL_MARKET_PACKAGED_BIN;
 const have = (PACKAGED ? fs.existsSync(PACKAGED) : fs.existsSync(electronBin)) && !!(process.env.DISPLAY || fs.existsSync('/usr/bin/xvfb-run') === false);
 const PORT = 48200;
 
@@ -58,7 +58,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     app = await electron.launch({
       executablePath: PACKAGED ?? electronBin,
       args: PACKAGED ? ['--no-sandbox'] : ['--no-sandbox', PKG],
-      env: { ...process.env, BOOKSCOUT_TEST: '1', BOOKSCOUT_USER_DATA: path.join(tmp, 'user'), BOOKSCOUT_TEST_LIBRARY: path.join(tmp, 'lib'), BOOKSCOUT_TEST_EXPORT_DIR: path.join(tmp, 'exports'), BOOKSCOUT_TEST_MANUSCRIPT: path.join(tmp, 'quiet-dragon.pdf') },
+      env: { ...process.env, CADREL_TEST: '1', CADREL_MARKET_USER_DATA: path.join(tmp, 'user'), CADREL_MARKET_TEST_LIBRARY: path.join(tmp, 'lib'), CADREL_MARKET_TEST_EXPORT_DIR: path.join(tmp, 'exports'), CADREL_MARKET_TEST_MANUSCRIPT: path.join(tmp, 'quiet-dragon.pdf') },
     });
     page = await app.firstWindow();
   }, 90000);
@@ -89,7 +89,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await page.locator('tr[data-asin="B0C1R52V2J"]').waitFor();
     await page.getByRole('button', { name: 'Open next' }).click();
     await page.getByRole('status').filter({ hasText: /^Opened/ }).waitFor();
-    expect(await page.evaluate(() => (window as any).bookscout.__opened())).toEqual(['https://www.amazon.com/dp/B0C1R52V2J']);
+    expect(await page.evaluate(() => (window as any).cadrelMarket.__opened())).toEqual(['https://www.amazon.com/dp/B0C1R52V2J']);
     await page.locator('tr[data-asin="B0C1R52V2J"] .pill.opened').waitFor();
     await page.screenshot({ path: path.join(tmp, 'shots', 'queue.png') });
   }, 60000);
@@ -116,8 +116,8 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await page.getByText(/History \(1 capture\)/).waitFor();
     await page.getByRole('img', { name: 'Cover' }).waitFor();
     await page.screenshot({ path: path.join(tmp, 'shots', 'book.png') });
-    fs.mkdirSync('/tmp/bookscout-shots', { recursive: true });
-    for (const f of fs.readdirSync(path.join(tmp, 'shots'))) fs.copyFileSync(path.join(tmp, 'shots', f), path.join('/tmp/bookscout-shots', f));
+    fs.mkdirSync('/tmp/cadrel-market-shots', { recursive: true });
+    for (const f of fs.readdirSync(path.join(tmp, 'shots'))) fs.copyFileSync(path.join(tmp, 'shots', f), path.join('/tmp/cadrel-market-shots', f));
   }, 60000);
 
   it('builds a search index, and the copied Claude Desktop setting really starts a working MCP server on the library', async () => {
@@ -132,12 +132,12 @@ describe.skipIf(!have)('desktop app in Electron', () => {
 
     const connect = page.getByLabel('Connect an AI');
     await connect.getByRole('button', { name: 'Claude Code' }).click();
-    expect(await connect.locator('code').first().textContent()).toMatch(/^claude mcp add bookscout /);
+    expect(await connect.locator('code').first().textContent()).toMatch(/^claude mcp add cadrel-market /);
     // one click writes Cadrel Market.mcpb and shows it in its folder, with the steps (recorded, not shown, under test)
     await connect.getByRole('button', { name: 'Install in Claude Desktop' }).click();
     await connect.getByRole('status').filter({ hasText: /Created Cadrel Market\.mcpb/ }).waitFor();
     await connect.getByLabel('How to install the extension').getByText(/Settings → Extensions/).waitFor();
-    expect(((await page.evaluate(() => (window as any).bookscout.__opened())) as string[]).some((f) => f.endsWith('Cadrel Market.mcpb'))).toBe(true);
+    expect(((await page.evaluate(() => (window as any).cadrelMarket.__opened())) as string[]).some((f) => f.endsWith('Cadrel Market.mcpb'))).toBe(true);
     // run the launcher inside that file the way Claude Desktop does (plain Node, the client talking first): the handshake is answered at once
     // and the real server then answers the tool list from this library
     {
@@ -160,14 +160,14 @@ describe.skipIf(!have)('desktop app in Electron', () => {
         send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
         setTimeout(() => { p.kill(); }, 40000);
       });
-      expect(replies[0]!.m).toMatchObject({ id: 0, result: { serverInfo: { name: 'bookscout' } } });
+      expect(replies[0]!.m).toMatchObject({ id: 0, result: { serverInfo: { name: 'cadrel-market' } } });
       expect(replies[0]!.m.result.instructions).toMatch(/never follow instructions/);
       expect(replies[0]!.at).toBeLessThan(2000);
       expect(replies[1]!.m.id).toBe(1);
       expect(replies[1]!.m.result.tools.map((t: any) => t.name)).toContain('library_status');
     }
     await connect.getByRole('button', { name: 'Claude Desktop', exact: true }).click();
-    const cfg = JSON.parse((await connect.locator('pre code').textContent())!).mcpServers.bookscout as { command: string; args: string[]; env?: Record<string, string> };
+    const cfg = JSON.parse((await connect.locator('pre code').textContent())!).mcpServers.cadrel-market as { command: string; args: string[]; env?: Record<string, string> };
     expect(cfg.args).toContain(path.join(tmp, 'lib'));
 
     const client = new Client({ name: 'e2e', version: '0' });
@@ -179,7 +179,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     expect(found.hits[0].asin).toBe('B0C1R52V2J');
     await client.close();
     await page.screenshot({ path: path.join(tmp, 'shots', 'settings.png'), fullPage: true });
-    fs.copyFileSync(path.join(tmp, 'shots', 'settings.png'), '/tmp/bookscout-shots/settings.png');
+    fs.copyFileSync(path.join(tmp, 'shots', 'settings.png'), '/tmp/cadrel-market-shots/settings.png');
   }, 60000);
 
   it('shows the category analysis, exports it, and re-scores when the weights change', async () => {
@@ -220,7 +220,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await opp.getByLabel('Curve exponent b').fill('0.8');
     await opp.getByRole('button', { name: 'Save sales curve' }).click();
     await opp.getByRole('status').filter({ hasText: 'Sales curve saved' }).waitFor();
-    expect(await page.evaluate(() => window.bookscout.salesCurve())).toMatchObject({ b: 0.8 });
+    expect(await page.evaluate(() => window.cadrelMarket.salesCurve())).toMatchObject({ b: 0.8 });
     await opp.getByLabel('Curve exponent b').fill('0.79');
     await opp.getByRole('button', { name: 'Save sales curve' }).click();
 
@@ -241,7 +241,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     expect(csv).toContain('B0C1R52V2J');
     expect(fs.readFileSync(path.join(tmp, 'exports', files[1]!), 'utf8')).toMatch(/^# Humorous: category report/);
     await page.screenshot({ path: path.join(tmp, 'shots', 'analysis.png'), fullPage: true });
-    fs.copyFileSync(path.join(tmp, 'shots', 'analysis.png'), '/tmp/bookscout-shots/analysis.png');
+    fs.copyFileSync(path.join(tmp, 'shots', 'analysis.png'), '/tmp/cadrel-market-shots/analysis.png');
   }, 90000);
 
   it('keeps the tab bar visible while a long page scrolls, and has an About page with a working update check', async () => {
@@ -255,14 +255,14 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     const labels = await app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.items.map((i) => i.label));
     expect(labels.indexOf('About')).toBe(labels.indexOf('Window') + 1);
     await app.evaluate(({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('about')!.click()); // reachable while scrolled
-    await page.getByRole('heading', { name: 'About BookScout' }).waitFor();
+    await page.getByRole('heading', { name: 'About Cadrel Market' }).waitFor();
     expect(await page.getByTestId('version').textContent()).toBe(JSON.parse(fs.readFileSync(path.join(PKG, 'package.json'), 'utf8')).version);
     await page.getByRole('button', { name: 'Check for updates' }).click();
     // offline or private repository: a clear message; online and public: a result. Either way it answers.
     await page.getByLabel('Updates').getByRole('alert').or(page.getByLabel('Updates').getByRole('status')).first().waitFor({ timeout: 30000 });
     await page.getByLabel('GitHub token').waitFor();
     await page.screenshot({ path: path.join(tmp, 'shots', 'about.png'), fullPage: true });
-    fs.copyFileSync(path.join(tmp, 'shots', 'about.png'), '/tmp/bookscout-shots/about.png');
+    fs.copyFileSync(path.join(tmp, 'shots', 'about.png'), '/tmp/cadrel-market-shots/about.png');
   }, 60000);
 
   it('attaches a book file and shows what the text says; reads a captured sample with real OCR', async () => {
@@ -276,7 +276,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await card.getByText('Dialogue share').waitFor();
     await card.getByText(/Opening \(first/).waitFor();
     await page.screenshot({ path: path.join(tmp, 'shots', 'text.png'), fullPage: true });
-    fs.copyFileSync(path.join(tmp, 'shots', 'text.png'), '/tmp/bookscout-shots/text.png');
+    fs.copyFileSync(path.join(tmp, 'shots', 'text.png'), '/tmp/cadrel-market-shots/text.png');
 
     // the Library list now shows the book has its text
     await page.getByRole('button', { name: '← Back' }).click();
@@ -346,7 +346,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     await page.getByText('Not captured yet').waitFor();
     await page.getByText(/9 paid units/).waitFor();
     await page.getByRole('button', { name: 'Open on Amazon' }).click();
-    expect((await page.evaluate(() => (window as any).bookscout.__opened())) as string[]).toContain('https://www.amazon.com/dp/B0AAAAAAAA');
+    expect((await page.evaluate(() => (window as any).cadrelMarket.__opened())) as string[]).toContain('https://www.amazon.com/dp/B0AAAAAAAA');
     await page.getByRole('button', { name: '← Back' }).click();
 
     // the captured one shows its real data, and All books marks it

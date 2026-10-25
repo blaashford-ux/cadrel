@@ -41,7 +41,7 @@ interface TokenReply {
 }
 
 const page = (title: string, body: string) =>
-  `<!doctype html><meta charset="utf-8"><title>MDEdit</title><body style="font:16px system-ui;margin:12vh auto;max-width:28em;text-align:center"><h2>${title}</h2><p>${body}</p></body>`;
+  `<!doctype html><meta charset="utf-8"><title>Cadrel Write</title><body style="font:16px system-ui;margin:12vh auto;max-width:28em;text-align:center"><h2>${title}</h2><p>${body}</p></body>`;
 
 export class GoogleAuth {
   private access: { token: string; expiresAt: number } | null = null;
@@ -53,7 +53,7 @@ export class GoogleAuth {
   }
 
   private ensureConfigured(): void {
-    if (!this.o.clientId || !this.o.clientSecret) throw new Error('Google sign-in isn’t set up in this build of MDEdit.');
+    if (!this.o.clientId || !this.o.clientSecret) throw new Error('Google sign-in isn’t set up in this build of Cadrel Write.');
   }
 
   /** A usable access token: from the saved sign-in if there is one, otherwise by signing in. */
@@ -133,10 +133,10 @@ export class GoogleAuth {
         }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         if (error || !code) {
-          res.end(page('Sign-in cancelled', 'You can close this tab and go back to MDEdit.'));
+          res.end(page('Sign-in cancelled', 'You can close this tab and go back to Cadrel Write.'));
           finish(() => reject(new Error(error === 'access_denied' ? 'Google sign-in was cancelled.' : `Google sign-in failed: ${error}`)));
         } else {
-          res.end(page('You’re signed in', 'You can close this tab and go back to MDEdit.'));
+          res.end(page('You’re signed in', 'You can close this tab and go back to Cadrel Write.'));
           finish(() => resolve({ code, redirectUri }));
         }
       });

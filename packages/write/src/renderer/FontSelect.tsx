@@ -4,17 +4,17 @@ import { BUNDLED_FONTS, bundledFont, fontStack } from '../shared/export/fonts';
 
 let installedPromise: Promise<string[]> | null = null;
 /** The installed font list is fetched once per session (it can take a moment on Windows). */
-const loadInstalled = () => (installedPromise ??= window.mdedit.listInstalledFonts().catch(() => []));
+const loadInstalled = () => (installedPromise ??= window.cadrelWrite.listInstalledFonts().catch(() => []));
 
 const previewLoaded = new Set<string>();
 /** Registers a bundled font for the preview line, once. Returns the CSS family to use. */
 async function ensurePreview(family: string): Promise<string> {
   const b = bundledFont(family);
   if (!b) return fontStack(family);
-  const name = `mdedit-preview-${b.slug}`;
+  const name = `cadrel-preview-${b.slug}`;
   if (!previewLoaded.has(name)) {
     previewLoaded.add(name);
-    const url = await window.mdedit.bundledFontPreview(b.family).catch(() => null);
+    const url = await window.cadrelWrite.bundledFontPreview(b.family).catch(() => null);
     if (url) {
       // From bytes, not a data: URL, so the page's content-security policy has nothing to object to.
       const bytes = Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0));

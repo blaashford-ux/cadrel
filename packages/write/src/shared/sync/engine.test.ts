@@ -4,7 +4,7 @@ import { md5Hex } from '../md5';
 import { FakeDrive } from './fakeDrive';
 import { emptySyncState, sanitizeSyncState, syncOnce, type SyncReport, type SyncState } from './engine';
 
-const ROOT = '/MDEdit';
+const ROOT = '/Cadrel Write';
 
 /** One phone or PC: its own file system and its own memory of the last sync, sharing one Drive. */
 class Device {
@@ -74,15 +74,15 @@ const CH = 'Novel/Manuscript/Ch 1.md';
 describe('first syncs', () => {
   it('uploads a new project and a second device downloads it', async () => {
     a.put(CH, '# One\nhello');
-    a.put('Novel/.mdedit/project.json', '{"name":"Novel"}');
+    a.put('Novel/.cadrel/project.json', '{"name":"Novel"}');
     const r1 = await a.sync();
-    expect(r1.uploaded.sort()).toEqual([CH, 'Novel/.mdedit/project.json'].sort());
+    expect(r1.uploaded.sort()).toEqual([CH, 'Novel/.cadrel/project.json'].sort());
     expect(drive.read(CH)).toBe('# One\nhello');
 
     const r2 = await b.sync();
     expect(r2.downloaded).toContain(CH);
     expect(await b.read(CH)).toBe('# One\nhello');
-    expect(await b.read('Novel/.mdedit/project.json')).toBe('{"name":"Novel"}');
+    expect(await b.read('Novel/.cadrel/project.json')).toBe('{"name":"Novel"}');
   });
 
   it('is quiet when nothing changed', async () => {
@@ -252,7 +252,7 @@ describe('folders', () => {
 
 describe('file types', () => {
   it('merges progress history from both devices', async () => {
-    const prog = 'Novel/.mdedit/progress.json';
+    const prog = 'Novel/.cadrel/progress.json';
     const day = (start: number, end: number) => JSON.stringify({ version: 1, days: { '2026-10-04': { start, end } } });
     a.put(prog, day(0, 100));
     await a.sync();
@@ -271,7 +271,7 @@ describe('file types', () => {
   });
 
   it('merges edited-chapter marks from both devices, keeping an unmark', async () => {
-    const f = 'Novel/.mdedit/edited.json';
+    const f = 'Novel/.cadrel/edited.json';
     const marks = (files: Record<string, Record<string, { edited: boolean; at: number }>>) => JSON.stringify({ version: 1, files });
     a.put(f, marks({ 'Book.md': { One: { edited: true, at: 100 } } }));
     await a.sync();
@@ -289,7 +289,7 @@ describe('file types', () => {
   });
 
   describe('review notes', () => {
-    const f = 'Novel/.mdedit/review/owner.json';
+    const f = 'Novel/.cadrel/review/owner.json';
     const note = (id: string, body: string, at: string) => ({
       id, kind: 'comment', file: 'Book.md', anchor: { quote: 'hello', prefix: '', suffix: '' }, body, author: 'Me', createdAt: at, updatedAt: at, replies: [],
     });
@@ -319,7 +319,7 @@ describe('file types', () => {
   });
 
   it('last writer wins for project settings, with no conflict copy', async () => {
-    const meta = 'Novel/.mdedit/project.json';
+    const meta = 'Novel/.cadrel/project.json';
     a.put(meta, '{"status":"planning"}');
     await a.sync();
     await b.sync();
@@ -335,9 +335,9 @@ describe('file types', () => {
   });
 
   it('never syncs temp files, drafts, backups or Exports', async () => {
-    a.put('Novel/a.md.mdedit-123.tmp', 'x');
-    a.put('Novel/.mdedit/drafts/d.json', 'x');
-    a.put('Novel/.mdedit/project.json.bak', 'x');
+    a.put('Novel/a.md.cadrel-123.tmp', 'x');
+    a.put('Novel/.cadrel/drafts/d.json', 'x');
+    a.put('Novel/.cadrel/project.json.bak', 'x');
     a.put('Novel/Exports/book.epub', 'x');
     a.put('Novel/Ch 1.md', 'real');
     const r = await a.sync();
@@ -424,7 +424,7 @@ describe('robustness', () => {
     a.state.files = {};
     const r = await a.sync();
     expect(r.errors).toEqual([]);
-    expect(drive.calls.filter((c) => c === 'createFolder:MDEdit')).toHaveLength(1); // no second MDEdit folder
+    expect(drive.calls.filter((c) => c === 'createFolder:Cadrel Write')).toHaveLength(1); // no second Cadrel Write folder
     expect(md5Hex(drive.read(CH)!)).toBe(md5Hex('x'));
   });
 });

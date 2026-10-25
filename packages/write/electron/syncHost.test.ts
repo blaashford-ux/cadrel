@@ -7,7 +7,7 @@ import { createDesktopSync, tokenVault } from './syncHost';
 
 const dirs: string[] = [];
 const tmp = () => {
-  const d = mkdtempSync(path.join(os.tmpdir(), 'mdedit-sync-'));
+  const d = mkdtempSync(path.join(os.tmpdir(), 'cadrel-sync-'));
   dirs.push(d);
   return d;
 };

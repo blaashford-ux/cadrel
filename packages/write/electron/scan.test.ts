@@ -6,7 +6,7 @@ import { scanFolder } from './scan';
 
 let root: string;
 beforeEach(async () => {
-  root = await mkdtemp(path.join(tmpdir(), 'mdedit-'));
+  root = await mkdtemp(path.join(tmpdir(), 'cadrel-'));
 });
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });

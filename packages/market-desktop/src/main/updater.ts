@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** Where releases are published. Fixed in code so the renderer can never point the updater somewhere else. */
-export const RELEASE_REPO = 'blaashford-ux/bookscout';
+export const RELEASE_REPO = 'blaashford-ux/cadrel';
 /** The only file name the updater will download and run. */
-export const INSTALLER_NAME = /^BookScout-Setup-\d+\.\d+\.\d+\.exe$/;
+export const INSTALLER_NAME = /^Cadrel-Setup-\d+\.\d+\.\d+\.exe$/;
 
 export interface ReleaseAsset {
   id: number;
@@ -49,7 +49,7 @@ export function compareVersions(a: string, b: string): number {
 
 const headers = (token: string | null, accept = 'application/vnd.github+json'): Record<string, string> => ({
   accept,
-  'user-agent': 'BookScout-updater',
+  'user-agent': 'Cadrel Market-updater',
   'x-github-api-version': '2022-11-28',
   ...(token ? { authorization: `Bearer ${token}` } : {}),
 });
@@ -57,7 +57,7 @@ const headers = (token: string | null, accept = 'application/vnd.github+json'): 
 function explain(status: number, hasToken: boolean, remaining: string | null): string {
   if (status === 404 || status === 401) {
     return hasToken
-      ? 'GitHub says the release is not visible with this token. Check that the token can read the "Contents" of the BookScout repository, and has not expired.'
+      ? 'GitHub says the release is not visible with this token. Check that the token can read the "Contents" of the Cadrel Market repository, and has not expired.'
       : 'GitHub shows no release to anonymous visitors. If the repository is private, add a read-only GitHub token below.';
   }
   if (status === 403 && remaining === '0') return 'GitHub’s request limit has been reached; try again later (a token raises the limit).';
@@ -99,7 +99,7 @@ export async function checkForUpdate(current: string, opts: { token: string | nu
  * The check shows the file arrived intact; it does not prove who built it, because the digest comes from the same place.
  */
 export async function downloadInstaller(asset: ReleaseAsset, opts: { token: string | null; dir: string; fetch?: Fetch; onProgress?: (done: number, total: number) => void }): Promise<string> {
-  if (!INSTALLER_NAME.test(asset.name)) throw new UpdateError('refusing to download a file that is not a BookScout installer');
+  if (!INSTALLER_NAME.test(asset.name)) throw new UpdateError('refusing to download a file that is not a Cadrel Market installer');
   if (asset.apiUrl !== `https://api.github.com/repos/${RELEASE_REPO}/releases/assets/${asset.id}`) throw new UpdateError('unexpected download address');
   const f = opts.fetch ?? fetch;
   fs.mkdirSync(opts.dir, { recursive: true });

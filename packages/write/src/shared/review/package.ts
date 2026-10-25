@@ -92,7 +92,7 @@ export function parsePackage(raw: string): ReviewPackage | null {
 }
 
 /** Marker file in a shared project's folder: where it came from and what it contained. */
-export const SHARED_MARKER = '.mdedit/shared.json';
+export const SHARED_MARKER = '.cadrel/shared.json';
 
 export interface SharedMarker {
   packageId: string;
@@ -107,7 +107,7 @@ export interface SharedMarker {
 }
 
 /** Where a collaborator's copy remembers the text both sides last agreed on, by file path (the starting point of the next merge). */
-export const COLLAB_BASE = '.mdedit/collab-base.json';
+export const COLLAB_BASE = '.cadrel/collab-base.json';
 
 export async function readCollabBase(fs: FsPort, dir: string): Promise<Record<string, string> | null> {
   try {
@@ -121,7 +121,7 @@ export async function readCollabBase(fs: FsPort, dir: string): Promise<Record<st
 }
 
 export async function writeCollabBase(fs: FsPort, dir: string, base: Record<string, string>): Promise<void> {
-  await fs.mkdir(`${dir}/.mdedit`, { recursive: true });
+  await fs.mkdir(`${dir}/.cadrel`, { recursive: true });
   await fs.writeText(`${dir}/${COLLAB_BASE}`, JSON.stringify(base));
 }
 
@@ -136,7 +136,7 @@ export async function readMarker(fs: FsPort, dir: string): Promise<SharedMarker 
 }
 
 export async function writeMarker(fs: FsPort, dir: string, m: SharedMarker): Promise<void> {
-  await fs.mkdir(`${dir}/.mdedit`, { recursive: true });
+  await fs.mkdir(`${dir}/.cadrel`, { recursive: true });
   await fs.writeText(`${dir}/${SHARED_MARKER}`, JSON.stringify(m, null, 2));
 }
 

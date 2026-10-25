@@ -24,7 +24,7 @@ const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 export function SyncDialog({ status, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   useEscape(onClose);
-  const api = window.mdedit;
+  const api = window.cadrelWrite;
   const run = async (f: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -44,7 +44,7 @@ export function SyncDialog({ status, onClose }: Props) {
         {!status.connected ? (
           <>
             <p className="modal-hint">
-              Keep your projects in a folder called <strong>MDEdit</strong> in your Google Drive, and up to date on every device you sign in on. MDEdit can only see the files it creates there, never the rest of your Drive.
+              Keep your projects in a folder called <strong>Cadrel Write</strong> in your Google Drive, and up to date on every device you sign in on. Cadrel Write can only see the files it creates there, never the rest of your Drive.
             </p>
             {status.message && <div className="modal-error" role="alert">{status.message}</div>}
             <div className="modal-actions">
@@ -87,9 +87,9 @@ export function SyncDialog({ status, onClose }: Props) {
 
             {sum?.rootCreated && (
               <div className="sync-block">
-                <strong>New MDEdit folder in Drive</strong>
+                <strong>New Cadrel Write folder in Drive</strong>
                 <p className="muted small">
-                  MDEdit couldn’t see an existing <em>MDEdit</em> folder in your Drive, so it made one. If you expected projects from another device to arrive, they’re in a different folder this app can’t see.
+                  Cadrel Write couldn’t see an existing <em>Cadrel Write</em> folder in your Drive, so it made one. If you expected projects from another device to arrive, they’re in a different folder this app can’t see.
                 </p>
               </div>
             )}

@@ -164,11 +164,11 @@ describe('AppService', () => {
     }, 30000);
 
     it('builds copy-paste settings for each client', () => {
-      const m = buildMcpSnippets({ command: 'C:\\Program Files\\BookScout\\BookScout.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
+      const m = buildMcpSnippets({ command: 'C:\\Program Files\\Cadrel Market\\Cadrel Market.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
       const desktop = JSON.parse(m.claudeDesktop);
-      expect(desktop.mcpServers.bookscout).toEqual({ command: 'C:\\Program Files\\BookScout\\BookScout.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
-      expect(m.claudeCode).toBe('claude mcp add bookscout -e ELECTRON_RUN_AS_NODE=1 -- "C:\\Program Files\\BookScout\\BookScout.exe" C:\\r\\main.mjs --library "D:\\My Books"');
-      expect(m.codex).toContain('[mcp_servers.bookscout]');
+      expect(desktop.mcpServers.cadrel-market).toEqual({ command: 'C:\\Program Files\\Cadrel Market\\Cadrel Market.exe', args: ['C:\\r\\main.mjs', '--library', 'D:\\My Books'], env: { ELECTRON_RUN_AS_NODE: '1' } });
+      expect(m.claudeCode).toBe('claude mcp add cadrel-market -e ELECTRON_RUN_AS_NODE=1 -- "C:\\Program Files\\Cadrel Market\\Cadrel Market.exe" C:\\r\\main.mjs --library "D:\\My Books"');
+      expect(m.codex).toContain('[mcp_servers.cadrel-market]');
       expect(m.codex).toContain('env = { ELECTRON_RUN_AS_NODE = "1" }');
     });
 
@@ -470,7 +470,7 @@ describe('AppService', () => {
 describe('about and updates', () => {
   const body = Buffer.from('MZ pretend installer '.repeat(40));
   const digest = 'sha256:' + require('node:crypto').createHash('sha256').update(body).digest('hex');
-  const rel = (tag: string) => new Response(JSON.stringify({ tag_name: tag, body: 'Fixes', assets: [{ id: 9, name: `BookScout-Setup-${tag.slice(1)}.exe`, size: body.length, url: 'u', digest }] }), { status: 200 });
+  const rel = (tag: string) => new Response(JSON.stringify({ tag_name: tag, body: 'Fixes', assets: [{ id: 9, name: `Cadrel-Setup-${tag.slice(1)}.exe`, size: body.length, url: 'u', digest }] }), { status: 200 });
   const secrets = { available: () => true, encrypt: (s: string) => Buffer.from('enc:' + s), decrypt: (b: Buffer) => b.toString().replace(/^enc:/, '') };
   const make = (extra: Partial<ConstructorParameters<typeof AppService>[0]> = {}) => {
     const launched: string[] = [];
@@ -489,7 +489,7 @@ describe('about and updates', () => {
 
   it('reports what is running', () => {
     const { s } = make();
-    expect(s.appInfo()).toMatchObject({ name: 'Cadrel Market', version: '0.2.0', repo: 'blaashford-ux/bookscout', canInstall: true, dataFolder: userData });
+    expect(s.appInfo()).toMatchObject({ name: 'Cadrel Market', version: '0.2.0', repo: 'blaashford-ux/cadrel', canInstall: true, dataFolder: userData });
     expect(make({ launchInstaller: undefined }).s.appInfo().canInstall).toBe(false);
   });
 
@@ -512,7 +512,7 @@ describe('about and updates', () => {
     expect(calls[0]!.auth).toBe('Bearer github_pat_' + 'a'.repeat(30));
     const done = await s.installUpdate();
     expect(done.phase).toBe('launching');
-    expect(launched).toEqual([path.join(userData, 'updates', 'BookScout-Setup-0.3.0.exe')]);
+    expect(launched).toEqual([path.join(userData, 'updates', 'Cadrel-Setup-0.3.0.exe')]);
     expect(fs.readFileSync(launched[0]!).equals(body)).toBe(true);
     const log = fs.readFileSync(path.join(userData, 'logs', 'updates.log'), 'utf8');
     expect(log).toMatch(/checked: running 0\.2\.0, latest 0\.3\.0 \(update available\)/);
@@ -539,7 +539,7 @@ describe('about and updates', () => {
     const { s: s2 } = make({ fetch: (async (url: string) => (url.includes('/releases/latest') ? rel('v0.3.0') : (n++, new Response(new Uint8Array(Buffer.from('truncated')), { status: 200 })))) as unknown as typeof fetch });
     await s2.checkForUpdates();
     expect((await s2.installUpdate()).error).toMatch(/incomplete/);
-    expect(fs.existsSync(path.join(userData, 'updates', 'BookScout-Setup-0.3.0.exe'))).toBe(false);
+    expect(fs.existsSync(path.join(userData, 'updates', 'Cadrel-Setup-0.3.0.exe'))).toBe(false);
   });
 
   it('opens only this repository’s release page', async () => {
@@ -547,7 +547,7 @@ describe('about and updates', () => {
     await expect(s.openReleasePage()).rejects.toThrow(/Check for updates first/);
     await s.checkForUpdates();
     await s.openReleasePage();
-    expect(opened).toEqual(['https://github.com/blaashford-ux/bookscout/releases/tag/v0.3.0']);
+    expect(opened).toEqual(['https://github.com/blaashford-ux/cadrel/releases/tag/v0.3.0']);
   });
 });
 
@@ -705,7 +705,7 @@ describe('keywords', () => {
     expect(s.keywordTable('cozy fantasy').rows[0]!.trend).toBeNull();
     await s.openTrends(['cozy fantasy', 'dark romance']);
     await s.openAmazonSearch('cozy fantasy');
-    expect(urls).toEqual(['https://trends.google.com/trends/explore?q=cozy+fantasy%2Cdark+romance&geo=US&date=today+5-y', 'https://www.amazon.com/s?k=cozy+fantasy&i=digital-text#bookscout-capture']);
+    expect(urls).toEqual(['https://trends.google.com/trends/explore?q=cozy+fantasy%2Cdark+romance&geo=US&date=today+5-y', 'https://www.amazon.com/s?k=cozy+fantasy&i=digital-text#cadrel-market-capture']);
     await expect(s.openAmazonSearch('x')).rejects.toThrow(/2-80/);
     await s.stop();
   }, 30000);
@@ -942,7 +942,7 @@ describe('Claude Desktop extension', () => {
     const z = unzipSync(new Uint8Array(fs.readFileSync(file)));
     expect(Object.keys(z).sort()).toEqual(['icon.png', 'manifest.json', 'server/launch.js']);
     const m = JSON.parse(strFromU8(z['manifest.json']!));
-    expect(m).toMatchObject({ manifest_version: '0.2', name: 'bookscout', version: '0.2.2', server: { type: 'node', entry_point: 'server/launch.js', mcp_config: { command: 'node', args: ['${__dirname}/server/launch.js'] } } });
+    expect(m).toMatchObject({ manifest_version: '0.2', name: 'cadrel-market', version: '0.2.2', server: { type: 'node', entry_point: 'server/launch.js', mcp_config: { command: 'node', args: ['${__dirname}/server/launch.js'] } } });
     // run the launcher as Claude Desktop would
     const dir = path.join(tmp, 'ext');
     fs.mkdirSync(path.join(dir, 'server'), { recursive: true });

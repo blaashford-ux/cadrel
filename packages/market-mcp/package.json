@@ -5,7 +5,7 @@
   "type": "module",
   "main": "src/index.ts",
   "bin": {
-    "bookscout-mcp": "dist/main.mjs"
+    "cadrel-market-mcp": "dist/main.mjs"
   },
   "scripts": {
     "build": "node scripts/build.mjs",

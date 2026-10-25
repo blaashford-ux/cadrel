@@ -47,7 +47,7 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
   useEffect(() => {
     let live = true;
     setConfirmed(false);
-    window.mdedit
+    window.cadrelWrite
       .readFile(file)
       .then((f) => {
         if (!live) return;
@@ -64,12 +64,12 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
   useEffect(() => {
     if (!details) return;
     const t = setTimeout(() => {
-      window.mdedit.planExport(file, details).then(setPlan).catch(() => setPlan(null));
+      window.cadrelWrite.planExport(file, details).then(setPlan).catch(() => setPlan(null));
     }, 250);
     return () => clearTimeout(t);
   }, [file, details?.title, details?.export.outputDir, details?.export.outputs.epub, details?.export.outputs.pdf, details?.export.outputs.docx]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => window.mdedit.onExportProgress((p) => setProgress((prev) => [...prev, p])), []);
+  useEffect(() => window.cadrelWrite.onExportProgress((p) => setProgress((prev) => [...prev, p])), []);
 
   const running = phase === 'running';
   useEscape(() => !running && closeAndSave());
@@ -109,7 +109,7 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
     const seq = ++runSeq.current;
     try {
       await saveLayers();
-      const r = await window.mdedit.runExport(file);
+      const r = await window.cadrelWrite.runExport(file);
       if (seq === runSeq.current) setResult(r);
     } catch (e) {
       if (seq === runSeq.current) setResult({ ok: false, errors: [e instanceof Error ? e.message : String(e)], warnings: [], outputs: [] });
@@ -217,7 +217,7 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
                 <button
                   type="button"
                   onClick={async () => {
-                    const p = await window.mdedit.pickFolder();
+                    const p = await window.cadrelWrite.pickFolder();
                     if (p) edit((d) => void (d.export.outputDir = p));
                   }}
                 >
@@ -287,10 +287,10 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
                       ))}
                     </div>
                     <div className="inline">
-                      <button type="button" onClick={() => void window.mdedit.openOutput(o.path)}>
+                      <button type="button" onClick={() => void window.cadrelWrite.openOutput(o.path)}>
                         Open
                       </button>
-                      <button type="button" onClick={() => window.mdedit.revealOutput(o.path)}>
+                      <button type="button" onClick={() => window.cadrelWrite.revealOutput(o.path)}>
                         Show in folder
                       </button>
                     </div>
@@ -345,7 +345,7 @@ export function ExportDialog({ chapterLevel, initialFile, dirtyFiles, saveFile, 
             </div>
           )}
           {phase === 'running' && (
-            <button type="button" onClick={() => window.mdedit.cancelExport()}>
+            <button type="button" onClick={() => window.cadrelWrite.cancelExport()}>
               Cancel export
             </button>
           )}

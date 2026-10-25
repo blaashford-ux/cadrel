@@ -35,7 +35,7 @@ afterAll(() => {
 
 function memoryFs(): MemoryFs {
   const fs = new MemoryFs();
-  fs.seed('/books/Novel/.mdedit/project.json', '{"status":"editing"}');
+  fs.seed('/books/Novel/.cadrel/project.json', '{"status":"editing"}');
   fs.seed('/books/Novel/Book.md', BOOK);
   return fs;
 }
@@ -66,7 +66,7 @@ describe('the Cadrel MCP server', () => {
     expect(text).toContain('## Market research (the Amazon library)');
   });
 
-  it('offers all of MDEdit\'s tools and all of BookScout\'s, each once', async () => {
+  it('offers all of Cadrel Write\'s tools and all of Cadrel Market\'s, each once', async () => {
     const { client } = await connect(both());
     const names = (await client.listTools()).tools.map((t) => t.name);
     const market = MARKET_TOOLS.map((t) => t.name);
@@ -75,14 +75,14 @@ describe('the Cadrel MCP server', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('the one name both apps used is now unambiguous: search_text stays MDEdit\'s, BookScout\'s is search_book_text', async () => {
+  it('the one name both apps used is now unambiguous: search_text stays Cadrel Write\'s, Cadrel Market\'s is search_book_text', async () => {
     const { client } = await connect(both());
     const tools = (await client.listTools()).tools;
     expect(tools.find((t) => t.name === 'search_text')?.description).toMatch(/manuscript/i);
     expect(tools.find((t) => t.name === 'search_book_text')?.description).toMatch(/blurbs|reviews/i);
   });
 
-  it('keeps MDEdit\'s tools and their read-only markings exactly', async () => {
+  it('keeps Cadrel Write\'s tools and their read-only markings exactly', async () => {
     const { client } = await connect(both());
     const tools = (await client.listTools()).tools;
     for (const n of ['list_projects', 'list_files', 'list_chapters', 'read_chapter', 'search_text', 'get_notes']) expect(tools.find((t) => t.name === n)?.annotations?.readOnlyHint, n).toBe(true);
@@ -109,7 +109,7 @@ describe('the Cadrel MCP server', () => {
     expect((await call('list_categories')).isError).toBe(false);
   });
 
-  it('prompts carry MDEdit\'s three editing skills', async () => {
+  it('prompts carry Cadrel Write\'s three editing skills', async () => {
     const { client } = await connect(both());
     const prompts = (await client.listPrompts()).prompts.map((p) => p.name).sort();
     expect(prompts).toEqual(['copy_edit', 'developmental_edit', 'line_edit']);

@@ -8,7 +8,7 @@ import { Payments } from './Payments.js';
 import { Payouts } from './Payouts.js';
 import { Royalties } from './Royalties.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const n = (v: number | null) => (v === null ? '' : v.toLocaleString('en-US'));
 const TEXT_LABEL = { manuscript: 'book', sample: 'sample' } as const;
 

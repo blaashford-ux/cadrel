@@ -163,14 +163,14 @@ describe('report page', () => {
     const { embedAnalysis, extractAnalysis } = await import('./embed');
     const a = await run([{ title: 'A -- B', raw: '# A -- B\n\n"Hi --> there," Mara said -- slowly. <b>Mara</b> left.\n' }]);
     const md = renderReport(a, { source: 'x.md', generated: '2026-10-11' }) + embedAnalysis(a, { source: 'x.md', generated: '2026-10-11' });
-    expect(md.trimEnd().split('\n').pop()).toMatch(/^<!-- mdedit-analysis v1 \{.*\} -->$/);
+    expect(md.trimEnd().split('\n').pop()).toMatch(/^<!-- cadrel-analysis v1 \{.*\} -->$/);
     expect(md.match(/-->/g)).toHaveLength(1); // only the comment's own end
     const back = extractAnalysis(md);
     expect(back?.meta.source).toBe('x.md');
     expect(back?.analysis.chapters[0].title).toBe('A -- B');
     expect(back?.analysis.totals.words).toBe(a.totals.words);
     expect(extractAnalysis('# Just a chapter\n\ntext')).toBeNull();
-    expect(extractAnalysis('<!-- mdedit-analysis v1 {"nope":1} -->')).toBeNull();
+    expect(extractAnalysis('<!-- cadrel-analysis v1 {"nope":1} -->')).toBeNull();
   });
 
   it('does not count the embedded data as words', async () => {

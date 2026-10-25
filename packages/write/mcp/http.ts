@@ -76,7 +76,7 @@ export async function startHttp(o: HttpOptions): Promise<{ port: number; host: s
     void (async () => {
       try {
         const url = new URL(req.url ?? '/', 'http://localhost');
-        if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { name: 'mdedit', ok: true });
+        if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { name: 'cadrel-write', ok: true });
         if (req.method === 'GET' && url.pathname === '/openapi.json') return send(res, 200, openApiDocument(baseUrl(req)));
         if (!tokenMatches(req.headers.authorization, o.token)) {
           res.setHeader('www-authenticate', 'Bearer');
@@ -112,8 +112,8 @@ export async function startHttp(o: HttpOptions): Promise<{ port: number; host: s
 
         if (url.pathname.startsWith('/api/')) {
           const body = req.method === 'POST' ? await readBody(req) : undefined;
-          // REST callers aren't MCP clients, so they are named by the --agent option, or by the x-mdedit-agent header, or "GPT".
-          const named = agentFromClient(String(req.headers['x-mdedit-agent'] ?? ''), o.agent);
+          // REST callers aren't MCP clients, so they are named by the --agent option, or by the x-cadrel-agent header, or "GPT".
+          const named = agentFromClient(String(req.headers['x-cadrel-agent'] ?? ''), o.agent);
           const ctx = { fs: o.fs, root: o.root, ...(named.agent === 'ai' ? { agent: 'gpt', agentName: 'GPT' } : named) };
           const r = await handleRest(ctx, req.method ?? 'GET', url, body);
           return send(res, r.status, r.json);

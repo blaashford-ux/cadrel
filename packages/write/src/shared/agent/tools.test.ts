@@ -15,7 +15,7 @@ let n: number;
 
 beforeEach(() => {
   fs = new MemoryFs();
-  fs.seed('/books/Novel/.mdedit/project.json', '{"status":"editing"}');
+  fs.seed('/books/Novel/.cadrel/project.json', '{"status":"editing"}');
   fs.seed('/books/Novel/Manuscript/Book.md', BOOK);
   fs.seed('/books/Novel/Exports/Book.md', BOOK);
   fs.seed('/books/Novel/Notes.md', '# Notes\n\nplain\n');
@@ -48,7 +48,7 @@ describe('reading', () => {
   });
 
   it('stays inside the project and the Root', async () => {
-    for (const bad of ['../Other/readme.txt', '/etc/passwd', 'Manuscript/../Notes.md', '.mdedit/project.json', 'Manuscript/Book.txt', 'Manuscript\\Book.md']) {
+    for (const bad of ['../Other/readme.txt', '/etc/passwd', 'Manuscript/../Notes.md', '.cadrel/project.json', 'Manuscript/Book.txt', 'Manuscript\\Book.md']) {
       await expect(readChapter(ctx, 'Novel', bad, 0), bad).rejects.toThrow(AgentError);
     }
     await expect(listFiles(ctx, '../books')).rejects.toThrow(AgentError);
@@ -83,7 +83,7 @@ describe('adding notes', () => {
     expect(r).toMatchObject({ ok: true, id: 'id1', chapter: 1, chapterTitle: 'Two' });
     expect(await fs.readText('/books/Novel/Manuscript/Book.md')).toBe(BOOK);
 
-    const file = parseReviewFile(await fs.readText('/books/Novel/.mdedit/review/ai-claude-developmental.json'))!;
+    const file = parseReviewFile(await fs.readText('/books/Novel/.cadrel/review/ai-claude-developmental.json'))!;
     expect(file.reviewer).toEqual({ id: 'ai-claude-developmental', name: 'Claude · Developmental edit' });
     const item = file.items[0];
     expect(item).toMatchObject({ kind: 'comment', origin: 'ai', status: 'open', file: 'Manuscript/Book.md', author: 'Claude · Developmental edit' });
@@ -97,7 +97,7 @@ describe('adding notes', () => {
     expect(r.ok).toBe(true);
     const item = (await getNotes(ctx, 'Novel'))[0];
     expect(item).toMatchObject({ kind: 'suggestion', replacement: 'crept', category: 'word choice' });
-    const stored = parseReviewFile(await fs.readText('/books/Novel/.mdedit/review/ai-claude-line.json'))!.items[0];
+    const stored = parseReviewFile(await fs.readText('/books/Novel/.cadrel/review/ai-claude-line.json'))!.items[0];
     expect(applySuggestion(flattenMarkdown(CH1), stored)).toContain('She crept to the door');
   });
 
@@ -107,7 +107,7 @@ describe('adding notes', () => {
     expect((r as { error: string }).error).toMatch(/2 times.*before.*after/);
     const [ok] = await addNotes(ctx, 'Novel', 'copy', [note({ quote: 'to the door', after: ' again' })]);
     expect(ok.ok).toBe(true);
-    expect(locateAnchor(flattenMarkdown(CH1), parseReviewFile(await fs.readText('/books/Novel/.mdedit/review/ai-claude-copy.json'))!.items[0].anchor)!.start).toBe(flattenMarkdown(CH1).lastIndexOf('to the door'));
+    expect(locateAnchor(flattenMarkdown(CH1), parseReviewFile(await fs.readText('/books/Novel/.cadrel/review/ai-claude-copy.json'))!.items[0].anchor)!.start).toBe(flattenMarkdown(CH1).lastIndexOf('to the door'));
   });
 
   it('says so when the quote is missing, and offers the curly-quote match', async () => {
@@ -188,7 +188,7 @@ describe('adding notes', () => {
 });
 
 describe('edited marks', () => {
-  const marks = async () => JSON.parse(await fs.readText('/books/Novel/.mdedit/edited.json')).files['Manuscript/Book.md'] as Record<string, { edited: boolean }>;
+  const marks = async () => JSON.parse(await fs.readText('/books/Novel/.cadrel/edited.json')).files['Manuscript/Book.md'] as Record<string, { edited: boolean }>;
   const flags = async () => (await listChapters(ctx, 'Novel', 'Manuscript/Book.md')).chapters.map((c) => c.edited);
 
   it('marks chapters by number or heading and shows them in list_chapters', async () => {
@@ -227,7 +227,7 @@ describe('edited marks', () => {
 describe('sharing a file with the app', () => {
   it('shows existing notes with the chapter, filtered by reviewer and status', async () => {
     const mine: ReviewItem = { id: 'o1', kind: 'comment', file: 'Manuscript/Book.md', anchor: { quote: 'cold', prefix: 'river ran ', suffix: '.', start: 0 }, body: 'Mine', status: 'open', author: 'Me', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z', replies: [] };
-    fs.seed('/books/Novel/.mdedit/review/owner.json', serializeReviewFile({ ...newReviewFile('Novel', { id: 'owner', name: 'Me' }), items: [mine] }));
+    fs.seed('/books/Novel/.cadrel/review/owner.json', serializeReviewFile({ ...newReviewFile('Novel', { id: 'owner', name: 'Me' }), items: [mine] }));
     await addNotes(ctx, 'Novel', 'line', [note({ quote: 'apples' })]);
     const ch = await readChapter(ctx, 'Novel', 'Manuscript/Book.md', 1);
     expect(ch.notes.map((x) => x.id).sort()).toEqual(['id1', 'o1']);
@@ -238,7 +238,7 @@ describe('sharing a file with the app', () => {
 
   it('the app saving its stale copy cannot erase notes the AI added meanwhile', async () => {
     await addNotes(ctx, 'Novel', 'line', [note({ quote: 'apples' })]);
-    const path = '/books/Novel/.mdedit/review/ai-claude-line.json';
+    const path = '/books/Novel/.cadrel/review/ai-claude-line.json';
     const appCopy = parseReviewFile(await fs.readText(path))!; // the app loads the file…
     await addNotes(ctx, 'Novel', 'line', [note({ quote: 'pears', body: 'Pears?' })]); // …the AI adds another…
     const first = appCopy.items[0];
@@ -250,9 +250,9 @@ describe('sharing a file with the app', () => {
 
   it('replies to anyone’s note, withdraws only its own open ones', async () => {
     const mine: ReviewItem = { id: 'o1', kind: 'comment', file: 'Manuscript/Book.md', anchor: { quote: 'cold', prefix: '', suffix: '', start: 0 }, body: 'Mine', status: 'open', author: 'Me', createdAt: '2025-01-01T00:00:00Z', updatedAt: '2025-01-01T00:00:00Z', replies: [] };
-    fs.seed('/books/Novel/.mdedit/review/owner.json', serializeReviewFile({ ...newReviewFile('Novel', { id: 'owner', name: 'Me' }), items: [mine] }));
+    fs.seed('/books/Novel/.cadrel/review/owner.json', serializeReviewFile({ ...newReviewFile('Novel', { id: 'owner', name: 'Me' }), items: [mine] }));
     await replyToNote(ctx, 'Novel', 'developmental', 'o1', 'Good point.');
-    const owner = parseReviewFile(await fs.readText('/books/Novel/.mdedit/review/owner.json'))!.items[0];
+    const owner = parseReviewFile(await fs.readText('/books/Novel/.cadrel/review/owner.json'))!.items[0];
     expect(owner).toMatchObject({ body: 'Mine', status: 'open' });
     expect(owner.replies.map((r) => [r.author, r.body])).toEqual([['Claude · Developmental edit', 'Good point.']]);
 
@@ -266,9 +266,9 @@ describe('sharing a file with the app', () => {
 
 describe('projects shared for editing', () => {
   beforeEach(() => {
-    fs.seed('/books/Shared With Me/Edit Book/.mdedit/shared.json', '{"packageId":"p1","commentsId":"c1","reviewerId":"rev1abc","project":"Edit Book","role":"edit"}');
+    fs.seed('/books/Shared With Me/Edit Book/.cadrel/shared.json', '{"packageId":"p1","commentsId":"c1","reviewerId":"rev1abc","project":"Edit Book","role":"edit"}');
     fs.seed('/books/Shared With Me/Edit Book/Manuscript/Book.md', BOOK);
-    fs.seed('/books/Shared With Me/Review Book/.mdedit/shared.json', '{"packageId":"p2","commentsId":"c2","reviewerId":"rev2abc","project":"Review Book"}');
+    fs.seed('/books/Shared With Me/Review Book/.cadrel/shared.json', '{"packageId":"p2","commentsId":"c2","reviewerId":"rev2abc","project":"Review Book"}');
     fs.seed('/books/Shared With Me/Review Book/Manuscript/Book.md', BOOK);
   });
 

@@ -18,7 +18,7 @@ const T = (d: number) => Math.floor(NOW.getTime() / 1000) - d * 86400;
 let root: string;
 let lib: Library;
 beforeEach(() => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-kw-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-kw-'));
   lib = Library.open(root);
 });
 afterEach(() => {

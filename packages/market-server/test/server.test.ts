@@ -18,7 +18,7 @@ let lib: Library;
 let srv: Awaited<ReturnType<typeof startIngestServer>>;
 
 beforeEach(async () => {
-  root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-srv-'));
+  root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-srv-'));
   lib = Library.open(root);
   srv = await startIngestServer({ library: lib, token: TOKEN, maxBodyBytes: 6 * 1024 * 1024 }, 0);
 });
@@ -51,7 +51,7 @@ const good = () => ({ url: `https://www.amazon.com/dp/${ASIN}`, html: detailHtml
 
 describe('auth and origin', () => {
   it('pings with the token', async () => {
-    expect((await call()).json).toEqual({ ok: true, app: 'bookscout' });
+    expect((await call()).json).toEqual({ ok: true, app: 'cadrel-market' });
   });
   it('rejects missing or wrong tokens', async () => {
     expect((await call({ auth: false })).status).toBe(401);

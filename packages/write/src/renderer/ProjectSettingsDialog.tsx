@@ -31,7 +31,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
 
   useEffect(() => {
     let live = true;
-    void Promise.all([window.mdedit.getProjectMeta(path), window.mdedit.getAppDefaults()])
+    void Promise.all([window.cadrelWrite.getProjectMeta(path), window.cadrelWrite.getAppDefaults()])
       .then(([m, a]) => {
         if (!live) return;
         if (!m) return setError('That folder is not a project.');
@@ -85,7 +85,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
     setSaving(true);
     setError(null);
     try {
-      const saved = await window.mdedit.updateProject(path, {
+      const saved = await window.cadrelWrite.updateProject(path, {
         status: meta.status,
         notes: meta.notes,
         archived: meta.archived,
@@ -104,7 +104,7 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
   const addMissing = async () => {
     if (!template) return;
     try {
-      const added = await window.mdedit.addMissingTemplateParts(path, template.id);
+      const added = await window.cadrelWrite.addMissingTemplateParts(path, template.id);
       setInfo(added.length ? `Added: ${added.join(', ')}` : 'Nothing was missing.');
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -162,8 +162,8 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
                 <button type="button" onClick={() => void addMissing()} disabled={!template} title={template ? '' : 'The template this project was made from no longer exists'}>
                   Add missing template folders
                 </button>
-                {window.mdedit.capabilities.folderPicker && (
-                  <button type="button" onClick={() => window.mdedit.reveal(path)}>
+                {window.cadrelWrite.capabilities.folderPicker && (
+                  <button type="button" onClick={() => window.cadrelWrite.reveal(path)}>
                     Show in File Explorer
                   </button>
                 )}

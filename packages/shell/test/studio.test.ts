@@ -8,7 +8,7 @@ import { rollUp, StudioService } from '../src/main/studio';
 
 async function service(writeRoot: string | null = '/books') {
   const mem = new MemoryFs();
-  mem.seed('/books/DR1/.mdedit/project.json', '{"status":"drafting"}');
+  mem.seed('/books/DR1/.cadrel/project.json', '{"status":"drafting"}');
   mem.seed('/books/DR1/Book.md', '# One\n\nShe walked slowly to the door.\n');
   const file = path.join(await mkdtemp(path.join(os.tmpdir(), 'cadrel-svc-')), 'studio.json');
   return new StudioService({ file, author: () => 'Blake', writeRoot: async () => writeRoot, fs: mem });

@@ -65,7 +65,7 @@ async function renderHtml(
     webPreferences: { sandbox: true, contextIsolation: true, backgroundThrottling: false, spellcheck: false, offscreen: true }
   });
   win.webContents.setFrameRate(60);
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdedit-print-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'cadrel-print-'));
   let poll: NodeJS.Timeout | undefined;
   // Destroying a window leaves its pending executeJavaScript/printToPDF promises unresolved, so
   // every await below is raced against this one, which rejects on cancel.
@@ -95,7 +95,7 @@ async function renderHtml(
     }, 400);
     const pages: number = await guard(
       win.webContents.executeJavaScript(
-        `window.PagedPolyfill.preview().then(() => window.__mdeditPostLayout(${JSON.stringify(post.firstBodyId)}, ${JSON.stringify(post.config)}))`
+        `window.PagedPolyfill.preview().then(() => window.__cadrelWritePostLayout(${JSON.stringify(post.firstBodyId)}, ${JSON.stringify(post.config)}))`
       )
     );
     clearInterval(poll);

@@ -1,4 +1,4 @@
-// Scale check. Skipped unless BOOKSCOUT_PERF=1:  BOOKSCOUT_PERF=1 npx vitest run --root packages/market-library test/perf.test.ts
+// Scale check. Skipped unless CADREL_MARKET_PERF=1:  CADREL_MARKET_PERF=1 npx vitest run --root packages/market-library test/perf.test.ts
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,7 +10,7 @@ import {
 
 const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const read = (n: string) => zlib.gunzipSync(fs.readFileSync(path.join(FIX, n))).toString('utf8');
-const run = process.env.BOOKSCOUT_PERF === '1';
+const run = process.env.CADREL_MARKET_PERF === '1';
 const WORDS = 'dragon baker oven village wizard cozy cottage tea magic quest sword library cat witch tavern forest river castle bread flour mystery'.split(' ');
 
 function timed<T>(label: string, f: () => T, budgetMs: number): T {

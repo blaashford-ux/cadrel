@@ -8,7 +8,7 @@ import { IssuesView } from './views/IssuesView.js';
 import { SettingsView } from './views/SettingsView.js';
 import { AboutView } from './views/AboutView.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 type Tab = 'queue' | 'library' | 'analysis' | 'keywords' | 'issues' | 'settings' | 'about';
 /** About is opened from the application menu, beside Window, so it has no tab. */
 const TABS: [Tab, string][] = [['queue', 'Queue'], ['library', 'Library'], ['analysis', 'Analysis'], ['keywords', 'Keywords'], ['issues', 'Parser health'], ['settings', 'Settings']];

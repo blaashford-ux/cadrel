@@ -1,9 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { UpdateProgress } from '../src/shared/update';
 import type { ThemeCustom } from '../src/shared/theme';
-import { DESKTOP_CAPABILITIES, type ExportProgress, type MdeditApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
+import { DESKTOP_CAPABILITIES, type ExportProgress, type WriteApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
-const api: MdeditApi = {
+const api: WriteApi = {
   capabilities: DESKTOP_CAPABILITIES,
   getShareStatus: (project) => ipcRenderer.invoke('review:shareStatus', project),
   listShares: () => ipcRenderer.invoke('review:listShares'),
@@ -134,4 +134,4 @@ const api: MdeditApi = {
   }
 };
 
-contextBridge.exposeInMainWorld('mdedit', api);
+contextBridge.exposeInMainWorld('cadrel-write', api);

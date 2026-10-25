@@ -2,18 +2,19 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 import type { FsPort } from '../src/shared/fsPort';
 
-/** Folders where MDEdit keeps `settings.json`, by platform (Electron's per-user data folder). */
+/** Where Write keeps `settings.json`: the `write` folder inside Cadrel's own data folder (Electron's per-user data folder, or CADREL_USER_DATA). */
 export function settingsCandidates(env: NodeJS.ProcessEnv, platform: NodeJS.Platform, home: string): string[] {
+  if (env.CADREL_USER_DATA) return [path.join(env.CADREL_USER_DATA, 'write', 'settings.json')];
   const bases =
     platform === 'win32'
       ? [env.APPDATA ?? path.join(home, 'AppData', 'Roaming')]
       : platform === 'darwin'
         ? [path.join(home, 'Library', 'Application Support')]
         : [env.XDG_CONFIG_HOME ?? path.join(home, '.config')];
-  return bases.flatMap((b) => [path.join(b, 'MDEdit', 'settings.json'), path.join(b, 'mdedit', 'settings.json')]);
+  return bases.map((b) => path.join(b, 'Cadrel', 'write', 'settings.json'));
 }
 
-/** A `--root` / `MDEDIT_ROOT` value that is really "not set": blank, or a placeholder the client never filled in (`${user_config.root_folder}`). */
+/** A `--root` / `CADREL_WRITE_ROOT` value that is really "not set": blank, or a placeholder the client never filled in (`${user_config.root_folder}`). */
 const unset = (v: string | undefined): boolean => !v?.trim() || /^\$\{.*\}$/.test(v.trim());
 
 export interface RootCandidate {
@@ -22,8 +23,8 @@ export interface RootCandidate {
 }
 
 /**
- * Every place the projects might be, in order of trust: `--root`, `MDEDIT_ROOT`, the Root Folder chosen in Cadrel Write, then the
- * default (`~/Cadrel`, then `~/MDEdit` for projects made before the rename). A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
+ * Every place the projects might be, in order of trust: `--root`, `CADREL_WRITE_ROOT`, the Root Folder chosen in Cadrel Write, then the
+ * default (`~/Cadrel`). A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
  */
 export async function rootCandidates(
   o: { flag?: string; env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; home?: string; fs: FsPort }
@@ -32,12 +33,12 @@ export async function rootCandidates(
   const home = o.home ?? homedir();
   const out: RootCandidate[] = [];
   if (!unset(o.flag)) out.push({ root: path.resolve(o.flag!.trim()), source: '--root' });
-  if (!unset(env.MDEDIT_ROOT)) out.push({ root: path.resolve(env.MDEDIT_ROOT!.trim()), source: 'MDEDIT_ROOT' });
+  if (!unset(env.CADREL_WRITE_ROOT)) out.push({ root: path.resolve(env.CADREL_WRITE_ROOT!.trim()), source: 'CADREL_WRITE_ROOT' });
   for (const file of settingsCandidates(env, o.platform ?? process.platform, home)) {
     try {
       const root = (JSON.parse(await o.fs.readText(file)) as { projects?: { rootFolder?: unknown } }).projects?.rootFolder;
       if (typeof root === 'string' && root.trim()) {
-        out.push({ root: root.trim(), source: `MDEdit settings (${file})` });
+        out.push({ root: root.trim(), source: `Cadrel Write settings (${file})` });
         break;
       }
     } catch {
@@ -45,7 +46,6 @@ export async function rootCandidates(
     }
   }
   out.push({ root: path.join(home, 'Cadrel'), source: 'default' });
-  out.push({ root: path.join(home, 'MDEdit'), source: 'MDEdit default' });
   return out.filter((c, i) => out.findIndex((d) => path.resolve(d.root) === path.resolve(c.root)) === i);
 }
 

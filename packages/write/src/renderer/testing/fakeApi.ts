@@ -9,7 +9,7 @@ import {
   type DirNode,
   type DraftRecord,
   type FileStamp,
-  type MdeditApi,
+  type WriteApi,
   type MenuAction,
   type Prefs,
   type Session,
@@ -21,7 +21,7 @@ import { basename, dirname, isInside } from '../../shared/paths';
 import { reviewOff, syncOff } from '../../shared/syncStub';
 
 /** In-memory stand-in for the Electron bridge, with scripted dialog answers. */
-export class FakeApi implements MdeditApi {
+export class FakeApi implements WriteApi {
   capabilities = DESKTOP_CAPABILITIES;
   getSyncStatus = syncOff.getSyncStatus;
   connectSync = syncOff.connectSync;
@@ -168,7 +168,7 @@ export class FakeApi implements MdeditApi {
     this.progressByProject.set(key, next);
     return { progress: next, total, manuscript };
   };
-  getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', defaultRoot: '/home/MDEdit', rootExists: true });
+  getProjectsConfig = async (): Promise<ProjectsConfig> => ({ ...this.projectsSettings, root: '/root', defaultRoot: '/home/Cadrel Write', rootExists: true });
   setProjectsConfig = async (patch: Partial<ProjectsSettings>) => {
     this.projectsSettings = { ...this.projectsSettings, ...patch };
     return this.getProjectsConfig();
@@ -226,12 +226,12 @@ export class FakeApi implements MdeditApi {
   deleteReview = async (project: string, id: string) => {
     this.reviews.delete(`${project}|${id}`);
   };
-  exportAiKit = async () => '/Downloads/MDEdit AI Kit';
+  exportAiKit = async () => '/Downloads/Cadrel Write AI Kit';
   private remote = { enabled: false, running: false, port: 47831, token: 'fake-token-0123456789abcdef', mcpUrl: 'http://127.0.0.1:47831/mcp', apiUrl: 'http://127.0.0.1:47831/api', openApiUrl: 'http://127.0.0.1:47831/openapi.json', error: null as string | null };
   getAiRemote = async () => ({ ...this.remote });
   setAiRemote = async (enabled: boolean) => ({ ...(this.remote = { ...this.remote, enabled, running: enabled }) });
   resetAiRemoteToken = async () => ({ ...(this.remote = { ...this.remote, token: 'new-token-0123456789abcdefgh' }) });
-  getAiServer = async () => ({ root: '/root', command: 'node', args: ['/x/mdedit-mcp.js'] });
+  getAiServer = async () => ({ root: '/root', command: 'node', args: ['/x/cadrel-write-mcp.js'] });
   statFile = async (p: string) => this.stampOf(p);
   writeFile = async (p: string, content: string) => {
     this.writes.push(p);

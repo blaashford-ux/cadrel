@@ -56,7 +56,7 @@ describe('splitPenNames', () => {
 describe('collaborations through the library', () => {
   let root: string;
   let lib: Library;
-  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'bookscout-au-')); lib = Library.open(root); });
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-market-au-')); lib = Library.open(root); });
   afterEach(() => { lib.close(); fs.rmSync(root, { recursive: true, force: true }); });
 
   const ASIN = 'B0H7QRHNJR'; // a fixture page with two authors

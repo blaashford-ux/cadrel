@@ -3,7 +3,7 @@ import type { PaymentOwed, PaymentsReport } from '../../shared/api.js';
 import { KdpReportImport } from './KdpReportImport.js';
 import { int, money, monthName, usd } from './moneyUtil.js';
 
-const api = window.bookscout;
+const api = window.cadrelMarket;
 const SRC = { sales: 'Sales (eBook and print)', kenp: 'Kindle+', ebook: 'eBook', print: 'Print' } as const;
 
 /** What Amazon has paid, line by line, what does not reconcile with the royalty reports, and what has been earned but not paid yet. */
