@@ -22,8 +22,8 @@ export interface RootCandidate {
 }
 
 /**
- * Every place the projects might be, in order of trust: `--root`, `MDEDIT_ROOT`, the Root Folder chosen in MDEdit, then the
- * default (`~/MDEdit`). A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
+ * Every place the projects might be, in order of trust: `--root`, `MDEDIT_ROOT`, the Root Folder chosen in Cadrel Write, then the
+ * default (`~/Cadrel`, then `~/MDEdit` for projects made before the rename). A source that is blank or an unfilled placeholder is skipped, and repeats are dropped.
  */
 export async function rootCandidates(
   o: { flag?: string; env?: NodeJS.ProcessEnv; platform?: NodeJS.Platform; home?: string; fs: FsPort }
@@ -44,7 +44,8 @@ export async function rootCandidates(
       /* not there: try the next */
     }
   }
-  out.push({ root: path.join(home, 'MDEdit'), source: 'default' });
+  out.push({ root: path.join(home, 'Cadrel'), source: 'default' });
+  out.push({ root: path.join(home, 'MDEdit'), source: 'MDEdit default' });
   return out.filter((c, i) => out.findIndex((d) => path.resolve(d.root) === path.resolve(c.root)) === i);
 }
 

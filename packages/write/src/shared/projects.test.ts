@@ -132,9 +132,9 @@ describe('names', () => {
     expect(uniqueName('Book', ['Other'])).toBe('Book');
     expect(uniqueName('Book', ['book', 'Book 2'])).toBe('Book 3');
   });
-  it('default root is <home>\\MDEdit', () => {
-    expect(defaultRootFolder('C:\\Users\\Me')).toBe('C:\\Users\\Me\\MDEdit');
-    expect(defaultRootFolder('/home/me/')).toBe('/home/me/MDEdit');
+  it('default root is <home>\\Cadrel', () => {
+    expect(defaultRootFolder('C:\\Users\\Me')).toBe('C:\\Users\\Me\\Cadrel');
+    expect(defaultRootFolder('/home/me/')).toBe('/home/me/Cadrel');
   });
 });
 

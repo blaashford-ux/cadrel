@@ -95,6 +95,29 @@ export function Profile() {
         </form>
       </section>
 
+      <section className="card" aria-labelledby="pf-ai">
+        <h3 id="pf-ai">AI assistant</h3>
+        <label className="check-row">
+          <input type="checkbox" checked={p.assistant.files} onChange={(e) => void run(() => api.setAssistantFiles(e.target.checked))} />{' '}
+          Let the AI assistant see and read my attached files
+        </label>
+        <p className="muted small">
+          {p.assistant.files
+            ? 'On: through Cadrel’s AI connection the assistant can list your attached files and open the ones you have not hidden, to sign things and write in your voice. Your email is never shared. Turn it off and it cannot tell you have any files.'
+            : 'Off: the assistant is told only that you have turned this off. Your name, pen names and about-me are still available to it.'}
+        </p>
+        {p.assistantReads.length > 0 && (
+          <details>
+            <summary className="small">Recently opened by the assistant ({p.assistantReads.length})</summary>
+            <ul className="reads">
+              {[...p.assistantReads].reverse().slice(0, 20).map((r, i) => (
+                <li key={i} className="small"><strong>{r.by}</strong> opened {r.name} <span className="muted">· {new Date(r.at).toLocaleString()}</span></li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+
       <section
         className={`card drop${over ? ' over' : ''}`}
         aria-labelledby="pf-files"
@@ -122,6 +145,7 @@ export function Profile() {
                   <strong className="att-name">{a.name}</strong>
                   <span className="muted small">{formatBytes(a.size)} · added {new Date(a.addedAt).toLocaleDateString()}</span>
                   {p.avatarId === a.id && <span className="chip">your photo</span>}
+                  {a.origin === 'assistant' && <span className="chip ai">added by AI</span>}
                   {problem(a) && <span className="warn small">{problem(a)!.problem === 'missing' ? 'the copy is missing' : 'the copy has changed'}</span>}
                 </div>
                 <input
@@ -135,6 +159,9 @@ export function Profile() {
                 <div className="att-actions">
                   <button type="button" onClick={() => void run(() => api.open(a.id))}>Open</button>
                   <button type="button" onClick={() => void run(() => api.reveal(a.id))}>Show in folder</button>
+                  <label className="inline small" title={p.assistant.files ? 'Untick to hide this file from the assistant' : 'The assistant cannot see any of your files while access is off'}>
+                    <input type="checkbox" checked={a.assistant} disabled={!p.assistant.files} onChange={(e) => void run(() => api.editAttachment(a.id, { assistant: e.target.checked }))} /> AI can read
+                  </label>
                   {IMAGE_MIME.test(a.mime) && (p.avatarId === a.id ? (
                     <button type="button" onClick={() => void run(() => api.setAvatar(null))}>Remove as photo</button>
                   ) : (

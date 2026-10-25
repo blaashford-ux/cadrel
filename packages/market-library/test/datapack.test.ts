@@ -112,9 +112,9 @@ describe('data packs', () => {
     await exportPack(src, file);
     await expect(exportPack(src, file)).rejects.toThrow(/already exists/);
     fs.writeFileSync(path.join(tmp, 'junk.zip'), 'nope');
-    expect(() => readPackManifest(path.join(tmp, 'junk.zip'))).toThrow(/not a BookScout data pack/);
+    expect(() => readPackManifest(path.join(tmp, 'junk.zip'))).toThrow(/not a Cadrel Market data pack/);
     fs.writeFileSync(path.join(tmp, 'other.zip'), zipSync({ 'manifest.json': Buffer.from('{"format":"something-else"}') }));
-    await expect(importPack(dst, path.join(tmp, 'other.zip'))).rejects.toThrow(/not a BookScout data pack/);
+    await expect(importPack(dst, path.join(tmp, 'other.zip'))).rejects.toThrow(/not a Cadrel Market data pack/);
   });
 
   it('ignores entries with unexpected paths and damaged pages instead of writing them', async () => {

@@ -132,7 +132,7 @@ export function createIngestServer(opts: ServerOptions): http.Server {
         return;
       }
       if ((route === '/v1/capture' || route === '/v1/sample/page' || route === '/v1/sample/finish') && opts.library.rebuilding) {
-        throw new HttpError(503, 'BookScout is re-reading the library; try again in a minute');
+        throw new HttpError(503, 'Cadrel Market is re-reading the library; try again in a minute');
       }
       if (route === '/v1/capture') {
         if (req.method !== 'POST') throw new HttpError(405, 'POST only');

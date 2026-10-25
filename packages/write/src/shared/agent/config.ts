@@ -1,6 +1,6 @@
 import { parseReviewFile } from '../review/comments';
 
-/** How to start the MDEdit MCP server: what an AI app puts in its settings. */
+/** How to start the Cadrel Write MCP server: what an AI app puts in its settings. */
 export interface AiServerInfo {
   /** The folder holding the projects (where the server looks). */
   root: string;

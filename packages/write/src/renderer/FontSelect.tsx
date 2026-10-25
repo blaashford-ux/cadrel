@@ -66,7 +66,7 @@ export function FontSelect({ label, value, onChange, hint, path }: Props) {
           <LayerTag path={path} />
         </span>
         <select value={bundledFont(value)?.family ?? value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
-          <optgroup label="Included with MDEdit">
+          <optgroup label="Included with Cadrel Write">
             {BUNDLED_FONTS.map((b) => (
               <option key={b.slug} value={b.family}>
                 {b.family}

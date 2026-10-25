@@ -45,7 +45,7 @@ const studio = new Studio(studioPath);
 const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
 const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, user, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 
-/** Write: the folder that holds the projects, by MDEdit's own rules (--root, MDEDIT_ROOT, MDEdit's settings, the default). */
+/** Write: the folder that holds the projects, by Cadrel Write's own rules (--root, MDEDIT_ROOT, Cadrel Write's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {
   try {
     const candidates = await rootCandidates({ flag: flag('root'), fs: nodeFs });
@@ -60,7 +60,7 @@ async function findWrite(): Promise<Found<{ options: WriteOptions; root: string;
 }
 
 /**
- * Market: the library BookScout keeps. A library that is missing or will not open just means these tools are left out.
+ * Market: the library Cadrel Market keeps. A library that is missing or will not open just means these tools are left out.
  * With `open: false` (the handshake) nothing is opened, only the instructions are read.
  */
 async function findMarket(open: boolean): Promise<Found<{ module: McpModule; close(): void; root: string }>> {
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
     say(
       'Cadrel MCP server\n' +
-        '  --root <folder>     the folder that holds your writing projects (default: the Root Folder set in Cadrel/MDEdit)\n' +
+        '  --root <folder>     the folder that holds your writing projects (default: the Root Folder set in Cadrel/Cadrel Write)\n' +
         '  --library <folder>  the market research library (default: the one the app last used)\n' +
         '  --studio <file>     the studio file (projects and notes; default: the one Cadrel keeps)\n' +
         '  --agent <name>      how the AI is named in the Notes panel (default: taken from the connecting app)\n' +

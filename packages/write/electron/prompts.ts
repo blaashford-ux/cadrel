@@ -10,7 +10,7 @@ async function show(win: BrowserWindow | null, opts: MessageBoxOptions): Promise
 export async function confirmUnsaved(win: BrowserWindow | null, fileName: string): Promise<UnsavedChoice> {
   const response = await show(win, {
     type: 'warning',
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     message: `Do you want to save the changes to ${fileName}?`,
     detail: "Your changes will be lost if you don't save them.",
     buttons: ['Save', "Don't Save", 'Cancel'],
@@ -24,7 +24,7 @@ export async function confirmUnsaved(win: BrowserWindow | null, fileName: string
 export async function confirmOverwrite(win: BrowserWindow | null, fileName: string): Promise<boolean> {
   const response = await show(win, {
     type: 'warning',
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     message: `${fileName} was changed on disk since you opened it.`,
     detail: 'Saving now will overwrite those changes.',
     buttons: ['Overwrite', 'Cancel'],
@@ -44,7 +44,7 @@ export async function confirmDelete(
   const where = kind === 'chapter' ? 'This removes the chapter and its text from the file.' : 'It will be moved to the Recycle Bin.';
   const response = await show(win, {
     type: 'warning',
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     message: `Delete the ${kind} "${name}"?`,
     detail: hasUnsaved ? `${where} Unsaved edits to it will be lost.` : where,
     buttons: ['Delete', 'Cancel'],
@@ -58,9 +58,9 @@ export async function confirmDelete(
 export async function confirmRecover(win: BrowserWindow | null, fileName: string): Promise<boolean> {
   const response = await show(win, {
     type: 'question',
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     message: `Recover unsaved changes to ${fileName}?`,
-    detail: 'MDEdit closed unexpectedly last time. These edits were autosaved but never written to the file.',
+    detail: 'Cadrel Write closed unexpectedly last time. These edits were autosaved but never written to the file.',
     buttons: ['Recover', 'Discard'],
     defaultId: 0,
     cancelId: 1,
@@ -72,7 +72,7 @@ export async function confirmRecover(win: BrowserWindow | null, fileName: string
 export async function confirmMarkEdited(win: BrowserWindow | null, chapterTitle: string): Promise<boolean> {
   const response = await show(win, {
     type: 'question',
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     message: `Mark "${chapterTitle}" as edited?`,
     detail: 'Edited chapters show a green dot in the file list.',
     buttons: ['Mark Edited', 'Not Yet'],

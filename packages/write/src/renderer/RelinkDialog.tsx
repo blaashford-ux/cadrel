@@ -32,7 +32,7 @@ export function RelinkDialog({ sidecar, candidates, onLink, onClose }: Props) {
       >
         <h3>Link export settings</h3>
         <p className="muted small">
-          <code>{basename(sidecar)}</code> holds a book’s title page, copyright page and export choices, but the manuscript it belonged to is gone (renamed outside MDEdit?). Pick the file it should belong to.
+          <code>{basename(sidecar)}</code> holds a book’s title page, copyright page and export choices, but the manuscript it belonged to is gone (renamed outside Cadrel Write?). Pick the file it should belong to.
         </p>
         {candidates.length === 0 ? (
           <p className="bad">There is no manuscript in this folder without export settings of its own.</p>

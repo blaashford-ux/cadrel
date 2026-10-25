@@ -6,7 +6,7 @@
  *     :::
  *
  * `left`, `center`, `right` and `justify` are the four alignments (`centre` and `justified` are accepted too).
- * Plain Markdown viewers show the two fence lines; MDEdit draws and exports the alignment.
+ * Plain Markdown viewers show the two fence lines; Cadrel Write draws and exports the alignment.
  */
 export type Align = 'left' | 'center' | 'right' | 'justify';
 

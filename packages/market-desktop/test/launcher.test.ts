@@ -108,7 +108,7 @@ describe('the extension launcher', () => {
     L.send({ jsonrpc: '2.0', id: 7, method: 'tools/list' });
     expect(await L.exited).toBe(3);
     const failed = L.out.find((o) => o.msg.id === 7)!.msg;
-    expect(failed.error.message).toMatch(/BookScout stopped before it could answer \(exit code 3\)/);
+    expect(failed.error.message).toMatch(/Cadrel Market stopped before it could answer \(exit code 3\)/);
     expect(failed.error.message).toContain('mcp-launcher.log');
     const log = fs.readFileSync(L.logFile, 'utf8');
     expect(log).toMatch(/the server stopped \(exit code 3\).*boom: could not open the library/);

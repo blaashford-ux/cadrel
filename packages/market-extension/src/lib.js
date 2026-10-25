@@ -17,7 +17,7 @@ export function classifyUrl(u) {
   return null;
 }
 
-/** Appended (as a fragment, which Amazon never sees) to the search URLs the BookScout app opens, so the extension knows to capture them without a click. */
+/** Appended (as a fragment, which Amazon never sees) to the search URLs the Cadrel Market app opens, so the extension knows to capture them without a click. */
 export const AUTO_CAPTURE_HASH = '#bookscout-capture';
 
 /** True for an amazon.com search page the app opened for capture. */

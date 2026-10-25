@@ -36,7 +36,7 @@ export function sampleLoop(session) {
   const bar = document.createElement('div');
   bar.setAttribute('style', 'position:fixed;left:12px;bottom:12px;z-index:2147483647;background:#1d1d1b;color:#fff;font:13px system-ui,sans-serif;padding:8px 12px;border-radius:8px;box-shadow:0 2px 10px #0006;display:flex;gap:10px;align-items:center');
   const label = document.createElement('span');
-  label.textContent = 'BookScout: open the sample and turn the pages';
+  label.textContent = 'Cadrel Market: open the sample and turn the pages';
   const stop = document.createElement('button');
   stop.textContent = 'Finish';
   stop.setAttribute('style', 'font:inherit;padding:2px 10px;border-radius:5px;border:0;cursor:pointer');

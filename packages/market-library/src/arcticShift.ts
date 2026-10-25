@@ -1,6 +1,6 @@
 /**
  * A small client for the Arctic Shift archive of Reddit (https://github.com/ArthurHeitmann/arctic_shift/tree/master/api):
- * a public, keyless service. Only the fields BookScout keeps are requested, plus `author` for a transient bot filter
+ * a public, keyless service. Only the fields Cadrel Market keeps are requested, plus `author` for a transient bot filter
  * (it is never stored).
  */
 export const ARCTIC_SHIFT_URL = 'https://arctic-shift.photon-reddit.com';

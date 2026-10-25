@@ -1,5 +1,5 @@
 /**
- * The MCP server: MDEdit's AI-reviewer tools (src/shared/agent) described to a model. Claude and GPT clients both speak
+ * The MCP server: Cadrel Write's AI-reviewer tools (src/shared/agent) described to a model. Claude and GPT clients both speak
  * MCP, so this is the only integration; nothing in it is specific to one vendor except the display name of the AI.
  */
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -71,16 +71,16 @@ const failure = (message: string) => ({ isError: true, content: [{ type: 'text' 
 export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
   const looked = (o.tried?.length ? o.tried : [{ root: o.root, source: 'the server settings' }]).map((t) => `${t.root} (${t.source})`).join('; ');
   return (
-    `No MDEdit projects were found. Looked in: ${looked}. A project is a folder directly inside the projects folder that contains .mdedit/project.json. ` +
-    'Check that the projects folder is the Root Folder from MDEdit (File → Settings → Projects), not a single book\'s folder, and that the book was created in or moved into it. ' +
+    `No Cadrel Write projects were found. Looked in: ${looked}. A project is a folder directly inside the projects folder that contains .mdedit/project.json. ` +
+    'Check that the projects folder is the Root Folder from Cadrel Write (File → Settings → Projects), not a single book\'s folder, and that the book was created in or moved into it. ' +
     'A folder opened with Open Folder from somewhere else is not found here.'
   );
 }
 
-/** What the AI is told about MDEdit's tools. A server that adds other modules' tools puts this beside theirs. */
+/** What the AI is told about Cadrel Write's tools. A server that adds other modules' tools puts this beside theirs. */
 export const WRITE_INSTRUCTIONS =
-  'MDEdit holds a writer\'s book projects as Markdown files. You are an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
-  'You cannot change the manuscript; the author reviews your notes in MDEdit and accepts or rejects each one. Quote text exactly as read_chapter returns it.';
+  'Cadrel Write holds a writer\'s book projects as Markdown files. You are an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
+  'You cannot change the manuscript; the author reviews your notes in Cadrel Write and accepts or rejects each one. Quote text exactly as read_chapter returns it.';
 
 export function createServer(o: ServerOptions): McpServer {
   const server = new McpServer({ name: 'mdedit', version: o.version ?? '0.0.0' }, { instructions: WRITE_INSTRUCTIONS });
@@ -88,7 +88,7 @@ export function createServer(o: ServerOptions): McpServer {
   return server;
 }
 
-/** MDEdit's tools and editing-skill prompts, registered on any MCP server (so one server can carry several modules' tools). */
+/** Cadrel Write's tools and editing-skill prompts, registered on any MCP server (so one server can carry several modules' tools). */
 export function registerWriteTools(server: McpServer, o: ServerOptions): void {
   const ctx = (): AgentContext => ({ fs: o.fs, root: o.root, ...agentFromClient(server.server.getClientVersion()?.name, o.agent) });
   const run = <T>(job: (c: AgentContext) => Promise<T>) => async () => {
@@ -208,7 +208,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'set_chapters_edited',
     {
       description:
-        'Mark chapters as edited, or unmark them: the same marks as Mark Edited and Unmark Edited in MDEdit\'s chapter menu, shown as the dot beside each chapter. ' +
+        'Mark chapters as edited, or unmark them: the same marks as Mark Edited and Unmark Edited in Cadrel Write\'s chapter menu, shown as the dot beside each chapter. ' +
         'Name the chapters, or give "through" to cover every chapter from the first up to and including that one (Mark Edited to Here / Unmark Edited to Here). ' +
         'Only do this when the author asks, or when they have told you to mark chapters as you finish them. It never changes the manuscript or your notes.',
       inputSchema: {

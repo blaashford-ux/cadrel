@@ -64,7 +64,7 @@ export interface ServiceOptions {
   secrets?: { available(): boolean; encrypt(s: string): Buffer; decrypt(b: Buffer): string };
   /** Runs a downloaded installer and closes the app. Not set where updating in place is unsupported. */
   launchInstaller?: (file: string) => void | Promise<void>;
-  /** When set, BookScout does not check its own releases and shows this instead (a host app updates as a whole). */
+  /** When set, Cadrel Market does not check its own releases and shows this instead (a host app updates as a whole). */
   updatesDisabledReason?: string;
   /** Opens a release page in the browser. */
   openRelease?: (url: string) => void | Promise<void>;
@@ -74,7 +74,7 @@ export interface ServiceOptions {
   iconFile?: () => string | null;
   /** Test hook: what the MCP server answers to `initialize`; by default it is read from the server (`--print-handshake`). */
   mcpHandshake?: () => Promise<Handshake | null>;
-  /** The MCP server's name and the extension's wording. Default: BookScout's. */
+  /** The MCP server's name and the extension's wording. Default: Cadrel Market's. */
   mcpBrand?: McpBrand;
   /** Pause between autocomplete requests, in ms; tests set 0. */
   keywordDelayMs?: number;
@@ -112,7 +112,7 @@ export interface TokenStatus {
 export interface McpBrand {
   /** The server's name in settings: "bookscout", "cadrel". */
   id: string;
-  /** Display name: "BookScout", "Cadrel". */
+  /** Display name: "Cadrel Market", "Cadrel". */
   name: string;
   /** What the Claude Desktop extension says it does. */
   description: string;
@@ -121,9 +121,9 @@ export interface McpBrand {
 }
 export const BOOKSCOUT_BRAND: McpBrand = {
   id: 'bookscout',
-  name: 'BookScout',
-  description: 'Search and analyse the Kindle categories, books, reviews, texts and Reddit threads in your BookScout library.',
-  file: 'BookScout.mcpb'
+  name: 'Cadrel Market',
+  description: 'Search and analyse the Kindle categories, books, reviews, texts and Reddit threads in your Cadrel Market library.',
+  file: 'Cadrel Market.mcpb'
 };
 
 export function buildMcpSnippets(launch: { command: string; args: string[]; env: Record<string, string> }, id = 'bookscout'): McpSnippets {
@@ -176,7 +176,7 @@ export class AppService {
 
   appInfo(): AppInfo {
     return {
-      name: 'BookScout',
+      name: 'Cadrel Market',
       version: this.opts.version ?? '0.0.0',
       electron: process.versions.electron ?? null,
       platform: `${process.platform} ${process.arch}`,
@@ -219,7 +219,7 @@ export class AppService {
     const t = token.trim();
     if (!/^[A-Za-z0-9_-]{20,255}$/.test(t)) throw new Error('That does not look like a GitHub token (letters, digits, "_" and "-" only).');
     const sec = this.opts.secrets;
-    if (!sec?.available()) throw new Error('This computer cannot encrypt the token, so BookScout will not store it. Set the BOOKSCOUT_GITHUB_TOKEN environment variable instead.');
+    if (!sec?.available()) throw new Error('This computer cannot encrypt the token, so Cadrel Market will not store it. Set the BOOKSCOUT_GITHUB_TOKEN environment variable instead.');
     fs.mkdirSync(this.opts.userData, { recursive: true });
     fs.writeFileSync(this.tokenFileEnc, sec.encrypt(t), { mode: 0o600 });
     this.ulog('info', 'GitHub token saved (encrypted)');
@@ -562,7 +562,7 @@ export class AppService {
     removeTrend(this.need().db, String(keyword));
   }
 
-  /** Opens Google Trends comparing up to five terms. BookScout never calls Trends itself. */
+  /** Opens Google Trends comparing up to five terms. Cadrel Market never calls Trends itself. */
   async openTrends(terms: string[]): Promise<void> {
     if (!Array.isArray(terms)) throw new Error('bad terms');
     await this.opts.openExternal(trendsUrl(terms.map(String)));
@@ -1211,7 +1211,7 @@ export class AppService {
    * A Claude Desktop extension (.mcpb) that starts this app's MCP server, so it can be installed by opening the file
    * instead of editing claude_desktop_config.json. The bundle holds no server code: its launcher starts the installed
    * app's own runtime (which already has the database, vector search and OCR libraries) on this library, and passes
-   * stdio through. It therefore points at this install; install again if BookScout is moved.
+   * stdio through. It therefore points at this install; install again if Cadrel Market is moved.
    */
   async buildClaudeExtension(): Promise<{ file: string; earlyHandshake: boolean }> {
     const c = this.mcpConfig();

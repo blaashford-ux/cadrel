@@ -7,7 +7,7 @@ const skills: KitSkill[] = [
   { name: 'mdedit-copy-edit', id: 'copy_edit', tag: 'Copy edit', markdown: '---\nname: mdedit-copy-edit\ndescription: "y"\n---\n\n# Copy Edit\n', body: '# Copy Edit' },
 ];
 const server = new TextEncoder().encode('console.log("server")');
-const kit = buildKit({ skills, server, version: '0.6.0', root: 'C:\\Users\\me\\MDEdit', serverPath: 'C:\\Users\\me\\Downloads\\MDEdit AI Kit\\mdedit-mcp.js' });
+const kit = buildKit({ skills, server, version: '0.6.0', root: 'C:\\Users\\me\\MDEdit', serverPath: 'C:\\Users\\me\\Downloads\\Cadrel Write AI Kit\\mdedit-mcp.js' });
 const file = (p: string): KitFile => kit.find((f) => f.path === p)!;
 
 describe('the AI Kit', () => {
@@ -25,7 +25,7 @@ describe('the AI Kit', () => {
       'skills/mdedit-line-edit.zip',
     ]);
     for (const f of kit) expect(f.path).not.toMatch(/^\/|\.\.|\\|:/);
-    expect(KIT_FOLDER).toBe('MDEdit AI Kit');
+    expect(KIT_FOLDER).toBe('Cadrel Write AI Kit');
   });
 
   it('makes a Claude Desktop extension that runs the server on the chosen projects folder', () => {
@@ -50,7 +50,7 @@ describe('the AI Kit', () => {
 
   it('writes settings that point at the saved server, and a README that names the steps', () => {
     const s = strFromU8(file('connect-settings.txt').data);
-    expect(s).toContain('claude mcp add mdedit -- node "C:\\Users\\me\\Downloads\\MDEdit AI Kit\\mdedit-mcp.js" --root C:\\Users\\me\\MDEdit');
+    expect(s).toContain('claude mcp add mdedit -- node "C:\\Users\\me\\Downloads\\Cadrel Write AI Kit\\mdedit-mcp.js" --root C:\\Users\\me\\MDEdit');
     expect(s).toContain("[mcp_servers.mdedit]");
     const r = strFromU8(file('README.txt').data);
     for (const needle of ['mdedit.mcpb', 'Settings > Capabilities > Skills', 'C:\\Users\\me\\MDEdit', 'Line edit', 'Copy edit', 'developmental_edit']) expect(r).toContain(needle);
@@ -63,7 +63,7 @@ describe('the AI Kit under a host app\'s brand', () => {
   const k = buildKit({ skills, server, version: '1.2.3', root: 'C:\\Users\\me\\MDEdit', serverPath: 'C:\\Users\\me\\Downloads\\Cadrel AI Kit\\cadrel-mcp.js', brand: cadrel });
   const f = (p: string) => k.find((x) => x.path === p)!;
 
-  it('names its files and the Claude Desktop extension after the host, with no MDEdit left in their names', () => {
+  it('names its files and the Claude Desktop extension after the host, with no Cadrel Write left in their names', () => {
     expect(k.map((x) => x.path)).toContain('cadrel.mcpb');
     expect(k.map((x) => x.path)).toContain('cadrel-mcp.js');
     expect(k.map((x) => x.path)).not.toContain('mdedit.mcpb');
@@ -79,6 +79,6 @@ describe('the AI Kit under a host app\'s brand', () => {
     expect(settings).toContain('"cadrel": {');
     expect(settings).toContain('cadrel.mcpb');
     expect(strFromU8(f('README.txt').data)).toContain('Cadrel AI Kit'.replace(' AI Kit', ''));
-    expect(strFromU8(f('README.txt').data)).not.toContain('MDEdit');
+    expect(strFromU8(f('README.txt').data)).not.toContain('Cadrel Write');
   });
 });

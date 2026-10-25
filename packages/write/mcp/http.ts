@@ -1,5 +1,5 @@
 /**
- * MDEdit's AI tools over HTTP, for apps that can't launch a program on this PC (the ChatGPT app, a Custom GPT, claude.ai):
+ * Cadrel Write's AI tools over HTTP, for apps that can't launch a program on this PC (the ChatGPT app, a Custom GPT, claude.ai):
  *   POST /mcp      MCP over Streamable HTTP
  *   /api/...       the same tools as REST, described at GET /openapi.json
  * Every call except /health and /openapi.json needs `Authorization: Bearer <token>`. It listens on this PC only
@@ -15,7 +15,7 @@ import { agentFromClient, createServer, type ServerOptions } from './server';
 import { handleRest, openApiDocument } from './rest';
 
 export interface HttpOptions extends ServerOptions {
-  /** Builds the MCP server for each session. Default: MDEdit's own tools; the Cadrel server passes one that adds the other modules'. */
+  /** Builds the MCP server for each session. Default: Cadrel Write's own tools; the Cadrel server passes one that adds the other modules'. */
   makeServer?: (o: ServerOptions) => McpServer | Promise<McpServer>;
   token: string;
   /** 0 picks a free port. */

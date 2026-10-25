@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "BookScout",
+  "name": "Cadrel Market",
   "version": "0.6.3",
-  "description": "Send Amazon book and bestseller pages to the BookScout desktop app on this computer.",
+  "description": "Send Amazon book and bestseller pages to the Cadrel Market desktop app on this computer.",
   "minimum_chrome_version": "116",
   "permissions": [
     "contextMenus",
@@ -21,7 +21,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "BookScout",
+    "default_title": "Cadrel Market",
     "default_popup": "src/popup.html"
   },
   "commands": {
@@ -29,7 +29,7 @@
       "suggested_key": {
         "default": "Alt+Shift+S"
       },
-      "description": "Save the sample page on screen to BookScout"
+      "description": "Save the sample page on screen to Cadrel Market"
     }
   }
 }

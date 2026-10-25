@@ -10,7 +10,7 @@ import { categoryPhrase } from './keywords/ideas.js';
 import { normalizeKeyword } from './keywords/suggest.js';
 
 /**
- * A data pack is a zip of the raw captures (the pages BookScout saved, which are the source of truth) plus book covers, for all
+ * A data pack is a zip of the raw captures (the pages Cadrel Market saved, which are the source of truth) plus book covers, for all
  * categories or only chosen ones. Importing a pack re-reads each page with the current parsers, so a pack stays usable as the parsers
  * improve, and nothing in it is trusted for its paths or its parsed values.
  *
@@ -266,8 +266,8 @@ export async function exportPack(lib: Library, dest: string, opts: ExportOptions
 function parseManifest(bytes: Uint8Array | undefined): PackManifest {
   let m: Partial<PackManifest>;
   try { m = JSON.parse(Buffer.from(bytes ?? []).toString('utf8')) as Partial<PackManifest>; } catch { m = {}; }
-  if (m.format !== PACK_FORMAT) throw new Error('this is not a BookScout data pack');
-  if (typeof m.version !== 'number' || m.version > PACK_VERSION) throw new Error('this data pack was made by a newer BookScout; update the app to import it');
+  if (m.format !== PACK_FORMAT) throw new Error('this is not a Cadrel Market data pack');
+  if (typeof m.version !== 'number' || m.version > PACK_VERSION) throw new Error('this data pack was made by a newer Cadrel Market; update the app to import it');
   if (typeof m.id !== 'string' || !m.id) throw new Error('this data pack has no id');
   return m as PackManifest;
 }
@@ -275,7 +275,7 @@ function parseManifest(bytes: Uint8Array | undefined): PackManifest {
 /** Read only the manifest of a pack (what it holds, and its id), without unpacking anything else. */
 export function readPackManifest(file: string): PackManifest {
   let files: Record<string, Uint8Array>;
-  try { files = unzipSync(fs.readFileSync(file), { filter: (f) => f.name === 'manifest.json' }); } catch { throw new Error('this is not a BookScout data pack'); }
+  try { files = unzipSync(fs.readFileSync(file), { filter: (f) => f.name === 'manifest.json' }); } catch { throw new Error('this is not a Cadrel Market data pack'); }
   return parseManifest(files['manifest.json']);
 }
 

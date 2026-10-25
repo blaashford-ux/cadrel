@@ -55,7 +55,7 @@ export const amazonUrl = (asin: string) => `https://www.amazon.com/dp/${asin}`;
 
 /**
  * The Best Sellers page of a category, as Amazon links it from a book page ("/gp/bestsellers/digital-text/12527147011/ref=..."): the
- * store's address segment and the browse node id, without the tracking that follows them. A store BookScout does not know has no such
+ * store's address segment and the browse node id, without the tracking that follows them. A store Cadrel Market does not know has no such
  * segment, so its browse-node page is used instead.
  */
 export function bestsellersUrl(category: { marketplace?: string | null; store: string; nodeId: string }): string {

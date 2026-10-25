@@ -12,7 +12,7 @@ $('port').value = String(stored.port || DEFAULT_PORT);
 
 $('pair').addEventListener('click', async () => {
   const r = await chrome.runtime.sendMessage({ type: 'pair', code: $('code').value, port: Number($('port').value) || DEFAULT_PORT });
-  status(r.ok ? 'Paired with BookScout' : r.error, r.ok);
+  status(r.ok ? 'Paired with Cadrel Market' : r.error, r.ok);
   if (r.ok) {
     $('code').value = '';
     const t = await chrome.storage.local.get(['token']);
@@ -23,7 +23,7 @@ $('pair').addEventListener('click', async () => {
 $('save').addEventListener('click', async () => {
   await chrome.storage.local.set({ token: $('token').value.trim(), port: Number($('port').value) || DEFAULT_PORT });
   const r = await chrome.runtime.sendMessage({ type: 'ping' });
-  status(r.ok ? 'Connected to BookScout' : r.error, r.ok);
+  status(r.ok ? 'Connected to Cadrel Market' : r.error, r.ok);
 });
 
 $('send').addEventListener('click', async () => {
@@ -36,6 +36,6 @@ for (const [id, type] of [['sample-start', 'sample-start'], ['sample-now', 'samp
   $(id).addEventListener('click', async () => {
     status('Working…', true);
     const r = await chrome.runtime.sendMessage({ type });
-    status(r.ok ? (type === 'sample-start' ? 'Open the sample and turn the pages. Each page is saved when it settles.' : type === 'sample-finish' ? `Sent ${r.pages ?? 0} page(s) to BookScout` : 'Saved') : r.error, r.ok);
+    status(r.ok ? (type === 'sample-start' ? 'Open the sample and turn the pages. Each page is saved when it settles.' : type === 'sample-finish' ? `Sent ${r.pages ?? 0} page(s) to Cadrel Market` : 'Saved') : r.error, r.ok);
   });
 }

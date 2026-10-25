@@ -26,7 +26,7 @@ async function connect(clientName: string, agent?: string) {
   return { client, call };
 }
 
-describe('the MDEdit MCP server', () => {
+describe('the Cadrel Write MCP server', () => {
   it('offers the tools, with read-only ones marked', async () => {
     const { client } = await connect('claude-ai');
     const tools = (await client.listTools()).tools;
@@ -120,7 +120,7 @@ describe('when the projects folder is wrong', () => {
 
   it('lists each place once, in order', async () => {
     const c = await rootCandidates({ flag: '/data/books', env: { MDEDIT_ROOT: '/y' }, platform: 'linux', home, fs: seeded() });
-    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/MDEdit']);
+    expect(c.map((x) => x.root)).toEqual(['/data/books', '/y', '/home/me/Cadrel', '/home/me/MDEdit']);
   });
 
   it('falls back to a later folder that has projects, and keeps the first when none do', async () => {

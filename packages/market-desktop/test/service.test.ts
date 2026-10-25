@@ -489,7 +489,7 @@ describe('about and updates', () => {
 
   it('reports what is running', () => {
     const { s } = make();
-    expect(s.appInfo()).toMatchObject({ name: 'BookScout', version: '0.2.0', repo: 'blaashford-ux/bookscout', canInstall: true, dataFolder: userData });
+    expect(s.appInfo()).toMatchObject({ name: 'Cadrel Market', version: '0.2.0', repo: 'blaashford-ux/bookscout', canInstall: true, dataFolder: userData });
     expect(make({ launchInstaller: undefined }).s.appInfo().canInstall).toBe(false);
   });
 
@@ -938,7 +938,7 @@ describe('Claude Desktop extension', () => {
     await s.setLibrary(libRoot);
     const { file, earlyHandshake } = await s.buildClaudeExtension();
     expect(earlyHandshake).toBe(false); // the stand-in server cannot say what it answers to initialize, so the launcher only passes stdio through
-    expect(path.basename(file)).toBe('BookScout.mcpb');
+    expect(path.basename(file)).toBe('Cadrel Market.mcpb');
     const z = unzipSync(new Uint8Array(fs.readFileSync(file)));
     expect(Object.keys(z).sort()).toEqual(['icon.png', 'manifest.json', 'server/launch.js']);
     const m = JSON.parse(strFromU8(z['manifest.json']!));

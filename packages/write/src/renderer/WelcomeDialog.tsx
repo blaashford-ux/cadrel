@@ -48,8 +48,8 @@ export function WelcomeDialog({ config, lastFolder, onDone }: Props) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal welcome" role="dialog" aria-modal="true" aria-label="Welcome to MDEdit">
-        <h3>Welcome to MDEdit</h3>
+      <div className="modal welcome" role="dialog" aria-modal="true" aria-label="Welcome to Cadrel Write">
+        <h3>Welcome to Cadrel Write</h3>
         <p>
           Your writing is organised into <strong>projects</strong>: a folder for each book, with subfolders for the manuscript, notes and research. All of them live inside one{' '}
           <strong>Root Folder</strong>.
@@ -69,7 +69,7 @@ export function WelcomeDialog({ config, lastFolder, onDone }: Props) {
         {lastFolder && (
           <label className="check-row">
             <input type="checkbox" checked={adopt} onChange={(e) => setAdopt(e.target.checked)} /> Also keep working on “{basename(lastFolder)}” as a project
-            <span className="field-hint">It stays where it is; MDEdit adds a small hidden .mdedit folder to it.</span>
+            <span className="field-hint">It stays where it is; Cadrel Write adds a small hidden .mdedit folder to it.</span>
           </label>
         )}
         {error && <div className="banner error">{error}</div>}

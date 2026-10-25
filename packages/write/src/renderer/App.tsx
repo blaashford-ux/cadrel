@@ -408,9 +408,9 @@ export function App() {
     ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${s.project ? ' · ' + s.project.meta.name : ''}`
     : s.project
       ? s.project.meta.name
-      : 'MDEdit';
+      : 'Cadrel Write';
   useEffect(() => {
-    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — MDEdit` : 'MDEdit';
+    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — Cadrel Write` : 'Cadrel Write';
   }, [activeTab, titleText, activeDirty]);
 
   // ---- actions ---------------------------------------------------------------------------
@@ -1101,7 +1101,7 @@ export function App() {
         )}
         {orphan && (
           <div className="banner warn" role="alert">
-            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside MDEdit?).{' '}
+            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside Cadrel Write?).{' '}
             <button onClick={() => setRelink(orphan)}>Link to a file…</button>{' '}
             <button onClick={() => setIgnoredOrphans(new Set([...ignoredOrphans, orphan]))}>Ignore</button>
           </div>

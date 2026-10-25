@@ -120,9 +120,9 @@ export function openApiDocument(baseUrl: string): unknown {
   return {
     openapi: '3.1.0',
     info: {
-      title: 'MDEdit AI reviewer',
+      title: 'Cadrel Write AI reviewer',
       version: '1.0.0',
-      description: 'Read an author\'s chapters and leave comments and suggestions in their MDEdit Notes panel. Cannot change the manuscript.',
+      description: 'Read an author\'s chapters and leave comments and suggestions in their Cadrel Write Notes panel. Cannot change the manuscript.',
     },
     servers: [{ url: baseUrl }],
     security: [{ bearer: [] }],
@@ -175,7 +175,7 @@ export function openApiDocument(baseUrl: string): unknown {
         post: op(
           'setChaptersEdited',
           'Mark chapters edited',
-          'Mark chapters as edited or unmark them, like the chapter menu in MDEdit. Give chapters, or through for every chapter up to and including that one. Only when the author asks.',
+          'Mark chapters as edited or unmark them, like the chapter menu in Cadrel Write. Give chapters, or through for every chapter up to and including that one. Only when the author asks.',
           [projectParam],
           {
             requestBody: {

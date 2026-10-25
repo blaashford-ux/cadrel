@@ -374,10 +374,10 @@ export function uniqueName(base: string, existing: readonly string[]): string {
   return `${base} ${Date.now()}`;
 }
 
-/** The default Root Folder: `<home>\MDEdit` (or `/` on POSIX). */
+/** The default Root Folder: `<home>\Cadrel` (or `/` on POSIX). */
 export function defaultRootFolder(home: string): string {
   const sep = home.includes('\\') && !home.includes('/') ? '\\' : '/';
-  return home.replace(/[\\/]+$/, '') + sep + 'MDEdit';
+  return home.replace(/[\\/]+$/, '') + sep + 'Cadrel';
 }
 
 export { isDate };
@@ -385,7 +385,7 @@ export { isDate };
 // ---- app-level settings for projects --------------------------------------------------------
 
 export interface ProjectsSettings {
-  /** The Root Folder, or null for the default (`<home>\MDEdit`). */
+  /** The Root Folder, or null for the default (`<home>\Cadrel`). */
   rootFolder: string | null;
   /** The first-run welcome has been completed. */
   setupDone: boolean;
@@ -446,7 +446,7 @@ export function byRecentlyOpened<T extends { path: string; lastEdited: number | 
 export interface ProjectsConfig extends ProjectsSettings {
   /** The Root Folder in use (the saved one, or the default). */
   root: string;
-  /** `<home>\MDEdit`: what "Use the default" means. */
+  /** `<home>\Cadrel`: what "Use the default" means. */
   defaultRoot: string;
   rootExists: boolean;
 }

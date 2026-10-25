@@ -35,7 +35,7 @@ const preloadCjs = (entry, out) => esbuild({ entryPoints: [entry], outfile: out,
 const polyfill = path.join(path.dirname(createRequire(path.join(write, 'package.json')).resolve('pagedjs')), '..', 'dist', 'paged.polyfill.js');
 // Write's whole assets folder: fonts, help, branding, icon (vendor/ is generated, so the polyfill is copied from the package itself).
 fs.cpSync(path.join(write, 'assets'), path.join(dist, 'assets'), { recursive: true, filter: (src) => !src.includes(`${path.sep}vendor`) });
-// ...but the window and installer carry Cadrel's icon, not MDEdit's.
+// ...but the window and installer carry Cadrel's icon, not Write's.
 fs.copyFileSync(path.join(root, 'build', 'icon.png'), path.join(dist, 'assets', 'icon.png'));
 fs.mkdirSync(path.join(dist, 'assets', 'vendor'), { recursive: true });
 fs.copyFileSync(polyfill, path.join(dist, 'assets', 'vendor', 'paged.polyfill.js'));

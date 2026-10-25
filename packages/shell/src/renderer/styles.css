@@ -1,5 +1,5 @@
 /*
- * Cadrel look: the MDEdit design language (borderless, tonal, rounded: the sidebar sits on the window and the page is a floating
+ * Cadrel look: the Cadrel Write design language (borderless, tonal, rounded: the sidebar sits on the window and the page is a floating
  * card) in Cadrel's slate and stone. The colours themselves are set at run time from the app's theme (shared/theme.ts), so the
  * user's choices in Settings apply here, in Write and in Market alike; only what the theme does not cover is fixed below.
  */
@@ -159,7 +159,9 @@ input[type='checkbox'] { padding: 0; }
 .att-main { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .att-name { word-break: break-all; }
 .att-note { width: 100%; }
-.att-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.reads { margin: 6px 0 0; padding-left: 18px; }
+.check-row { display: flex; align-items: center; gap: 6px; }
+.att-actions { align-items: center; display: flex; gap: 6px; flex-wrap: wrap; }
 .att-actions button { padding: 3px 10px; font-size: 12.5px; }
 
 /* ---- dialogs and forms ---- */

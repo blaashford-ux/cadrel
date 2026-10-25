@@ -23,7 +23,7 @@ export function TitleBar({ title, dirty }: Props) {
     <header className="titlebar" onDoubleClick={(e) => e.target === e.currentTarget && control('maximize')}>
       <div className="tb-left">
         <img className="tb-logo" src={logo} alt="" width={20} height={20} />
-        <span className="wordmark">MDEdit</span>
+        <span className="wordmark">Cadrel Write</span>
         <MenuBar />
       </div>
       <div className="tb-title" title={title} onDoubleClick={() => control('maximize')}>

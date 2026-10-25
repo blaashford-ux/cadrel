@@ -76,7 +76,7 @@ export function AiDialog({ project, projectName, onClose }: Props) {
           </div>
         )}
         {server === undefined && <p className="muted">Looking…</p>}
-        {server === null && <p className="modal-error">This build of MDEdit doesn’t include the AI connection.</p>}
+        {server === null && <p className="modal-error">This build of Cadrel Write doesn’t include the AI connection.</p>}
         {rows.length > 0 && <h4>Or set it up by hand</h4>}
         {rows.map(([name, hint, text]) => (
           <div key={name} className="ai-snippet">
@@ -94,7 +94,7 @@ export function AiDialog({ project, projectName, onClose }: Props) {
           <details className="ai-remote">
             <summary>Online apps (ChatGPT, Custom GPTs) — advanced</summary>
             <p className="modal-hint">
-              These apps run on the internet, so they can’t start a program on your PC. Turn this on and MDEdit listens on this PC only, and every request needs the access token below.
+              These apps run on the internet, so they can’t start a program on your PC. Turn this on and Cadrel Write listens on this PC only, and every request needs the access token below.
               To let an online app reach it you must also make it available on the internet yourself, for example with a tunnel such as <code>cloudflared tunnel --url http://127.0.0.1:{remote.port}</code>.
               Anyone with the tunnel address <strong>and</strong> the token can read your chapters and add notes, so keep the token private and turn this off when you aren’t using it.
               ChatGPT’s connector settings must allow a bearer token; if an app only offers “no authentication” or sign-in, don’t expose this to it.

@@ -113,10 +113,10 @@ export function installMenu(theme: ThemeHooks, menuHost: MenuHost): void {
     {
       label: '&Help',
       submenu: [
-        { label: 'MDEdit Help\tF1', click: () => openHelp() },
+        { label: 'Cadrel Write Help\tF1', click: () => openHelp() },
         { type: 'separator' },
         {
-          label: 'About MDEdit',
+          label: 'About Cadrel Write',
           click: send('about')
         }
       ]

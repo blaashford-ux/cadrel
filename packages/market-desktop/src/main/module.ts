@@ -1,5 +1,5 @@
 /**
- * BookScout's application logic as a hostable module: the library service, the local capture server, the dialogs and the
+ * Cadrel Market's application logic as a hostable module: the library service, the local capture server, the dialogs and the
  * whole IPC surface. The standalone app (index.ts) and the Cadrel shell each create it with their own window.
  */
 import fs from 'node:fs';
@@ -30,9 +30,9 @@ export interface MarketHost {
   willQuit(): void;
   /** When set, the self-updater is off and shows this message (the shell is updated as a whole). */
   updatesDisabledReason?: string;
-  /** The MCP server's name and the Claude Desktop extension's wording. Default: BookScout's. */
+  /** The MCP server's name and the Claude Desktop extension's wording. Default: Cadrel Market's. */
   mcpBrand?: McpBrand;
-  /** How an AI app launches the MCP server. Default: BookScout's own bundled server next to the code. */
+  /** How an AI app launches the MCP server. Default: Cadrel Market's own bundled server next to the code. */
   mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
 }
 
@@ -96,7 +96,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
       return true;
     }
     const r = await dialog.showOpenDialog(host.getWindow()!, {
-      title: 'Choose the BookScout library folder',
+      title: 'Choose the Cadrel Market library folder',
       properties: ['openDirectory', 'createDirectory'],
     });
     if (r.canceled || !r.filePaths[0]) return false;
@@ -125,7 +125,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     let target: string;
     if (TEST && process.env.BOOKSCOUT_TEST_EXPORT_DIR) target = path.join(process.env.BOOKSCOUT_TEST_EXPORT_DIR, name);
     else {
-      const r = await dialog.showSaveDialog(host.getWindow()!, { title: 'Save the data pack', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'BookScout data pack', extensions: ['pack'] }] });
+      const r = await dialog.showSaveDialog(host.getWindow()!, { title: 'Save the data pack', defaultPath: path.join(app.getPath('documents'), name), filters: [{ name: 'Cadrel Market data pack', extensions: ['pack'] }] });
       if (r.canceled || !r.filePath) return null;
       target = r.filePath;
     }
@@ -136,7 +136,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     let file: string | undefined;
     if (TEST && process.env.BOOKSCOUT_TEST_PACK) file = process.env.BOOKSCOUT_TEST_PACK;
     else {
-      const r = await dialog.showOpenDialog(host.getWindow()!, { title: 'Choose a BookScout data pack', properties: ['openFile'], filters: [{ name: 'BookScout data pack', extensions: ['pack'] }] });
+      const r = await dialog.showOpenDialog(host.getWindow()!, { title: 'Choose a Cadrel Market data pack', properties: ['openFile'], filters: [{ name: 'Cadrel Market data pack', extensions: ['pack'] }] });
       file = r.canceled ? undefined : r.filePaths[0];
     }
     return file ? service.importData(file) : null;

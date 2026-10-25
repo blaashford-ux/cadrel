@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
-  addAttachment, editAttachment, removeAttachment, sanitizeUser, setAvatar, updateProfile, UserError, newUser, ATTACHMENT_MAX_BYTES,
+  addAttachment, assistantVisibleFiles, editAttachment, recordAssistantRead, removeAttachment, sanitizeUser, setAssistantFiles, setAvatar, updateProfile, UserError, newUser, ATTACHMENT_MAX_BYTES,
   type Attachment, type ProfilePatch, type UserProfile
 } from '@cadrel/kernel';
 
@@ -80,7 +80,7 @@ export class UserStore {
     });
   }
 
-  editAttachment(id: string, patch: { note?: string; name?: string }): Promise<void> {
+  editAttachment(id: string, patch: { note?: string; name?: string; assistant?: boolean }): Promise<void> {
     return this.change((u) => ({ user: editAttachment(u, id, patch), result: undefined }));
   }
 
@@ -90,6 +90,43 @@ export class UserStore {
       await fsp.rm(this.blob(id), { force: true });
       return { user, result: undefined };
     });
+  }
+
+  setAssistantFiles(on: boolean): Promise<UserProfile> {
+    return this.change((u) => {
+      const user = setAssistantFiles(u, on);
+      return { user, result: user };
+    });
+  }
+
+  /**
+   * What the assistant may see of the attached files: nothing at all when the person has opted out (so it cannot even tell
+   * files exist), else the files they have not hidden from it.
+   */
+  async filesForAssistant(): Promise<{ allowed: boolean; files: Attachment[] }> {
+    const u = await this.read();
+    return { allowed: u.assistant.files, files: assistantVisibleFiles(u) };
+  }
+
+  /**
+   * The assistant opens one file. Refused (as if it did not exist) when access is off or the file is hidden from it. The read
+   * is logged so the person can see it. Text comes back as text up to `maxBytes`; anything else as bytes for the caller to treat by type.
+   */
+  async readForAssistant(id: string, by: string, maxBytes = 5 * 1024 * 1024): Promise<{ attachment: Attachment; bytes: Buffer; truncated: boolean }> {
+    const { files } = await this.filesForAssistant();
+    const attachment = files.find((a) => a.id === id);
+    const p = attachment && (await this.pathOf(id));
+    if (!attachment || !p) throw new UserError('There is no such file available to you.');
+    const fh = await fsp.open(p, 'r');
+    try {
+      const size = (await fh.stat()).size;
+      const buf = Buffer.alloc(Math.min(size, maxBytes));
+      await fh.read(buf, 0, buf.length, 0);
+      await this.change((u) => ({ user: recordAssistantRead(u, { at: new Date().toISOString(), fileId: id, name: attachment.name, by }), result: undefined }));
+      return { attachment, bytes: buf, truncated: size > maxBytes };
+    } finally {
+      await fh.close();
+    }
   }
 
   setAvatar(id: string | null): Promise<UserProfile> {

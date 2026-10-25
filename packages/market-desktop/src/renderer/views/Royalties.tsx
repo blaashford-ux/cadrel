@@ -146,7 +146,7 @@ function Splits({ people, version, reload }: { people: Person[]; version: number
   const [err, setErr] = useState('');
   const capture = async (b: OwnBookRow) => {
     setErr(''); setMsg('');
-    try { await api.openBook(b.asin); setMsg(`Opened “${b.title ?? b.asin}” on Amazon. Right-click the page → Send to BookScout; its credited authors appear here once it arrives.`); } catch (e) { setErr((e as Error).message); }
+    try { await api.openBook(b.asin); setMsg(`Opened “${b.title ?? b.asin}” on Amazon. Right-click the page → Send to Cadrel Market; its credited authors appear here once it arrives.`); } catch (e) { setErr((e as Error).message); }
   };
   const load = () => { void api.ownBooks().then(setBooks); void api.allSplits().then(setSplits); void api.detectedAuthors().then(setDetected); };
   useEffect(load, [version]);

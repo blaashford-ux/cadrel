@@ -9,7 +9,7 @@ let helpWindow: BrowserWindow | null = null;
 const TOPIC = /^[a-z0-9-]{1,40}$/i;
 
 /**
- * Help → MDEdit Help. The help is a self-contained page in a window of its own, so it can sit beside the editor and be
+ * Help → Cadrel Write Help. The help is a self-contained page in a window of its own, so it can sit beside the editor and be
  * navigated on its own. One window is reused: asking again focuses it (and moves it to `topic` if one is given).
  */
 export function openHelp(topic?: string): void {
@@ -25,7 +25,7 @@ export function openHelp(topic?: string): void {
     height: 720,
     minWidth: 480,
     minHeight: 360,
-    title: 'MDEdit Help',
+    title: 'Cadrel Write Help',
     backgroundColor: shellColor(),
     icon: path.join(assetsDir(), 'icon.png'),
     autoHideMenuBar: true,

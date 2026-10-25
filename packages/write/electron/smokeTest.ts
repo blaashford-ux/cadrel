@@ -17,7 +17,7 @@ const SAMPLE = Array.from(
 
 /**
  * Headless self-test of the installed app: exports a small book to EPUB, PDF and DOCX with the real
- * bundled fonts and Paged.js, then checks the files. Run it as `MDEdit.exe --smoke-test=<result.json>`.
+ * bundled fonts and Paged.js, then checks the files. Run it as `Cadrel Write.exe --smoke-test=<result.json>`.
  * CI uses it to prove a freshly built Windows package can really export (it can't be tested any
  * other way off-Windows). Returns the process exit code.
  */
@@ -29,7 +29,7 @@ export async function runSmokeTest(outFile: string): Promise<number> {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mdedit-smoke-'));
     const md = path.join(dir, 'smoke.md');
     await fs.writeFile(md, SAMPLE);
-    const details = sanitizeBookDetails({ title: 'Smoke Test Book', author: 'MDEdit', export: { outputs: { epub: true, pdf: true, docx: true }, outputDir: 'out' } });
+    const details = sanitizeBookDetails({ title: 'Smoke Test Book', author: 'Cadrel Write', export: { outputs: { epub: true, pdf: true, docx: true }, outputDir: 'out' } });
     await saveDetails(md, details);
 
     const r = await runExport(md, makeExportDeps());

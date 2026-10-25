@@ -80,7 +80,7 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
           <strong>Bring this book into the library</strong>
           <ol>
             <li>Press <b>Open on Amazon</b>: the book's page opens in your browser.</li>
-            <li>On that page, right-click and choose <b>Send to BookScout</b> (or use the toolbar button).</li>
+            <li>On that page, right-click and choose <b>Send to Cadrel Market</b> (or use the toolbar button).</li>
             <li>The page appears here with its rank, price, reviews and cover. Its rank is also paired with your sales to calibrate sales estimates.</li>
           </ol>
         </div>

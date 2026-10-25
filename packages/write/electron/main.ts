@@ -62,7 +62,7 @@ function restoredBounds(): Partial<Electron.Rectangle> & { width: number; height
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     ...restoredBounds(),
-    title: 'MDEdit',
+    title: 'Cadrel Write',
     // match the app's shell colour so there is no white flash while the page loads
     backgroundColor: shellColor(),
     ...chromeOptions(),
@@ -144,7 +144,7 @@ if (!firstInstance) {
     });
   }).catch((e) => {
     // Never fail silently: a startup error would otherwise leave a running process with no window.
-    console.error('MDEdit failed to start:', e);
+    console.error('Cadrel Write failed to start:', e);
     app.exit(1);
   });
 }

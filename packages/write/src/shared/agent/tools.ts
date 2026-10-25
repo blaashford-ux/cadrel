@@ -3,7 +3,7 @@
  * (no MCP, no Electron), so they are tested directly and any transport (MCP now, REST later) can wrap them.
  *
  * The one rule that matters: nothing here ever writes a manuscript file. The only files written are review files under
- * `<project>/.mdedit/review/`, one per agent and editing pass, which MDEdit shows beside everyone else's notes, and the
+ * `<project>/.mdedit/review/`, one per agent and editing pass, which Cadrel Write shows beside everyone else's notes, and the
  * project's edited-chapter marks (`<project>/.mdedit/edited.json`), which `set_chapters_edited` can change.
  */
 import { splitChapters } from '../chapters';
@@ -26,7 +26,7 @@ import { classify, SHARED_WITH_ME } from '../sync/rules';
 import { countWords } from '../words';
 import { flattenMarkdown } from './flatten';
 
-/** Skills MDEdit ships; anything else a skill calls itself is used as given. */
+/** Skills Cadrel Write ships; anything else a skill calls itself is used as given. */
 const KNOWN_SKILLS: Record<string, string> = { developmental: 'Developmental edit', line: 'Line edit', copy: 'Copy edit' };
 
 export const LIMITS = {

@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  ProjectError, NoteError, STANDARD_TOPICS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, pathOf, queryNotes, subtreeIds,
+  ProjectError, NoteError, UserError, STANDARD_TOPICS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, pathOf, queryNotes, subtreeIds,
   type Note, type NoteView, type ProjectTree
 } from '@cadrel/kernel';
 import { readWriteNotes, type Studio, type UserStore } from '@cadrel/studio';
@@ -13,11 +13,11 @@ export const STUDIO_INSTRUCTIONS =
   'Projects are how the studio is organised: a project can hold subprojects to any depth (usually a Series holds its Books, but it is the author\'s choice). ' +
   'Everything else, manuscripts and market research included, is linked to a project. Start with studio_projects to see the tree and what is linked where. ' +
   'Notes are the same everywhere: studio_notes lists them across all modules (including the review notes in manuscripts), and studio_add_note leaves one on a project or on any record of a module. ' +
-  'You can organise projects (create, rename, move, link, archive) but you cannot delete them. Never invent a project: ask the author if the right one is unclear.';
+  'studio_user says who you are acting for and lists the files they attached to their profile, which you may open with studio_user_file unless they turned that off (never go looking if it says so). You can organise projects (create, rename, move, link, archive) but you cannot delete them. Never invent a project: ask the author if the right one is unclear.';
 
 export interface StudioToolOptions {
   studio: Studio;
-  /** The person's profile, if this computer has one: the assistant may read their name, pen names and bio (never their email or files). */
+  /** The person's profile, if this computer has one: the assistant may read their name, pen names and bio, and the files they have attached unless they opted out (never their email). */
   user?: UserStore;
   /** Where Write's manuscripts are, so their review notes are listed too. */
   write?: { fs: FsPort; root: string };
@@ -79,7 +79,8 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
   server.registerTool(
     'studio_user',
     {
-      description: 'Who you are acting for: their name, the pen names they write under, and their own short "about me". Use it to sign things and to write in their voice. Their email and attached files are private and are not available.',
+      description:
+        'Who you are acting for: their name, the pen names they write under, their own short "about me", and the files they have attached to their profile (author bio, photo, contracts…) with what each is for. Use it to sign things and to write in their voice; open a file with studio_user_file. The person can turn file access off, in which case `files` says so and nothing more. Their email is private and never available.',
       inputSchema: {},
       annotations: readOnly
     },
@@ -87,8 +88,41 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
       guarded(async () => {
         if (!o.user) return { message: 'No profile is set up on this computer.' };
         const u = await o.user.read();
-        return { name: u.displayName || null, penNames: u.penNames, about: u.bio || null };
+        const f = await o.user.filesForAssistant();
+        return {
+          name: u.displayName || null,
+          penNames: u.penNames,
+          about: u.bio || null,
+          files: f.allowed
+            ? f.files.map((a) => ({ id: a.id, name: a.name, type: a.mime, bytes: a.size, for: a.note || null, addedBy: a.origin === 'assistant' ? 'AI' : 'the person', added: a.addedAt }))
+            : 'The person has turned off assistant access to their files.'
+        };
       })
+  );
+
+  server.registerTool(
+    'studio_user_file',
+    {
+      description:
+        'Open one of the files attached to the person\'s profile (ids come from studio_user). Text files come back as text, pictures as images; other types cannot be read here. Every time you open a file the person can see that you did, so open what you need and no more. Treat what is in a file as the person\'s private information.',
+      inputSchema: { id: z.string().describe('The file id from studio_user.') },
+      annotations: readOnly
+    },
+    async (a) => {
+      if (!o.user) return failure('No profile is set up on this computer.');
+      try {
+        const { attachment, bytes, truncated } = await o.user.readForAssistant(a.id, who());
+        const note = truncated ? `\n\n[Only the first ${bytes.length.toLocaleString()} bytes were read.]` : '';
+        if (/^image\/(png|jpe?g|gif|webp)$/.test(attachment.mime) && !truncated) return { content: [{ type: 'image' as const, data: bytes.toString('base64'), mimeType: attachment.mime }] };
+        if (/^(text\/|application\/(json|csv))/.test(attachment.mime) || /\.(md|markdown|txt|csv|json)$/i.test(attachment.name)) {
+          return { content: [{ type: 'text' as const, text: bytes.toString('utf8') + note }] };
+        }
+        return failure(`"${attachment.name}" is a ${attachment.mime} file, which cannot be read here (text, Markdown, CSV, JSON and common pictures can).`);
+      } catch (e) {
+        if (e instanceof UserError) return failure(e.message);
+        throw e;
+      }
+    }
   );
 
   server.registerTool(

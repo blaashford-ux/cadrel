@@ -32,7 +32,7 @@ export function App() {
   if (!status.libraryRoot) {
     return (
       <div className="welcome">
-        <h1>Welcome to BookScout</h1>
+        <h1>Welcome to Cadrel Market</h1>
         <p className="muted">
           Pick a folder for your library. Every page you capture, every cover and the index are kept there. You can change it later in Settings.
         </p>

@@ -112,7 +112,9 @@ export interface UserApi {
   attach(): Promise<UserView | null>;
   /** Attaches dropped files (the page passes the File objects; the bridge turns them into paths). */
   attachDropped(files: File[]): Promise<UserView>;
-  editAttachment(id: string, patch: { note?: string; name?: string }): Promise<UserView>;
+  editAttachment(id: string, patch: { note?: string; name?: string; assistant?: boolean }): Promise<UserView>;
+  /** The opt-out: whether the AI assistant may see and read the attached files at all. */
+  setAssistantFiles(on: boolean): Promise<UserView>;
   removeAttachment(id: string): Promise<UserView>;
   setAvatar(id: string | null): Promise<UserView>;
   open(id: string): Promise<void>;

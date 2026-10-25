@@ -83,7 +83,7 @@ const ANALYSIS_TOOLS: ToolSpec[] = [
     readOnly: true,
     run: ({ lib }, a) => {
       const e = excerpt(lib.root, lib.db, a.asin, { source: a.source, chapter: a.chapter, offset: a.offset, chars: a.chars });
-      if (!e) return { error: `no text is stored for ${a.asin}. The user can attach the book file or capture the free sample in the BookScout app.` };
+      if (!e) return { error: `no text is stored for ${a.asin}. The user can attach the book file or capture the free sample in the Cadrel Market app.` };
       if ('error' in e) return { error: String(e.error) };
       const m = getManuscripts(lib.db, a.asin).find((r) => r.source === e.source);
       return { data: { ...cite(a.asin, m?.createdAt ?? null), note: TEXT_FIELD_NOTICE, basis: e.source === 'upload' ? 'whole book' : 'free sample (OCR; may contain recognition errors)', ...e } };
@@ -322,7 +322,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'library_status',
-    description: 'Start here. Summarises what is in the local BookScout library: how many books and list pages are captured, when the last capture was, and whether semantic search is ready.',
+    description: 'Start here. Summarises what is in the local Cadrel Market library: how many books and list pages are captured, when the last capture was, and whether semantic search is ready.',
     shape: {},
     readOnly: true,
     run: ({ lib }) => {
@@ -685,5 +685,5 @@ export const TOOLS: ToolSpec[] = [
   ...ANALYSIS_TOOLS,
 ];
 
-export const SERVER_INSTRUCTIONS = `BookScout is the user's local library of Amazon Kindle market research (amazon.com only). Start with library_status and list_categories. Every result cites an ASIN and a capture date; include them when you report findings, and say when a figure comes from only some of the books (the "known" counts and detail_captured flags show coverage). ${TEXT_FIELD_NOTICE}`;
+export const SERVER_INSTRUCTIONS = `Cadrel Market is the user's local library of Amazon Kindle market research (amazon.com only). Start with library_status and list_categories. Every result cites an ASIN and a capture date; include them when you report findings, and say when a figure comes from only some of the books (the "known" counts and detail_captured flags show coverage). ${TEXT_FIELD_NOTICE}`;
 

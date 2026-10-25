@@ -69,7 +69,7 @@ describe.skipIf(!have)('desktop app in Electron', () => {
   });
 
   it('asks for a library on first run, then shows the empty queue', async () => {
-    await page.getByRole('heading', { name: 'Welcome to BookScout' }).waitFor();
+    await page.getByRole('heading', { name: 'Welcome to Cadrel Market' }).waitFor();
     await page.getByRole('button', { name: /Choose library folder/ }).click();
     await page.getByRole('heading', { name: 'Capture queue' }).waitFor();
     await page.getByText(`Listening on port ${PORT}`).waitFor();
@@ -133,16 +133,16 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     const connect = page.getByLabel('Connect an AI');
     await connect.getByRole('button', { name: 'Claude Code' }).click();
     expect(await connect.locator('code').first().textContent()).toMatch(/^claude mcp add bookscout /);
-    // one click writes BookScout.mcpb and shows it in its folder, with the steps (recorded, not shown, under test)
+    // one click writes Cadrel Market.mcpb and shows it in its folder, with the steps (recorded, not shown, under test)
     await connect.getByRole('button', { name: 'Install in Claude Desktop' }).click();
-    await connect.getByRole('status').filter({ hasText: /Created BookScout\.mcpb/ }).waitFor();
+    await connect.getByRole('status').filter({ hasText: /Created Cadrel Market\.mcpb/ }).waitFor();
     await connect.getByLabel('How to install the extension').getByText(/Settings → Extensions/).waitFor();
-    expect(((await page.evaluate(() => (window as any).bookscout.__opened())) as string[]).some((f) => f.endsWith('BookScout.mcpb'))).toBe(true);
+    expect(((await page.evaluate(() => (window as any).bookscout.__opened())) as string[]).some((f) => f.endsWith('Cadrel Market.mcpb'))).toBe(true);
     // run the launcher inside that file the way Claude Desktop does (plain Node, the client talking first): the handshake is answered at once
     // and the real server then answers the tool list from this library
     {
       const { unzipSync } = await import('fflate');
-      const z = unzipSync(new Uint8Array(fs.readFileSync(path.join(tmp, 'user', 'BookScout.mcpb'))));
+      const z = unzipSync(new Uint8Array(fs.readFileSync(path.join(tmp, 'user', 'Cadrel Market.mcpb'))));
       const dirX = path.join(tmp, 'mcpb');
       fs.mkdirSync(path.join(dirX, 'server'), { recursive: true });
       fs.writeFileSync(path.join(dirX, 'server', 'launch.js'), z['server/launch.js']!);

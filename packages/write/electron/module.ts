@@ -55,7 +55,7 @@ export interface WriteHost {
    * The AI server. `file` is what AI apps launch (outside the asar when packaged). `kitServer` makes the file that goes
    * into the Claude Desktop extension (default: `file` itself, which then has to be plain JavaScript that runs under
    * Claude's own Node); a host whose server needs its own runtime passes a launcher. `brand` names the kit.
-   * Default: Write's own server and the MDEdit brand.
+   * Default: Write's own server and the Cadrel Write brand.
    */
   mcp?: { file: string; kitServer?: () => Promise<Uint8Array>; brand?: KitBrand };
   /**
@@ -63,7 +63,7 @@ export interface WriteHost {
    * and written to it instead of Write's own settings, and Settings → Appearance points there.
    */
   theme?: { get(): { source: ThemeSource; custom?: ThemeCustom }; set(change: { source?: ThemeSource; custom?: ThemeCustom | null }): void };
-  /** When set, MDEdit's own updater is off and says this (a host app updates as a whole). */
+  /** When set, Cadrel Write's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
 }
 
@@ -144,7 +144,7 @@ function ensureSync(): Promise<SyncService> {
  * the file sits outside app.asar (see `asarUnpack`) because an outside program can't read inside the archive.
  */
 async function aiServer(): Promise<AiServerInfo | null> {
-  // MDEdit's own server is a plain-JavaScript file that an outside program must be able to read, so it sits outside the asar. A host's server
+  // Cadrel Write's own server is a plain-JavaScript file that an outside program must be able to read, so it sits outside the asar. A host's server
   // is started by the app's own runtime, which reads inside the asar, and needs its dependencies from there, so its path is used as given.
   const file = host.mcp?.file ?? path.join(app.getAppPath(), 'dist-electron', 'mcp', 'mdedit-mcp.js').replace(/app\.asar(?=[\\/])/, 'app.asar.unpacked');
   if (!(await fsp.stat(file).catch(() => null))) return null;
@@ -156,7 +156,7 @@ async function aiServer(): Promise<AiServerInfo | null> {
 /** Saves the AI Kit into the user's Downloads folder (replacing an earlier copy of the same files) and shows it. */
 async function exportAiKit(): Promise<string> {
   const info = await aiServer();
-  if (!info) throw new Error(`This build of ${host.mcp?.brand?.name ?? 'MDEdit'} doesn’t include the AI connection.`);
+  if (!info) throw new Error(`This build of ${host.mcp?.brand?.name ?? 'Cadrel Write'} doesn’t include the AI connection.`);
   const brand = host.mcp?.brand ?? MDEDIT_BRAND;
   const dest = path.join(app.getPath('downloads'), brand.folder);
   const files = buildKit({

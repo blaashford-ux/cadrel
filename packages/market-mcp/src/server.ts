@@ -15,7 +15,7 @@ export function createServer(ctx: ToolContext): McpServer {
   return server;
 }
 
-/** BookScout's tools, registered on any MCP server (so one server can carry several modules' tools). */
+/** Cadrel Market's tools, registered on any MCP server (so one server can carry several modules' tools). */
 export function registerMarketTools(server: McpServer, ctx: ToolContext): void {
   for (const t of TOOLS) {
     server.registerTool(

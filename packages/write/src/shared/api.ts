@@ -302,7 +302,7 @@ export interface DesktopApi {
    * (headings, bold / italic and so on kept). Null when the picker is cancelled.
    */
   importDocx(dir: string): Promise<ImportDocxResult | null>;
-  /** How an AI app starts MDEdit's MCP server; null when this build doesn't include it. */
+  /** How an AI app starts Cadrel Write's MCP server; null when this build doesn't include it. */
   getAiServer(): Promise<AiServerInfo | null>;
   /** Writes the AI Kit (Claude extension, skills, server, settings) into Downloads, shows it, and returns the folder. */
   exportAiKit(): Promise<string>;
@@ -360,7 +360,7 @@ export interface SyncSummary {
   /** Files left alone, with the reason. */
   skipped: { path: string; reason: string }[];
   errors: { path: string; message: string }[];
-  /** A new `MDEdit` folder was made in Drive because none was visible to this app. */
+  /** A new `Cadrel Write` folder was made in Drive because none was visible to this app. */
   rootCreated: boolean;
   /** How long the pass took. */
   durationMs: number;
@@ -416,7 +416,7 @@ export interface ReviewSharingApi {
   exchangeReviews(project: string): Promise<{ changed: boolean; revoked: boolean; errors: string[] }>;
   /** Projects other people shared with this person. */
   listShared(): Promise<SharedProject[]>;
-  /** An access token for Google's file picker, which gives MDEdit access to the files in an invitation. */
+  /** An access token for Google's file picker, which gives Cadrel Write access to the files in an invitation. */
   pickerToken(): Promise<string>;
   /**
    * Phone only: runs Google's file picker in the phone's own browser and returns the file ids picked (null when cancelled).

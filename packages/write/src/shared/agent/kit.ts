@@ -2,23 +2,23 @@ import { strToU8, zipSync } from 'fflate';
 import { aiConfigSnippets } from './config';
 
 /** The folder the AI Kit is written into (inside the user's Downloads). */
-export const KIT_FOLDER = 'MDEdit AI Kit';
+export const KIT_FOLDER = 'Cadrel Write AI Kit';
 
-/** What the kit calls itself. A host app that bundles MDEdit (Cadrel) passes its own, so there is one extension, not two. */
+/** What the kit calls itself. A host app that bundles Cadrel Write (Cadrel) passes its own, so there is one extension, not two. */
 export interface KitBrand {
   /** Lower-case id used in file names and as the MCP server's name in settings: "mdedit", "cadrel". */
   id: string;
-  /** Display name: "MDEdit", "Cadrel". */
+  /** Display name: "Cadrel Write", "Cadrel". */
   name: string;
   /** Folder inside Downloads. */
   folder: string;
   /** What the Claude Desktop extension says it does. Default: the writing description. */
   description?: string;
 }
-export const MDEDIT_BRAND: KitBrand = { id: 'mdedit', name: 'MDEdit', folder: KIT_FOLDER };
+export const MDEDIT_BRAND: KitBrand = { id: 'mdedit', name: 'Cadrel Write', folder: KIT_FOLDER };
 
-/** Re-words text written for MDEdit for another brand. A no-op for MDEdit itself. */
-const rebrand = (t: string, b: KitBrand): string => (b.id === 'mdedit' ? t : t.replaceAll('MDEdit', b.name).replaceAll('mdedit', b.id));
+/** Re-words text written for Cadrel Write for another brand. A no-op for Cadrel Write itself. */
+const rebrand = (t: string, b: KitBrand): string => (b.id === 'mdedit' ? t : t.replaceAll('Cadrel Write', b.name).replaceAll('mdedit', b.id));
 
 export interface KitSkill {
   /** Folder name, e.g. "mdedit-line-edit". */
@@ -42,7 +42,7 @@ export interface KitInput {
   root: string;
   /** Where `<id>-mcp.js` will be once written (for the settings snippets that point at it). */
   serverPath: string;
-  /** Default: MDEdit. */
+  /** Default: Cadrel Write. */
   brand?: KitBrand;
 }
 
@@ -61,7 +61,7 @@ function extension(i: KitInput, b: KitBrand): Uint8Array {
     name: b.id,
     display_name: b.name,
     version: i.version,
-    description: b.description ?? rebrand('Lets Claude read your MDEdit chapters and leave comments and suggestions in your Notes panel. It never changes your manuscript.', b),
+    description: b.description ?? rebrand('Lets Claude read your Cadrel Write chapters and leave comments and suggestions in your Notes panel. It never changes your manuscript.', b),
     author: { name: b.name },
     server: {
       type: 'node',
@@ -72,7 +72,7 @@ function extension(i: KitInput, b: KitBrand): Uint8Array {
       root_folder: {
         type: 'directory',
         title: 'Projects folder',
-        description: rebrand('Leave this empty to follow the Root Folder set in MDEdit (File → Settings → Projects). Set it only if your books live somewhere else; it must be the folder that holds your book folders, not one book\'s folder.', b),
+        description: rebrand('Leave this empty to follow the Root Folder set in Cadrel Write (File → Settings → Projects). Set it only if your books live somewhere else; it must be the folder that holds your book folders, not one book\'s folder.', b),
         required: false,
       },
     },
@@ -89,13 +89,13 @@ function readme(i: KitInput): string {
     'MDEDIT AI KIT',
     '=============',
     '',
-    'Everything here lets an AI app review your chapters and leave comments and suggestions in MDEdit\'s Notes panel.',
+    'Everything here lets an AI app review your chapters and leave comments and suggestions in Cadrel Write\'s Notes panel.',
     'The AI cannot change your manuscript. You accept or reject each note. New notes appear in the Notes panel within a few seconds.',
     '',
     'CLAUDE DESKTOP (the easiest)',
     '  1. Double-click mdedit.mcpb, or drag it into Claude Desktop under Settings > Extensions. Install it, and check the',
     `     projects folder it asks for is empty or is: ${i.root} (the folder that holds your book folders, not one book's folder).`,
-    '     Empty is best: it follows the Root Folder you set in MDEdit.',
+    '     Empty is best: it follows the Root Folder you set in Cadrel Write.',
     '  2. Add the skills: Settings > Capabilities > Skills > upload each zip in the "skills" folder (three of them).',
     '  3. Start a chat and ask: "Do a line edit of the chapters in my project <name>."',
     '',
@@ -112,8 +112,8 @@ function readme(i: KitInput): string {
     'THE THREE EDITING PASSES',
     ...i.skills.map((s) => `  ${s.tag}: notes are signed "Claude · ${s.tag}" (or "GPT · ${s.tag}")`),
     '',
-    'If you move your MDEdit Root Folder, update the projects folder in the settings you added.',
-    'These files are made by MDEdit (version ' + i.version + '). Choose Notes > AI... in MDEdit to save them again after an update.',
+    'If you move your Cadrel Write Root Folder, update the projects folder in the settings you added.',
+    'These files are made by Cadrel Write (version ' + i.version + '). Choose Notes > AI... in Cadrel Write to save them again after an update.',
     '',
   ];
   return lines.join('\r\n');

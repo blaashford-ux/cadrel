@@ -100,7 +100,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     expect(await write.evaluate(() => [typeof (window as any).mdedit, typeof (window as any).cadrel, typeof (window as any).bookscout])).toEqual(['object', 'undefined', 'undefined']);
 
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
@@ -144,7 +144,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     await write.evaluate(async () => {
       const api = (window as any).mdedit;
       const cfg = await api.getProjectsConfig();
@@ -172,7 +172,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
 
     // Write: the AI server settings and the kit it saves for Claude Desktop.
     const server = await write.evaluate(() => (window as any).mdedit.getAiServer());
@@ -213,7 +213,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // A manuscript made in Write, to link.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     await write.evaluate(async () => {
       const api = (window as any).mdedit;
       const cfg = await api.getProjectsConfig();
@@ -272,7 +272,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
@@ -435,7 +435,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     await write.getByRole('button', { name: 'Get started' }).click();
     // Make a project the way a person does: the Novel template, with a name.
     await write.getByRole('button', { name: /New Project/ }).first().click();
@@ -477,7 +477,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByText('Welcome to MDEdit').waitFor();
+    await write.getByText('Welcome to Cadrel Write').waitFor();
     // Write's own page answers the question (it really has nothing unsaved, so it says yes). To observe the moment
     // between the question and the close, the test holds the final close from the main process.
     await app.evaluate(({ BrowserWindow }) => {

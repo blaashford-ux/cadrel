@@ -6,7 +6,7 @@ const MENU_ID = 'bookscout-send';
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: MENU_ID,
-    title: 'Send to BookScout',
+    title: 'Send to Cadrel Market',
     contexts: ['page', 'link', 'selection', 'image'],
     documentUrlPatterns: ['https://www.amazon.com/*', 'https://amazon.com/*'],
   });
@@ -16,7 +16,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId === MENU_ID && tab) void captureTab(tab);
 });
 
-// A search the BookScout app opened ("Search on Amazon") is captured once it has loaded, with no click.
+// A search the Cadrel Market app opened ("Search on Amazon") is captured once it has loaded, with no click.
 /** @type {Map<number, string>} tab id -> the url already captured, so repeated "complete" events do not capture twice */
 const autoCaptured = new Map();
 
@@ -42,7 +42,7 @@ async function post(path, body, cfg) {
   return res.json().catch(() => ({ ok: false, error: `app answered ${res.status}` }));
 }
 
-/** Exchange the 6-digit code shown in the BookScout app for the access token. */
+/** Exchange the 6-digit code shown in the Cadrel Market app for the access token. */
 export async function pairWithCode(code, port) {
   const p = Number(port) || DEFAULT_PORT;
   try {
@@ -52,17 +52,17 @@ export async function pairWithCode(code, port) {
     await chrome.storage.local.set({ token: r.token, port: p });
     return { ok: true };
   } catch {
-    return { ok: false, error: 'BookScout is not running (or the port is wrong)' };
+    return { ok: false, error: 'Cadrel Market is not running (or the port is wrong)' };
   }
 }
 
 export async function ping() {
   const cfg = await getConfig();
-  if (!cfg.token) return { ok: false, error: 'not paired: paste the token from the BookScout app' };
+  if (!cfg.token) return { ok: false, error: 'not paired: paste the token from the Cadrel Market app' };
   try {
     return await post('/v1/ping', null, cfg);
   } catch {
-    return { ok: false, error: 'BookScout is not running' };
+    return { ok: false, error: 'Cadrel Market is not running' };
   }
 }
 
@@ -91,11 +91,11 @@ function show(tabId, badge, title, color, ctx = null) {
   if (ctx && (badge === '!' || badge === '?')) slog(ctx, 'error', 'error shown to user', title);
   void chrome.action.setBadgeText({ tabId, text: badge }).catch(() => {}); // the tab may have closed
   void chrome.action.setBadgeBackgroundColor({ tabId, color }).catch(() => {}); // the tab may have closed
-  void chrome.action.setTitle({ tabId, title: `BookScout: ${title}` }).catch(() => {}); // the tab may have closed
+  void chrome.action.setTitle({ tabId, title: `Cadrel Market: ${title}` }).catch(() => {}); // the tab may have closed
   if (badge !== '…') {
     setTimeout(() => {
       void chrome.action.setBadgeText({ tabId, text: '' }).catch(() => {}); // the tab may have closed
-      void chrome.action.setTitle({ tabId, title: 'BookScout' }).catch(() => {}); // the tab may have closed
+      void chrome.action.setTitle({ tabId, title: 'Cadrel Market' }).catch(() => {}); // the tab may have closed
     }, 6000);
   }
 }
@@ -111,7 +111,7 @@ export async function captureTab(tab) {
   }
   const cfg = await getConfig();
   if (!cfg.token) {
-    show(tabId, '?', 'not paired: open the BookScout popup and paste the token', '#b3261e', ctx);
+    show(tabId, '?', 'not paired: open the Cadrel Market popup and paste the token', '#b3261e', ctx);
     return { ok: false, error: 'not paired' };
   }
   show(tabId, '…', 'capturing', '#555555');
@@ -130,7 +130,7 @@ export async function captureTab(tab) {
     show(tabId, d.badge, d.title, r.ok ? '#1e7a3c' : '#b3261e', ctx);
     return r;
   } catch (e) {
-    const msg = e instanceof TypeError ? 'BookScout is not running' : String(/** @type {Error} */ (e)?.message ?? e);
+    const msg = e instanceof TypeError ? 'Cadrel Market is not running' : String(/** @type {Error} */ (e)?.message ?? e);
     show(tabId, '!', msg, '#b3261e', ctx);
     return { ok: false, error: msg };
   }
@@ -228,7 +228,7 @@ async function uploadPage(cfg, s, dataUrl, rect) {
 function sampleStatus(tabId, s, text) {
   void chrome.action.setBadgeText({ tabId, text: String(s.pages) }).catch(() => {}); // the tab may have closed
   void chrome.action.setBadgeBackgroundColor({ tabId, color: '#1e7a3c' }).catch(() => {}); // the tab may have closed
-  void chrome.action.setTitle({ tabId, title: `BookScout: ${text}` }).catch(() => {}); // the tab may have closed
+  void chrome.action.setTitle({ tabId, title: `Cadrel Market: ${text}` }).catch(() => {}); // the tab may have closed
   s.port?.postMessage({ type: 'status', text });
 }
 
@@ -319,7 +319,7 @@ export async function finishSample(tabId) {
     if (s.pages && r.ok) slog(s, 'info', 'session finished', `${s.pages} page${s.pages === 1 ? '' : 's'} sent for reading`);
     else if (s.pages) slog(s, 'error', 'finish failed', String(r.error));
   } catch {
-    r = { ok: false, error: 'BookScout is not running' };
+    r = { ok: false, error: 'Cadrel Market is not running' };
   }
   show(tabId, r.ok ? '✓' : '!', r.ok ? (s.pages ? `sample sent: ${s.pages} page${s.pages === 1 ? '' : 's'}` : 'no sample pages were captured') : r.error, r.ok ? '#1e7a3c' : '#b3261e', s);
   return { ...r, pages: s.pages };

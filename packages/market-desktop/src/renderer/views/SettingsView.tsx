@@ -113,7 +113,7 @@ function DataPackCard({ onChange }: { onChange: () => Promise<void> }) {
     <div className="card" aria-label="Data packs">
       <h2>Share data</h2>
       <p className="muted">
-        A data pack sets up another copy of BookScout to analyse the same categories: the saved Amazon pages (book pages, bestseller lists, covers
+        A data pack sets up another copy of Cadrel Market to analyse the same categories: the saved Amazon pages (book pages, bestseller lists, covers
         and the searches whose results are those books), the linked subreddits with their stored text, the keyword research filed under the category, and the books you
         removed from a category. Book text, samples, your notes, queue, My Books and sales figures are never included. The search index is rebuilt after import.
       </p>
@@ -193,23 +193,23 @@ function ConnectCard() {
   return (
     <div className="card" aria-label="Connect an AI">
       <h2>Connect Claude or GPT</h2>
-      <p className="muted">BookScout offers your library to AI apps on this computer through MCP.</p>
+      <p className="muted">Cadrel Market offers your library to AI apps on this computer through MCP.</p>
       <div className="row">
         <button className="primary" onClick={async () => {
           try {
             const r = await api.installClaudeExtension();
             setExtFile(r.file);
-            setExt(`Created BookScout.mcpb and showed it in its folder (${r.file}).`);
+            setExt(`Created Cadrel Market.mcpb and showed it in its folder (${r.file}).`);
           } catch (e) { setExt((e as Error).message); setExtFile(''); }
         }}>Install in Claude Desktop</button>
         <span role="status" className="muted">{ext}</span>
       </div>
       {extFile && (
         <ol className="muted" aria-label="How to install the extension">
-          <li>In Claude Desktop open <b>Settings → Extensions</b> and drag <b>BookScout.mcpb</b> into the window (or use <b>Advanced settings → Install Extension…</b> and choose it; menu names vary between versions).</li>
+          <li>In Claude Desktop open <b>Settings → Extensions</b> and drag <b>Cadrel Market.mcpb</b> into the window (or use <b>Advanced settings → Install Extension…</b> and choose it; menu names vary between versions).</li>
           <li>Click <b>Install</b> in the dialog it shows, then restart Claude Desktop.</li>
           <li>Do not open the file with “Claude” from a list of programs: that attaches it to a chat instead of installing it.</li>
-          <li>If it will not start, the extension writes what happened to <code>logs\mcp-launcher.log</code> in BookScout's settings folder (<button className="link" onClick={() => void api.openLogs()}>open the logs folder</button>).</li>
+          <li>If it will not start, the extension writes what happened to <code>logs\mcp-launcher.log</code> in Cadrel Market's settings folder (<button className="link" onClick={() => void api.openLogs()}>open the logs folder</button>).</li>
         </ol>
       )}
       <p className="muted">Or set it up by hand: pick your app and copy the setting.</p>
@@ -249,11 +249,11 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
           <button onClick={() => run('Library changed', async () => { await api.chooseLibrary(); })}>Choose a different folder…</button>
           <button onClick={() => run('Index rebuilt', async () => { const r = await api.rebuild(); setMsg(`Rebuilt from ${r.detail} book, ${r.list} list and ${r.search} search captures`); })}>Rebuild index</button>
         </div>
-        <div className="muted">Switching points BookScout at another folder; it does not move files. Copy the old folder across first to carry your captures over.</div>
+        <div className="muted">Switching points Cadrel Market at another folder; it does not move files. Copy the old folder across first to carry your captures over.</div>
       </div>
       <div className="card">
         <h2>Browser extension</h2>
-        <p className="muted">Paste this token into the BookScout extension's popup. Only this computer can reach the app, and only with the token.</p>
+        <p className="muted">Paste this token into the Cadrel Market extension's popup. Only this computer can reach the app, and only with the token.</p>
         <div className="row">
           <code aria-label="Pairing token">{show ? token : '•'.repeat(24)}</code>
           <button onClick={() => setShow(!show)}>{show ? 'Hide' : 'Show'}</button>

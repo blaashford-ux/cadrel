@@ -148,7 +148,11 @@ The **user** is one object at the shell level: the person using this copy of Cad
 - **Attached files:** any file can be attached to the user (a photo, an author bio, a signed contract, a tax form). They are **copied** into Cadrel's own folder under their own ids (the original is untouched), carry a note saying what they are for, are checked against their hash so a missing or changed copy is reported, and can be opened, shown in the folder or removed. A picture can be chosen as the photo.
 - **Today (local):** `user.json` and `attachments/` beside the app's settings. The shell exposes it as `window.cadrel.user`; the rail shows the photo; the **Profile** page edits it. The name replaces the old "name on notes" setting.
 - **In a studio (M2):** the profile becomes the person's `person` record and the attachments become vault files that only that person and people holding `people.read` can open (contracts and tax forms are sensitive: opening them is audited like finance data). Attachments are *not* part of any project and are never exported or sent to a beta reader.
-- **The assistant** may read the name, pen names and about-me (`studio_user`) so it can sign things and write in the person's voice. It never receives the email or the attached files.
+- **The assistant** can read the name, pen names and about-me, and the **attached files** (`studio_user` lists them with what each is for; `studio_user_file` opens one: text, Markdown, CSV, JSON and common pictures). It never receives the email. The person controls this:
+  - **Opt-out:** one switch on the Profile page, *Let the AI assistant see and read my attached files*. Off, the assistant is told only that access is off and cannot tell whether any file exists or open any by id. On is the default.
+  - **Per file:** each file has *AI can read*; a hidden file is absent from the list and refused by id, exactly as if it were not there.
+  - **A record of reads:** every file the assistant opens is logged (which file, which AI, when; the last 50) and shown on the Profile page.
+  - **Coming later: the assistant adds files and writes into them** (a draft author bio, a notes file, a generated contract summary). The model is ready for it: each attachment records its `origin` (`user` or `assistant`; assistant-made files are marked *added by AI*), and writes will go through the same opt-out and per-file switch, be logged like reads, and by default stay proposals the person accepts.
 
 ## 6. SQLite
 

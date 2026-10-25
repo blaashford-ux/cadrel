@@ -161,7 +161,7 @@ export function renderReport(a: Analysis, opts: ReportOptions): string {
   const fs = findings(a);
   add(
     H(`Text analysis: ${esc(opts.source)}`),
-    `Generated ${opts.generated} by MDEdit. In MDEdit this file opens as a formatted report with charts; choose *Edit as Markdown* to see this text. Guidance, not rules: the checks are automatic and will sometimes be wrong (a passive sentence may be deliberate, a "name" may not be one). Use them to know where to look.`,
+    `Generated ${opts.generated} by Cadrel Write. In Cadrel Write this file opens as a formatted report with charts; choose *Edit as Markdown* to see this text. Guidance, not rules: the checks are automatic and will sometimes be wrong (a passive sentence may be deliberate, a "name" may not be one). Use them to know where to look.`,
     table(
       ['Measure', 'Value'],
       [

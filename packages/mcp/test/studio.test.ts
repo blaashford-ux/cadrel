@@ -9,7 +9,7 @@ import { Studio, UserStore } from '@cadrel/studio';
 import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { createCadrelServer, studioModule, writeModule } from '../src/index.js';
 
-const NAMES = ['studio_user', 'studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project'];
+const NAMES = ['studio_user', 'studio_user_file', 'studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project'];
 
 let studio: Studio;
 let user: UserStore;
@@ -40,8 +40,55 @@ describe('studio tools', () => {
     const { call } = await connect();
     await user.update({ displayName: 'Blake Ashford', email: 'blake@example.com', penNames: ['Ashe Wilder'], bio: 'Writes fantasy.' });
     const r = await call('studio_user');
-    expect(r.json()).toEqual({ name: 'Blake Ashford', penNames: ['Ashe Wilder'], about: 'Writes fantasy.' });
+    expect(r.json()).toEqual({ name: 'Blake Ashford', penNames: ['Ashe Wilder'], about: 'Writes fantasy.', files: [] });
     expect(r.text).not.toContain('blake@example.com');
+  });
+
+  it('the assistant sees the attached files and can open them; the person can opt out, or hide one file', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-att-'));
+    const bio = path.join(dir, 'Author bio.md');
+    const secret = path.join(dir, 'Tax form.txt');
+    const pic = path.join(dir, 'me.png');
+    fs.writeFileSync(bio, '# Blake\nWrites fantasy about dragons.');
+    fs.writeFileSync(secret, 'SSN 000');
+    fs.writeFileSync(pic, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const a = await user.attach(bio, 'Short bio for covers');
+    const s = await user.attach(secret, 'Tax');
+    await user.attach(pic);
+    await user.attach(path.join(dir, 'Author bio.md'));
+    const { call, client } = await connect('claude-ai');
+
+    const listed = (await call('studio_user')).json().files as { id: string; name: string; for: string | null }[];
+    expect(listed.map((f) => f.name)).toEqual(['Author bio.md', 'Tax form.txt', 'me.png', 'Author bio.md']);
+    expect(listed[0]).toMatchObject({ for: 'Short bio for covers', addedBy: 'the person' });
+
+    // reading text, an image, and what cannot be read
+    expect((await call('studio_user_file', { id: a.id })).text).toContain('Writes fantasy about dragons.');
+    const img = (await client.callTool({ name: 'studio_user_file', arguments: { id: listed[2]!.id } })) as { content: { type: string }[] };
+    expect(img.content[0]!.type).toBe('image');
+
+    // every read is recorded for the person to see
+    const reads = (await user.read()).assistantReads;
+    expect(reads.map((r) => [r.name, r.by])).toEqual([['Author bio.md', 'Claude'], ['me.png', 'Claude']]);
+
+    // one file hidden from the assistant: it is gone from the list and cannot be opened by id
+    await user.editAttachment(s.id, { assistant: false });
+    expect(((await call('studio_user')).json().files as { name: string }[]).map((f) => f.name)).not.toContain('Tax form.txt');
+    const denied = await call('studio_user_file', { id: s.id });
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toMatch(/no such file/);
+
+    // the opt-out: the assistant is told access is off, learns nothing about the files, and cannot open any
+    await user.setAssistantFiles(false);
+    const off = (await call('studio_user')).json();
+    expect(off.files).toMatch(/turned off/);
+    expect(JSON.stringify(off)).not.toContain('Author bio');
+    expect((await call('studio_user_file', { id: a.id })).isError).toBe(true);
+    expect((await user.read()).assistantReads).toHaveLength(2); // nothing was read while off
+
+    // and back on
+    await user.setAssistantFiles(true);
+    expect(((await call('studio_user')).json().files as unknown[]).length).toBe(3);
   });
 
   it('sit beside Write’s tools without clashing', async () => {

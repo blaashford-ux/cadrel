@@ -223,7 +223,7 @@ export function applyCalibration(db: Db, o: { includeKu?: boolean } = {}, now = 
   return cal;
 }
 
-/** Back to the BookScout default curve and the published-methods range. */
+/** Back to the Cadrel Market default curve and the published-methods range. */
 export function resetCalibration(db: Db): void {
   db.transaction(() => {
     setSalesCurve(db, { ...DEFAULT_SALES_CURVE });

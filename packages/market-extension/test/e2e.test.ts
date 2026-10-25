@@ -166,7 +166,7 @@ describe.skipIf(!haveBrowser)('extension in Chromium', () => {
     expect(await capture(`/dp/${ASIN}`)).toMatchObject({ ok: false, error: 'bad token' });
     expect(await badge(`/dp/${ASIN}`)).toBe('!');
     await configure(TOKEN, 1); // nothing listens here
-    expect(await capture(`/dp/${ASIN}`)).toMatchObject({ ok: false, error: 'BookScout is not running' });
+    expect(await capture(`/dp/${ASIN}`)).toMatchObject({ ok: false, error: 'Cadrel Market is not running' });
     await page.close();
   }, 60000);
 

@@ -93,7 +93,7 @@ export interface MaintenanceStatus {
 }
 
 export interface AppSettings {
-  /** Closing the window keeps BookScout running in the tray, so the extension can still send pages. */
+  /** Closing the window keeps Cadrel Market running in the tray, so the extension can still send pages. */
   keepRunningInTray: boolean;
   startWithWindows: boolean;
   /** Autocomplete sources the keyword explorer may ask. Each is only contacted when the user presses Look up. */
@@ -201,7 +201,7 @@ export interface Api {
   /** "neural" downloads the local model first (needs internet once); "basic" needs nothing but is weaker. */
   buildIndex(kind: 'neural' | 'basic'): Promise<IndexStatus>;
   mcpConfig(): Promise<McpSnippets>;
-  /** Writes BookScout.mcpb and shows it in its folder, ready to install from Claude Desktop (Settings → Extensions). */
+  /** Writes Cadrel Market.mcpb and shows it in its folder, ready to install from Claude Desktop (Settings → Extensions). */
   installClaudeExtension(): Promise<{ file: string; error: string | null }>;
   onIndex(cb: () => void): () => void;
   communitySources(categoryKey: string): Promise<CommunitySource[]>;
@@ -307,7 +307,7 @@ export interface Api {
   setKenpc(asin: string, kenpc: number | null): Promise<void>;
   /** The share of a book the average borrower is assumed to read, 0.1 to 1; returns the saved value. */
   setKuCompletion(share: number): Promise<number>;
-  /** Back to BookScout's default curve and the published-methods range. */
+  /** Back to Cadrel Market's default curve and the published-methods range. */
   resetCalibration(): Promise<void>;
   /** Forget imported sales and rank files (the books and pages stay). */
   clearSalesData(): Promise<void>;

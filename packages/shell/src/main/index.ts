@@ -385,7 +385,8 @@ function registerShellIpc(): void {
     return attachAll(r.filePaths);
   });
   userOp('shell:user:attachPaths', async (paths: unknown) => attachAll(Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string') : []));
-  userOp('shell:user:editAttachment', async (id: string, patch: { note?: string; name?: string }) => (await users.editAttachment(id, patch ?? {}), changed()));
+  userOp('shell:user:editAttachment', async (id: string, patch: { note?: string; name?: string; assistant?: boolean }) => (await users.editAttachment(id, patch ?? {}), changed()));
+  userOp('shell:user:setAssistantFiles', async (on: boolean) => (await users.setAssistantFiles(on === true), changed()));
   userOp('shell:user:removeAttachment', async (id: string) => (await users.removeAttachment(id), changed()));
   userOp('shell:user:setAvatar', async (id: string | null) => (await users.setAvatar(id ?? null), changed()));
   userOp('shell:user:open', async (id: string) => {

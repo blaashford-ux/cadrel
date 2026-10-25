@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 
 /**
- * The launcher inside BookScout.mcpb. Claude Desktop runs it with its own Node and expects an answer to the MCP `initialize` request within a
+ * The launcher inside Cadrel Market.mcpb. Claude Desktop runs it with its own Node and expects an answer to the MCP `initialize` request within a
  * fraction of a second, but the real server (the installed app's runtime loading the library) takes a few hundred milliseconds on a fast
  * computer and longer on a slow or busy one, and a server that is late is dropped as "couldn't start". So the launcher starts the server at
  * once, answers the handshake itself from what the server reported (`--print-handshake`), holds the client's other messages until the server
@@ -17,7 +17,7 @@ export interface Handshake {
 }
 
 export interface LauncherConfig {
-  /** The product's name in log lines and error messages. Default "BookScout". */
+  /** The product's name in log lines and error messages. Default "Cadrel Market". */
   label?: string;
   command: string;
   args: string[];
@@ -33,7 +33,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const cfg = __CONFIG__;
-const label = cfg.label || 'BookScout';
+const label = cfg.label || 'Cadrel Market';
 const hs = cfg.handshake;
 const HS_ID = '__bookscout_initialize__';
 const started = Date.now();

@@ -17,7 +17,7 @@ export function pickerUrl(token: string, ids: string[], ret = false): string {
   return `${JOIN_PAGE}#${q}`;
 }
 
-/** Google's file picker, shown inside the app. Picking the files is what gives MDEdit permission to open them. */
+/** Google's file picker, shown inside the app. Picking the files is what gives Cadrel Write permission to open them. */
 export function PickerFrame({ token, ids, onPicked, onCancel, onError }: Props) {
   useEffect(() => {
     const origin = new URL(JOIN_PAGE).origin;

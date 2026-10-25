@@ -4,7 +4,7 @@ import { normalizeKeyword } from './suggest.js';
 import { linkKeyword, pruneKeywordLinks } from './links.js';
 
 /**
- * Google Trends has no stable public API and its unofficial endpoints block quickly, so BookScout never calls it:
+ * Google Trends has no stable public API and its unofficial endpoints block quickly, so Cadrel Market never calls it:
  * it builds a link that opens the comparison in the browser, and reads the CSV that Trends' own Download button saves.
  * Values are Trends' relative interest (0-100, 100 = the peak of the compared terms), never searches.
  */
