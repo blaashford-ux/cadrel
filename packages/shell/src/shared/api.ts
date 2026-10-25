@@ -6,7 +6,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kern
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'projects', 'notes', 'dashboard', 'write', 'market', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -113,8 +113,10 @@ export interface UserApi {
   /** Attaches dropped files (the page passes the File objects; the bridge turns them into paths). */
   attachDropped(files: File[]): Promise<UserView>;
   editAttachment(id: string, patch: { note?: string; name?: string; assistant?: boolean }): Promise<UserView>;
-  /** The opt-out: whether the AI assistant may see and read the attached files at all. */
-  setAssistantFiles(on: boolean): Promise<UserView>;
+  /** Opens a picker for a picture, keeps it with the person's files and makes it their photo; null if cancelled. */
+  chooseAvatar(): Promise<UserView | null>;
+  /** Saves a copy of an attached file where the person chooses; false if cancelled. */
+  download(id: string): Promise<boolean>;
   removeAttachment(id: string): Promise<UserView>;
   setAvatar(id: string | null): Promise<UserView>;
   open(id: string): Promise<void>;

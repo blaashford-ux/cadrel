@@ -85,7 +85,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'Projects', 'Notes', 'Dashboard', 'Write', 'Market', 'Profile', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'Dashboard', 'Projects', 'Notes', 'Write', 'Market', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -398,17 +398,36 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await pic.getByRole('button', { name: 'Use as photo' }).click();
     await shell.locator('.rail .avatar img').waitFor(); // the photo is in the rail, with no restart
 
-    // The assistant opt-out: on by default, per-file switches follow it, and the choice is remembered.
-    const optOut = shell.getByLabel('Let the AI assistant see and read my attached files');
-    expect(await optOut.isChecked()).toBe(true);
+    // Clicking the picture chooses a photo; the chosen picture is kept with the person's files. (The native picker cannot be driven,
+    // so the main process answers it with a file.)
+    const photo = path.join(tmp, 'My face.png');
+    fs.copyFileSync(path.join(PKG, 'build', 'icon.png'), photo);
+    await app.evaluate(({ dialog }, f) => {
+      (dialog as any).showOpenDialog = async () => ({ canceled: false, filePaths: [f] });
+    }, photo);
+    await shell.getByRole('button', { name: 'Choose your photo' }).first().click();
+    const mine = shell.locator('.attachments li', { hasText: 'My face.png' });
+    await mine.waitFor();
+    await mine.getByText('your photo').waitFor();
+    expect(await mine.getByLabel('Note on My face.png').inputValue()).toBe('My photo');
+
+    // A file can be downloaded: a copy is saved where the person says, and the stored one stays.
+    const saved = path.join(tmp, 'downloaded bio.txt');
+    await app.evaluate(({ dialog }, f) => {
+      (dialog as any).showSaveDialog = async () => ({ canceled: false, filePath: f });
+    }, saved);
+    await shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByRole('button', { name: 'Download' }).click();
+    await waitFor(() => fs.existsSync(saved), 'the downloaded copy');
+    expect(fs.readFileSync(saved, 'utf8')).toBe('Blake writes fantasy.');
+
+    // The assistant opt-out is per file: on by default, and only that file is hidden. There is no global switch.
+    expect(await shell.getByLabel('Let the AI assistant see and read my attached files').count()).toBe(0);
     const fileSwitch = shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByLabel('AI can read');
     expect(await fileSwitch.isChecked()).toBe(true);
-    // (the boxes change when the app confirms, a moment after the click, so wait rather than expect it at once)
+    expect(await pic.getByLabel('AI can read').isChecked()).toBe(true);
     await fileSwitch.click();
     await waitFor(async () => !(await fileSwitch.isChecked()), 'the file to be hidden from the assistant');
-    await optOut.click();
-    await waitFor(async () => !(await optOut.isChecked()), 'assistant access to turn off');
-    await waitFor(async () => (await fileSwitch.isDisabled()), 'the per-file switch to follow the opt-out');
+    expect(await pic.getByLabel('AI can read').isChecked()).toBe(true); // the other file is untouched
 
     // The name is what notes are written under, in the shell and in Market.
     await shell.getByRole('button', { name: 'Notes', exact: true }).click();
@@ -424,11 +443,11 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(await second.shell.getByLabel('Name', { exact: true }).inputValue()).toBe('Blake Ashford');
     expect(await second.shell.getByLabel('Pen names').inputValue()).toBe('Ashe Wilder, Loric Thorne');
     expect(await second.shell.getByLabel('Note on Author bio.txt').inputValue()).toBe('Short bio for covers');
-    expect(await second.shell.getByLabel('Let the AI assistant see and read my attached files').isChecked()).toBe(false);
+    expect(await second.shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByLabel('AI can read').isChecked()).toBe(false);
     await second.shell.locator('.rail .avatar img').waitFor();
     expect(fs.readFileSync(doc, 'utf8')).toBe('Blake writes fantasy.');
     const stored = fs.readdirSync(path.join(userData, 'user', 'attachments'));
-    expect(stored).toHaveLength(2);
+    expect(stored).toHaveLength(3);
     // Only the shell's own page may use the user bridge.
     const refused = await second.app.evaluate(async ({ ipcMain, BrowserWindow }) => {
       const h = (ipcMain as any)._invokeHandlers.get('shell:user:get');

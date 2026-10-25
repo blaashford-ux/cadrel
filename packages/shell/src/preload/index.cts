@@ -25,7 +25,8 @@ const api: CadrelApi = {
     attach: () => studioCall('shell:user:attach'),
     // A dropped File has no path in the page; Electron can tell the bridge where it came from.
     attachDropped: (files) => studioCall('shell:user:attachPaths', files.map((f) => webUtils.getPathForFile(f)).filter(Boolean)),
-    setAssistantFiles: (on) => studioCall('shell:user:setAssistantFiles', on),
+    chooseAvatar: () => studioCall('shell:user:chooseAvatar'),
+    download: (id) => studioCall('shell:user:download', id),
     editAttachment: (id, patch) => studioCall('shell:user:editAttachment', id, patch),
     removeAttachment: (id) => studioCall('shell:user:removeAttachment', id),
     setAvatar: (id) => studioCall('shell:user:setAvatar', id),

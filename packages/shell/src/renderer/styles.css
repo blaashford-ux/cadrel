@@ -153,6 +153,10 @@ input[type='checkbox'] { padding: 0; }
 .profile-form { display: flex; flex-direction: column; gap: 12px; }
 .avatar { display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar.clickable { position: relative; padding: 0; border: 0; cursor: pointer; }
+.avatar.clickable:hover:not(:disabled) { background: var(--accent); filter: brightness(1.08); }
+.avatar-hint { position: absolute; inset: auto 0 0 0; padding: 2px 0; font-size: 11px; font-weight: 600; text-align: center; background: rgba(0, 0, 0, 0.55); color: #fff; opacity: 0; transition: opacity 0.12s; }
+.avatar.clickable:hover .avatar-hint, .avatar.clickable:focus-visible .avatar-hint { opacity: 1; }
 .drop.over { outline: 2px dashed var(--accent); outline-offset: -6px; }
 .attachments { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .attachments li { background: var(--bg); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }

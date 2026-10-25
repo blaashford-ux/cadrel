@@ -16,9 +16,9 @@ const svg = (d: string) => (
 
 const TOP: Item[] = [
   { page: 'home', label: 'Home', icon: svg('M3 11.5 12 4l9 7.5M5.5 10v9.5h5v-5.5h3v5.5h5V10') },
+  { page: 'dashboard', label: 'Dashboard', icon: svg('M4 20V10m6 10V4m6 16v-7m4 7H2') },
   { page: 'projects', label: 'Projects', icon: svg('M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-10Z') },
-  { page: 'notes', label: 'Notes', icon: svg('M5 4.5h14v11.5l-4 4H5v-15.5ZM15 20v-4h4M8 9h8M8 12.5h5') },
-  { page: 'dashboard', label: 'Dashboard', icon: svg('M4 20V10m6 10V4m6 16v-7m4 7H2') }
+  { page: 'notes', label: 'Notes', icon: svg('M5 4.5h14v11.5l-4 4H5v-15.5ZM15 20v-4h4M8 9h8M8 12.5h5') }
 ];
 const MODULES: Item[] = [
   { page: 'write', label: 'Write', icon: svg('M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Zm9-13 4 4') },

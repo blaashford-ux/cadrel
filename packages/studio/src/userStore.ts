@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream, promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
-  addAttachment, assistantVisibleFiles, editAttachment, recordAssistantRead, removeAttachment, sanitizeUser, setAssistantFiles, setAvatar, updateProfile, UserError, newUser, ATTACHMENT_MAX_BYTES,
+  addAttachment, assistantVisibleFiles, editAttachment, recordAssistantRead, removeAttachment, sanitizeUser, setAvatar, updateProfile, UserError, newUser, ATTACHMENT_MAX_BYTES,
   type Attachment, type ProfilePatch, type UserProfile
 } from '@cadrel/kernel';
 
@@ -92,29 +92,17 @@ export class UserStore {
     });
   }
 
-  setAssistantFiles(on: boolean): Promise<UserProfile> {
-    return this.change((u) => {
-      const user = setAssistantFiles(u, on);
-      return { user, result: user };
-    });
+  /** What the assistant may see of the attached files: the ones the person has not hidden from it. A hidden file is as if it were not there. */
+  async filesForAssistant(): Promise<Attachment[]> {
+    return assistantVisibleFiles(await this.read());
   }
 
   /**
-   * What the assistant may see of the attached files: nothing at all when the person has opted out (so it cannot even tell
-   * files exist), else the files they have not hidden from it.
-   */
-  async filesForAssistant(): Promise<{ allowed: boolean; files: Attachment[] }> {
-    const u = await this.read();
-    return { allowed: u.assistant.files, files: assistantVisibleFiles(u) };
-  }
-
-  /**
-   * The assistant opens one file. Refused (as if it did not exist) when access is off or the file is hidden from it. The read
+   * The assistant opens one file. Refused (as if it did not exist) when the file is hidden from it. The read
    * is logged so the person can see it. Text comes back as text up to `maxBytes`; anything else as bytes for the caller to treat by type.
    */
   async readForAssistant(id: string, by: string, maxBytes = 5 * 1024 * 1024): Promise<{ attachment: Attachment; bytes: Buffer; truncated: boolean }> {
-    const { files } = await this.filesForAssistant();
-    const attachment = files.find((a) => a.id === id);
+    const attachment = (await this.filesForAssistant()).find((a) => a.id === id);
     const p = attachment && (await this.pathOf(id));
     if (!attachment || !p) throw new UserError('There is no such file available to you.');
     const fh = await fsp.open(p, 'r');

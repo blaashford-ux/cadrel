@@ -387,7 +387,23 @@ function registerShellIpc(): void {
   });
   userOp('shell:user:attachPaths', async (paths: unknown) => attachAll(Array.isArray(paths) ? paths.filter((p): p is string => typeof p === 'string') : []));
   userOp('shell:user:editAttachment', async (id: string, patch: { note?: string; name?: string; assistant?: boolean }) => (await users.editAttachment(id, patch ?? {}), changed()));
-  userOp('shell:user:setAssistantFiles', async (on: boolean) => (await users.setAssistantFiles(on === true), changed()));
+  userOp('shell:user:chooseAvatar', async () => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Choose your photo', properties: ['openFile'], filters: [{ name: 'Pictures', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'] }] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    // The picture is kept with the person's files like any other, and is also their photo.
+    const a = await users.attach(r.filePaths[0], 'My photo');
+    await users.setAvatar(a.id);
+    return changed();
+  });
+  userOp('shell:user:download', async (id: string) => {
+    const p = await users.pathOf(id);
+    const a = (await users.read()).attachments.find((x) => x.id === id);
+    if (!p || !a) throw new UserError('That file is not there any more.');
+    const r = await dialog.showSaveDialog(win!, { title: 'Save a copy', defaultPath: path.join(app.getPath('downloads'), a.name) });
+    if (r.canceled || !r.filePath) return false;
+    await fsp.copyFile(p, r.filePath);
+    return true;
+  });
   userOp('shell:user:removeAttachment', async (id: string) => (await users.removeAttachment(id), changed()));
   userOp('shell:user:setAvatar', async (id: string | null) => (await users.setAvatar(id ?? null), changed()));
   userOp('shell:user:open', async (id: string) => {
