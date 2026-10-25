@@ -23,7 +23,7 @@ describe('the AI Kit', () => {
       'skills/folders/cadrel-line-edit/SKILL.md',
       'skills/cadrel-copy-edit.zip',
       'skills/cadrel-line-edit.zip',
-    ]);
+    ].sort());
     for (const f of kit) expect(f.path).not.toMatch(/^\/|\.\.|\\|:/);
     expect(KIT_FOLDER).toBe('Cadrel Write AI Kit');
   });
@@ -50,8 +50,8 @@ describe('the AI Kit', () => {
 
   it('writes settings that point at the saved server, and a README that names the steps', () => {
     const s = strFromU8(file('connect-settings.txt').data);
-    expect(s).toContain('claude mcp add cadrel-write -- node "C:\\Users\\me\\Downloads\\Cadrel Write AI Kit\\cadrel-write-mcp.js" --root C:\\Users\\me\\Cadrel Write');
-    expect(s).toContain("[mcp_servers.cadrel]");
+    expect(s).toContain('claude mcp add cadrel-write -- node "C:\\Users\\me\\Downloads\\Cadrel Write AI Kit\\cadrel-write-mcp.js" --root "C:\\Users\\me\\Cadrel Write"');
+    expect(s).toContain("[mcp_servers.cadrel-write]");
     const r = strFromU8(file('README.txt').data);
     for (const needle of ['cadrel-write.mcpb', 'Settings > Capabilities > Skills', 'C:\\Users\\me\\Cadrel Write', 'Line edit', 'Copy edit', 'developmental_edit']) expect(r).toContain(needle);
     expect(file('cadrel-write-mcp.js').data).toBe(server);
