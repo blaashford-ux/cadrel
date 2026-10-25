@@ -43,7 +43,7 @@ if (params.get('mode') === 'pick') {
   msg.hidden = false;
   // Embedded in the app (Windows) the result goes to the parent window. On the phone the page runs in the browser (Google's picker
   // stays blank inside the app's web view) and hands the result back to the app with an cadrel-write:// link.
-  // ret=1: hand back with an cadrel-write://picked link (phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
+  // ret=1: hand back with a cadrel-write://picked link (phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
   // desktop app's local listener. Anything else is ignored, so this page can never send a result to some other address.
   var retParam = params.get('ret');
   var loopback = /^http:\/\/127\.0\.0\.1:\d{2,5}\/picked\?state=[A-Za-z0-9_-]{8,64}$/.test(retParam || '');
