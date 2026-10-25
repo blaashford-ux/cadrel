@@ -438,7 +438,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await write.getByText('Welcome to MDEdit').waitFor();
     await write.getByRole('button', { name: 'Get started' }).click();
     // Make a project the way a person does: the Novel template, with a name.
-    await write.getByRole('button', { name: /^Novel/ }).click();
+    await write.getByRole('button', { name: /New Project/ }).first().click();
+    await write.getByRole('dialog', { name: 'New project' }).getByLabel('Template').selectOption('novel');
     await write.getByRole('dialog', { name: 'New project' }).getByPlaceholder('The Lost King').fill('Export Test');
     await write.getByRole('dialog', { name: 'New project' }).getByRole('button', { name: /Create/ }).click();
     await write.getByRole('treeitem', { name: /Manuscript/ }).click();
