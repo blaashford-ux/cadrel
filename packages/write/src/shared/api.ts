@@ -453,11 +453,13 @@ export interface Capabilities {
   update: boolean;
   /** Connecting AI reviewers (the MCP server); needs the desktop app. */
   ai: boolean;
+  /** Creating and managing projects here. False inside Cadrel, where the Projects page does that and Write only opens them. */
+  manageProjects: boolean;
 }
 
-export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, importDocx: true, sync: true, review: true, update: true, ai: true };
+export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, importDocx: true, sync: true, review: true, update: true, ai: true, manageProjects: false };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false, manageProjects: true };
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present

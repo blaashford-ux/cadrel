@@ -465,14 +465,15 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
 
   it('Write: Export works on the file you choose, from the tree by right-click or from the open file, and nothing is picked for you', async () => {
     const { app, shell } = await launch();
-    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    // Projects are made on the Projects page; Write only opens them.
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByRole('button', { name: 'New project' }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('Export Test');
+    await shell.getByRole('dialog').getByLabel('Manuscript folder').selectOption('novel');
+    await shell.getByRole('button', { name: 'Create' }).click();
+    await shell.getByRole('button', { name: 'Open in Write' }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
-    // Make a project the way a person does: the Novel template, with a name.
-    await write.getByRole('button', { name: /New Project/ }).first().click();
-    await write.getByRole('dialog', { name: 'New project' }).getByLabel('Template').selectOption('novel');
-    await write.getByRole('dialog', { name: 'New project' }).getByPlaceholder('The Lost King').fill('Export Test');
-    await write.getByRole('dialog', { name: 'New project' }).getByRole('button', { name: /Create/ }).click();
+    expect(await write.getByRole('button', { name: /New Project/ }).count()).toBe(0);
     await write.getByRole('treeitem', { name: /Manuscript/ }).click();
     const draft = write.getByRole('treeitem', { name: /Draft\.md/ });
     await draft.waitFor();
@@ -559,6 +560,43 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(fs.existsSync(path.join(h, 'Cadrel', 'Market', 'scout.db'))).toBe(true);
     expect(fs.readdirSync(path.join(h, 'Cadrel')).some((n) => n.startsWith('Market (old copy'))).toBe(true);
     expect(JSON.parse(fs.readFileSync(path.join(ud, 'market', 'config.json'), 'utf8')).libraryRoot).toBe(path.join(h, 'Cadrel', 'Market'));
+    await app.close();
+  }, 120_000);
+
+  it('Projects manages the project folders: create from a template, rename, archive, delete; Write only opens them', async () => {
+    const { app, shell } = await launch();
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByRole('button', { name: 'New project' }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('Managed Book');
+    await shell.getByRole('dialog').getByLabel('Manuscript folder').selectOption('novel');
+    await shell.getByRole('button', { name: 'Create' }).click();
+    await shell.getByRole('heading', { level: 2, name: 'Managed Book' }).waitFor();
+    await shell.getByText(/made from/).waitFor();
+
+    await shell.getByRole('button', { name: 'Rename', exact: true }).click();
+    await shell.getByRole('dialog').getByLabel('Name').fill('Renamed Book');
+    await shell.getByRole('button', { name: 'Rename', exact: true }).last().click();
+    await shell.getByRole('heading', { level: 2, name: 'Renamed Book' }).waitFor();
+
+    await shell.getByRole('button', { name: 'Archive', exact: true }).click();
+    await shell.getByRole('button', { name: 'Restore', exact: true }).waitFor();
+    await shell.getByRole('button', { name: 'Restore', exact: true }).click();
+
+    // Write lists it, offers no way to create, rename or delete it, and opens it.
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByRole('button', { name: /Open Renamed Book/ }).waitFor();
+    expect(await write.getByRole('button', { name: /New Project/ }).count()).toBe(0);
+    await write.getByRole('button', { name: /Actions for Renamed Book/ }).click();
+    const menu = write.getByRole('menu');
+    await menu.getByRole('menuitem', { name: 'Open' }).waitFor();
+    for (const gone of ['Rename…', 'Delete…', 'Duplicate…', 'Archive']) expect(await menu.getByRole('menuitem', { name: gone }).count()).toBe(0);
+    await write.keyboard.press('Escape');
+
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByRole('button', { name: 'Delete…' }).click();
+    await shell.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
+    await shell.getByText('Start with a project').waitFor();
     await app.close();
   }, 120_000);
 

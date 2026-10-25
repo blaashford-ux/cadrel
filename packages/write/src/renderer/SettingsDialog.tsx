@@ -181,7 +181,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
               ['front', 'Front matter'],
               ['back', 'Back matter'],
               ['export', 'Export'],
-              ['projects', 'Projects']
+              ['projects', window.cadrelWrite.capabilities.manageProjects ? 'Projects' : 'Templates']
             ] as const
           ).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>

@@ -50,7 +50,7 @@ export function TemplateEditor({ config, draft, setDraft, app, projectCount }: P
 
   return (
     <div className="projects-settings">
-      {window.cadrelWrite.capabilities.folderPicker && (
+      {window.cadrelWrite.capabilities.folderPicker && window.cadrelWrite.capabilities.manageProjects && (
         <section>
           <h4>Root Folder</h4>
           <p className="muted small">Your projects live here, one folder each. Anything you can do in File Explorer still works.</p>

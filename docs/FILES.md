@@ -221,7 +221,7 @@ Adoption is **copy-on-read**: Cadrel scans a project folder and builds the catal
 
 ## 11. Decisions made on this design
 
-1. **Folder layout mirrors the project tree.** `<root>/<Series>/<Book>/…`; Cadrel moves a project's folder when the project moves. Write's project list becomes the book-level projects (projects that hold files), and "linking a Write folder" is replaced by projects owning their files.
+1. **Folder layout mirrors the project tree.** *(Not built yet: in 0.2.0 each manuscript is a flat folder under `<Cadrel>/Write`, linked to its project by the Projects page.)* `<root>/<Series>/<Book>/…`; Cadrel moves a project's folder when the project moves. Write's project list becomes the book-level projects (projects that hold files), and "linking a Write folder" is replaced by projects owning their files.
 2. **A file's kind is stored in the catalog, with folder defaults.** Files stay pure Markdown; front matter is read only as a hint.
 3. **A solo author is a one-person studio on the Cadrel server**; their machines and, later, the phone app sync through it. Google Drive is not used for sync. Until the server exists, a solo author works on the local vault of one machine. The phone app waits for the server.
 4. **Beta readers use Drive review packages**; the file they return is imported into Notes as external notes.
