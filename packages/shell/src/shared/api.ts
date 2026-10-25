@@ -257,7 +257,52 @@ export interface UpdateApi {
   onAvailable(cb: (s: UpdateStatus) => void): () => void;
 }
 
+/** Where a Studio stands. 'local' is the one-person Studio on this computer (no server). */
+export type StudioStatus = 'local' | 'not-provisioned' | 'provisioning' | 'ready' | 'error';
+
+/** A Studio this Cadrel knows about: one the person owns (created here), or one they were invited to. */
+export interface StudioEntry {
+  id: string;
+  name: string;
+  role: 'owner' | 'member';
+  status: StudioStatus;
+  /** The Studio's address once it exists. */
+  url: string | null;
+  /** The owner's Cloudflare account (owners only). Shown masked; the API token is never kept. */
+  accountId: string | null;
+  createdAt: string;
+  /** The last thing worth telling the person about this Studio, in a sentence. */
+  note: string | null;
+}
+
+export interface StudiosView {
+  /** The Studio Manager (on the Admin page) is switched on. Off until an administrator turns it on. */
+  managerEnabled: boolean;
+  activeId: string;
+  studios: StudioEntry[];
+  /** The active Studio has its data here and now. False for one that is not provisioned or not connected: the pages say so instead of showing another Studio's data. */
+  connected: boolean;
+}
+
+export interface StudiosApi {
+  get(): Promise<StudiosView>;
+  /** Switch to another Studio (anyone). */
+  setActive(id: string): Promise<StudiosView>;
+  onChange(cb: (v: StudiosView) => void): () => void;
+  // The rest are the Studio Manager's: administrators only.
+  enableManager(on: boolean): Promise<StudiosView>;
+  create(name: string): Promise<StudiosView>;
+  rename(id: string, name: string): Promise<StudiosView>;
+  /** Forget a Studio on this computer. A provisioned Studio's data stays where it is in Cloudflare. */
+  remove(id: string): Promise<StudiosView>;
+  /** Checks the Cloudflare details and (when provisioning is connected) builds the Studio there. The token is used once and never kept. */
+  provision(id: string, details: { accountId: string; apiToken: string }): Promise<StudiosView>;
+  createInvite(id: string, invite: { role: string; label: string }): Promise<{ link: string }>;
+  backup(id: string): Promise<string>;
+}
+
 export interface CadrelApi {
+  studios: StudiosApi;
   studio: StudioApi;
   manage: ManageApi;
   theme: {

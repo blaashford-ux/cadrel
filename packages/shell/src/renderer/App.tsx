@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Overview, Page, UpdateStatus, WindowInfo } from '../shared/api';
 import { shellCss } from '../shared/theme';
 import { Admin } from './Admin';
+import { NotConnected } from './NotConnected';
+import { useStudios } from './useStudios';
 import { Assistants } from './Assistants';
 import { Dashboard } from './Dashboard';
 import { Home } from './Home';
@@ -16,6 +18,7 @@ const api = window.cadrel;
 const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', assistants: 'AI Assistants', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
 const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'assistants', 'admin', 'profile', 'settings']);
+const STUDIO_PAGES = new Set<Page>(['dashboard', 'projects', 'notes', 'write', 'market']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'projects', 'notes', 'dashboard']);
 
@@ -46,6 +49,7 @@ export function App() {
     }
   });
   const studio = useStudio(NEEDS_STUDIO.has(page));
+  const studios = useStudios();
   const [isAdmin, setIsAdmin] = useState(false);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
   useEffect(() => {
@@ -89,7 +93,9 @@ export function App() {
   }, [page, refresh]);
 
   const go = (p: Page) => void api.navigate(p);
-  const own = OWN.has(page);
+  // A Studio with no data here: its pages explain, and the module views stay hidden (the shell hides them).
+  const blocked = !!studios && !studios.connected && page !== 'home' && STUDIO_PAGES.has(page);
+  const own = OWN.has(page) || blocked;
 
   return (
     <div className="shell">
@@ -100,12 +106,13 @@ export function App() {
           <h1 className="strip-title">{TITLES[page]}</h1>
         </header>
         <div className={`page page-${page}`}>
-          {page === 'home' && <Home overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
-          {page === 'projects' && (
+          {page === 'home' && <Home overview={overview} studio={studio.state} studios={studios} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {blocked && <NotConnected studio={studios!.studios.find((s) => s.id === studios!.activeId)!} />}
+          {!blocked && page === 'projects' && (
             <Projects studio={studio.state} overview={overview} error={studio.error} clearError={studio.clearError} act={studio.act} onGo={go} selected={selected} onSelect={select} />
           )}
-          {page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
-          {page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {!blocked && page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
+          {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}
           {page === 'profile' && <Profile />}

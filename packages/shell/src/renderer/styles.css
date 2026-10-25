@@ -224,3 +224,14 @@ input[type='checkbox'] { padding: 0; }
 .snippet { overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 6px 0; white-space: pre-wrap; }
 .subtabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0; }
 .subtabs button[aria-selected='true'], .subtabs button.active { background: var(--selected); color: var(--accent); }
+
+.studio-switch { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.studio-list { list-style: none; padding: 0; margin: 6px 0 12px; display: grid; gap: 4px; }
+.studio-list li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: var(--radius); background: var(--raised); }
+.studio-list .link.on { font-weight: 600; }
+.studio-detail { margin-top: 16px; padding-top: 6px; border-top: 1px solid var(--line); }
+.studio-detail h5 { margin: 16px 0 6px; }
+.provision { display: grid; gap: 8px; max-width: 520px; }
+.field { display: grid; gap: 3px; }
+.field-label { font-size: 12px; color: var(--muted); }
+.chip.warn { background: var(--warn-bg); color: var(--fg); }

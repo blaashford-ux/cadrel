@@ -10,6 +10,22 @@ const studioCall = async (channel: string, ...args: unknown[]) => {
 
 // Sandboxed preload (CommonJS). Everything the shell's page may do is listed here; nothing generic is exposed.
 const api: CadrelApi = {
+  studios: {
+    get: () => studioCall('shell:studios:get'),
+    setActive: (id) => studioCall('shell:studios:setActive', id),
+    enableManager: (on) => studioCall('shell:studios:enableManager', on),
+    create: (name) => studioCall('shell:studios:create', name),
+    rename: (id, name) => studioCall('shell:studios:rename', id, name),
+    remove: (id) => studioCall('shell:studios:remove', id),
+    provision: (id, details) => studioCall('shell:studios:provision', id, details),
+    createInvite: (id, invite) => studioCall('shell:studios:createInvite', id, invite),
+    backup: (id) => studioCall('shell:studios:backup', id),
+    onChange: (cb) => {
+      const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
+      ipcRenderer.on('shell:studios', h);
+      return () => ipcRenderer.removeListener('shell:studios', h);
+    }
+  },
   manage: {
     templates: () => studioCall('shell:manage:templates'),
     create: (o) => studioCall('shell:manage:create', o),

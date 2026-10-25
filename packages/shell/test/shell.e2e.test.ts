@@ -713,6 +713,73 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await again.app.close();
   }, 120_000);
 
+  it('Studios: the Studio Manager is off until enabled, makes Studios, checks Cloudflare details without keeping the token, and the switcher walls off an unconnected Studio', async () => {
+    const ud = path.join(tmp, 'studios-userdata');
+    const { app, shell } = await launch({ userData: ud, home: path.join(tmp, 'studios-home') });
+
+    // Everyone gets a switcher on Home; with one Studio it names it.
+    const switcher = shell.getByLabel('Studio', { exact: true });
+    await switcher.waitFor();
+    expect(await switcher.locator('option').allInnerTexts()).toEqual(['My Studio']);
+
+    // Admin → Studio Manager starts switched off, and one press turns it on.
+    await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await shell.getByRole('heading', { name: 'Studio Manager' }).waitFor();
+    expect(await shell.getByLabel('New Studio name').count()).toBe(0);
+    await shell.getByRole('button', { name: 'Enable Studio Manager' }).click();
+    await shell.getByLabel('New Studio name').fill('Acme Books');
+    await shell.getByRole('button', { name: 'Create Studio' }).click();
+    const detail = shell.getByRole('region', { name: 'Acme Books settings' });
+    await detail.waitFor();
+
+    // Provision: bad details are refused in words; good ones are checked, the account is kept (masked), the token is not.
+    const token = 'cf-token-0123456789abcdefghijklmnopqrstuv';
+    await detail.getByLabel('Account ID').fill('not-an-id');
+    await detail.getByLabel('API token').fill(token);
+    await detail.getByRole('button', { name: 'Provision', exact: true }).click();
+    await shell.getByRole('alert').filter({ hasText: /account ID is 32/ }).waitFor();
+    await detail.getByLabel('Account ID').fill('a1b2c3d4e5f60718293a4b5c6d7e8f90');
+    await detail.getByRole('button', { name: 'Provision', exact: true }).click();
+    await detail.getByText('a1b2…8f90').waitFor();
+    await shell.getByText(/not connected in this build yet/).first().waitFor();
+    expect(await detail.getByLabel('API token').inputValue()).toBe(''); // cleared
+    expect(fs.readFileSync(path.join(ud, 'studios.json'), 'utf8')).not.toContain(token);
+    // Invitations and backup wait for a built Studio.
+    expect(await detail.getByRole('button', { name: 'Create invitation' }).isDisabled()).toBe(true);
+    expect(await detail.getByRole('button', { name: 'Back up this Studio' }).isDisabled()).toBe(true);
+    expect(await detail.getByLabel('Role for the invitation').locator('option').allInnerTexts()).not.toContain('Owner');
+
+    // Switch to it from Home: no data from My Studio is shown under its name, on any page, and Write's view is hidden.
+    await shell.getByRole('button', { name: 'Home', exact: true }).click();
+    await switcher.selectOption({ label: 'Acme Books' });
+    await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+    expect(await shell.getByText('Your projects').count()).toBe(0);
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    await shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+    expect((await views(app)).every((v) => !v.visible)).toBe(true);
+
+    // Back to My Studio: everything returns. The choice survives a restart.
+    await shell.getByRole('button', { name: 'Home', exact: true }).click();
+    await switcher.selectOption({ label: 'My Studio' });
+    await shell.getByText('Your projects').waitFor();
+    await switcher.selectOption({ label: 'Acme Books' });
+    await app.close();
+    const again = await launch({ userData: ud, home: path.join(tmp, 'studios-home') });
+    await again.shell.getByRole('button', { name: 'Home', exact: true }).click();
+    await again.shell.getByRole('heading', { name: 'Acme Books is not connected yet' }).waitFor();
+
+    // Removing it from this computer falls back to My Studio.
+    await again.shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await again.shell.getByRole('button', { name: 'Acme Books' }).click();
+    await again.shell.getByRole('button', { name: 'Remove from this computer…' }).click();
+    await again.shell.getByRole('button', { name: 'Remove', exact: true }).click();
+    await again.shell.getByRole('button', { name: 'Home', exact: true }).click();
+    await again.shell.getByText('Your projects').waitFor();
+    await again.app.close();
+  }, 120_000);
+
   it('closing with unsaved edits in Write brings Write forward, asks it, and only then closes', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();

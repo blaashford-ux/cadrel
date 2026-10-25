@@ -31,6 +31,7 @@ import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/ke
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
+import { StudioRegistry } from './studios';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -53,6 +54,7 @@ let settings: SettingsStore;
 let studio: StudioService;
 let users: UserStore;
 let admin: AdminStore;
+let studios: StudioRegistry;
 let updater: Updater;
 /** A verified installer to start once the app has exited. */
 let installerToRun: string | null = null;
@@ -372,12 +374,17 @@ function ensureView(id: ModuleId): WebContentsView {
   return view;
 }
 
+/** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'projects', 'notes', 'write', 'market']);
+
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
   if (!win || win.isDestroyed()) return;
   page = next;
   for (const id of ['write', 'market'] as const) views[id]?.setVisible(false);
-  if (isModule(next)) {
+  if (isModule(next) && !studios.view().connected) {
+    win.webContents.focus(); // the page explains; the module's view stays hidden
+  } else if (isModule(next)) {
     const v = ensureView(next);
     v.setVisible(true);
     v.webContents.focus();
@@ -518,6 +525,30 @@ function registerShellIpc(): void {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
     });
+  // Studios: anyone can switch; the Studio Manager's changes are for administrators.
+  const studiosChanged = (v: ReturnType<StudioRegistry['view']>) => {
+    if (win && !win.isDestroyed()) win.webContents.send('shell:studios', v);
+    showPage(page); // a module's view must appear or go away with the Studio
+    return v;
+  };
+  const adminOnly = () => {
+    if (!admin.isAdmin()) throw new Error('Only an administrator can manage Studios.');
+  };
+  manageLike('studios:get', async () => studios.view());
+  manageLike('studios:setActive', async (id: string) => studiosChanged(studios.setActive(String(id))));
+  manageLike('studios:enableManager', async (on: boolean) => (adminOnly(), studiosChanged(studios.enableManager(on === true))));
+  manageLike('studios:create', async (name: string) => (adminOnly(), studiosChanged(studios.create(name))));
+  manageLike('studios:rename', async (id: string, name: string) => (adminOnly(), studiosChanged(studios.rename(String(id), name))));
+  manageLike('studios:remove', async (id: string) => (adminOnly(), studiosChanged(studios.remove(String(id)))));
+  manageLike('studios:provision', async (id: string, d: { accountId: string; apiToken: string }) => (adminOnly(), studiosChanged(studios.provision(String(id), d))));
+  manageLike('studios:createInvite', async () => {
+    adminOnly();
+    throw new Error('Invitations need the Studio to be built in Cloudflare first, and that is not connected in this build yet.');
+  });
+  manageLike('studios:backup', async () => {
+    adminOnly();
+    throw new Error('Backup is not connected in this build yet.');
+  });
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
   manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
@@ -721,6 +752,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     settings = new SettingsStore(path.join(app.getPath('userData'), 'shell.json'));
     await settings.load();
     nativeTheme.themeSource = settings.get().theme ?? 'system';
+    studios = new StudioRegistry(path.join(app.getPath('userData'), 'studios.json'));
+    await studios.load();
     admin = new AdminStore(path.join(app.getPath('userData'), 'admin.json'), () => settings.get().role ?? 'owner');
     await admin.load();
     await ensureFolders();

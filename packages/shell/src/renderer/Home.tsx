@@ -1,17 +1,20 @@
 import { childrenOf, kindLabel } from '@cadrel/kernel';
-import type { Overview, Page, StudioState } from '../shared/api';
+import type { Overview, Page, StudioState, StudiosView } from '../shared/api';
 import { captureState } from './capture';
 import { ago, formatWords, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
+import { NotConnected } from './NotConnected';
+import { StudioSwitcher } from './StudioSwitcher';
 
 interface Props {
   overview: Overview | null;
   studio: StudioState | null;
   onGo: (p: Page) => void;
   onProject: (id: string) => void;
+  studios: StudiosView | null;
 }
 
-export function Home({ overview, studio, onGo, onProject }: Props) {
+export function Home({ overview, studio, onGo, onProject, studios }: Props) {
   const now = Date.now();
   const recent = overview?.write.projects.find((p) => !p.archived);
   const pct = recent ? percent(recent.words, recent.goalWords) : null;
@@ -20,6 +23,15 @@ export function Home({ overview, studio, onGo, onProject }: Props) {
 
   return (
     <div className="home">
+      {studios && <StudioSwitcher studios={studios} />}
+      {studios && !studios.connected && <NotConnected studio={studios.studios.find((s) => s.id === studios.activeId)!} />}
+      {(!studios || studios.connected) && renderBody()}
+    </div>
+  );
+
+  function renderBody() {
+    return (
+    <>
       <h2 className="hello">{greeting(new Date().getHours())}</h2>
       <p className="muted">Here is where your studio stands.</p>
 
@@ -109,6 +121,7 @@ export function Home({ overview, studio, onGo, onProject }: Props) {
       <p className="muted small">
         <button type="button" className="link" onClick={() => onGo('dashboard')}>See the whole studio on the Dashboard</button>
       </p>
-    </div>
-  );
+    </>
+    );
+  }
 }
