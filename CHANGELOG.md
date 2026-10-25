@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased
+## 0.2.0 (in development)
 
 - **M0: one app.** MDEdit 0.8.5 and BookScout 0.6.3 are imported (`@cadrel/write`, `@cadrel/market-*`) and run together in a new shell (`@cadrel/shell`): left rail, Home, Dashboard, Write and Market in their own views. Electron 44 and a single pdf.js across the workspace. Windows installer, packaged-app smoke test and CI to build and publish them.
 
