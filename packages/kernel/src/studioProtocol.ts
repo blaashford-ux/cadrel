@@ -84,11 +84,7 @@ export async function signedText(method: string, path: string, ts: string, body:
   return `${method.toUpperCase()}\n${path}\n${ts}\n${hex(await sha256(body))}`;
 }
 
-export interface SignedHeaders {
-  'x-cadrel-key': string;
-  'x-cadrel-ts': string;
-  'x-cadrel-sig': string;
-}
+export type SignedHeaders = { 'x-cadrel-key': string; 'x-cadrel-ts': string; 'x-cadrel-sig': string };
 
 export async function signRequest(o: { method: string; path: string; body?: string; key: KeyPair; now?: number }): Promise<SignedHeaders> {
   const ts = String(o.now ?? Date.now());
