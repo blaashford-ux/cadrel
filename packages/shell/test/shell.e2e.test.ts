@@ -398,6 +398,18 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await pic.getByRole('button', { name: 'Use as photo' }).click();
     await shell.locator('.rail .avatar img').waitFor(); // the photo is in the rail, with no restart
 
+    // The assistant opt-out: on by default, per-file switches follow it, and the choice is remembered.
+    const optOut = shell.getByLabel('Let the AI assistant see and read my attached files');
+    expect(await optOut.isChecked()).toBe(true);
+    const fileSwitch = shell.locator('.attachments li', { hasText: 'Author bio.txt' }).getByLabel('AI can read');
+    expect(await fileSwitch.isChecked()).toBe(true);
+    // (the boxes change when the app confirms, a moment after the click, so wait rather than expect it at once)
+    await fileSwitch.click();
+    await waitFor(async () => !(await fileSwitch.isChecked()), 'the file to be hidden from the assistant');
+    await optOut.click();
+    await waitFor(async () => !(await optOut.isChecked()), 'assistant access to turn off');
+    await waitFor(async () => (await fileSwitch.isDisabled()), 'the per-file switch to follow the opt-out');
+
     // The name is what notes are written under, in the shell and in Market.
     await shell.getByRole('button', { name: 'Notes', exact: true }).click();
     await shell.getByLabel('New note').fill('Written as me.');
@@ -412,6 +424,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(await second.shell.getByLabel('Name', { exact: true }).inputValue()).toBe('Blake Ashford');
     expect(await second.shell.getByLabel('Pen names').inputValue()).toBe('Ashe Wilder, Loric Thorne');
     expect(await second.shell.getByLabel('Note on Author bio.txt').inputValue()).toBe('Short bio for covers');
+    expect(await second.shell.getByLabel('Let the AI assistant see and read my attached files').isChecked()).toBe(false);
     await second.shell.locator('.rail .avatar img').waitFor();
     expect(fs.readFileSync(doc, 'utf8')).toBe('Blake writes fantasy.');
     const stored = fs.readdirSync(path.join(userData, 'user', 'attachments'));
