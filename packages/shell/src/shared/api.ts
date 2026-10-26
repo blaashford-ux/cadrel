@@ -381,6 +381,8 @@ export interface CadrelApi {
   market: {
     /** Tries Market's capture server again, for example after freeing the port some other program was holding it on. */
     reconnect(): Promise<void>;
+    /** Stops Market's capture server deliberately, without closing its library, so the port is free right away for another program. */
+    forceDisconnect(): Promise<void>;
   };
   update: UpdateApi;
   navigate(page: Page): Promise<void>;

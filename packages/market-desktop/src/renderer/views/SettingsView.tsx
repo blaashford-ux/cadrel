@@ -190,6 +190,7 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
   const [show, setShow] = useState(false);
   const [port, setPort] = useState(String(status.port));
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState<'reconnect' | 'disconnect' | null>(null);
 
   useEffect(() => { void api.token().then(setToken); }, [status.serverRunning]);
 
@@ -223,6 +224,29 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
           <label>Port <input type="number" value={port} min={1024} max={65535} onChange={(e) => setPort(e.target.value)} style={{ width: 90 }} /></label>
           <button onClick={() => run('Port changed; update it in the extension too', () => api.setPort(Number(port)))}>Apply</button>
         </div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <span className={`dot ${status.serverRunning ? 'on' : 'off'}`} aria-hidden />
+          <span>{status.serverRunning ? `Listening on port ${status.port}` : status.serverError ?? 'Not listening'}</span>
+          <button
+            disabled={busy !== null || status.serverRunning}
+            onClick={() => {
+              setBusy('reconnect');
+              run('Reconnected', () => api.reconnect()).finally(() => setBusy(null));
+            }}
+          >
+            {busy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}
+          </button>
+          <button
+            disabled={busy !== null || !status.serverRunning}
+            onClick={() => {
+              setBusy('disconnect');
+              run('Disconnected; the port is free', () => api.forceDisconnect()).finally(() => setBusy(null));
+            }}
+          >
+            {busy === 'disconnect' ? 'Disconnecting…' : 'Force disconnect'}
+          </button>
+        </div>
+        <div className="muted">If the port is "already in use" even after closing whatever else was using it, try Force disconnect, wait a moment, then Reconnect.</div>
       </div>
       <PairCard />
       <HealthCard onChange={onChange} />

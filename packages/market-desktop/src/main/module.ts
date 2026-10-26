@@ -368,6 +368,10 @@ export function createMarketModule(host: MarketHost): MarketModule {
     openReleasePage: () => service.openReleasePage(),
     githubTokenStatus: () => service.githubTokenStatus(),
     setGithubToken: (t: string | null) => service.setGithubToken(t),
+    // The capture server's port: a retry after whatever was holding it (another app, an earlier run) lets go of it, or a
+    // deliberate stop to free the port right away for something else.
+    reconnect: () => service.reconnect(),
+    forceDisconnect: () => service.forceDisconnect(),
   };
 
   const send = (channel: string) => () => host.getContents()?.send(channel);

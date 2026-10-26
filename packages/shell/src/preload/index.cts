@@ -98,7 +98,8 @@ const api: CadrelApi = {
     resetRemoteToken: () => studioCall('shell:assistants:resetRemoteToken')
   },
   market: {
-    reconnect: () => studioCall('shell:market:reconnect')
+    reconnect: () => studioCall('shell:market:reconnect'),
+    forceDisconnect: () => studioCall('shell:market:forceDisconnect')
   },
   update: {
     check: () => studioCall('shell:update:check'),

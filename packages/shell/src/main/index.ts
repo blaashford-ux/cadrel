@@ -928,6 +928,8 @@ function registerShellIpc(): void {
   manageLike('assistants:resetRemoteToken', () => write.ai.remote.resetToken());
   // Market's capture server: a retry after whatever was holding the port (another app, an earlier run) lets go of it.
   manageLike('market:reconnect', () => market.service.reconnect());
+  // A deliberate stop, so the port is free right away without waiting on a reconnect retry.
+  manageLike('market:forceDisconnect', () => market.service.forceDisconnect());
   // Updating.
   manageLike('update:check', () => updater.check());
   manageLike('update:last', async () => updater.last());
