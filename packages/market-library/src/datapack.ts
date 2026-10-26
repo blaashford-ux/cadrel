@@ -22,6 +22,8 @@ import { normalizeKeyword } from './keywords/suggest.js';
  * figures, API tokens and the settings. The search index's vectors are not shipped either: they are rebuilt on the importing computer.
  */
 export const PACK_FORMAT = 'cadrel-market-data-pack';
+/** The tag BookScout (before Cadrel) wrote in its packs. The layout is the same, so those packs still import. */
+export const LEGACY_PACK_FORMAT = 'bookscout-data-pack';
 export const PACK_VERSION = 2;
 
 export interface PackManifest {
@@ -266,10 +268,10 @@ export async function exportPack(lib: Library, dest: string, opts: ExportOptions
 function parseManifest(bytes: Uint8Array | undefined): PackManifest {
   let m: Partial<PackManifest>;
   try { m = JSON.parse(Buffer.from(bytes ?? []).toString('utf8')) as Partial<PackManifest>; } catch { m = {}; }
-  if (m.format !== PACK_FORMAT) throw new Error('this is not a Cadrel Market data pack');
+  if (m.format !== PACK_FORMAT && m.format !== LEGACY_PACK_FORMAT) throw new Error('this is not a Cadrel Market data pack');
   if (typeof m.version !== 'number' || m.version > PACK_VERSION) throw new Error('this data pack was made by a newer Cadrel Market; update the app to import it');
   if (typeof m.id !== 'string' || !m.id) throw new Error('this data pack has no id');
-  return m as PackManifest;
+  return { ...m, format: PACK_FORMAT } as PackManifest; // a BookScout pack reads as a Cadrel Market one from here on
 }
 
 /** Read only the manifest of a pack (what it holds, and its id), without unpacking anything else. */

@@ -83,10 +83,19 @@ function CategoriesTable({ rows }: { rows: MarketCategoryRow[] }) {
 
 export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Props) {
   const now = Date.now();
-  const [marketBusy, setMarketBusy] = useState<'reconnect' | 'disconnect' | null>(null);
+  const [marketBusy, setMarketBusy] = useState<'reconnect' | 'disconnect' | 'free' | null>(null);
   const reconnect = () => {
     setMarketBusy('reconnect');
     void api.market.reconnect().finally(() => {
+      setMarketBusy(null);
+      onRefresh();
+    });
+  };
+  const freePort = () => {
+    const h = overview?.market.portHolder;
+    if (!h || !window.confirm(`Quit ${h.name} (process ${h.pid})? It is holding the port Cadrel Market needs. Anything unsaved in it will be lost.`)) return;
+    setMarketBusy('free');
+    void api.market.freePort().finally(() => {
       setMarketBusy(null);
       onRefresh();
     });
@@ -175,6 +184,9 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
               <span><span className={`dot ${captureState(market).tone}`} aria-hidden /> {captureState(market).text}</span>
               {captureState(market).tone === 'off' && market.libraryRoot && (
                 <button type="button" className="link" disabled={marketBusy !== null} onClick={reconnect}>{marketBusy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}</button>
+              )}
+              {captureState(market).tone === 'off' && market.portHolder && (
+                <button type="button" className="link" disabled={marketBusy !== null} onClick={freePort}>{marketBusy === 'free' ? 'Quitting…' : `Quit ${market.portHolder.name} and reconnect`}</button>
               )}
               {captureState(market).tone === 'on' && (
                 <button type="button" className="link" disabled={marketBusy !== null} onClick={forceDisconnect}>{marketBusy === 'disconnect' ? 'Disconnecting…' : 'Force disconnect'}</button>

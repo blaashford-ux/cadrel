@@ -120,9 +120,17 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('before-quit', () => {
+// Quitting always closes the capture server first (and waits for it), so the port is released before this process goes and the next start
+// never finds it taken. A stuck close cannot hold the quit up for more than a few seconds.
+let serverStopped = false;
+app.on('before-quit', (e) => {
   quitting = true;
+  if (serverStopped) return;
+  serverStopped = true;
+  e.preventDefault();
+  void Promise.race([service.stop().catch((err) => log.error('stop failed', err)), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
 });
+for (const sig of ['SIGINT', 'SIGTERM'] as const) process.on(sig, () => app.quit());
 
 app.on('window-all-closed', () => {
   void service.stop().then(() => app.quit());

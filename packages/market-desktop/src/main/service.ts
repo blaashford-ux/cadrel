@@ -15,6 +15,7 @@ import {
 } from '@cadrel/market-library';
 import { DEFAULT_PORT, loadOrCreateToken, rotateToken, startIngestServer, type SampleLogEvent } from '@cadrel/market-server';
 import { Logger } from './log.js';
+import { describeHolder, findPortHolder, stopPortHolder, type PortHolder } from './portHolder.js';
 import { launcherSource, readHandshake, type Handshake } from './launcher.js';
 import { RELEASE_REPO, checkForUpdate, downloadInstaller, type UpdateInfo } from './updater.js';
 import type { AppSettings, BookText, CommunityJob, IndexStatus, KeywordJob, KeywordLookupResult, MaintenanceStatus, IssueRow, McpSnippets, Status, TextJob } from '../shared/api.js';
@@ -76,6 +77,10 @@ function probeCaptureServer(port: number, token: string, timeoutMs = 500): Promi
 }
 
 export interface ServiceOptions {
+  /** Test hook: stands in for looking up which program is listening on a port. */
+  findPortHolder?: (port: number) => Promise<PortHolder | null>;
+  /** Test hook: stands in for quitting that program. */
+  stopPortHolder?: (pid: number) => Promise<unknown>;
   /** Folder for settings and the pairing token (not the library). */
   userData: string;
   /** Opens a URL in the user's browser. */
@@ -174,6 +179,8 @@ export class AppService {
   private lib: Library | null = null;
   private server: Awaited<ReturnType<typeof startIngestServer>> | null = null;
   private serverError: string | null = null;
+  /** Who was listening on the port when the last bind failed, when that could be found out. */
+  private portHolder: PortHolder | null = null;
   private listeners = new Set<() => void>();
   private indexListeners = new Set<() => void>();
   private textListeners = new Set<() => void>();
@@ -361,6 +368,7 @@ export class AppService {
 
   private async startServer(): Promise<void> {
     this.serverError = null;
+    this.portHolder = null;
     for (let attempt = 1; attempt <= AppService.BIND_ATTEMPTS; attempt++) {
       try {
         this.server = await startIngestServer(
@@ -395,17 +403,31 @@ export class AppService {
     }
   }
 
-  /** Builds the "port in use" message, naming whoever answers there when it is safe to ask (never blocks longer than the probe timeout). */
+  /** Builds the "port in use" message, naming whoever answers or listens there when it can be found out (never blocks longer than the probe timeouts). */
   private async portConflictMessage(port: number): Promise<string> {
     const plain = `port ${port} is already in use`;
+    let holder: PortHolder | null = null;
+    try {
+      holder = await this.holderOf(port);
+    } catch {
+      /* best effort: the plain message below still says what happened */
+    }
+    this.portHolder = holder;
+    const by = holder ? ` by ${describeHolder(holder)}` : '';
     try {
       const r = await probeCaptureServer(port, loadOrCreateToken(this.tokenFile));
-      if (r.sameApp && r.sameToken) return `${plain} — another copy of Cadrel Market is already listening there (check its tray icon)`;
-      if (r.sameApp) return `${plain} — something speaking Cadrel Market's protocol is listening there with a different pairing token; quit it, then Reconnect`;
+      if (r.sameApp && r.sameToken) return `${plain}${by} — another copy of Cadrel Market is already listening there (check its tray icon)`;
+      if (r.sameApp) return `${plain}${by} — something speaking Cadrel Market's protocol is listening there with a different pairing token; quit it, then Reconnect`;
     } catch {
-      /* the probe never throws, but this stays defensive: fall through to the plain message */
+      /* the probe never throws, but this stays defensive: fall through */
     }
-    return plain;
+    return holder ? `${plain}${by}` : plain;
+  }
+
+  /** The program listening on `port`, except this very process (which could not usefully be asked to quit). */
+  private async holderOf(port: number): Promise<PortHolder | null> {
+    const h = await (this.opts.findPortHolder ?? findPortHolder)(port);
+    return h && h.pid !== process.pid ? h : null;
   }
 
   async stop(): Promise<void> {
@@ -423,7 +445,7 @@ export class AppService {
   }
 
   status(): Status {
-    return { libraryRoot: this.config.libraryRoot, port: this.config.port, serverRunning: !!this.server, serverError: this.serverError };
+    return { libraryRoot: this.config.libraryRoot, port: this.config.port, serverRunning: !!this.server, serverError: this.serverError, portHolder: this.portHolder };
   }
 
   /**
@@ -446,7 +468,22 @@ export class AppService {
     await this.server?.close();
     this.server = null;
     this.serverError = null;
+    this.portHolder = null;
     return this.status();
+  }
+
+  /**
+   * Quits the program that is holding the capture server's port, then starts the server. Only ever acts on whatever holds the port right now
+   * (looked up again, not remembered), and never on this app itself.
+   */
+  async freePort(): Promise<Status> {
+    const port = this.config.port;
+    const holder = await this.holderOf(port);
+    if (holder) {
+      const stop = this.opts.stopPortHolder ?? ((pid: number) => stopPortHolder(pid, port, this.opts.findPortHolder));
+      await stop(holder.pid);
+    }
+    return this.reconnect();
   }
 
   /** The library to use when none has been chosen: made if it is missing, and remembered. Does nothing once a library is set. Call before `start`. */

@@ -20,7 +20,7 @@ export function summariseWrite(listing: RootListing): Overview['write'] {
 export const writeUnavailable = (error: unknown): Overview['write'] => ({ ok: false, root: null, exists: false, projects: [], error: message(error) });
 
 export interface MarketFacts {
-  status: { libraryRoot: string | null; port: number; serverRunning: boolean; serverError?: string | null };
+  status: { libraryRoot: string | null; port: number; serverRunning: boolean; serverError?: string | null; portHolder?: { pid: number; name: string } | null };
   /** Absent when no library is chosen yet. */
   categories?: { name: string | null; key: string; listedBooks: number; capturedBooks: number; listCaptures: number; lastListCapture: string | null }[];
   queue?: { state: 'pending' | 'opened' | 'skipped' }[];
@@ -40,6 +40,7 @@ export function summariseMarket(f: MarketFacts): Overview['market'] {
     libraryRoot: f.status.libraryRoot,
     serverRunning: f.status.serverRunning,
     serverError: f.status.serverError ?? null,
+    portHolder: f.status.serverRunning ? null : f.status.portHolder ?? null,
     port: f.status.port,
     categories,
     queued: (f.queue ?? []).filter((q) => q.state === 'pending').length,
@@ -52,6 +53,7 @@ export const marketUnavailable = (error: unknown): Overview['market'] => ({
   libraryRoot: null,
   serverRunning: false,
   serverError: null,
+  portHolder: null,
   port: null,
   categories: [],
   queued: 0,

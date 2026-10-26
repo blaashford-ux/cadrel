@@ -119,6 +119,38 @@ describe('AppService', () => {
     await other.stop();
   });
 
+  it('names the program holding the port, and quits it on request before reconnecting', async () => {
+    const blocker = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => blocker.once('listening', r));
+    const port = (blocker.address() as { port: number }).port;
+    let holder: { pid: number; name: string } | null = { pid: 424242, name: 'BookScout.exe' };
+    const stopped: number[] = [];
+    const s = new AppService({
+      userData: path.join(tmp, 'holder-user'), openExternal: () => {}, revealInFolder: () => {},
+      findPortHolder: async () => holder,
+      stopPortHolder: async (pid) => { stopped.push(pid); holder = null; await new Promise<void>((r) => blocker.close(() => r())); },
+    });
+    await s.setLibrary(path.join(tmp, 'holder-lib'));
+    await s.setPort(port);
+    expect(s.status()).toMatchObject({ serverRunning: false, portHolder: { pid: 424242, name: 'BookScout.exe' } });
+    expect(s.status().serverError).toBe(`port ${port} is already in use by BookScout.exe (process 424242)`);
+    expect(await s.freePort()).toMatchObject({ serverRunning: true, serverError: null, portHolder: null });
+    expect(stopped).toEqual([424242]);
+    await s.stop();
+  });
+
+  it('does not offer to quit this very process as the holder', async () => {
+    const blocker = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => blocker.once('listening', r));
+    const port = (blocker.address() as { port: number }).port;
+    const s = new AppService({ userData: path.join(tmp, 'self-user'), openExternal: () => {}, revealInFolder: () => {}, findPortHolder: async () => ({ pid: process.pid, name: 'node' }) });
+    await s.setLibrary(path.join(tmp, 'self-lib'));
+    await s.setPort(port);
+    expect(s.status()).toMatchObject({ serverRunning: false, portHolder: null, serverError: `port ${port} is already in use` });
+    await s.stop();
+    blocker.close();
+  });
+
   it('turns a capture over the wire into queue items, then Open next opens and marks one', async () => {
     await svc.setLibrary(libRoot);
     await svc.setPort(48124);

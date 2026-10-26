@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { zipSync } from 'fflate';
+import { unzipSync, zipSync } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Library, exportPack, importPack, readPackManifest, listCategories, queue, addCommunitySource, reindexCommunity, saveTrends, recordKeywordSearch, listCommunitySources, listExclusions, getTrend, cachedLookup, listKeywordHistory, communityThreads, categoryKeywords, importTrendsCsv, removeKeywordHistory, removeTrend } from '../src/index.js';
 
@@ -102,6 +102,18 @@ describe('data packs', () => {
     await importPack(dst, file);
     expect(count(dst, 'search_capture')).toBe(0);
     expect(count(dst, 'list_capture')).toBe(1);
+  });
+
+  it('still imports a pack made by BookScout, before the rename to Cadrel Market', async () => {
+    const file = path.join(tmp, 'all.zip');
+    await exportPack(src, file);
+    const files = unzipSync(fs.readFileSync(file));
+    const manifest = JSON.parse(Buffer.from(files['manifest.json']!).toString('utf8'));
+    files['manifest.json'] = Buffer.from(JSON.stringify({ ...manifest, format: 'bookscout-data-pack' }));
+    const old = path.join(tmp, 'bookscout.zip');
+    fs.writeFileSync(old, zipSync(files));
+    expect(readPackManifest(old).format).toBe('cadrel-market-data-pack');
+    expect(await importPack(dst, old)).toMatchObject({ added: { books: 1, lists: 1, searches: 1, covers: 1 }, skipped: 0 });
   });
 
   it('refuses an unknown or empty category choice, an existing file, and things that are not packs', async () => {

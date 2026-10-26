@@ -13,14 +13,36 @@ const scheme = (): Scheme => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
 export const shellColor = () => colorsFor(scheme(), custom).shell;
 const inkColor = () => colorsFor(scheme(), custom).fg;
 
+/**
+ * Windows that draw their own rounded outline and window buttons (a transparent window with no OS overlay). Their background must stay
+ * transparent and they have no OS title-bar overlay to recolour; whoever owns them is told through `onChromeTheme`.
+ */
+const ownDrawn = new WeakSet<BrowserWindow>();
+export const drawsOwnChrome = (win: BrowserWindow) => ownDrawn.has(win);
+export function markOwnChrome(win: BrowserWindow): void {
+  ownDrawn.add(win);
+}
+const themeListeners = new Set<() => void>();
+/** Runs `fn` whenever the window colours may have changed (custom colours, or light/dark). Returns an unsubscribe function. */
+export function onChromeTheme(fn: () => void): () => void {
+  themeListeners.add(fn);
+  return () => void themeListeners.delete(fn);
+}
+/** The colours a window draws its own chrome with. */
+export const chromeColors = () => {
+  const c = colorsFor(scheme(), custom);
+  return { shell: c.shell, fg: c.fg, hover: /^#[0-9a-f]{6}$/i.test(c.fg) ? `${c.fg}1f` : c.fg }; // a faint wash of the ink colour
+};
+
 /** Called when the custom colours are loaded or changed; recolours every open window. */
 export function setChromeTheme(next: ThemeCustom | undefined): void {
   custom = next;
   for (const win of BrowserWindow.getAllWindows()) {
-    if (win.isDestroyed()) continue;
+    if (win.isDestroyed() || ownDrawn.has(win)) continue;
     win.setBackgroundColor(shellColor());
     if (usesOverlay()) win.setTitleBarOverlay(overlay());
   }
+  themeListeners.forEach((fn) => fn());
 }
 
 /** On Windows the OS draws minimise/maximise/close over our bar; elsewhere we draw them ourselves. */
@@ -58,6 +80,7 @@ export function watchWindow(win: BrowserWindow, getContents: () => WebContents |
   win.on('leave-full-screen', send);
   const retheme = () => {
     if (win.isDestroyed()) return;
+    if (ownDrawn.has(win)) return themeListeners.forEach((fn) => fn());
     win.setBackgroundColor(shellColor());
     if (usesOverlay()) win.setTitleBarOverlay(overlay());
   };

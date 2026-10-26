@@ -43,6 +43,8 @@ describe('summariseMarket', () => {
     const m = summariseMarket({ status: { libraryRoot: '/lib', port: 4545, serverRunning: false, serverError: 'port 4545 is in use' } });
     expect(m).toMatchObject({ serverRunning: false, serverError: 'port 4545 is in use' });
     expect(summariseMarket({ status: { libraryRoot: '/lib', port: 4545, serverRunning: true } }).serverError).toBeNull();
+    const held = summariseMarket({ status: { libraryRoot: '/lib', port: 4545, serverRunning: false, serverError: 'x', portHolder: { pid: 7, name: 'BookScout.exe' } } });
+    expect(held.portHolder).toEqual({ pid: 7, name: 'BookScout.exe' });
   });
   it('is fine with no library chosen yet', () => {
     expect(summariseMarket({ status: { libraryRoot: null, port: 4545, serverRunning: true } })).toMatchObject({ ok: true, libraryRoot: null, categories: [], queued: 0 });

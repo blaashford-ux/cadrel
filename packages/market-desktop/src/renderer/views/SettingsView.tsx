@@ -190,7 +190,7 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
   const [show, setShow] = useState(false);
   const [port, setPort] = useState(String(status.port));
   const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState<'reconnect' | 'disconnect' | null>(null);
+  const [busy, setBusy] = useState<'reconnect' | 'disconnect' | 'free' | null>(null);
 
   useEffect(() => { void api.token().then(setToken); }, [status.serverRunning]);
 
@@ -236,6 +236,20 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
           >
             {busy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}
           </button>
+          {!status.serverRunning && status.portHolder && (
+            <button
+              className="primary"
+              disabled={busy !== null}
+              onClick={() => {
+                const h = status.portHolder!;
+                if (!window.confirm(`Quit ${h.name} (process ${h.pid})? It is holding port ${status.port}. Anything unsaved in it will be lost.`)) return;
+                setBusy('free');
+                run('Quit it; reconnected', () => api.freePort()).finally(() => setBusy(null));
+              }}
+            >
+              {busy === 'free' ? 'Quitting…' : `Quit ${status.portHolder.name} and reconnect`}
+            </button>
+          )}
           <button
             disabled={busy !== null || !status.serverRunning}
             onClick={() => {
@@ -246,7 +260,13 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
             {busy === 'disconnect' ? 'Disconnecting…' : 'Force disconnect'}
           </button>
         </div>
-        <div className="muted">If the port is "already in use" even after closing whatever else was using it, try Force disconnect, wait a moment, then Reconnect.</div>
+        <div className="muted">
+          {status.serverRunning
+            ? 'Force disconnect stops this app listening, so another program can use the port; Reconnect starts it again.'
+            : status.portHolder
+              ? `${status.portHolder.name} (process ${status.portHolder.pid}) is using port ${status.port}. Quit it from here, or close it yourself — closing a window may only hide it in the tray — then Reconnect.`
+              : 'If the port is "already in use", close the program using it (closing its window may only hide it in the tray), then Reconnect. Or choose another port above and update it in the extension.'}
+        </div>
       </div>
       <PairCard />
       <HealthCard onChange={onChange} />

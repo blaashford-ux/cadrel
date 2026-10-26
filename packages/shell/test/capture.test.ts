@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { captureState } from '../src/renderer/capture';
 
-const base = { ok: true, libraryRoot: '/lib', serverRunning: true, serverError: null, port: 4545, categories: [], queued: 0, error: null };
+const base = { ok: true, libraryRoot: '/lib', serverRunning: true, serverError: null, portHolder: null, port: 4545, categories: [], queued: 0, error: null };
 
 describe('captureState', () => {
   it('waiting, not broken, before a library is chosen', () => {

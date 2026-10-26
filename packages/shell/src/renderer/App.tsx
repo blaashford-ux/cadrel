@@ -96,12 +96,12 @@ export function App() {
   // A Studio with no data here: its pages explain, and the module views stay hidden (the shell hides them).
   const blocked = !!studios && !studios.connected && page !== 'home' && STUDIO_PAGES.has(page);
   const own = OWN.has(page) || blocked;
-  // Windows rounds the window's own corners unless it is maximised or full-screen; match that so our background doesn't
-  // show square corners under the OS's rounded frame.
+  // On Windows the window is transparent and frameless, so the rounded corners and the outline are drawn here (not when
+  // maximised or full-screen, where the window has no corners).
   const rounded = !!win?.overlay && !win?.maximized && !win?.fullscreen;
 
   return (
-    <div className={`shell${rounded ? ' rounded' : ''}`}>
+    <div className={`shell${rounded ? ' rounded' : ''}${win?.overlay ? ' has-controls' : ''}`}>
       <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} />
       <main className={`content${own ? '' : ' hidden'}`} aria-label={TITLES[page]}>
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
