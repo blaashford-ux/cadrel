@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { promises as fsp, appendFileSync, readFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
-import { chromeOptions, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
+import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
 import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/src/main/module.js';
 import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/launcher.js';
@@ -19,6 +19,7 @@ import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/
 import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
 import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
+import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './controls';
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
@@ -438,7 +439,51 @@ function saveWindowState(): void {
 function layout(): void {
   if (!win || win.isDestroyed()) return;
   const { width, height } = win.getContentBounds();
-  for (const v of Object.values(views)) v?.setBounds(moduleBounds({ width, height }));
+  // A module's view is square; its outer corners are rounded off to match the window's (not when maximised, where the window has none).
+  const radius = windowIsRounded() ? WINDOW_RADIUS : 0;
+  for (const v of Object.values(views)) {
+    v?.setBounds(moduleBounds({ width, height }));
+    v?.setBorderRadius(radius);
+  }
+  controls?.setBounds(controlsBounds({ width }));
+  paintControls();
+}
+
+// ---- the window's own buttons (Windows) ---------------------------------------------------------
+// The window is transparent and frameless, so its rounded outline and its minimise / maximise / close buttons are ours. The buttons
+// live in a small view kept above every other view.
+let controls: WebContentsView | null = null;
+let controlsKey = '';
+const windowIsRounded = () => !!win && !win.isDestroyed() && drawsOwnChrome(win) && !win.isMaximized() && !win.isFullScreen();
+
+function paintControls(): void {
+  if (!controls || controls.webContents.isDestroyed() || !win || win.isDestroyed()) return;
+  const look = { ...chromeColors(), maximized: win.isMaximized() };
+  const key = JSON.stringify(look);
+  if (key === controlsKey) return;
+  controlsKey = key;
+  void controls.webContents.loadURL(controlsUrl(look));
+}
+
+function addControls(w: BrowserWindow): void {
+  controls = new WebContentsView({ webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  controls.setBackgroundColor('#00000000');
+  controls.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  controls.webContents.on('will-navigate', (e) => {
+    if (!e.url.startsWith('data:')) e.preventDefault();
+  });
+  w.contentView.addChildView(controls);
+  controls.setBounds({ x: 0, y: 0, width: 0, height: CONTROLS_HEIGHT });
+  const off = onChromeTheme(paintControls);
+  w.on('closed', () => {
+    off();
+    controls = null;
+  });
+}
+
+/** Keeps the buttons above a module view that has just been added (the last view added is the top one). */
+function raiseControls(): void {
+  if (controls && win && !win.isDestroyed()) win.contentView.addChildView(controls);
 }
 
 /** Creates a module's view the first time it is needed. The module's main half is already running. */
@@ -467,6 +512,8 @@ function ensureView(id: ModuleId): WebContentsView {
   views[id] = view;
   win!.contentView.addChildView(view);
   view.setBounds(moduleBounds(win!.getContentBounds()));
+  view.setBorderRadius(windowIsRounded() ? WINDOW_RADIUS : 0);
+  raiseControls();
   return view;
 }
 
@@ -499,14 +546,20 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 500,
     title: 'Cadrel',
-    backgroundColor: shellColor(),
-    // Frameless with window buttons drawn by Windows. Elsewhere (development only) a normal frame.
-    ...(process.platform === 'win32' ? chromeOptions() : {}),
+    // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
+    // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
+    // only) a normal frame.
+    ...(process.platform === 'win32' ? { frame: false, transparent: true, backgroundColor: '#00000000' } : { backgroundColor: shellColor() }),
     icon: iconPath(),
     webPreferences: { preload: path.join(here, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
   });
   if (settings.get().window?.maximized) win.maximize();
   const w = win;
+  if (process.platform === 'win32') {
+    markOwnChrome(w);
+    addControls(w);
+    layout();
+  }
   w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   w.webContents.on('will-navigate', (e) => e.preventDefault());
   watchWindow(w); // tells the shell's own page about maximise / fullscreen

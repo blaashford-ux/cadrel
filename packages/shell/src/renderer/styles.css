@@ -60,10 +60,13 @@ input[type='checkbox'] { padding: 0; }
 .warn { color: var(--gold); }
 .pad { padding: 20px; }
 
-.shell { display: flex; height: 100%; }
-/* Windows auto-rounds frameless windows (not maximised/full-screen); clip to match so no square corner shows through, and
-   draw a hairline border since there is no OS frame to give the window an edge. */
-.shell.rounded { border-radius: 8px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
+.shell { display: flex; height: 100%; position: relative; }
+/* On Windows the window is transparent, so its rounded corners are ours: clip to them, and draw a hairline since there is no OS
+   frame to give the window an edge. */
+.shell.rounded { border-radius: 8px; overflow: hidden; background: var(--shell); box-shadow: inset 0 0 0 1px var(--line, rgba(23, 42, 54, 0.22)); }
+/* The window buttons (a separate view, on top, 138 x 40) sit in the top-right corner in the border's colour, rounded at their inner
+   corner. They cut a notch out of the floating card; this rounds the card's own corner just below them so it reads as one shape. */
+.shell.has-controls::before { content: ''; position: absolute; top: 40px; right: 10px; width: 14px; height: 14px; background: radial-gradient(circle at 0 100%, transparent 13.5px, var(--shell) 14px); pointer-events: none; z-index: 1; }
 
 /* ---- rail: sits on the window ---- */
 .rail { width: 64px; flex: none; background: var(--shell); display: flex; flex-direction: column; align-items: stretch; -webkit-app-region: drag; padding-bottom: 8px; }
