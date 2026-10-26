@@ -1,0 +1,12 @@
+# The Studio server, for development only (`npm run dev`: wrangler dev, with a local database).
+#
+# A real Studio is not deployed from here or from CI. The Cadrel app builds it in the owner's own Cloudflare account (Admin -> Studio Manager):
+# it creates the database and file bucket, uploads this Worker (bundled into the app) and tells it who owns it. There is one Studio instance
+# per Studio, shared by every build of the app, development builds and releases alike; no "dev" copy exists.
+name = "cadrel-studio-dev"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "dev"

@@ -1,0 +1,22 @@
+{
+  "name": "@cadrel/market-library",
+  "version": "0.6.3",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cadrel/market-core": "*",
+    "fflate": "^0.8.2",
+    "sqlite-vec": "^0.1.9",
+    "sharp": "^0.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

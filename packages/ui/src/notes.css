@@ -1,0 +1,43 @@
+/*
+ * Notes, drawn the same in every module. The colours come from whichever page it is on: the shell and Write name them
+ * --fg / --muted / --raised / --accent, Market --ink / --muted / --line / --accent; the fallbacks below cover both.
+ */
+.cn-panel, .cn-pop {
+  --cn-fg: var(--fg, var(--ink, #172a36));
+  --cn-muted: var(--muted, #69747a);
+  --cn-raised: var(--raised, var(--line, #e6e5e2));
+  --cn-card: var(--bg, var(--panel, #faf8f3));
+  --cn-accent: var(--accent, #344553);
+  --cn-accent-ink: var(--accent-ink, #fff);
+  --cn-danger: var(--danger, var(--bad, #b4372b));
+}
+.cn-panel { display: flex; flex-direction: column; gap: 12px; color: var(--cn-fg); font-size: 14px; }
+.cn-panel button { font: inherit; color: inherit; background: var(--cn-raised); border: 0; border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+.cn-panel button.primary { background: var(--cn-accent); color: var(--cn-accent-ink); font-weight: 600; }
+.cn-panel button.quiet { background: none; color: var(--cn-muted); }
+.cn-panel button.quiet:hover { color: var(--cn-danger); }
+.cn-panel button:disabled { opacity: 0.5; cursor: default; }
+.cn-panel input, .cn-panel select, .cn-panel textarea { font: inherit; color: inherit; border: 0; border-radius: 8px; background: var(--cn-raised); padding: 6px 10px; }
+.cn-panel textarea { resize: vertical; width: 100%; box-sizing: border-box; }
+.cn-new { display: flex; flex-direction: column; gap: 8px; }
+.cn-new-row, .cn-filters, .cn-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.cn-new-row input, .cn-form input { flex: 1; min-width: 140px; }
+.cn-filters input[type='search'] { flex: 1; min-width: 140px; }
+.cn-notes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cn-note { background: var(--cn-card); border-radius: 10px; padding: 10px 14px; }
+.cn-note.done { opacity: 0.7; }
+.cn-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cn-muted { color: var(--cn-muted); font-size: 12.5px; }
+.cn-chip { font-size: 11.5px; padding: 1px 9px; border-radius: 999px; background: var(--cn-raised); color: var(--cn-muted); white-space: nowrap; }
+.cn-chip.ai { color: var(--cn-accent); font-weight: 600; }
+.cn-where { margin-top: 2px; }
+.cn-quote { margin: 8px 0 0; padding: 2px 10px; border-left: 3px solid var(--cn-raised); color: var(--cn-muted); font-style: italic; }
+.cn-body { margin: 6px 0; white-space: pre-wrap; }
+.cn-reply { margin: 4px 0 4px 14px; padding-left: 10px; border-left: 2px solid var(--cn-raised); white-space: pre-wrap; }
+.cn-actions { display: flex; gap: 6px; margin-top: 4px; }
+.cn-actions button { padding: 3px 10px; font-size: 12.5px; }
+/* the button a module puts beside a record, and the panel it opens */
+.cn-pop-wrap { position: relative; display: inline-block; }
+.cn-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 200; width: min(460px, 90vw); max-height: 70vh; overflow: auto; background: var(--cn-card); color: var(--cn-fg); border-radius: 14px; padding: 14px; box-shadow: 0 12px 40px rgba(23, 42, 54, 0.28); }
+.cn-pop h4 { margin: 0 0 8px; font-size: 14px; }
+.cn-count { display: inline-block; min-width: 18px; margin-left: 6px; padding: 0 5px; border-radius: 999px; font-size: 11px; text-align: center; background: var(--cn-accent); color: var(--cn-accent-ink); }

@@ -1,0 +1,21 @@
+{
+  "name": "@cadrel/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pieces of interface every Cadrel module uses the same way (starting with Notes)",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cadrel/kernel": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@types/react-dom": "^18.3.0"
+  }
+}

@@ -1,33 +1,101 @@
 name: build
 
 # Runs on every pull request into dev or main and is reused by release.yml.
-# The finished files are attached to the run as the "cadrel-build" artifact:
-# Actions tab -> the run -> Artifacts, to download a build before merging.
+#   test     typecheck, the whole test suite (unit, real Electron end-to-end, real PDF layout, epubcheck, DOCX), and a
+#            smoke test of the packaged Linux app
+#   windows  builds the Windows installer, smoke-tests the installed layout, and attaches the installer to the run:
+#            Actions tab -> the run -> Artifacts -> Cadrel-windows-installer
 on:
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
   workflow_call:
 
+env:
+  # GitHub is retiring the Node 20 runtime for actions; run them on Node 24 now.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 permissions:
   contents: read
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # tags, so the version can be compared with past releases
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
       - name: Check VERSION
         run: |
           # a PR into main (or a push to it) is a release, so it must carry a new version
           if [ "${{ github.base_ref || github.ref_name }}" = "main" ]; then scripts/check-version.sh --newer; else scripts/check-version.sh; fi
-      - name: Build
-        run: scripts/build.sh
+      - name: System tools used by the integration tests
+        # xvfb: run Electron headless · poppler: pdfinfo/pdffonts · java + epubcheck: EPUB validation
+        # libreoffice-writer: opens the generated DOCX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb poppler-utils default-jre-headless libreoffice-writer
+          pip install epubcheck
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium # the browser the capture-extension tests drive
+      - run: npm run typecheck
+      - run: npm run build:electron -w @cadrel/write
+      - name: Tests
+        # CI=true makes the Electron and PDF tests fail, instead of skip, when their environment is missing.
+        run: xvfb-run -a npm test
+      - name: Package the app for Linux and smoke-test it as installed
+        env:
+          # A build that is not of `main` is a development build (see scripts/sync-version.mjs): the app then
+          # self-reports "<VERSION>-dev.<run number>", matching the tag release.yml publishes for it, so the
+          # updater (and the installer's own filename) correctly tells it apart from a stable release. Scoped to
+          # just this step: `npm test` above must see the plain VERSION, unsuffixed, like a contributor's own run.
+          CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
+        run: |
+          npm run pack -w @cadrel/shell
+          xvfb-run -a packages/shell/release/linux-unpacked/cadrel --no-sandbox --smoke-test="$RUNNER_TEMP/smoke.json" || code=$?
+          cat "$RUNNER_TEMP/smoke.json" || echo "The smoke test wrote no result file."
+          exit "${code:-0}"
+      - name: Run the shell end-to-end suite against the packaged app
+        run: CADREL_PACKAGED_BIN="$PWD/packages/shell/release/linux-unpacked/cadrel" xvfb-run -a npx vitest run --root packages/shell test/shell.e2e.test.ts
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - name: Build the installer
+        shell: pwsh
+        env:
+          # Optional code signing. Add these repository secrets to sign the installer and avoid SmartScreen warnings:
+          #   WIN_CSC_LINK (base64 .pfx or URL), WIN_CSC_KEY_PASSWORD
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # A build that is not of `main` is a development build (see scripts/sync-version.mjs): the app then
+          # self-reports "<VERSION>-dev.<run number>", matching the tag release.yml publishes for it, so the
+          # updater (and the installer's own filename) correctly tells it apart from a stable release.
+          CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:CSC_LINK)) {
+            Remove-Item Env:CSC_LINK, Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+            Write-Host 'No signing certificate configured: building an UNSIGNED installer.'
+          }
+          npm run dist -w @cadrel/shell
+      - name: Smoke test the installed app (Write exports EPUB, PDF and DOCX; Market's native pieces load)
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'smoke.json'
+          $p = Start-Process -FilePath 'packages\shell\release\win-unpacked\Cadrel.exe' -ArgumentList "--smoke-test=$out" -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out } else { Write-Host 'The smoke test wrote no result file.' }
+          if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
       - uses: actions/upload-artifact@v4
         with:
-          name: cadrel-build
-          path: dist/*
+          name: Cadrel-windows-installer
+          path: packages/shell/release/Cadrel-Setup-*.exe
           if-no-files-found: error
           retention-days: 30

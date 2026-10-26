@@ -1,0 +1,126 @@
+{
+  "name": "@cadrel/write",
+  "version": "0.8.5",
+  "description": "Folder-based Markdown editor that splits files into chapters by Heading 1",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build:electron": "npm run build:assets && node scripts/build-electron.mjs",
+    "build:renderer": "vite build",
+    "mcp": "node dist-electron/mcp/cadrel-write-mcp.js",
+    "build:skills": "node scripts/skills.mjs",
+    "build": "npm run build:electron && npm run build:renderer",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
+    "test": "vitest run",
+    "dist": "npm run build && electron-builder --win nsis --publish never",
+    "build:assets": "node -e \"const fs=require('fs'),path=require('path');fs.mkdirSync('assets/vendor',{recursive:true});fs.copyFileSync(path.join(path.dirname(require.resolve('pagedjs')),'..','dist','paged.polyfill.js'),'assets/vendor/paged.polyfill.js')\"",
+    "dev:mobile": "vite --config vite.mobile.config.ts",
+    "build:mobile": "vite build --config vite.mobile.config.ts",
+    "android:sync": "npm run build:mobile && cap sync android"
+  },
+  "build": {
+    "appId": "com.blaashford.cadrel",
+    "productName": "Cadrel Write",
+    "asarUnpack": [
+      "dist-electron/mcp/**"
+    ],
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "assets/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Cadrel-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cadrel Write",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "copyright": "Copyright © 2026 blaashford-ux",
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Markdown document",
+        "description": "Markdown document",
+        "role": "Editor",
+        "icon": "build/icon.ico"
+      }
+    ],
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office",
+      "target": [
+        "dir"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@fontsource/eb-garamond": "^5.3.0",
+    "@milkdown/crepe": "^7.22.2",
+    "@milkdown/kit": "^7.22.2",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "concurrently": "^9.0.0",
+    "docx": "^9.8.1",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.24.0",
+    "fflate": "^0.8.3",
+    "font-list": "^2.1.0",
+    "jsdom": "^25.0.1",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
+    "pagedjs": "^0.4.3",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remark-parse": "^11.0.0",
+    "typescript": "^5.6.0",
+    "unified": "^11.0.5",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0",
+    "wait-on": "^8.0.0",
+    "zod": "^3.25.76"
+  },
+  "author": "blaashford-ux",
+  "homepage": "https://github.com/blaashford-ux/cadrel",
+  "private": true,
+  "dependencies": {
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@cadrel/market-mcp",
+  "version": "0.6.3",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "bin": {
+    "cadrel-market-mcp": "dist/main.mjs"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cadrel/market-library": "*",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8",
+    "@cadrel/market-embedder": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
