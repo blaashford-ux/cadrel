@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## 0.2.0 (in development)
+## 0.2.0
 
 - **Data packs made by BookScout import again.** The rename to Cadrel Market changed the tag inside a pack (`bookscout-data-pack` to `cadrel-market-data-pack`), so every older pack was refused as "not a Cadrel Market data pack". Both tags are accepted now; the layout is the same.
 - **The Cadrel window has real rounded corners on Windows, and its own window buttons.** Windows draws a square grey outline around a frameless window and rounds nothing, so the rounded shell sat inside a square frame. The window is now transparent and frameless: the shell draws the rounded outline, Write's and Market's views are rounded to match, and minimise / maximise / close are drawn by Cadrel in a small view above everything, in the border's colour with a rounded top-right corner (and rounded where they meet the page's card). Maximised and full-screen windows are square, as they should be. Not yet checked on a real Windows machine: please check that the edges still resize.
