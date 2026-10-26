@@ -372,6 +372,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     // deliberate stop to free the port right away for something else.
     reconnect: () => service.reconnect(),
     forceDisconnect: () => service.forceDisconnect(),
+    freePort: () => service.freePort(),
   };
 
   const send = (channel: string) => () => host.getContents()?.send(channel);

@@ -930,6 +930,8 @@ function registerShellIpc(): void {
   manageLike('market:reconnect', () => market.service.reconnect());
   // A deliberate stop, so the port is free right away without waiting on a reconnect retry.
   manageLike('market:forceDisconnect', () => market.service.forceDisconnect());
+  // Quits whatever program is holding the port (an old build still running, say), then starts the server.
+  manageLike('market:freePort', () => market.service.freePort());
   // Updating.
   manageLike('update:check', () => updater.check());
   manageLike('update:last', async () => updater.last());
@@ -1063,11 +1065,19 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
 }
 
 let finalSyncStarted = false;
+let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
   void write?.flush();
   void settings?.flush();
   write?.stop();
+  // Close Market's capture server first and wait for it, so port 47321 is released before this process goes and the next start never finds it taken.
+  if (!marketStopped && market) {
+    marketStopped = true;
+    e.preventDefault();
+    void Promise.race([market.stop().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+    return;
+  }
   // Edits made in the last few seconds haven't synced to Google Drive yet: give them one pass (at most 10 s) before exiting.
   const sync = write?.syncService();
   if (!smokeArg && !finalSyncStarted && sync?.dirty) {

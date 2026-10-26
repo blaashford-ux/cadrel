@@ -99,7 +99,8 @@ const api: CadrelApi = {
   },
   market: {
     reconnect: () => studioCall('shell:market:reconnect'),
-    forceDisconnect: () => studioCall('shell:market:forceDisconnect')
+    forceDisconnect: () => studioCall('shell:market:forceDisconnect'),
+    freePort: () => studioCall('shell:market:freePort')
   },
   update: {
     check: () => studioCall('shell:update:check'),

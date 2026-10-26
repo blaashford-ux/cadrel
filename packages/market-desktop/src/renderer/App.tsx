@@ -53,6 +53,7 @@ export function App() {
         <span className={`dot ${status.serverRunning ? 'on' : 'off'}`} title={status.serverError ?? ''}>
           {status.serverRunning ? `Listening on port ${status.port}` : status.serverError ?? 'Not listening'}
         </span>
+        {!status.serverRunning && <button className="tab" onClick={() => setTab('settings')}>Fix…</button>}
       </header>
       <main>
         {tab === 'queue' && <QueueView version={version} />}

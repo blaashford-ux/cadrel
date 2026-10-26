@@ -52,6 +52,8 @@ export interface Overview {
     serverRunning: boolean;
     /** Why the capture server is not running when it should be (for example the port is taken), or null. */
     serverError: string | null;
+    /** The program holding the capture port when that is why the server is not running, if known. */
+    portHolder: { pid: number; name: string } | null;
     port: number | null;
     categories: MarketCategoryRow[];
     queued: number;
@@ -383,6 +385,8 @@ export interface CadrelApi {
     reconnect(): Promise<void>;
     /** Stops Market's capture server deliberately, without closing its library, so the port is free right away for another program. */
     forceDisconnect(): Promise<void>;
+    /** Quits the program holding Market's capture port (looked up now) and starts the server again. */
+    freePort(): Promise<void>;
   };
   update: UpdateApi;
   navigate(page: Page): Promise<void>;
