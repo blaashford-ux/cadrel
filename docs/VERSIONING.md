@@ -25,3 +25,12 @@ Examples: `0.1.0` → `0.1.1` (a bug fix) → `0.2.0` (a new capability, fix res
 | `VERSION` file | `0.2.0` |
 | Git tag / GitHub release on `main` | `v0.2.0` |
 | Pre-release from `dev` | `v0.2.0-dev.17` (17 is the build number; it is a test build of the version being worked on, not a release) |
+
+A build is only a *release* once it comes from `main`; anything else (`dev`, a pull request, a manual run) is a
+**development build**, and must say so about itself — not just in the tag it may later be published under. CI
+(`.github/workflows/build.yml`) sets `CADREL_DEV_BUILD=dev.<run number>` for every build that is not of `main`, and
+`packages/shell/scripts/sync-version.mjs` appends it to the `VERSION` it writes into `package.json`, so the packaged
+app's own `app.getVersion()` — what the installer is named after, and what Settings → About shows — reads
+`0.2.0-dev.17`, matching the tag that run's release (if any) is published under. The updater (`isDevBuild` in
+`@cadrel/write/src/shared/update.ts`) reads that suffix to decide whether to offer development or stable releases; a
+build of `main` leaves `CADREL_DEV_BUILD` unset, so a stable release's own version is the bare `VERSION`, nothing more.
