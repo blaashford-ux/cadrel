@@ -87,7 +87,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'Dashboard', 'Projects', 'Notes', 'Write', 'Market', 'AI Assistants', 'Admin', 'Profile', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'Dashboard', 'Projects', 'Notes', 'Write', 'Market', 'Extensions', 'Admin', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -548,7 +548,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // The AI server is pinned to this Studio: it looks only where the app says, never at another Studio's folders.
     const { rootCandidates } = await import('@cadrel/write/mcp/root');
     const { nodeFs } = await import('@cadrel/write/electron/nodeFs');
-    await shell.getByRole('button', { name: 'AI Assistants', exact: true }).click();
+    await shell.getByRole('button', { name: 'Extensions', exact: true }).click();
     await shell.getByRole('tab', { name: 'Claude Code' }).click();
     const snippet = await shell.locator('pre.snippet').innerText();
     expect(snippet).toContain(`--root ${mine}`);
@@ -664,9 +664,9 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await m.app.close();
   }, 120_000);
 
-  it('AI Assistants: the kit and the Claude extension download from one page, and the settings can be copied', async () => {
+  it('Extensions: the kit and the Claude extension download from one page, and the settings can be copied', async () => {
     const { app, shell } = await launch();
-    await shell.getByRole('button', { name: 'AI Assistants', exact: true }).click();
+    await shell.getByRole('button', { name: 'Extensions', exact: true }).click();
     await shell.getByRole('heading', { name: 'Download' }).waitFor();
     await shell.getByRole('button', { name: 'Download the AI Kit' }).click();
     const saved = shell.getByRole('status').filter({ hasText: /Saved to .*Cadrel AI Kit/ });

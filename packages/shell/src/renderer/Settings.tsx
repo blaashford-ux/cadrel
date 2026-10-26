@@ -180,7 +180,7 @@ export function Settings() {
       <section className="card" aria-labelledby="s-about">
         <h3 id="s-about">About</h3>
         <p>Cadrel {info?.version} <span className="muted small">· Electron {info?.electron}</span></p>
-        <p className="muted small">Connecting an AI app, and everything to download for it, is on the AI Assistants page.</p>
+        <p className="muted small">Connecting an AI app or the browser extension, and everything to download for them, is on the Extensions page.</p>
       </section>
     </div>
   );
