@@ -15,7 +15,7 @@ import { Settings } from './Settings';
 import { useStudio } from './useStudio';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', assistants: 'AI Assistants', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
 const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'assistants', 'admin', 'profile', 'settings']);
 const STUDIO_PAGES = new Set<Page>(['dashboard', 'projects', 'notes', 'write', 'market']);
@@ -96,9 +96,12 @@ export function App() {
   // A Studio with no data here: its pages explain, and the module views stay hidden (the shell hides them).
   const blocked = !!studios && !studios.connected && page !== 'home' && STUDIO_PAGES.has(page);
   const own = OWN.has(page) || blocked;
+  // Windows rounds the window's own corners unless it is maximised or full-screen; match that so our background doesn't
+  // show square corners under the OS's rounded frame.
+  const rounded = !!win?.overlay && !win?.maximized && !win?.fullscreen;
 
   return (
-    <div className="shell">
+    <div className={`shell${rounded ? ' rounded' : ''}`}>
       <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} />
       <main className={`content${own ? '' : ' hidden'}`} aria-label={TITLES[page]}>
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
@@ -112,7 +115,7 @@ export function App() {
             <Projects studio={studio.state} overview={overview} error={studio.error} clearError={studio.clearError} act={studio.act} onGo={go} selected={selected} onSelect={select} />
           )}
           {!blocked && page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
-          {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} onRefresh={refresh} />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}
           {page === 'profile' && <Profile />}

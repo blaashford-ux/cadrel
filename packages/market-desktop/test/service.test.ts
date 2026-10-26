@@ -71,6 +71,17 @@ describe('AppService', () => {
     blocker.close();
   });
 
+  it('reconnects once whatever was holding the port lets go of it', async () => {
+    const blocker = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => blocker.once('listening', r));
+    const port = (blocker.address() as { port: number }).port;
+    await svc.setLibrary(libRoot);
+    await svc.setPort(port);
+    expect(svc.status().serverRunning).toBe(false);
+    await new Promise<void>((r) => blocker.close(() => r()));
+    expect(await svc.reconnect()).toMatchObject({ serverRunning: true, serverError: null });
+  });
+
   it('turns a capture over the wire into queue items, then Open next opens and marks one', async () => {
     await svc.setLibrary(libRoot);
     await svc.setPort(48124);

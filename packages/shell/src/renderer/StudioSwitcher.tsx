@@ -33,10 +33,15 @@ export function StudioSwitcher({ studios }: { studios: StudiosView }) {
         </select>
         <span className="chip">{active.status === 'local' ? 'On this computer' : active.role === 'owner' ? 'You own it' : 'Member'}</span>
         <button type="button" className="link" onClick={() => setJoining(true)}>Join a Studio…</button>
-        {switching && <span role="status" className="muted small">Opening {switching}…</span>}
       </div>
       {error && <div className="banner error" role="alert">{error}</div>}
       {joining && <JoinDialog onClose={() => setJoining(false)} />}
+      {switching && (
+        <div className="switch-lock" role="status" aria-live="polite">
+          <span className="spinner" aria-hidden />
+          <p>Opening {switching}…</p>
+        </div>
+      )}
     </div>
   );
 }

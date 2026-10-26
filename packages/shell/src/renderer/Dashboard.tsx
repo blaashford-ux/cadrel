@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { kindLabel, outline } from '@cadrel/kernel';
 import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
 import { ago, formatWords, percent, STATUS_LABEL } from './format';
 import { factsFor } from './projectFacts';
 
+const api = window.cadrel;
+
 interface Props {
   overview: Overview | null;
   studio: StudioState | null;
   onGo: (p: Page) => void;
   onProject: (id: string) => void;
+  onRefresh: () => void;
 }
 
 function ProjectsTable({ rows, now }: { rows: WriteProjectRow[]; now: number }) {
@@ -77,8 +81,16 @@ function CategoriesTable({ rows }: { rows: MarketCategoryRow[] }) {
   );
 }
 
-export function Dashboard({ overview, studio, onGo, onProject }: Props) {
+export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Props) {
   const now = Date.now();
+  const [reconnecting, setReconnecting] = useState(false);
+  const reconnect = () => {
+    setReconnecting(true);
+    void api.market.reconnect().finally(() => {
+      setReconnecting(false);
+      onRefresh();
+    });
+  };
   if (!overview) return <p className="muted">Loading…</p>;
   const { write, market } = overview;
   const live = write.projects.filter((p) => !p.archived);
@@ -154,6 +166,9 @@ export function Dashboard({ overview, studio, onGo, onProject }: Props) {
           <>
             <p className="stats">
               <span><span className={`dot ${captureState(market).tone}`} aria-hidden /> {captureState(market).text}</span>
+              {captureState(market).tone === 'off' && market.libraryRoot && (
+                <button type="button" className="link" disabled={reconnecting} onClick={reconnect}>{reconnecting ? 'Reconnecting…' : 'Reconnect'}</button>
+              )}
               <span><strong>{market.categories.length}</strong> categories</span>
               <span><strong>{market.queued}</strong> in the capture queue</span>
             </p>

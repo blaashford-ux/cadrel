@@ -235,6 +235,8 @@ export interface AssistantsApi {
   saveKit(): Promise<string>;
   /** Saves just the Claude Desktop extension (Cadrel.mcpb) into Downloads and shows it; resolves to the file. */
   saveExtension(): Promise<string>;
+  /** Saves the Market capture extension (a .zip, for Chrome's "Load unpacked" once unzipped) into Downloads and shows it; resolves to the file. */
+  saveChromeExtension(): Promise<string>;
   setRemote(on: boolean): Promise<AiRemoteStatus>;
   resetRemoteToken(): Promise<AiRemoteStatus>;
 }
@@ -376,6 +378,10 @@ export interface CadrelApi {
   };
   admin: AdminApi;
   assistants: AssistantsApi;
+  market: {
+    /** Tries Market's capture server again, for example after freeing the port some other program was holding it on. */
+    reconnect(): Promise<void>;
+  };
   update: UpdateApi;
   navigate(page: Page): Promise<void>;
   current(): Promise<Page>;
