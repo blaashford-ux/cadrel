@@ -83,11 +83,18 @@ function CategoriesTable({ rows }: { rows: MarketCategoryRow[] }) {
 
 export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Props) {
   const now = Date.now();
-  const [reconnecting, setReconnecting] = useState(false);
+  const [marketBusy, setMarketBusy] = useState<'reconnect' | 'disconnect' | null>(null);
   const reconnect = () => {
-    setReconnecting(true);
+    setMarketBusy('reconnect');
     void api.market.reconnect().finally(() => {
-      setReconnecting(false);
+      setMarketBusy(null);
+      onRefresh();
+    });
+  };
+  const forceDisconnect = () => {
+    setMarketBusy('disconnect');
+    void api.market.forceDisconnect().finally(() => {
+      setMarketBusy(null);
       onRefresh();
     });
   };
@@ -167,7 +174,10 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
             <p className="stats">
               <span><span className={`dot ${captureState(market).tone}`} aria-hidden /> {captureState(market).text}</span>
               {captureState(market).tone === 'off' && market.libraryRoot && (
-                <button type="button" className="link" disabled={reconnecting} onClick={reconnect}>{reconnecting ? 'Reconnecting…' : 'Reconnect'}</button>
+                <button type="button" className="link" disabled={marketBusy !== null} onClick={reconnect}>{marketBusy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}</button>
+              )}
+              {captureState(market).tone === 'on' && (
+                <button type="button" className="link" disabled={marketBusy !== null} onClick={forceDisconnect}>{marketBusy === 'disconnect' ? 'Disconnecting…' : 'Force disconnect'}</button>
               )}
               <span><strong>{market.categories.length}</strong> categories</span>
               <span><strong>{market.queued}</strong> in the capture queue</span>

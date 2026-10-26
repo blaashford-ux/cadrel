@@ -82,6 +82,43 @@ describe('AppService', () => {
     expect(await svc.reconnect()).toMatchObject({ serverRunning: true, serverError: null });
   });
 
+  it('absorbs a brief delay in the old listener releasing the port, without a manual reconnect', async () => {
+    const blocker = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => blocker.once('listening', r));
+    const port = (blocker.address() as { port: number }).port;
+    setTimeout(() => blocker.close(), 50);
+    await svc.setLibrary(libRoot);
+    expect(await svc.setPort(port)).toMatchObject({ serverRunning: true, serverError: null });
+  });
+
+  it('force-disconnects the capture server without closing the library, and reconnects after', async () => {
+    await svc.setLibrary(libRoot);
+    await svc.setPort(48129);
+    expect(svc.status().serverRunning).toBe(true);
+    expect(await svc.forceDisconnect()).toMatchObject({ serverRunning: false, serverError: null });
+    expect(() => svc.categories()).not.toThrow(); // the library itself stayed open
+    expect(await svc.reconnect()).toMatchObject({ serverRunning: true, port: 48129, serverError: null });
+  });
+
+  it('names another Cadrel Market as the one holding the port, once it is really listening there', async () => {
+    const probe = http.createServer().listen(0, '127.0.0.1');
+    await new Promise((r) => probe.once('listening', r));
+    const port = (probe.address() as { port: number }).port;
+    await new Promise<void>((r) => probe.close(() => r()));
+
+    const other = new AppService({ userData: path.join(tmp, 'other-user'), openExternal: () => {}, revealInFolder: () => {} });
+    await other.setLibrary(path.join(tmp, 'other-lib'));
+    await other.setPort(port);
+    expect(other.status().serverRunning).toBe(true);
+
+    await svc.setLibrary(libRoot);
+    await svc.setPort(port);
+    expect(svc.status().serverRunning).toBe(false);
+    expect(svc.status().serverError).toMatch(/Cadrel Market.*different pairing token/);
+
+    await other.stop();
+  });
+
   it('turns a capture over the wire into queue items, then Open next opens and marks one', async () => {
     await svc.setLibrary(libRoot);
     await svc.setPort(48124);

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import http from 'node:http';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { execFile } from 'node:child_process';
@@ -44,6 +45,34 @@ function assertAsin(asin: unknown): asserts asin is string {
 
 function assertSession(s: unknown): asserts s is string {
   if (typeof s !== 'string' || !/^\d{8}T\d{6}Z$/.test(s)) throw new Error('bad session id');
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Asks whatever is listening on `port` whether it is a Cadrel Market capture server, so a bind failure can say who is
+ * actually holding the port instead of just "in use". Never throws or hangs: an unreachable or non-conforming
+ * responder resolves to `{ sameApp: false }` within `timeoutMs`.
+ */
+function probeCaptureServer(port: number, token: string, timeoutMs = 500): Promise<{ sameApp: boolean; sameToken: boolean }> {
+  return new Promise((resolve) => {
+    const req = http.get({ host: '127.0.0.1', port, path: '/v1/ping', timeout: timeoutMs, headers: { authorization: `Bearer ${token}` } }, (res) => {
+      let body = '';
+      res.on('data', (c: Buffer) => (body += c));
+      res.on('end', () => {
+        let json: unknown;
+        try { json = JSON.parse(body); } catch { json = null; }
+        const j = json as { ok?: unknown; app?: unknown; error?: unknown } | null;
+        if (res.statusCode === 200 && j?.ok === true && j.app === 'cadrel-market') resolve({ sameApp: true, sameToken: true });
+        else if (res.statusCode === 401 && j?.error === 'bad token') resolve({ sameApp: true, sameToken: false });
+        else resolve({ sameApp: false, sameToken: false });
+      });
+    });
+    req.on('timeout', () => { req.destroy(); resolve({ sameApp: false, sameToken: false }); });
+    req.on('error', () => resolve({ sameApp: false, sameToken: false }));
+  });
 }
 
 export interface ServiceOptions {
@@ -325,30 +354,58 @@ export class AppService {
     await this.startServer();
   }
 
+  /** How many times to try binding the port before giving up: covers the common case of a just-quit app (Cadrel Market itself, run standalone,
+   * or an older build of it) still finishing its own shutdown and releasing the socket a moment later. */
+  private static readonly BIND_ATTEMPTS = 3;
+  private static readonly BIND_RETRY_MS = 200;
+
   private async startServer(): Promise<void> {
     this.serverError = null;
-    try {
-      this.server = await startIngestServer(
-        { library: this.lib!, token: loadOrCreateToken(this.tokenFile), pairing: { redeem: (c) => this.redeemPairing(c) }, onCapture: () => {
-            this.listeners.forEach((l) => l());
-            this.scheduleAutoIndex();
+    for (let attempt = 1; attempt <= AppService.BIND_ATTEMPTS; attempt++) {
+      try {
+        this.server = await startIngestServer(
+          { library: this.lib!, token: loadOrCreateToken(this.tokenFile), pairing: { redeem: (c) => this.redeemPairing(c) }, onCapture: () => {
+              this.listeners.forEach((l) => l());
+              this.scheduleAutoIndex();
+            },
+            onSamplePage: (e) => {
+              this.slog(e.duplicate ? 'warn' : 'info', 'app', e.asin, e.session, e.duplicate ? 'page ignored, identical image already stored' : 'page stored', `#${e.index}, ${Math.round(e.bytes / 1024)} KB, ${e.pages} page${e.pages === 1 ? '' : 's'} in session`);
+              this.textListeners.forEach((l) => l());
+            },
+            onSampleFinished: ({ asin, session }) => {
+              this.slog('info', 'app', asin, session, 'extension finished the session', 'reading the pages');
+              void this.readSample(asin, session).catch(() => {});
+            },
+            onSampleLog: (e: SampleLogEvent) => this.slog(e.level, e.source, e.asin, e.session, e.event, e.detail),
           },
-          onSamplePage: (e) => {
-            this.slog(e.duplicate ? 'warn' : 'info', 'app', e.asin, e.session, e.duplicate ? 'page ignored, identical image already stored' : 'page stored', `#${e.index}, ${Math.round(e.bytes / 1024)} KB, ${e.pages} page${e.pages === 1 ? '' : 's'} in session`);
-            this.textListeners.forEach((l) => l());
-          },
-          onSampleFinished: ({ asin, session }) => {
-            this.slog('info', 'app', asin, session, 'extension finished the session', 'reading the pages');
-            void this.readSample(asin, session).catch(() => {});
-          },
-          onSampleLog: (e: SampleLogEvent) => this.slog(e.level, e.source, e.asin, e.session, e.event, e.detail),
-        },
-        this.config.port,
-      );
-    } catch (e) {
-      this.server = null;
-      this.serverError = (e as NodeJS.ErrnoException).code === 'EADDRINUSE' ? `port ${this.config.port} is already in use` : String(e);
+          this.config.port,
+        );
+        this.serverError = null;
+        return;
+      } catch (e) {
+        this.server = null;
+        const busy = (e as NodeJS.ErrnoException).code === 'EADDRINUSE';
+        if (busy && attempt < AppService.BIND_ATTEMPTS) {
+          await delay(AppService.BIND_RETRY_MS);
+          continue;
+        }
+        this.serverError = busy ? await this.portConflictMessage(this.config.port) : String(e);
+        return;
+      }
     }
+  }
+
+  /** Builds the "port in use" message, naming whoever answers there when it is safe to ask (never blocks longer than the probe timeout). */
+  private async portConflictMessage(port: number): Promise<string> {
+    const plain = `port ${port} is already in use`;
+    try {
+      const r = await probeCaptureServer(port, loadOrCreateToken(this.tokenFile));
+      if (r.sameApp && r.sameToken) return `${plain} — another copy of Cadrel Market is already listening there (check its tray icon)`;
+      if (r.sameApp) return `${plain} — something speaking Cadrel Market's protocol is listening there with a different pairing token; quit it, then Reconnect`;
+    } catch {
+      /* the probe never throws, but this stays defensive: fall through to the plain message */
+    }
+    return plain;
   }
 
   async stop(): Promise<void> {
@@ -369,9 +426,26 @@ export class AppService {
     return { libraryRoot: this.config.libraryRoot, port: this.config.port, serverRunning: !!this.server, serverError: this.serverError };
   }
 
-  /** Tries the capture server again (for example after freeing the port some other program was holding it on). */
+  /**
+   * Tries the capture server again — for example after freeing the port some other program was holding it on.
+   * Leaves the library open if it already is: a reconnect only needs the server back, not a full restart.
+   */
   async reconnect(): Promise<Status> {
-    await this.start();
+    await this.server?.close();
+    this.server = null;
+    if (!this.lib) {
+      if (!this.config.libraryRoot) return this.status();
+      this.lib = Library.open(this.config.libraryRoot);
+    }
+    await this.startServer();
+    return this.status();
+  }
+
+  /** Stops the capture server deliberately, without closing the library, so the port is free right away for another program. Reconnect starts it again. */
+  async forceDisconnect(): Promise<Status> {
+    await this.server?.close();
+    this.server = null;
+    this.serverError = null;
     return this.status();
   }
 

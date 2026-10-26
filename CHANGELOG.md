@@ -4,6 +4,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 ## 0.2.0 (in development)
 
+- **Market's capture server handles a busy port 47321 better.** A bind failure is retried a few times before giving up, since it is often just the previous process (an old BookScout/Cadrel Market build, or this app's own tray icon) still releasing the socket. When it really is held, the message now says, where it can tell, whether another copy of Cadrel Market is the one holding it. **Reconnect** no longer closes and reopens the library on every try, and a new **Force disconnect** stops the capture server on demand (library untouched) so the port is free immediately — both are on Settings in the standalone app and on the Dashboard's Market card in the shell.
 - **M0: one app.** MDEdit 0.8.5 and BookScout 0.6.3 are imported (`@cadrel/write`, `@cadrel/market-*`) and run together in a new shell (`@cadrel/shell`): left rail, Home, Dashboard, Write and Market in their own views. Electron 44 and a single pdf.js across the workspace. Windows installer, packaged-app smoke test and CI to build and publish them.
 
 - **Names, from the start:** the apps are Cadrel Write and Cadrel Market everywhere, including on disk (`%APPDATA%\Cadrel\write` and `\market`, `.cadrel` project folders, `window.cadrelWrite` / `window.cadrelMarket`, `CADREL_*` variables, `cadrel-*` skills). No migration from the old names is built. The default projects folder is `<home>\Cadrel`.
