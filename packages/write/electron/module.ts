@@ -675,7 +675,7 @@ export interface WriteModule {
   takeInstaller(): string | null;
   /** For a host page that edits templates: the font list and a bundled font's preview. */
   fontPreview(family: string): Promise<string | null>;
-  /** The AI connection: how an AI app launches the server, the kit saved to Downloads, and the online door for ChatGPT. For a host's AI Assistants page. */
+  /** The AI connection: how an AI app launches the server, the kit saved to Downloads, and the online door for ChatGPT. For a host's Extensions page. */
   ai: {
     server(): Promise<AiServerInfo | null>;
     saveKit(): Promise<string>;

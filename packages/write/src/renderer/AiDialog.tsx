@@ -8,7 +8,7 @@ interface Props {
   onClose(): void;
 }
 
-/** The notes AI reviewers have left in this project, which can be removed. Connecting an AI app is on Cadrel's AI Assistants page. */
+/** The notes AI reviewers have left in this project, which can be removed. Connecting an AI app is on Cadrel's Extensions page. */
 export function AiDialog({ project, projectName, onClose }: Props) {
   const api = window.cadrelWrite;
   const [reviewers, setReviewers] = useState<AiReviewerSummary[]>([]);
@@ -25,7 +25,7 @@ export function AiDialog({ project, projectName, onClose }: Props) {
         <h3>AI reviewers</h3>
         <p className="modal-hint">
           An AI app connected to Cadrel can read your chapters and leave comments and suggestions here. It can’t change your text: you accept or reject each note.
-          To connect Claude or GPT, and to download everything it needs, open <strong>AI Assistants</strong> in Cadrel’s left bar.
+          To connect Claude or GPT, and to download everything it needs, open <strong>Extensions</strong> in Cadrel’s left bar.
         </p>
         <h4>Notes from AI in “{projectName}”</h4>
         <ul className="share-list">

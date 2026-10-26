@@ -18,6 +18,22 @@ describe('packaging', () => {
     expect(() => execFileSync('node', ['scripts/sync-version.mjs', '--check'], { cwd: PKG, stdio: 'pipe' })).not.toThrow();
   });
 
+  it('a development build (CADREL_DEV_BUILD set, as CI sets it off main) embeds a "-dev.N" version the updater can tell from a stable release', () => {
+    const file = path.join(PKG, 'package.json');
+    const before = fs.readFileSync(file, 'utf8');
+    const version = fs.readFileSync(path.join(PKG, '..', '..', 'VERSION'), 'utf8').trim();
+    try {
+      execFileSync('node', ['scripts/sync-version.mjs'], { cwd: PKG, stdio: 'pipe', env: { ...process.env, CADREL_DEV_BUILD: 'dev.42' } });
+      expect(JSON.parse(fs.readFileSync(file, 'utf8')).version).toBe(`${version}-dev.42`);
+      // --check agrees it is in sync as long as the same CADREL_DEV_BUILD is given back
+      expect(() => execFileSync('node', ['scripts/sync-version.mjs', '--check'], { cwd: PKG, stdio: 'pipe', env: { ...process.env, CADREL_DEV_BUILD: 'dev.42' } })).not.toThrow();
+      // and disagrees once the build moves on to a different run
+      expect(() => execFileSync('node', ['scripts/sync-version.mjs', '--check'], { cwd: PKG, stdio: 'pipe', env: { ...process.env, CADREL_DEV_BUILD: 'dev.43' } })).toThrow();
+    } finally {
+      fs.writeFileSync(file, before);
+    }
+  });
+
   it('every module the main bundle leaves external ships with the app (reachable from the shell\'s production dependencies)', () => {
     const build = fs.readFileSync(path.join(PKG, 'scripts', 'build.mjs'), 'utf8');
     const external = /const NATIVE = \[([^\]]+)\]/.exec(build)![1]!.match(/'([^']+)'/g)!.map((x) => x.slice(1, -1)).filter((n) => n !== 'electron' && !n.includes('/legacy/'));

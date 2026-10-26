@@ -180,7 +180,7 @@ function ConnectCard() {
   return (
     <div className="card" aria-label="AI assistants">
       <h2>AI assistants</h2>
-      <p className="muted">Connecting Claude or GPT to your library, and everything to download for it, is on the <b>AI Assistants</b> page in Cadrel’s left bar.</p>
+      <p className="muted">Connecting Claude or GPT to your library, and everything to download for it, is on the <b>Extensions</b> page in Cadrel’s left bar.</p>
     </div>
   );
 }

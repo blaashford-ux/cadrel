@@ -93,8 +93,12 @@ const api: CadrelApi = {
     get: () => studioCall('shell:assistants:get'),
     saveKit: () => studioCall('shell:assistants:saveKit'),
     saveExtension: () => studioCall('shell:assistants:saveExtension'),
+    saveChromeExtension: () => studioCall('shell:assistants:saveChromeExtension'),
     setRemote: (on) => studioCall('shell:assistants:setRemote', on),
     resetRemoteToken: () => studioCall('shell:assistants:resetRemoteToken')
+  },
+  market: {
+    reconnect: () => studioCall('shell:market:reconnect')
   },
   update: {
     check: () => studioCall('shell:update:check'),

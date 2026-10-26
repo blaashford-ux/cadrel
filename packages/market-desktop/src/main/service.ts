@@ -369,6 +369,12 @@ export class AppService {
     return { libraryRoot: this.config.libraryRoot, port: this.config.port, serverRunning: !!this.server, serverError: this.serverError };
   }
 
+  /** Tries the capture server again (for example after freeing the port some other program was holding it on). */
+  async reconnect(): Promise<Status> {
+    await this.start();
+    return this.status();
+  }
+
   /** The library to use when none has been chosen: made if it is missing, and remembered. Does nothing once a library is set. Call before `start`. */
   useDefaultLibrary(root: string): void {
     if (this.config.libraryRoot) return;

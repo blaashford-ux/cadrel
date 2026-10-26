@@ -916,8 +916,18 @@ function registerShellIpc(): void {
     if (!TEST) shell.showItemInFolder(dest);
     return dest;
   });
+  manageLike('assistants:saveChromeExtension', async () => {
+    const src = path.join(resourcesDir(), 'cadrel-market-extension.zip');
+    const dest = path.join(app.getPath('downloads'), path.basename(src));
+    await fsp.mkdir(path.dirname(dest), { recursive: true });
+    await fsp.copyFile(src, dest);
+    if (!TEST) shell.showItemInFolder(dest);
+    return dest;
+  });
   manageLike('assistants:setRemote', (on: boolean) => write.ai.remote.setEnabled(on === true));
   manageLike('assistants:resetRemoteToken', () => write.ai.remote.resetToken());
+  // Market's capture server: a retry after whatever was holding the port (another app, an earlier run) lets go of it.
+  manageLike('market:reconnect', () => market.service.reconnect());
   // Updating.
   manageLike('update:check', () => updater.check());
   manageLike('update:last', async () => updater.last());

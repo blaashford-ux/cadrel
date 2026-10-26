@@ -35,12 +35,34 @@ export function Assistants() {
   const copy = (text: string, what: string) => run(() => navigator.clipboard.writeText(text).then(() => `${what} copied.`, () => 'Could not copy to the clipboard.'));
 
   if (!v) return <p className="muted">Loading…</p>;
-  if (!v.available) return <div className="settings"><section className="card"><h3>AI assistants</h3><p className="muted">This build of Cadrel does not include the AI connection.</p></section></div>;
-  const remote = v.remote;
-  const snippet = v[which];
+  const remote = v.available ? v.remote : null;
+  const snippet = v.available ? v[which] : '';
 
   return (
     <div className="settings assistants">
+      {note && <div className="banner info" role="status">{note}</div>}
+      {error && <div className="banner error" role="alert">{error}</div>}
+
+      <section className="card" aria-labelledby="as-chrome">
+        <h3 id="as-chrome">Browser extension</h3>
+        <p className="muted small">Captures Amazon listing and category pages into Market as you browse them, straight into the capture queue.</p>
+        <div className="row">
+          <button type="button" className="primary" disabled={busy} onClick={() => void run(async () => `Saved ${await api.assistants.saveChromeExtension()}. Unzip it, then follow the steps below.`)}>Download the Chrome extension</button>
+          <span className="muted small">A .zip, for Chrome’s “Load unpacked”.</span>
+        </div>
+        <ol className="muted small">
+          <li>Unzip the download, somewhere it can stay (Chrome loads it from there each time).</li>
+          <li>In Chrome, open <code>chrome://extensions</code> and turn on Developer mode.</li>
+          <li>Click “Load unpacked” and choose the unzipped folder.</li>
+          <li>Open Market → Settings → “Pair the browser extension” for a one-time pairing code, and enter it in the extension’s popup.</li>
+        </ol>
+      </section>
+
+      {!v.available && (
+        <section className="card"><h3>AI connection</h3><p className="muted">This build of Cadrel does not include the AI connection.</p></section>
+      )}
+
+      {v.available && (
       <section className="card" aria-labelledby="as-dl">
         <h3 id="as-dl">Download</h3>
         <p className="muted small">
@@ -54,10 +76,10 @@ export function Assistants() {
           <button type="button" disabled={busy} onClick={() => void run(async () => `Saved ${await api.assistants.saveExtension()}. In Claude Desktop open Settings → Extensions and drag it into the window.`)}>Download the Claude Desktop extension</button>
           <span className="muted small">Just Cadrel.mcpb.</span>
         </div>
-        {note && <div className="banner info" role="status">{note}</div>}
-        {error && <div className="banner error" role="alert">{error}</div>}
       </section>
+      )}
 
+      {v.available && (
       <section className="card" aria-labelledby="as-hand">
         <h3 id="as-hand">Set it up by hand</h3>
         <div className="subtabs" role="tablist">
@@ -67,6 +89,7 @@ export function Assistants() {
         <pre className="snippet"><code>{snippet}</code></pre>
         <button type="button" onClick={() => void copy(snippet, APPS.find((a) => a.id === which)!.label + ' setting')}>Copy</button>
       </section>
+      )}
 
       {remote && (
         <section className="card" aria-labelledby="as-remote">

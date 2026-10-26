@@ -43,7 +43,7 @@ describe('AiDialog', () => {
     await settle();
 
     const text = host.textContent ?? '';
-    expect(text).toContain('AI Assistants'); // where to connect an AI app
+    expect(text).toContain('Extensions'); // where to connect an AI app
     expect(host.querySelectorAll('pre')).toHaveLength(0);
     expect(text).toContain('Claude · Line edit');
     expect(text).toContain('3 open of 3 notes');
