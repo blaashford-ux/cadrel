@@ -31,10 +31,6 @@ jobs:
         run: |
           # a PR into main (or a push to it) is a release, so it must carry a new version
           if [ "${{ github.base_ref || github.ref_name }}" = "main" ]; then scripts/check-version.sh --newer; else scripts/check-version.sh; fi
-      - name: What build.mjs/sync-version.mjs should embed (a development build gets "-dev.<run number>"; see scripts/sync-version.mjs)
-        run: echo "CADREL_DEV_BUILD=${CADREL_DEV_BUILD}" >> "$GITHUB_ENV"
-        env:
-          CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
       - name: System tools used by the integration tests
         # xvfb: run Electron headless · poppler: pdfinfo/pdffonts · java + epubcheck: EPUB validation
         # libreoffice-writer: opens the generated DOCX
@@ -50,6 +46,12 @@ jobs:
         # CI=true makes the Electron and PDF tests fail, instead of skip, when their environment is missing.
         run: xvfb-run -a npm test
       - name: Package the app for Linux and smoke-test it as installed
+        env:
+          # A build that is not of `main` is a development build (see scripts/sync-version.mjs): the app then
+          # self-reports "<VERSION>-dev.<run number>", matching the tag release.yml publishes for it, so the
+          # updater (and the installer's own filename) correctly tells it apart from a stable release. Scoped to
+          # just this step: `npm test` above must see the plain VERSION, unsuffixed, like a contributor's own run.
+          CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
         run: |
           npm run pack -w @cadrel/shell
           xvfb-run -a packages/shell/release/linux-unpacked/cadrel --no-sandbox --smoke-test="$RUNNER_TEMP/smoke.json" || code=$?
