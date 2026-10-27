@@ -98,3 +98,5 @@ export function memoryStudioDb(): StudioDb {
 }
 
 export { STUDIO_SCHEMA_VERSION };
+
+export * from './localVault';
