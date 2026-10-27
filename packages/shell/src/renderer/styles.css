@@ -85,7 +85,9 @@ input[type='checkbox'] { padding: 0; }
 /* A module's own view is drawn over the content area; keep the card out of its way. */
 .content.hidden { visibility: hidden; }
 .strip { height: 40px; flex: none; display: flex; align-items: center; padding: 0 22px; -webkit-app-region: drag; }
-.strip.overlay { padding-right: 150px; }
+.strip.overlay { padding-right: 0; }
+/* The window's buttons are a separate view over this corner. A drag region under another view takes its mouse (it is the window's caption to Windows), so the corner must not be one. */
+.strip-gap { margin-left: auto; align-self: stretch; width: 150px; flex: none; -webkit-app-region: no-drag; }
 .strip-title { margin: 0; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
 .page { flex: 1; min-height: 0; overflow: auto; padding: 8px 32px 40px; }
 .page-projects { padding: 0; overflow: hidden; }

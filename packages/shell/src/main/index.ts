@@ -516,14 +516,15 @@ function ensureView(id: ModuleId): WebContentsView {
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   view.webContents.on('will-navigate', (e) => e.preventDefault());
   view.webContents.on('render-process-gone', (_e, d) => market?.log.error(`${id} renderer gone`, d.reason));
-  // Market and Finance have no title bar of their own, so on Windows their tab bars must clear the window buttons and be draggable.
-  if (id === 'market' || id === 'finance') {
-    view.webContents.on('did-finish-load', () => {
-      if (win && windowInfo(win).overlay) {
-        void view.webContents.insertCSS('header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}');
-      }
-    });
-  }
+  // Every module view reaches the window's top-right corner, where the window buttons (a separate view) sit. A drag region under another view is the
+  // window's caption to Windows and takes the mouse from it, so the corner must not be one, in any module.
+  // Market and Finance have no title bar of their own, so on Windows their tab bars must also clear the window buttons and be draggable.
+  view.webContents.on('did-finish-load', () => {
+    if (!win || !windowInfo(win).overlay) return;
+    const tabs = id === 'market' || id === 'finance' ? 'header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}' : '';
+    void view.webContents.insertCSS(`${tabs}#cadrel-window-corner{position:fixed;top:0;right:0;width:150px;height:40px;-webkit-app-region:no-drag;z-index:2147483647}`);
+    void view.webContents.executeJavaScript("if(!document.getElementById('cadrel-window-corner')){const d=document.createElement('div');d.id='cadrel-window-corner';d.setAttribute('aria-hidden','true');document.body.appendChild(d)}").catch(() => undefined);
+  });
   if (id === 'market' || id === 'finance') view.webContents.on('did-finish-load', () => paintMarketStyled(id));
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
   if (id === 'write') write.attach(view.webContents, win!);
