@@ -33,6 +33,7 @@ import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, 
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { callWorkflow } from './workflowCalls';
+import { ProjectWork } from './projectWork';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -836,6 +837,9 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost).state(String(projectId)));
+  manageLike('work:mine', async () => new ProjectWork(studio, peopleHost).mine());
+  manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
@@ -1234,7 +1238,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       fs: nodeFs
     });
-    stages = new ProjectStages(studio, () => peopleHost.workflows);
+    stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
 
     write = await createWriteModule({

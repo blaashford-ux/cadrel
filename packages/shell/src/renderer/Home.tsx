@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { childrenOf, kindLabel } from '@cadrel/kernel';
-import type { Overview, Page, StudioState, StudiosView } from '../shared/api';
+import type { MineState, Overview, Page, StudioState, StudiosView } from '../shared/api';
 import { captureState } from './capture';
 import { ago, formatWords, greeting, percent, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
@@ -12,6 +13,32 @@ interface Props {
   onGo: (p: Page) => void;
   onProject: (id: string) => void;
   studios: StudiosView | null;
+}
+
+/** Work that waits on the person using the app: sign-offs they are asked for, then their open tasks, late ones first. */
+function Mine({ studio, onProject }: { studio: StudioState | null; onProject: (id: string) => void }) {
+  const [m, setM] = useState<MineState | null>(null);
+  useEffect(() => {
+    void window.cadrel.work.mine().then(setM, () => setM(null));
+  }, [studio]);
+  if (!m || !m.available || (m.tasks.length === 0 && m.approvals.length === 0)) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <section className="card" aria-labelledby="h-mine">
+      <h3 id="h-mine">Waiting on you</h3>
+      <ul className="plain work-list">
+        {m.approvals.map((a) => (
+          <li key={a.id}><span className="chip">sign-off</span> <button type="button" className="link" onClick={() => onProject(a.projectId)}>{a.label}</button> <span className="muted small">on {a.projectName}</span></li>
+        ))}
+        {m.tasks.map((t) => (
+          <li key={t.id}>
+            <span className="chip">{t.kind}</span> <button type="button" className="link" onClick={() => onProject(t.projectId)}>{t.title}</button> <span className="muted small">on {t.projectName}</span>
+            {t.due && <span className={t.due < today ? 'warn small' : 'muted small'}> · {t.due < today ? 'late: ' : 'due '}{t.due}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
 export function Home({ overview, studio, onGo, onProject, studios }: Props) {
@@ -67,6 +94,8 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
           </ul>
         )}
       </section>
+
+      <Mine studio={studio} onProject={onProject} />
 
       <section className="card" aria-labelledby="h-write">
         <h3 id="h-write">Continue writing</h3>

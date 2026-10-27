@@ -8,6 +8,7 @@ import type { WorkflowRecord } from '@cadrel/kernel';
 import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
+import { WorkCard } from './WorkCard';
 
 const api = window.cadrel.studio;
 const manage = window.cadrel.manage;
@@ -183,6 +184,7 @@ function StageCard({ p, studio, act }: { p: Project; studio: StudioState; act: P
 
 function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: Project; studio: StudioState; overview: Overview | null; act: Props['act']; onGo: Props['onGo']; onSelect: Props['onSelect']; openDialog: (d: Dialog) => void }) {
   const tree = studio.tree;
+  const [workTick, setWorkTick] = useState(0); // work changes what a stage gate sees
   const facts = factsFor(tree, overview, p.id);
   const pct = percent(facts.words, facts.goalWords);
   const path = [...ancestorsOf(tree, p.id), p];
@@ -243,7 +245,9 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
         <button type="button" className="quiet" onClick={() => openDialog({ kind: 'delete', id: p.id })}>Delete…</button>
       </div>
 
-      <StageCard p={p} studio={studio} act={act} />
+      <StageCard key={workTick} p={p} studio={studio} act={act} />
+
+      <WorkCard projectId={p.id} projectName={p.name} act={act} onChanged={() => setWorkTick((n) => n + 1)} />
 
       <ManuscriptCard p={p} linked={mine.some((l) => l.module === 'write')} act={act} />
 

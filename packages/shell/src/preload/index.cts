@@ -36,6 +36,19 @@ const api: CadrelApi = {
     options: (projectId) => studioCall('shell:stages:options', projectId),
     move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
   },
+  work: {
+    state: (projectId) => studioCall('shell:work:state', projectId),
+    mine: () => studioCall('shell:work:mine'),
+    createTask: (i) => studioCall('shell:work:call', 'createTask', i),
+    updateTask: (id, patch) => studioCall('shell:work:call', 'updateTask', id, patch),
+    setState: (id, state) => studioCall('shell:work:call', 'setState', id, state),
+    addDependency: (id, on) => studioCall('shell:work:call', 'addDependency', id, on),
+    removeDependency: (id, on) => studioCall('shell:work:call', 'removeDependency', id, on),
+    requestApproval: (i) => studioCall('shell:work:call', 'requestApproval', i),
+    respond: (id, response, reason) => studioCall('shell:work:call', 'respond', id, response, reason),
+    withdraw: (id) => studioCall('shell:work:call', 'withdraw', id),
+    recordDecision: (i) => studioCall('shell:work:call', 'record', i)
+  },
   workflow: {
     state: () => studioCall('shell:workflow:state'),
     create: (i) => studioCall('shell:workflow:call', 'create', i),

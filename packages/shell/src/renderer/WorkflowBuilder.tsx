@@ -255,7 +255,7 @@ function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: 
       </div>
       <p className="muted small">{m.roleIds.length ? 'Only people holding one of these roles (an Owner always may).' : 'No role chosen: anyone who may move projects.'}</p>
       <div><strong className="small">The project needs</strong></div>
-      {(Object.keys(CONDITION_KINDS) as ConditionKind[]).map((kind) => {
+      {(Object.keys(CONDITION_KINDS) as ConditionKind[]).filter((k) => k !== 'approved').map((kind) => {
         const c = has(kind);
         return (
           <div key={kind} className="row">
@@ -263,6 +263,34 @@ function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: 
           </div>
         );
       })}
+      <SignOffs m={m} editable={editable} onChange={onChange} />
+    </div>
+  );
+}
+
+/** "Signed off" gates: the labels of the sign-offs a project must stand approved under (Cover approved, Legal…). Each is a separate condition. */
+function SignOffs({ m, editable, onChange }: { m: DraftMove; editable: boolean; onChange: (patch: Partial<DraftMove>) => void }) {
+  const [label, setLabel] = useState('');
+  const labels = m.conditions.filter((c) => c.kind === 'approved');
+  const add = () => {
+    const l = label.trim().replace(/\s+/g, ' ');
+    if (l && !labels.some((c) => c.label?.toLowerCase() === l.toLowerCase())) onChange({ conditions: [...m.conditions, { kind: 'approved', label: l }] });
+    setLabel('');
+  };
+  return (
+    <div>
+      {labels.map((c) => (
+        <div key={c.label} className="row">
+          <span className="small">{CONDITION_KINDS.approved}: <strong>{c.label}</strong></span>
+          {editable && <button type="button" className="link small" aria-label={`Remove the ${c.label} sign-off`} onClick={() => onChange({ conditions: m.conditions.filter((x) => x !== c) })}>Remove</button>}
+        </div>
+      ))}
+      {editable && (
+        <div className="row">
+          <input aria-label="Sign-off label" placeholder="Sign-off needed, e.g. Cover approved" maxLength={40} value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), add())} />
+          <button type="button" disabled={!label.trim()} onClick={add}>Require sign-off</button>
+        </div>
+      )}
     </div>
   );
 }

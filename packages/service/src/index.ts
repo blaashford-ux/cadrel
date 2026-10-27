@@ -7,11 +7,12 @@
  * once a book is linked to a project; until then they do not reach catalogue calls, which is the safe way round.
  */
 import {
-  acknowledgeCapabilities, addEdition, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
+  acknowledgeCapabilities, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
+  type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage
 } from '@cadrel/kernel';
 
@@ -262,6 +263,57 @@ export class StudioAs {
       if (pc.roles.get(a.roleId)?.all) owner = true;
     }
     return (roleIds) => owner || roleIds.some((r) => held.has(r));
+  }
+
+  /**
+   * Tasks, deadlines, approvals and decisions. Reading needs task.read. A task can be made and changed by someone with task.edit for work that is
+   * theirs (assigned to them, or not yet to anyone when they make it); handing work to someone else needs task.assign; task.manage reaches
+   * everything. An approval is requested by anyone with task.edit and answered only by the people it names (no capability makes you one of
+   * them); it is withdrawn by whoever asked, or by task.manage. Decisions are recorded with task.edit and can never be changed or removed.
+   * Projects live in the project tree, so the caller checks a project exists and expands a project to its subprojects.
+   */
+  readonly work = {
+    tasks: async (f?: TaskFilter): Promise<TaskRecord[]> => (await this.need('task.read'), listTasks(this.o.db, this.ctx(), f)),
+    task: async (id: string): Promise<TaskRecord | null> => (await this.need('task.read'), getTask(this.o.db, this.ctx(), id)),
+    openTaskCount: async (projectIds: string[]): Promise<number> => (await this.need('task.read'), openTaskCount(this.o.db, this.ctx(), projectIds)),
+    createTask: async (i: NewTask): Promise<TaskRecord> => {
+      await this.need(i?.assigneeId && i.assigneeId !== this.personId ? 'task.assign' : 'task.edit');
+      return createTask(this.o.db, this.ctx(), i);
+    },
+    updateTask: async (id: string, patch: TaskPatch): Promise<TaskRecord> => {
+      const t = await this.mineToChange(id);
+      if (patch?.assigneeId !== undefined && (patch.assigneeId || null) !== t.assigneeId && patch.assigneeId !== this.personId) await this.need('task.assign');
+      return updateTask(this.o.db, this.ctx(), id, patch);
+    },
+    setState: async (id: string, state: TaskState): Promise<TaskRecord> => (await this.mineToChange(id), setTaskState(this.o.db, this.ctx(), id, state)),
+    addDependency: async (id: string, dependsOnId: string): Promise<TaskRecord> => (await this.mineToChange(id), addDependency(this.o.db, this.ctx(), id, dependsOnId)),
+    removeDependency: async (id: string, dependsOnId: string): Promise<TaskRecord> => (await this.mineToChange(id), removeDependency(this.o.db, this.ctx(), id, dependsOnId)),
+
+    approvals: async (f?: { projectId?: string; projectIds?: string[]; approverId?: string; state?: ApprovalState | 'any' }): Promise<ApprovalRecord[]> => (await this.need('task.read'), listApprovals(this.o.db, this.ctx(), f)),
+    /** The sign-offs waiting for this person's answer. */
+    waitingForMe: async (): Promise<ApprovalRecord[]> => (await this.need('task.read'), approvalsWaitingFor(this.o.db, this.ctx(), this.personId)),
+    approvedLabels: async (projectId: string): Promise<string[]> => (await this.need('task.read'), approvedLabels(this.o.db, this.ctx(), projectId)),
+    requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => (await this.need('task.edit'), requestApproval(this.o.db, this.ctx(), i)),
+    respond: async (id: string, response: 'approved' | 'rejected', reason?: string): Promise<ApprovalRecord> => (await this.need('task.read'), respondToApproval(this.o.db, this.ctx(), id, response, reason)),
+    withdraw: async (id: string): Promise<ApprovalRecord> => {
+      await this.need('task.read');
+      const a = await getApproval(this.o.db, this.ctx(), id);
+      if (a && a.requestedBy !== this.personId) await this.need('task.manage');
+      return withdrawApproval(this.o.db, this.ctx(), id);
+    },
+
+    decisions: async (f?: { projectId?: string; projectIds?: string[]; current?: boolean }): Promise<DecisionRecord[]> => (await this.need('task.read'), listDecisions(this.o.db, this.ctx(), f)),
+    decision: async (id: string): Promise<DecisionRecord | null> => (await this.need('task.read'), getDecision(this.o.db, this.ctx(), id)),
+    record: async (i: Parameters<typeof recordDecision>[2]): Promise<DecisionRecord> => (await this.need('task.edit'), recordDecision(this.o.db, this.ctx(), i))
+  };
+
+  /** A task this person may change: any task for task.manage, else one assigned to them with task.edit. */
+  private async mineToChange(id: string): Promise<TaskRecord> {
+    await this.need('task.edit');
+    const t = await getTask(this.o.db, this.ctx(), id);
+    if (!t) throw new Error('That task is not there.');
+    if (t.assigneeId !== this.personId) await this.need('task.manage');
+    return t;
   }
 
   /**

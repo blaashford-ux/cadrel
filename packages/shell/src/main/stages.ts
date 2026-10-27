@@ -8,7 +8,7 @@
  */
 import { childrenOf, getProject, initialStage, linksOf, subtreeIds, type ProjectFacts, type ProjectLevel, type StageCategory, type WorkflowDraft, type WorkflowRecord, type WorkflowUsage } from '@cadrel/kernel';
 import type { StudioService } from './studio';
-import type { StudioWorkflows } from './people';
+import type { StudioWork, StudioWorkflows } from './people';
 
 export class StageError extends Error {}
 const fail = (m: string): never => {
@@ -25,7 +25,7 @@ export interface ProjectStageView {
 export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
 
 export class ProjectStages {
-  constructor(private readonly studio: StudioService, private readonly workflows: () => StudioWorkflows | null) {}
+  constructor(private readonly studio: StudioService, private readonly workflows: () => StudioWorkflows | null, private readonly work: () => StudioWork | null = () => null) {}
 
   private need(): StudioWorkflows {
     return this.workflows() ?? fail('This Studio’s workflows are managed by its owner.');
@@ -55,7 +55,11 @@ export class ProjectStages {
     const p = getProject(tree, projectId) ?? fail('There is no such project.');
     const wfs = this.workflows() ? await this.workflows()!.list() : [];
     const categoryOf = (q: { workflowId: string | null; stage: string | null }): StageCategory | null => wfs.find((w) => w.id === q.workflowId)?.stages.find((s) => s.key === q.stage)?.category ?? null;
+    const work = this.work();
+    const live = subtreeIds(tree, p.id).filter((id) => getProject(tree, id)?.status !== 'archived');
     return {
+      openTasks: work ? await work.openTaskCount(live) : 0,
+      approved: work ? await work.approvedLabels(p.id) : [],
       hasManuscript: linksOf(tree, p.id, 'write').length > 0,
       openNotes: state.openByProject[p.id] ?? 0,
       subprojects: childrenOf(tree, p.id).filter((c) => c.status !== 'archived').map(categoryOf)

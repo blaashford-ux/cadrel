@@ -17,6 +17,7 @@ const CALLS: Record<string, string> = {
   grant: 'grant', revoke: 'revoke', setExpiry: 'setExpiry'
 };
 export type StudioWorkflows = ReturnType<StudioService['as']>['workflows'];
+export type StudioWork = ReturnType<StudioService['as']>['work'];
 export const PEOPLE_CALLS = Object.keys(CALLS);
 
 /** The workflow builder's operations that need only the records, by the page's names (`save` and `delete` also move projects, so they go through `ProjectStages`). */
@@ -69,6 +70,21 @@ export class PeopleHost {
     const [people, deactivated, teams, penNames, roles, assignments] = await Promise.all([p.people.list(), p.people.list({ deactivated: true }), p.people.teams(), p.people.penNames(), p.people.roles(), p.people.assignments()]);
     const may = { people: await p.can('people.manage'), teams: await p.can('teams.manage'), roles: await p.can('roles.manage') };
     return { available: true, me: this.meId, studioId: this.studioId, people, deactivated, teams, penNames, roles, assignments, review: may.roles ? await p.people.capabilityReview() : [], may };
+  }
+
+  /** Tasks, approvals and decisions as the person using the app; null where this computer holds no records for the Studio. */
+  get work(): StudioWork | null {
+    return this.svc ? (this.svc.as(this.meId).work as StudioWork) : null;
+  }
+
+  /** Whether the person using the app holds a capability at the studio. */
+  async may(capability: string): Promise<boolean> {
+    return this.svc ? this.svc.as(this.meId).can(capability) : false;
+  }
+
+  /** The active people, for choosing an assignee or an approver. */
+  async peopleList(): Promise<{ id: string; name: string }[]> {
+    return this.svc ? (await this.svc.as(this.meId).people.list()).map((p) => ({ id: p.id, name: p.name })) : [];
   }
 
   /** Runs one change as the person using the app. A refusal carries its reason; anything else is the service's own error text. */

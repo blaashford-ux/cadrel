@@ -12,4 +12,5 @@ export * from './ids';
 export * from './catalogue';
 export * from './people';
 export * from './workflow';
+export * from './work';
 export * from './sql';

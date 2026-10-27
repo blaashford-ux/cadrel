@@ -22,6 +22,7 @@ import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { ProjectManager, type WriteFolders } from '../src/main/manage';
 import { PeopleHost } from '../src/main/people';
 import { ProjectStages } from '../src/main/stages';
+import { ProjectWork } from '../src/main/projectWork';
 import { StudioService } from '../src/main/studio';
 import { callWorkflow } from '../src/main/workflowCalls';
 
@@ -46,7 +47,7 @@ beforeEach(async () => {
   host = new PeopleHost();
   await host.open({ file: path.join(dir, 'records.db'), studioId: 'local', owned: true, ownerName: 'Ana Reyes' });
   studio = new StudioService({ file: path.join(dir, 'studio.json'), author: () => 'Ana', writeRoot: async () => null, fs: new MemoryFs() });
-  stages = new ProjectStages(studio, () => host.workflows);
+  stages = new ProjectStages(studio, () => host.workflows, () => host.work);
   mgr = new ProjectManager(studio, write, stages);
   folders.clear();
 });
@@ -135,5 +136,58 @@ describe('project stages', () => {
   it('shows each project’s stage for Write and the pages', async () => {
     const p = await mgr.create({ name: 'P', template: null });
     expect((await stages.views())[p.id]).toMatchObject({ workflowName: 'Writing and publishing', stage: { key: 'planning', name: 'Planning', category: 'start' } });
+  });
+});
+
+describe('gates that ask for finished tasks and sign-off', () => {
+  /** Open, then Done once there are no open tasks and "Ready" is signed off. */
+  async function signedOff() {
+    const w = (await callWorkflow('create', [{ name: 'Signed' }], host, stages)) as { id: string };
+    await callWorkflow('save', [w.id, {
+      name: 'Signed', description: '',
+      stages: [{ key: 'open', name: 'Open', category: 'start', color: '#111111' }, { key: 'done', name: 'Done', category: 'done', color: '#222222' }],
+      transitions: [{ from: 'open', to: 'done', roleIds: [], conditions: [{ kind: 'no_open_tasks' }, { kind: 'approved', label: 'Ready' }] }]
+    }], host, stages);
+    return w.id;
+  }
+  const work = () => new ProjectWork(studio, host);
+
+  it('holds a move until the tasks under the project are done and the sign-off stands', async () => {
+    const wf = await signedOff();
+    const series = await mgr.create({ name: 'Series', template: null, workflowId: wf });
+    const book = await mgr.create({ name: 'Book', parentId: series.id, template: null, workflowId: wf });
+    const task = (await work().call('createTask', [{ projectId: book.id, title: 'Proof' }])) as { id: string };
+    const reasons = async () => (await stages.options(series.id))!.options[0]!.reasons;
+    expect(await reasons()).toEqual([expect.stringMatching(/1 open task/), 'Needs sign-off: “Ready”']); // the subproject's task counts
+    await work().call('setState', [task.id, 'done']);
+    const me = host.me;
+    const a = (await work().call('requestApproval', [{ projectId: series.id, label: 'Ready', approverIds: [me] }])) as { id: string };
+    expect(await reasons()).toEqual(['Needs sign-off: “Ready”']);
+    await work().call('respond', [a.id, 'approved']);
+    expect(await reasons()).toEqual([]);
+    await stages.move(series.id, 'done');
+    expect((await proj(series.id)).stage).toBe('done');
+  });
+
+  it('shows a project’s work with its subprojects’, and what waits on me', async () => {
+    const s = await mgr.create({ name: 'Series', template: null });
+    const b = await mgr.create({ name: 'Book', parentId: s.id, template: null });
+    await work().call('createTask', [{ projectId: b.id, title: 'Cover', assigneeId: host.me, due: '2026-11-01' }]);
+    await work().call('requestApproval', [{ projectId: s.id, label: 'Plan', approverIds: [host.me] }]);
+    const st = await work().state(s.id);
+    if (!st.available) throw new Error('expected work');
+    expect(st.tasks.map((t) => [t.title, t.projectName])).toEqual([['Cover', 'Book']]);
+    expect(st.may).toEqual({ edit: true, assign: true, manage: true });
+    const mine = await work().mine();
+    expect(mine.tasks.map((t) => t.title)).toEqual(['Cover']);
+    expect(mine.approvals.map((a) => [a.label, a.projectName])).toEqual([['Plan', 'Series']]);
+  });
+
+  it('works on projects that exist and are not archived, and only the changes it lists', async () => {
+    const p = await mgr.create({ name: 'P', template: null });
+    await expect(work().call('createTask', [{ projectId: 'nope', title: 'x' }])).rejects.toThrow(/no such project/);
+    await mgr.archive(p.id, true);
+    await expect(work().call('createTask', [{ projectId: p.id, title: 'x' }])).rejects.toThrow(/archived/);
+    for (const bad of ['tasks', 'constructor', '__proto__', 'state']) await expect(work().call(bad, [])).rejects.toThrow(/not something/);
   });
 });

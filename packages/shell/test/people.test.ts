@@ -104,7 +104,7 @@ describe('the workflow builder on this computer', () => {
     expect(after.workflows.find((x) => x.defaultFor.includes('project'))!.name).toBe('Audio');
     expect(after.workflows.find((x) => x.defaultFor.includes('subproject'))!.name).toBe('Writing and publishing'); // each level has its own default
     await h.workflowCall('setDefault', w.id, ['subproject']);
-    expect((await h.workflowState() as { workflows: { defaultFor: string[] }[] }).workflows.find((x) => x.name === 'Writing and publishing')!.defaultFor).toEqual([]);
+    expect((await h.workflowState() as { workflows: { name: string; defaultFor: string[] }[] }).workflows.find((x) => x.name === 'Writing and publishing')!.defaultFor).toEqual([]);
   });
 
   it('offers only the changes it lists', async () => {

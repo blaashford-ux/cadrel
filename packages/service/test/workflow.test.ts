@@ -7,7 +7,7 @@ const S = 'studio1';
 const STUDIO = { kind: 'studio' as const, id: S };
 const NOW = () => new Date('2026-10-27T10:00:00.000Z');
 const denied = (p: Promise<unknown>) => p.then(() => false, (e) => e instanceof PermissionDenied); // any other error means the permission check passed
-const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], ...over });
+const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], openTasks: 0, approved: [], ...over });
 
 async function studio() {
   const db = memoryStudioDb();

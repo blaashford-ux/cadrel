@@ -85,6 +85,7 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 
 Notes on the defaults:
+- **Tasks, sign-offs and decisions** use the Tasks and deadlines row: Read sees them; Write (`task.edit`) makes and changes tasks assigned to you, asks for sign-offs and records decisions; Manage-level roles can also hand work to others (`task.assign`), reach anyone's task and withdraw anyone's request (`task.manage`). Answering a sign-off is not a capability: only the people it names can, whatever they hold. Decisions can be added by anyone who may write them and never changed or removed by anyone.
 - **Moving a project between stages** (`project.stage`) is part of the Tasks and deadlines row, and a move can also name roles in its gate; the workflow, not this table, says which.
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.

@@ -48,11 +48,15 @@ export const CONDITION_KINDS = {
   has_manuscript: 'A manuscript is linked to it',
   no_open_notes: 'It and its subprojects have no open notes',
   has_subprojects: 'It has at least one subproject',
-  subprojects_done: 'Every subproject has reached a Done stage'
+  subprojects_done: 'Every subproject has reached a Done stage',
+  no_open_tasks: 'It and its subprojects have no open tasks',
+  approved: 'It has been signed off'
 } as const;
 export type ConditionKind = keyof typeof CONDITION_KINDS;
 export interface Condition {
   kind: ConditionKind;
+  /** For `approved`: the label of the sign-off that must stand ("Cover approved"). */
+  label?: string;
 }
 
 export interface Stage { key: string; name: string; category: StageCategory; color: string; position: number }
@@ -125,7 +129,12 @@ export function cleanConditions(raw: unknown): Condition[] {
   for (const c of raw) {
     const kind = (c as Condition)?.kind;
     if (!kind || !Object.hasOwn(CONDITION_KINDS, kind)) return fail('invalid', `${String(kind)} is not a condition a gate can check.`);
-    if (!out.some((x) => x.kind === kind)) out.push({ kind });
+    if (kind === 'approved') {
+      const label = typeof (c as Condition).label === 'string' ? (c as Condition).label!.trim().replace(/\s+/g, ' ') : '';
+      if (!label) return fail('invalid', 'A sign-off gate needs the label of the approval it asks for.');
+      if (label.length > 40) return fail('invalid', 'A sign-off label is 40 characters at most.');
+      if (!out.some((x) => x.kind === kind && x.label!.toLowerCase() === label.toLowerCase())) out.push({ kind, label });
+    } else if (!out.some((x) => x.kind === kind)) out.push({ kind });
   }
   return out;
 }
@@ -322,18 +331,30 @@ export interface ProjectFacts {
   openNotes: number;
   /** The category of each live subproject's current stage; null for one that has no workflow yet. */
   subprojects: (StageCategory | null)[];
+  /** Open tasks on the project and everything under it. */
+  openTasks: number;
+  /** The labels of the sign-offs the project currently stands approved under. */
+  approved: string[];
 }
 
 /** The conditions that do not hold for a project, in words. Empty means the gate is open on the project's side. */
 export function unmetConditions(facts: ProjectFacts, conditions: Condition[]): string[] {
   const out: string[] = [];
-  for (const { kind } of conditions) {
+  for (const { kind, label } of conditions) {
+    if (kind === 'approved') {
+      if (!facts.approved.some((l) => l.toLowerCase() === (label ?? '').toLowerCase())) out.push(`Needs sign-off: “${label}”`);
+      continue;
+    }
     const ok =
       kind === 'has_manuscript' ? facts.hasManuscript
       : kind === 'no_open_notes' ? facts.openNotes === 0
+      : kind === 'no_open_tasks' ? facts.openTasks === 0
       : kind === 'has_subprojects' ? facts.subprojects.length > 0
       : facts.subprojects.length > 0 && facts.subprojects.every((c) => c === 'done'); // subprojects_done: nothing to be done is not done
-    if (!ok) out.push(kind === 'no_open_notes' && facts.openNotes > 0 ? `${facts.openNotes} open note${facts.openNotes === 1 ? '' : 's'} to resolve first (${CONDITION_KINDS.no_open_notes.toLowerCase()})` : CONDITION_KINDS[kind]);
+    if (ok) continue;
+    if (kind === 'no_open_notes' && facts.openNotes > 0) out.push(`${facts.openNotes} open note${facts.openNotes === 1 ? '' : 's'} to resolve first (${CONDITION_KINDS.no_open_notes.toLowerCase()})`);
+    else if (kind === 'no_open_tasks') out.push(`${facts.openTasks} open task${facts.openTasks === 1 ? '' : 's'} to finish first (${CONDITION_KINDS.no_open_tasks.toLowerCase()})`);
+    else out.push(CONDITION_KINDS[kind]);
   }
   return out;
 }

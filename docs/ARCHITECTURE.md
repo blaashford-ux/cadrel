@@ -148,9 +148,9 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `workflow(name, is_default, template_key)`, `workflow_stage(key, name, position, category, color)`, `workflow_transition(from_key, to_key, conditions)` and `workflow_transition_role(transition_id, role_id)`. One default per studio; `book.workflow_id` and `book.stage` (a stage key). The shipped default is MDEdit's stages. Gate conditions are checked from the catalogue; approval, progress and task conditions arrive with those records.
 
 **Production**
-- `deliverable(owner, due)`, `task`, `dependency`.
+- `task(project_id, kind task|deadline, title, assignee, due, state)` and `task_dependency` (migration 0007; a deadline is a task with a date).
 - `brief(kind, project, body, version)`: manuscript, edit, cover, blurb, campaign.
-- `approval(subject, version, decider, outcome, conditions)` and `decision(context, subject, outcome, follow-ups)` (the ledger).
+- `approval(project_id, label, required, state)` with `approval_approver(person, response, reason)`, and `decision(project_id, title, context, outcome, supersedes_id)` (the append-only ledger). Approvals are of a project under a label for now; approvals of a specific file version come with the vault. A workflow gate's `approved` condition reads the labels a project currently stands approved under.
 - manuscripts and art are vault files with versions (above); `asset` adds purpose, channel, licence and approval on top of a vault file.
 - `comment` anchored to a document passage or an asset region, with `resolution`.
 

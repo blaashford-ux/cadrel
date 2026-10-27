@@ -16,7 +16,7 @@ beforeEach(async () => {
 const code = async (p: Promise<unknown>) => p.then(() => 'ok', (e) => (e instanceof WorkflowError ? e.code : `other:${(e as Error).message}`));
 const anyone = () => true;
 const nobody = () => false;
-const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], ...over });
+const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], openTasks: 0, approved: [], ...over });
 const asDraft = (w: WorkflowRecord): WorkflowDraft => ({ name: w.name, description: w.description, stages: w.stages.map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color })), transitions: w.transitions });
 
 describe('the shipped default', () => {
@@ -270,5 +270,22 @@ describe('projects hold a workflow and a stage, and the workflow never changes',
     const t = createProject(emptyTree(), { name: 'Salt Road', workflowId: 'wf', stage: 'drafting', now: NOW }).tree;
     expect(sanitizeTree(JSON.parse(JSON.stringify(t))).projects[0]).toMatchObject({ workflowId: 'wf', stage: 'drafting' });
     expect(sanitizeTree({ projects: [{ id: 'a', name: 'A', stage: 'drafting' }, { id: 'b', name: 'B', workflowId: 'wf', stage: 'BAD KEY' }] }).projects.map((p) => [p.workflowId, p.stage])).toEqual([[null, null], ['wf', null]]);
+  });
+});
+
+describe('gates that ask about tasks and sign-off', () => {
+  it('names the open tasks and the missing sign-off', () => {
+    expect(unmetConditions(facts({ openTasks: 2 }), [{ kind: 'no_open_tasks' }])).toEqual(['2 open tasks to finish first (it and its subprojects have no open tasks)']);
+    expect(unmetConditions(facts(), [{ kind: 'no_open_tasks' }])).toEqual([]);
+    expect(unmetConditions(facts(), [{ kind: 'approved', label: 'Cover approved' }])).toEqual(['Needs sign-off: “Cover approved”']);
+    expect(unmetConditions(facts({ approved: ['cover approved'] }), [{ kind: 'approved', label: 'Cover approved' }])).toEqual([]); // labels compare without case
+  });
+  it('keeps a sign-off gate only with a label, and one gate per label', async () => {
+    const w0 = (await listWorkflows(db, ctx()))[0]!;
+    const save = (conditions: unknown) => saveWorkflow(db, ctx(), w0.id, { ...asDraft(w0), transitions: w0.transitions.map((t) => (t.from === 'editing' && t.to === 'published' ? { ...t, conditions: conditions as never } : t)) });
+    expect(await code(save([{ kind: 'approved' }]))).toBe('invalid');
+    expect(await code(save([{ kind: 'approved', label: 'x'.repeat(41) }]))).toBe('invalid');
+    const w = await save([{ kind: 'approved', label: ' Ready  to publish ' }, { kind: 'approved', label: 'ready to publish' }, { kind: 'approved', label: 'Legal' }]);
+    expect(w.transitions.find((t) => t.from === 'editing' && t.to === 'published')!.conditions).toEqual([{ kind: 'approved', label: 'Ready to publish' }, { kind: 'approved', label: 'Legal' }]);
   });
 });

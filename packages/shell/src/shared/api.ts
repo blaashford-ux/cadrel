@@ -1,4 +1,4 @@
-import type { AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -563,6 +563,44 @@ export interface WorkflowApi {
   delete(id: string): Promise<void>;
 }
 
+/** Tasks, deadlines, approvals and decisions on a project and its subprojects, each labelled with the project it is on. */
+export type OnProject<T> = T & { projectName: string };
+export type WorkState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      people: { id: string; name: string }[];
+      /** What the person using the app may do with work: task.edit (their own), task.assign (hand work over), task.manage (anyone's). */
+      may: { edit: boolean; assign: boolean; manage: boolean };
+      tasks: OnProject<TaskRecord>[];
+      approvals: OnProject<ApprovalRecord>[];
+      decisions: OnProject<Omit<DecisionRecord, 'projectId'> & { projectId: string | null }>[];
+      /** The sign-off labels the project stands approved under now. */
+      approved: string[];
+    };
+/** What waits on the person using the app, across projects. */
+export interface MineState {
+  available: boolean;
+  tasks: OnProject<TaskRecord>[];
+  approvals: OnProject<ApprovalRecord>[];
+}
+export interface WorkApi {
+  state(projectId: string): Promise<WorkState>;
+  mine(): Promise<MineState>;
+  createTask(i: NewTask): Promise<TaskRecord>;
+  updateTask(id: string, patch: TaskPatch): Promise<TaskRecord>;
+  setState(id: string, state: TaskState): Promise<TaskRecord>;
+  addDependency(id: string, dependsOnId: string): Promise<TaskRecord>;
+  removeDependency(id: string, dependsOnId: string): Promise<TaskRecord>;
+  requestApproval(i: NewApproval): Promise<ApprovalRecord>;
+  /** Only a person the approval names can answer it; rejecting needs a reason. */
+  respond(id: string, response: 'approved' | 'rejected', reason?: string): Promise<ApprovalRecord>;
+  withdraw(id: string): Promise<ApprovalRecord>;
+  /** Adds to the ledger. Entries are never changed; `supersedes` replaces an earlier one. */
+  recordDecision(i: { projectId?: string | null; title: string; context?: string; outcome: string; supersedes?: string | null }): Promise<DecisionRecord>;
+}
+
 /** A project's workflow and where it is in it, as the pages show them. */
 export interface ProjectStageView {
   workflowId: string;
@@ -584,6 +622,7 @@ export interface CadrelApi {
   studios: StudiosApi;
   stages: StagesApi;
   workflow: WorkflowApi;
+  work: WorkApi;
   people: PeopleApi;
   myBooks: MyBooksApi;
   backup: BackupApi;
