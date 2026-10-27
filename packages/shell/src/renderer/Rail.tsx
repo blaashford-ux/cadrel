@@ -22,7 +22,8 @@ const TOP: Item[] = [
 ];
 const MODULES: Item[] = [
   { page: 'write', label: 'Write', icon: svg('M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3Zm9-13 4 4') },
-  { page: 'market', label: 'Market', icon: svg('M3 3v18h18M7 15l4-5 3 3 5-7') }
+  { page: 'market', label: 'Market', icon: svg('M3 3v18h18M7 15l4-5 3 3 5-7') },
+  { page: 'finance', label: 'Finance', icon: svg('M12 3v18M16.5 7.5c-.8-1-2.3-1.5-4.5-1.5-2.5 0-4 1.1-4 2.8 0 4.4 8.5 1.8 8.5 6.2 0 1.8-1.7 3-4.5 3-2.2 0-3.8-.6-4.8-1.8') }
 ];
 const ASSISTANTS: Item = { page: 'assistants', label: 'Extensions', icon: svg('M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6.5 11 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z') };
 const ADMIN: Item = { page: 'admin', label: 'Admin', icon: svg('M12 3 4.5 6v5.5c0 4.4 3.1 8.1 7.5 9.5 4.4-1.4 7.5-5.1 7.5-9.5V6L12 3Zm-3 9 2.2 2.2L15.5 9.8') };

@@ -4,6 +4,7 @@
 //   dist/main.mjs, preload.cjs, renderer/        the shell
 //   dist/modules/write/{preload.cjs,renderer/}    Write's view
 //   dist/modules/market/{preload.cjs,renderer/}   Market's view
+//   dist/modules/finance/{preload.cjs,renderer/}  Finance's view
 //   dist/mcp.mjs                                  the MCP server Claude launches
 //   dist/assets/{fonts,vendor,icon.png}           what Write's print pipeline reads
 //   dist/resources/extension/, cadrel-market-extension.zip
@@ -20,6 +21,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkgs = path.resolve(root, '..');
 const write = path.join(pkgs, 'write');
 const market = path.join(pkgs, 'market-desktop');
+const finance = path.join(pkgs, 'finance-desktop');
 const dist = path.join(root, 'dist');
 const rel = (p) => path.relative(pkgs, p);
 
@@ -47,6 +49,9 @@ await preloadCjs(path.join(write, 'electron', 'preload.ts'), path.join(dist, 'mo
 // ---- Market's view, its MCP server and browser extension ----
 await page(path.join(market, 'src', 'renderer'), path.join(dist, 'modules', 'market', 'renderer'));
 await preloadCjs(path.join(market, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'market', 'preload.cjs'));
+// ---- Finance's view (its main half runs inside the shell) ----
+await page(path.join(finance, 'src', 'renderer'), path.join(dist, 'modules', 'finance', 'renderer'));
+await preloadCjs(path.join(finance, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'finance', 'preload.cjs'));
 // The one MCP server for the whole suite (Write's tools and Market's), run by the app's own Node (ELECTRON_RUN_AS_NODE)
 // so it finds the same native modules.
 const version = fs.readFileSync(path.join(root, '..', '..', 'VERSION'), 'utf8').trim();

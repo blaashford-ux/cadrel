@@ -15,10 +15,10 @@ import { Settings } from './Settings';
 import { useStudio } from './useStudio';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
 const OWN = new Set<Page>(['home', 'projects', 'notes', 'dashboard', 'assistants', 'admin', 'profile', 'settings']);
-const STUDIO_PAGES = new Set<Page>(['dashboard', 'projects', 'notes', 'write', 'market']);
+const STUDIO_PAGES = new Set<Page>(['dashboard', 'projects', 'notes', 'write', 'market', 'finance']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'projects', 'notes', 'dashboard']);
 

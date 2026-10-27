@@ -309,40 +309,30 @@ describe.skipIf(!have)('desktop app in Electron', () => {
     expect(text).toContain('The bread had risen far too high again.');
     expect(text).not.toMatch(/end of your free sample/i);
   }, 120000);
-  it('My Books: importing a KDP report creates the user\'s books, an uncaptured one opens to "Open on Amazon", and captured ones are marked', async () => {
+  it('My Books: a book added by ASIN is listed, an uncaptured one opens to "Open on Amazon", and captured ones are marked', async () => {
     await page.getByRole('tab', { name: 'Library' }).click();
     const back = page.getByRole('button', { name: '← Back' });
     if (await back.isVisible()) await back.click(); // the previous test left a book open
     await page.getByRole('button', { name: 'My Books' }).click();
     await page.getByText(/No books of yours yet/).waitFor();
-    const csv = ['Date,Title,Author Name,ASIN,Marketplace,Paid Units', '2026-10-16,Waiting One,Jo Writer,B0AAAAAAAA,Amazon.com,9', '2026-10-17,A Book I Captured,Jo Writer,B0C1R52V2J,Amazon.com,3', '2026-10-18,Joint Venture,Jo Writer & Sam Partner,B0BBBBBBBB,Amazon.com,2'].join('\n');
-    await page.locator('input[type=file]').first().setInputFiles({ name: 'orders.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
-    await page.getByText(/3 new books added to My Books/).waitFor();
-    const waiting = page.locator('tr[data-asin]').filter({ hasText: 'Waiting One' });
+    // KDP reports are imported in Finance (which adds their books here); in Market a book is added by its ASIN
+    for (const asin of ['B0AAAAAAAA', 'B0C1R52V2J']) {
+      await page.getByLabel('ASIN to add').fill(asin);
+      await page.getByRole('button', { name: 'Add', exact: true }).click();
+      await page.getByText(`Added ${asin}.`).waitFor();
+    }
+    const waiting = page.locator('tr[data-asin="B0AAAAAAAA"]');
     await waiting.waitFor();
-    await page.getByText(/1 of 3 captured/).waitFor();
-    // the Library's columns, with Pen Name where Mine was, and Orders and KU added; Pen Name filters and sorts
-    for (const name of ['Title', 'Author', 'Rank', 'Store rank', 'Rating', 'Ratings', 'Price', 'Captures', 'Text', 'Pen Name', 'Orders', 'KU pages read']) await page.getByRole('button', { name, exact: true }).waitFor();
-    expect(await page.getByRole('button', { name: 'Mine', exact: true }).count()).toBe(0);
-    await waiting.getByText('Jo Writer').waitFor();
-    // a collaboration shows every pen name, and filtering by either name finds it
-    const joint = page.locator('tr[data-asin="B0BBBBBBBB"]');
-    await joint.getByText('Jo Writer, Sam Partner').first().waitFor();
-    await page.getByLabel('Filter Pen Name').selectOption('Sam Partner');
-    await page.getByText('1 of 3 books').waitFor();
-    await page.getByLabel('Filter Pen Name').selectOption('Jo Writer');
-    await page.getByText('3 books').first().waitFor();
-    await page.getByLabel('Filter Pen Name').selectOption('');
-    await page.getByRole('button', { name: 'Pen Name', exact: true }).click();
-    await page.locator('th[aria-sort="ascending"]').getByText('Pen Name').waitFor();
+    await page.getByText(/1 of 2 captured/).waitFor();
+    // the Library's columns, with Pen Name where Mine was; the money columns (Orders, KU pages read) are Finance's
+    for (const name of ['Title', 'Author', 'Rank', 'Store rank', 'Rating', 'Ratings', 'Price', 'Captures', 'Text', 'Pen Name']) await page.getByRole('button', { name, exact: true }).waitFor();
+    for (const name of ['Mine', 'Orders', 'KU pages read']) expect(await page.getByRole('button', { name, exact: true }).count()).toBe(0);
     await page.screenshot({ path: path.join(tmp, 'shots', 'mybooks.png'), fullPage: true });
 
     // the book that was never captured has a page of its own with the way to capture it
-    await waiting.getByRole('button', { name: 'Waiting One' }).click();
-    await page.getByRole('heading', { name: 'Waiting One' }).waitFor();
+    await waiting.getByRole('button', { name: 'B0AAAAAAAA' }).click();
     await page.getByText(/Bring this book into the library/).waitFor();
     await page.getByText('Not captured yet').waitFor();
-    await page.getByText(/9 paid units/).waitFor();
     await page.getByRole('button', { name: 'Open on Amazon' }).click();
     expect((await page.evaluate(() => (window as any).cadrelMarket.__opened())) as string[]).toContain('https://www.amazon.com/dp/B0AAAAAAAA');
     await page.getByRole('button', { name: '← Back' }).click();

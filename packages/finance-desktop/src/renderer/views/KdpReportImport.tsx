@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import type { ImportSummary } from '../../shared/api.js';
+import type { ImportSummary } from './types.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 
 export const describeImport = (s: ImportSummary) =>
   `${s.file.replace(/^\d{8}T\d{6}Z-/, '')}: ${s.contains?.length === 1 && s.contains[0] === 'payments' ? '' : `${s.rows.toLocaleString()} rows for ${s.books} book${s.books === 1 ? '' : 's'}, ${s.from} to ${s.to}`}${s.contains ? ` (${s.contains.map((c) => (c === 'orders' ? 'paid orders' : c === 'payments' ? `${s.paymentCount} payment${s.paymentCount === 1 ? '' : 's'}${s.paymentFrom ? `, paid ${s.paymentFrom}${s.paymentTo && s.paymentTo !== s.paymentFrom ? ' to ' + s.paymentTo : ''}` : ''}` : c === 'royalties' ? `royalties${s.royaltyFrom ? ` ${s.royaltyFrom} to ${s.royaltyTo}` : ''}` : 'Kindle+ pages read')).join(' and ')})` : ''}${s.newBooks ? `; ${s.newBooks} new book${s.newBooks === 1 ? '' : 's'} added to My Books` : ''}${s.skipped ? `; ${s.skipped} unreadable rows skipped` : ''}`;

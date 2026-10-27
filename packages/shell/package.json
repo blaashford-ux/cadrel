@@ -22,6 +22,7 @@
     "tesseract.js": "^6.0.0"
   },
   "devDependencies": {
+    "@cadrel/finance-desktop": "*",
     "@cadrel/kernel": "*",
     "@cadrel/market-desktop": "*",
     "@cadrel/market-library": "*",

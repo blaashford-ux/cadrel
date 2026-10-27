@@ -12,6 +12,7 @@ import { createWriteModule, type WriteModule } from '@cadrel/write/electron/modu
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
 import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/src/main/module.js';
+import { createFinanceModule, type FinanceModule } from '@cadrel/finance-desktop/src/main/module.js';
 import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/launcher.js';
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
@@ -102,6 +103,7 @@ async function attachAll(paths: string[]): Promise<UserView> {
 }
 let write: WriteModule;
 let market: MarketModule;
+let finance: FinanceModule;
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
@@ -110,17 +112,19 @@ const views: Partial<Record<ModuleId, WebContentsView>> = {};
 // Light/dark follows nativeTheme (which reaches every view). The colours are the shell's to set: it paints its own page,
 // tells Write (which already understands the model), and maps the same colours onto Market's differently named variables.
 const themeState = (): ThemeState => ({ source: settings.get().theme ?? 'system', ...(settings.get().themeCustom ? { custom: settings.get().themeCustom } : {}) });
-let marketCssKey: string | undefined;
+// Finance is drawn with Market's stylesheet, so it takes the same mapping.
+const paintedCss: Partial<Record<ModuleId, string>> = {};
 
-function paintMarket(): void {
-  const c = views.market?.webContents;
+function paintMarketStyled(id: 'market' | 'finance'): void {
+  const c = views[id]?.webContents;
   if (!c || c.isDestroyed()) return;
-  const old = marketCssKey;
+  const old = paintedCss[id];
   void c.insertCSS(marketCss(settings.get().themeCustom)).then((key) => {
-    marketCssKey = key;
+    paintedCss[id] = key;
     if (old) void c.removeInsertedCSS(old).catch(() => undefined);
   });
 }
+const paintMarket = (): void => (paintMarketStyled('market'), paintMarketStyled('finance'));
 
 function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null }): ThemeState {
   settings.update((s) => {
@@ -499,15 +503,15 @@ function ensureView(id: ModuleId): WebContentsView {
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   view.webContents.on('will-navigate', (e) => e.preventDefault());
   view.webContents.on('render-process-gone', (_e, d) => market?.log.error(`${id} renderer gone`, d.reason));
-  // Market has no title bar of its own, so on Windows its tab bar must clear the window buttons and be draggable.
-  if (id === 'market') {
+  // Market and Finance have no title bar of their own, so on Windows their tab bars must clear the window buttons and be draggable.
+  if (id === 'market' || id === 'finance') {
     view.webContents.on('did-finish-load', () => {
       if (win && windowInfo(win).overlay) {
         void view.webContents.insertCSS('header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}');
       }
     });
   }
-  if (id === 'market') view.webContents.on('did-finish-load', paintMarket);
+  if (id === 'market' || id === 'finance') view.webContents.on('did-finish-load', () => paintMarketStyled(id));
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
   if (id === 'write') write.attach(view.webContents, win!);
   views[id] = view;
@@ -519,13 +523,13 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'projects', 'notes', 'write', 'market']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
   if (!win || win.isDestroyed()) return;
   page = next;
-  for (const id of ['write', 'market'] as const) views[id]?.setVisible(false);
+  for (const id of ['write', 'market', 'finance'] as const) views[id]?.setVisible(false);
   if (isModule(next) && !studios.view().connected) {
     win.webContents.focus(); // the page explains; the module's view stays hidden
   } else if (isModule(next)) {
@@ -1175,6 +1179,10 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
+    // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
+    finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
+    finance.start();
+    market.service.onCapture(() => finance.notify());
     registerShellIpc();
     watchForUpdates();
 

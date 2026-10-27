@@ -22,20 +22,6 @@ function Spark({ values, label, invert }: { values: (number | null)[]; label: st
   );
 }
 
-/** What the imported KDP reports say about one of the user's own books. */
-function MySales({ b }: { b: OwnBookRow }) {
-  return (
-    <div className="card">
-      <strong>Your sales (from the KDP reports you imported)</strong>
-      <div>
-        {b.paidUnits.toLocaleString()} paid unit{b.paidUnits === 1 ? '' : 's'}{b.firstSaleDay ? ` since ${b.firstSaleDay}` : ''}{b.lastSaleDay ? `, last sale ${b.lastSaleDay}` : ''}
-        {b.kenpPages > 0 && <> · {b.kenpPages.toLocaleString()} Kindle Unlimited pages read</>}
-      </div>
-      {b.paidUnits === 0 && b.kenpPages === 0 && <div className="muted">No sales in the imported reports.</div>}
-    </div>
-  );
-}
-
 export function BookDetailView({ asin, onBack, version }: { asin: string; onBack: () => void; version: number }) {
   const [d, setD] = useState<BookDetail | null | undefined>(undefined);
   const [cover, setCover] = useState<string | null>(null);
@@ -75,7 +61,6 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
             <div className="muted">★ One of your books · ASIN <code>{asin}</code></div>
           </div>
         </div>
-        <MySales b={own} />
         <div className="banner">
           <strong>Bring this book into the library</strong>
           <ol>
@@ -112,8 +97,6 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
           <div className="muted">Published {L.publication_date ?? '–'} · {L.publisher ?? '–'} · ASIN <code>{asin}</code></div>
         </div>
       </div>
-
-      {own && <MySales b={own} />}
 
       <h2>History ({d.history.length} capture{d.history.length === 1 ? '' : 's'})</h2>
       <div className="grid3">
