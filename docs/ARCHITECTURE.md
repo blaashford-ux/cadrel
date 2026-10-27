@@ -164,7 +164,7 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `rights` (who owns or licenses what, restrictions)
 - `revenue_share` (percentages, advances, bonuses)
 
-This separation is a standing requirement: credit is not ownership, contribution is not share. The schema exists from M1 even though the screens arrive in M7.
+This separation is a standing requirement: credit is not ownership, contribution is not share. The schema exists from M1 (migration 0010; kernel `business.ts`, service `business`) even though the screens arrive in M7. Each record is about a subject (an IP, series, book or edition) and no table or function joins the four; shares are basis points and money is cents; the live shares on a subject never exceed 100% on any day; records are archived, never deleted; reads need `business.read` and are logged.
 
 **Market and sales:** the BookScout library schema (captures, snapshots, ranks, lists, keywords, KDP reports, royalty months, payments, `person`, `book_split`) moves into the `market` and `sales` packages. Its `person` and `book_split` tables are replaced by kernel `person` and `revenue_share` in M7, with a migration.
 

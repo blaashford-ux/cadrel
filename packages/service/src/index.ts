@@ -7,11 +7,13 @@
  * once a book is linked to a project; until then they do not reach catalogue calls, which is the safe way round.
  */
 import {
+  addContribution, addCredit, addRights, addShare, listContributions, listCredits, listRights, listShares, setBusinessArchived, updateContribution, updateCredit, updateRights, updateShare, AUDITED_READS,
   acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
+  type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage
 } from '@cadrel/kernel';
@@ -267,6 +269,35 @@ export class StudioAs {
       if (pc.roles.get(a.roleId)?.all) owner = true;
     }
     return (roleIds) => owner || roleIds.some((r) => held.has(r));
+  }
+
+  /**
+   * Contributions, credits, rights and revenue shares: four separate kinds of record about a book, series, IP or edition. Reading needs
+   * business.read and **is logged** (who looked, at what), as for royalties; changing needs business.manage. Nothing is deleted: records are archived.
+   */
+  readonly business = {
+    contributions: async (f?: { subject?: Subject; personId?: string; archived?: boolean }): Promise<Contribution[]> => (await this.seen('contributions', f?.subject), listContributions(this.o.db, this.ctx(), f)),
+    credits: async (f?: { subject?: Subject; archived?: boolean }): Promise<Credit[]> => (await this.seen('credits', f?.subject), listCredits(this.o.db, this.ctx(), f)),
+    rights: async (f?: { subject?: Subject; archived?: boolean }): Promise<Rights[]> => (await this.seen('rights', f?.subject), listRights(this.o.db, this.ctx(), f)),
+    shares: async (f?: { subject?: Subject; personId?: string; archived?: boolean }): Promise<RevenueShare[]> => (await this.seen('shares', f?.subject), listShares(this.o.db, this.ctx(), f)),
+
+    addContribution: async (i: Parameters<typeof addContribution>[2]): Promise<Contribution> => (await this.need('business.manage'), addContribution(this.o.db, this.ctx(), i)),
+    updateContribution: async (id: string, p: Parameters<typeof updateContribution>[3]): Promise<Contribution> => (await this.need('business.manage'), updateContribution(this.o.db, this.ctx(), id, p)),
+    addCredit: async (i: Parameters<typeof addCredit>[2]): Promise<Credit> => (await this.need('business.manage'), addCredit(this.o.db, this.ctx(), i)),
+    updateCredit: async (id: string, p: Parameters<typeof updateCredit>[3]): Promise<Credit> => (await this.need('business.manage'), updateCredit(this.o.db, this.ctx(), id, p)),
+    addRights: async (i: Parameters<typeof addRights>[2]): Promise<Rights> => (await this.need('business.manage'), addRights(this.o.db, this.ctx(), i)),
+    updateRights: async (id: string, p: Parameters<typeof updateRights>[3]): Promise<Rights> => (await this.need('business.manage'), updateRights(this.o.db, this.ctx(), id, p)),
+    addShare: async (i: Parameters<typeof addShare>[2]): Promise<RevenueShare> => (await this.need('business.manage'), addShare(this.o.db, this.ctx(), i)),
+    updateShare: async (id: string, p: Parameters<typeof updateShare>[3]): Promise<RevenueShare> => (await this.need('business.manage'), updateShare(this.o.db, this.ctx(), id, p)),
+    archive: async (kind: 'contribution' | 'credit' | 'rights' | 'share', id: string, archived = true): Promise<void> => (await this.need('business.manage'), setBusinessArchived(this.o.db, this.ctx(), kind, id, archived))
+  };
+
+  /** A read of business data: needs business.read, and leaves a row in the audit log saying who looked at what. */
+  private async seen(what: string, subject?: Subject): Promise<void> {
+    await this.need('business.read');
+    if (AUDITED_READS.has('business.read')) {
+      await this.o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [this.stamp(), this.personId, 'read.business', subject ? `${subject.kind}:${subject.id}` : '*', JSON.stringify({ what })]);
+    }
   }
 
   /**
