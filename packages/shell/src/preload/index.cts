@@ -108,6 +108,7 @@ const api: CadrelApi = {
     addEdition: (bookId, i) => studioCall('shell:mybooks:call', 'addEdition', bookId, i),
     updateEdition: (id, patch) => studioCall('shell:mybooks:call', 'updateEdition', id, patch),
     archiveBook: (id) => studioCall('shell:mybooks:call', 'archive', 'book', id),
+    deleteBook: (id) => studioCall('shell:mybooks:deleteBook', id),
     linkProject: (bookId, projectId) => studioCall('shell:mybooks:call', 'linkProject', bookId, projectId),
     addFromMarket: (asins) => studioCall('shell:mybooks:addFromMarket', asins),
     list: () => studioCall('shell:mybooks:list'),

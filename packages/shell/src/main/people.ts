@@ -29,11 +29,13 @@ export class PeopleHost {
   private meId = '';
   private studioId = '';
   private why = 'The people and roles of this Studio are managed by its owner.';
+  private penScope: string[] | null = null;
 
   /** Opens (or creates) the records file. An owned Studio starts with its twelve default roles and this person as Owner; a joined one has none here. */
   async open(o: { file: string; studioId: string; owned: boolean; ownerName: string; now?: () => Date }): Promise<void> {
     await this.close();
     this.studioId = o.studioId;
+    this.penScope = null;
     if (!o.owned) return;
     this.db = await openStudioDb(o.file);
     // One records file belongs to one Studio and keeps the Studio id it was made with. A Studio restored from a backup has a new id of its own
@@ -46,6 +48,19 @@ export class PeopleHost {
     const row = await this.db.first<{ id: string }>("SELECT subject_id AS id FROM assignment WHERE studio_id = ? AND role_id = 'role_owner' AND scope_kind = 'studio' AND subject_kind = 'person' ORDER BY granted_at, id LIMIT 1", [this.studioId]);
     this.meId = row!.id;
     this.svc = new StudioService({ db: this.db, studioId: this.studioId, access: dbAccess(this.db, this.studioId), now: o.now });
+    await this.refreshPenNames();
+  }
+
+  /**
+   * The pen names this Studio publishes under, for limiting what Market imports and shows. Null where this computer holds no records for the
+   * Studio (nothing to limit by); an empty list where it does but no pen name has been added yet.
+   */
+  penNameScope(): readonly string[] | null {
+    return this.penScope;
+  }
+
+  private async refreshPenNames(): Promise<void> {
+    this.penScope = this.db ? (await this.db.all<{ n: string }>('SELECT display_name AS n FROM pen_name WHERE studio_id = ? ORDER BY lower(display_name)', [this.studioId])).map((r) => r.n) : null;
   }
 
   async close(): Promise<void> {
@@ -53,6 +68,7 @@ export class PeopleHost {
     this.db = null;
     this.svc = null;
     this.meId = '';
+    this.penScope = null;
   }
 
   /** A consistent copy of the records for a backup, written to `dest`. False where this computer holds no records. */
@@ -118,7 +134,9 @@ export class PeopleHost {
     if (!method) throw new Error('That is not something the People page can do.');
     if (!this.svc) throw new Error(this.why);
     const people = this.svc.as(this.meId).people as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
-    return people[method]!(...args);
+    const done = await people[method]!(...args);
+    await this.refreshPenNames(); // a pen name may have been added, renamed or removed
+    return done;
   }
 
   async workflowState(): Promise<Exclude<WorkflowState, { available: true }> | Omit<Extract<WorkflowState, { available: true }>, 'usage'>> {

@@ -119,4 +119,16 @@ describe('the workflow builder on this computer', () => {
     expect(await h.workflowState()).toMatchObject({ available: false });
     await expect(h.workflowCall('create', { name: 'X' })).rejects.toThrow(/managed by its owner/);
   });
+
+  it('offers the Studio’s pen names as the limit for Market: none where there are no records, an empty list until one is added', async () => {
+    const joined = await open(false);
+    expect(joined.h.penNameScope()).toBeNull();
+    const { h } = await open();
+    expect(h.penNameScope()).toEqual([]);
+    await h.call('createPenName', { displayName: 'Mara Quinn' });
+    await h.call('createPenName', { displayName: 'A. J. Vale' });
+    expect(h.penNameScope()).toEqual(['A. J. Vale', 'Mara Quinn']);
+    await h.close();
+    expect(h.penNameScope()).toBeNull();
+  });
 });

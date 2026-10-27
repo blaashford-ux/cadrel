@@ -6,6 +6,7 @@ import { exportUserData } from '../userdata.js';
 import { registerOwnBooks, type OwnCandidate } from './own.js';
 import { parsePaymentFile, savePayments, type PaymentParse } from './payments.js';
 import { parseRoyaltyFile, saveRoyaltyRows, type RoyaltyParse } from './royalty.js';
+import { knownInScope, scopeKdpFile, type AuthorScope, type Excluded } from './scope.js';
 import { readXlsx, readCsv, isXlsx, norm, findHeader, parseDates, cell, num, type Grid } from './grid.js';
 
 /**
@@ -199,6 +200,10 @@ export interface ImportSummary {
   /** Books this file added to My Books, and how many books the file named. */
   newBooks?: number;
   titles?: number;
+  /** Set when the library is limited to the Studio's pen names: what the file held that was left out because it belongs to other pen names. */
+  excluded?: Excluded;
+  /** The library is limited to the Studio's pen names and the Studio has none, so nothing could be brought in. */
+  noPenNames?: boolean;
 }
 
 /** Read whichever KDP tables a file holds: paid orders, KENP pages read, royalties, or any mix (a full workbook). */
@@ -224,8 +229,10 @@ function ownRoyaltyBooks(r: RoyaltyParse | null): { asin: string; title?: string
 }
 
 /** Parse, keep a copy of the file, and store its rows. Re-importing an overlapping report just replaces those days. */
-export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8Array, now = new Date()): ImportSummary {
-  const p = parseKdpFile(name, bytes);
+export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8Array, now = new Date(), scope: AuthorScope = null): ImportSummary {
+  const parsed = parseKdpFile(name, bytes);
+  // Only the Studio's pen names come in (see scope.ts); everything else in the report is left out, and so is its trace in the library.
+  const { parts: p, excluded } = scopeKdpFile(parsed, scope, knownInScope(db, scope));
   const file = `${stampOf(now)}-${safe(name)}`;
   fs.mkdirSync(path.join(dirOf(root), 'orders'), { recursive: true });
   fs.writeFileSync(path.join(dirOf(root), 'orders', file), bytes);
@@ -241,7 +248,7 @@ export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8
   const days = [...all.map((r) => r.day), ...(p.royalty?.rows ?? []).map((r) => `${r.month}-01`), ...paid].sort();
   const months = (p.royalty?.rows ?? []).map((r) => r.month).sort();
   return {
-    file, rows: all.length, books: new Set(named.map((r) => r.asin)).size, from: days[0]!, to: days[days.length - 1]!,
+    file, rows: all.length, books: new Set(named.map((r) => r.asin)).size, from: days[0] ?? '', to: days[days.length - 1] ?? '',
     skipped: (p.orders?.skipped ?? 0) + (p.kenp?.skipped ?? 0) + (p.royalty?.skipped ?? 0) + (p.payments?.skipped ?? 0),
     contains: [...(p.orders ? ['orders' as const] : []), ...(p.kenp ? ['kenp' as const] : []), ...(p.royalty ? ['royalties' as const] : []), ...(p.payments ? ['payments' as const] : [])],
     kenpRows: p.kenp?.rows.length,
@@ -249,6 +256,7 @@ export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8
     ...(p.royalty ? { royaltyRows: p.royalty.rows.length, royaltyFrom: months[0], royaltyTo: months[months.length - 1] } : {}),
     newBooks,
     titles: new Set(named.map((b) => b.asin)).size,
+    ...(scope !== null ? { excluded, ...(scope.length === 0 ? { noPenNames: true } : {}) } : {}),
   };
 }
 
@@ -264,7 +272,7 @@ export function importRankFile(db: Db, root: string, name: string, bytes: Uint8A
 }
 
 /** Read every saved file again (a lost database, or after a parser fix). Oldest first so newer reports win. */
-export function reindexSales(db: Db, root: string): number {
+export function reindexSales(db: Db, root: string, scope: AuthorScope = null): number {
   let n = 0;
   for (const kind of ['orders', 'ranks'] as const) {
     const d = path.join(dirOf(root), kind);
@@ -273,7 +281,7 @@ export function reindexSales(db: Db, root: string): number {
       try {
         const bytes = new Uint8Array(fs.readFileSync(path.join(d, f)));
         if (kind === 'orders') {
-          const p = parseKdpFile(f, bytes);
+          const { parts: p } = scopeKdpFile(parseKdpFile(f, bytes), scope, knownInScope(db, scope));
           if (p.orders) saveSalesRows(db, p.orders.rows, f, f.slice(0, 16));
           if (p.kenp) saveKenpRows(db, p.kenp.rows, f, f.slice(0, 16));
           if (p.royalty) saveRoyaltyRows(db, p.royalty.rows, p.royalty.summary, f, f.slice(0, 16));

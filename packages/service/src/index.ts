@@ -10,7 +10,7 @@ import {
   addContribution, addCredit, addRights, addShare, listContributions, listCredits, listRights, listShares, setBusinessArchived, updateContribution, updateCredit, updateRights, updateShare, AUDITED_READS,
   acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
-  loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
+  loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
@@ -125,7 +125,10 @@ export class StudioAs {
     projectLinks: async (): Promise<{ bookId: string; projectId: string }[]> => (await this.need('catalogue.read'), bookProjectLinks(this.o.db, this.ctx())),
     linkProject: async (bookId: string, projectId: string | null): Promise<void> => (await this.need('catalogue.edit'), linkBookProject(this.o.db, this.ctx(), bookId, projectId)),
 
-    archive: async (kind: 'ip' | 'series' | 'book' | 'edition', id: string, archived = true): Promise<void> => (await this.need('catalogue.archive'), setCatalogueArchived(this.o.db, this.ctx(), kind, id, archived))
+    archive: async (kind: 'ip' | 'series' | 'book' | 'edition', id: string, archived = true): Promise<void> => (await this.need('catalogue.archive'), setCatalogueArchived(this.o.db, this.ctx(), kind, id, archived)),
+
+    /** Deletes a book added by mistake, with its editions, links, business records and log rows. Needs the same power as archiving; returns the ASINs its editions had. */
+    deleteBook: async (id: string): Promise<{ asins: string[] }> => (await this.need('catalogue.archive'), deleteBook(this.o.db, this.ctx(), id))
   };
 
   /**

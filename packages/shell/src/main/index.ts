@@ -37,7 +37,7 @@ import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
-import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
+import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
@@ -160,12 +160,14 @@ function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null })
 const MCP_DESCRIPTION = 'Lets Claude read your Cadrel manuscripts and leave review notes in them (it never changes your manuscript), and search your Kindle market research.';
 const CADREL_MCP: McpBrand = { id: 'cadrel', name: 'Cadrel', description: MCP_DESCRIPTION, file: 'Cadrel.mcpb' };
 const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI Kit', description: MCP_DESCRIPTION };
+/** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
+const penNameArgs = (): string[] => { const p = peopleHost.penNameScope(); return p ? ['--pen-names', JSON.stringify(p)] : []; };
 const mcpFile = () => path.join(here, 'mcp.mjs');
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
   // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile())],
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -514,14 +516,15 @@ function ensureView(id: ModuleId): WebContentsView {
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   view.webContents.on('will-navigate', (e) => e.preventDefault());
   view.webContents.on('render-process-gone', (_e, d) => market?.log.error(`${id} renderer gone`, d.reason));
-  // Market and Finance have no title bar of their own, so on Windows their tab bars must clear the window buttons and be draggable.
-  if (id === 'market' || id === 'finance') {
-    view.webContents.on('did-finish-load', () => {
-      if (win && windowInfo(win).overlay) {
-        void view.webContents.insertCSS('header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}');
-      }
-    });
-  }
+  // Every module view reaches the window's top-right corner, where the window buttons (a separate view) sit. A drag region under another view is the
+  // window's caption to Windows and takes the mouse from it, so the corner must not be one, in any module.
+  // Market and Finance have no title bar of their own, so on Windows their tab bars must also clear the window buttons and be draggable.
+  view.webContents.on('did-finish-load', () => {
+    if (!win || !windowInfo(win).overlay) return;
+    const tabs = id === 'market' || id === 'finance' ? 'header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}' : '';
+    void view.webContents.insertCSS(`${tabs}#cadrel-window-corner{position:fixed;top:0;right:0;width:150px;height:40px;-webkit-app-region:no-drag;z-index:2147483647}`);
+    void view.webContents.executeJavaScript("if(!document.getElementById('cadrel-window-corner')){const d=document.createElement('div');d.id='cadrel-window-corner';d.setAttribute('aria-hidden','true');document.body.appendChild(d)}").catch(() => undefined);
+  });
   if (id === 'market' || id === 'finance') view.webContents.on('did-finish-load', () => paintMarketStyled(id));
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
   if (id === 'write') write.attach(view.webContents, win!);
@@ -886,6 +889,7 @@ function registerShellIpc(): void {
   manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
   manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
   manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
   manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));
@@ -1292,7 +1296,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
@@ -1317,6 +1321,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         quitting = true;
       },
       defaultLibrary: marketDefault,
+      authorScope: () => peopleHost.penNameScope(),
       mcpLaunch,
       mcpBrand: CADREL_MCP,
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'

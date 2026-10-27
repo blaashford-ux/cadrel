@@ -483,6 +483,29 @@ function RecordCard({ d, reload }: { d: CatalogueDetail; reload: () => void }) {
   );
 }
 
+/** Permanent removal of a book added by mistake: everything about it goes, from the catalogue, Market and Finance. */
+function DeleteCard({ d, reload, onGone }: { d: CatalogueDetail; reload: () => void; onGone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const { err, run } = useRun(reload);
+  if (!d.may.archive) return null;
+  const title = d.book.title;
+  return (
+    <section className="card" aria-labelledby="mb-del">
+      <h3 id="mb-del">Delete this book</h3>
+      <p className="muted small">For a book added by mistake. It is removed for good from the catalogue and from Market and Finance (pages captured, sales, pages read, royalties and splits under its ASINs), with its editions, credits, rights and shares and every log entry about them. The project it was made in stays. Nothing can bring it back; to keep a record of a book you no longer sell, archive it instead.</p>
+      {!open ? <button type="button" className="danger" onClick={() => setOpen(true)}>Delete this book…</button> : (
+        <div className="row">
+          <label className="field"><span className="field-label">Type the title to confirm</span><input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={title} aria-label="Type the title to confirm" /></label>
+          <button type="button" className="danger" disabled={typed.trim() !== title} onClick={() => void run(() => api.deleteBook(d.book.bookId)).then((r) => r.ok && onGone())}>Delete permanently</button>
+          <button type="button" onClick={() => { setOpen(false); setTyped(''); }}>Cancel</button>
+        </div>
+      )}
+      {err && <div className="banner error" role="alert">{err}</div>}
+    </section>
+  );
+}
+
 function EditionsCard({ d, reload }: { d: CatalogueDetail; reload: () => void }) {
   const b = d.book;
   const { err, note, run } = useRun(reload);
@@ -595,6 +618,7 @@ function CatalogueBookView({ bookId, financeVisible, studio, act, onBack, onProj
       <RecordCard d={d} reload={reload} />
       <EditionsCard d={d} reload={reload} />
       <ProjectCard d={d} reload={reload} onProject={onProject} />
+      <DeleteCard d={d} reload={reload} onGone={onBack} />
       {asins.length > 1 && (
         <label className="inline"><span className="muted small">Listing, sales and royalties for</span>
           <select value={shown ?? ''} onChange={(e) => setAsin(e.target.value)} aria-label="Edition shown below">{asins.map((a) => <option key={a.asin} value={a.asin}>{a.format} · {a.asin}</option>)}</select>

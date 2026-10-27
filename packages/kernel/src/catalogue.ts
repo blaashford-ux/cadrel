@@ -377,3 +377,40 @@ export async function linkBookProject(db: Db, c: Ctx, bookId: string, projectId:
 export async function bookProjectLinks(db: Db, c: Pick<Ctx, 'studioId'>): Promise<BookProjectLink[]> {
   return db.all<BookProjectLink>('SELECT book_id AS bookId, project_id AS projectId FROM book_project WHERE studio_id = ?', [c.studioId]);
 }
+
+/**
+ * Deletes a book that was added by mistake, with nothing left behind in the records: its editions, the project link, every contribution,
+ * credit, right and revenue share about it or its editions, and every audit row about any of them. The one trace is a row saying that a book
+ * was deleted and by whom, with no title, ASIN or ISBN in it, since the log must still show who removed records. Returns the ASINs its
+ * editions had, so the caller can remove what other modules hold under them (Market's pages and sales, Finance's splits). The project the
+ * book was made in is not touched.
+ */
+export async function deleteBook(db: Db, c: Ctx, id: string): Promise<{ asins: string[] }> {
+  const cur = await getBook(db, c, id);
+  if (!cur) return fail('not-found', 'That book is not there.');
+  const editions = (await db.all<{ id: string; asin: string | null }>('SELECT id, asin FROM edition WHERE book_id = ? AND studio_id = ?', [id, c.studioId]));
+  const ids = [id, ...editions.map((e) => e.id)];
+  const marks = ids.map(() => '?').join(',');
+  const kinds = `(subject_kind = 'book' AND subject_id = ?) OR (subject_kind = 'edition' AND subject_id IN (${editions.map(() => '?').join(',') || "''"}))`;
+  const kindParams = [id, ...editions.map((e) => e.id)];
+  const about = await db.all<{ id: string }>(
+    `SELECT id FROM contribution WHERE studio_id = ? AND (${kinds}) UNION SELECT id FROM credit WHERE studio_id = ? AND (${kinds}) UNION SELECT id FROM rights WHERE studio_id = ? AND (${kinds}) UNION SELECT id FROM revenue_share WHERE studio_id = ? AND (${kinds})`,
+    [c.studioId, ...kindParams, c.studioId, ...kindParams, c.studioId, ...kindParams, c.studioId, ...kindParams]
+  );
+  const everyId = [...ids, ...about.map((a) => a.id)];
+  const stmts: { sql: string; params?: unknown[] }[] = [];
+  // the log first: rows about these records by target, or naming one of them in the detail (a project link, a move)
+  for (let i = 0; i < everyId.length; i += 100) {
+    const part = everyId.slice(i, i + 100);
+    stmts.push({ sql: `DELETE FROM audit WHERE target IN (${part.map(() => '?').join(',')}) OR ${part.map(() => 'instr(detail, ?) > 0').join(' OR ')}`, params: [...part, ...part] });
+  }
+  for (const t of ['contribution', 'credit', 'rights', 'revenue_share']) stmts.push({ sql: `DELETE FROM ${t} WHERE studio_id = ? AND (${kinds})`, params: [c.studioId, ...kindParams] });
+  stmts.push(
+    { sql: 'DELETE FROM book_project WHERE book_id = ?', params: [id] },
+    { sql: `DELETE FROM edition WHERE book_id = ? AND studio_id = ? AND id IN (${marks})`, params: [id, c.studioId, ...ids] },
+    { sql: 'DELETE FROM book WHERE id = ? AND studio_id = ?', params: [id, c.studioId] },
+    audit(c, 'catalogue.book.delete', 'deleted', {})
+  );
+  await write(db, stmts, 'That book could not be deleted.');
+  return { asins: [...new Set(editions.map((e) => e.asin).filter((a): a is string => !!a))] };
+}

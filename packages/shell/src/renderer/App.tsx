@@ -110,6 +110,7 @@ export function App() {
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
         <header className={`strip${win?.overlay ? ' overlay' : ''}`}>
           <h1 className="strip-title">{TITLES[page]}</h1>
+          {win?.overlay && <span className="strip-gap" aria-hidden="true" />}
         </header>
         <div className={`page page-${page}`}>
           {page === 'home' && <Home overview={overview} studio={studio.state} studios={studios} onGo={go} onProject={(id) => (select(id), go('projects'))} />}

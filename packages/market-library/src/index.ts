@@ -37,6 +37,7 @@ export * from './sales/import.js';
 export * from './sales/calibrate.js';
 export * from './sales/ku.js';
 export * from './sales/own.js';
+export * from './sales/scope.js';
 export * from './sales/royalty.js';
 export * from './sales/earnings.js';
 export * from './sales/payments.js';

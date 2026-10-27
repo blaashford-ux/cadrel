@@ -38,6 +38,8 @@ export interface MarketHost {
   updatesDisabledReason?: string;
   /** The MCP server's name and the Claude Desktop extension's wording. Default: Cadrel Market's. */
   mcpBrand?: McpBrand;
+  /** The pen names this Studio publishes under. Imports bring in only these authors' books, and My Books shows only them. Null: no limit. */
+  authorScope?: () => readonly string[] | null;
   /** How an AI app launches the MCP server. Default: Cadrel Market's own bundled server next to the code. */
   mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
 }
@@ -60,6 +62,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
   const service = new AppService({
     userData: host.dataDir,
     updatesDisabledReason: host.updatesDisabledReason,
+    authorScope: host.authorScope,
     openExternal: (url) => {
       // Amazon pages, the Google Trends comparison the keyword view builds, and Reddit threads shown in the community analysis; nothing else is opened on the user's behalf
       if (!/^https:\/\/www\.amazon\.com\//.test(url) && !/^https:\/\/trends\.google\.com\/trends\/explore\?/.test(url) && !/^https:\/\/www\.reddit\.com\/r\/[A-Za-z0-9_]+\/comments\//.test(url)) throw new Error('refusing to open ' + url);

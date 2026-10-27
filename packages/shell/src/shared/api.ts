@@ -532,6 +532,8 @@ export interface MyBooksApi {
   addEdition(bookId: string, i: { format: string; asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
   updateEdition(id: string, patch: { asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
   archiveBook(id: string): Promise<void>;
+  /** Deletes a book added by mistake from the catalogue and from Market and Finance, leaving no trace of it (the project it was made in stays). */
+  deleteBook(id: string): Promise<{ asins: string[] }>;
   /** Links the book to the project it is made in (or unlinks with null). */
   linkProject(bookId: string, projectId: string | null): Promise<void>;
   /** Adds books Market knows as yours to the catalogue. */

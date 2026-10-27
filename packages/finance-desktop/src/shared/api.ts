@@ -88,6 +88,10 @@ export interface FinanceApi {
   resetCalibration(): Promise<void>;
   /** Forget imported sales and rank files (the books and pages stay). */
   clearSalesData(): Promise<void>;
+  /** Books already in the library under pen names this Studio does not have (empty where the Studio is not limited to its pen names). */
+  booksOutsideScope(): Promise<OwnBookRow[]>;
+  /** Removes those books with their sales, pages read and royalties; returns how many books went. */
+  removeBooksOutsideScope(): Promise<number>;
   /** Saves one book's earnings by month as a spreadsheet (the same file My Books saves). Returns where it went, or null if cancelled. */
   exportBookEarnings(asin: string): Promise<string | null>;
   /** Subscribe to "something was captured or imported" so figures reload; returns an unsubscribe function. */
@@ -96,4 +100,4 @@ export interface FinanceApi {
   onNavigate(cb: (page: string) => void): () => void;
 }
 
-export const CHANNELS = ['ready', 'bookPayments', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData'] as const satisfies readonly (keyof FinanceApi)[];
+export const CHANNELS = ['ready', 'bookPayments', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData', 'booksOutsideScope', 'removeBooksOutsideScope'] as const satisfies readonly (keyof FinanceApi)[];
