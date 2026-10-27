@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { zipSync, strToU8 } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { MyBooksError, bookPage, earningsCsv, financeAccess, listBooks, saveBook, type BookService } from '../src/main/mybooks';
+import { MyBooksError, bookPage, financeAccess, listBooks, saveBook, type BookService } from '../src/main/mybooks';
 import { AppService } from '@cadrel/market-desktop/src/main/service';
 
 const A = 'B0AAAAAAA1';
@@ -50,7 +50,7 @@ afterEach(async () => {
 const withCategory = (): BookService => ({
   status: () => svc.status(), ownBooks: () => svc.ownBooks(), ownBook: (a) => svc.ownBook(a), book: (a) => svc.book(a), cover: (a) => svc.cover(a),
   moneyMonths: () => svc.moneyMonths(), moneyAnalysis: (f, t) => svc.moneyAnalysis(f, t), bookSplit: (a) => svc.bookSplit(a), statement: (f, t, b) => svc.statement(f, t, b),
-  statementFile: (f, t, k, p, b) => svc.statementFile(f, t, k, p, b),
+  statementFile: (f, t, k, p, b) => svc.statementFile(f, t, k, p, b), bookEarningsFile: (a, m) => svc.bookEarningsFile(a, m),
   bookLists: () => [{ key: 'romance', name: 'Romance' }],
   exportContent: async (key, kind) => ({ filename: `${key}.${kind}`, content: `category ${key} as ${kind}` })
 });
@@ -133,11 +133,26 @@ describe('saving from My Books', () => {
     expect(fs.readFileSync(path.join(r.folder, 'Market', 'romance.csv'), 'utf8')).toBe('category romance as csv');
   });
 
-  it('earnings CSV states the basis of every month, oldest first', () => {
+  it('earnings CSV is made by the service, states the basis of every month, oldest first, and equals what My Books saves', async () => {
     seed();
-    const csv = earningsCsv(bookPage(svc, A, true, 24)!.finance!);
-    expect(csv.split('\r\n')[0]).toBe('Month,Royalties (USD),Units,KENP pages,Basis');
-    expect(csv).toMatch(/^2026-09,[\d.]+,12,2600,reported by KDP$/m);
+    const f = svc.bookEarningsFile(A);
+    expect(f.filename).toBe('Anthology earnings.csv');
+    expect(f.content.split('\r\n')[0]).toBe('Month,Royalties (USD),eBook,Print,Kindle+,Units,KENP pages,Basis');
+    expect(f.content).toMatch(/^2026-09,49\.39,[\d.]+,[\d.]+,[\d.]+,12,2600,reported by KDP$/m);
+    expect(svc.bookEarningsFile('B0BBBBBBB2').content).not.toContain('2026-09');
+    const r = await saveBook(withCategory(), A, 'finance', true, { parent: path.join(tmp, 'out') });
+    expect(fs.readFileSync(path.join(r.folder, 'Finance', f.filename), 'utf8')).toBe(f.content);
+  });
+
+  it('a per-book analysis counts only that book', () => {
+    seed();
+    const all = svc.moneyAnalysis('2026-08', '2026-09');
+    const one = svc.moneyAnalysis('2026-08', '2026-09', B);
+    expect(all.books.map((b) => b.asin).sort()).toEqual([A, B].sort());
+    expect(one.books.map((b) => b.asin)).toEqual([B]);
+    expect(one.totals.usd).toBeCloseTo(10, 2);
+    expect(one.marketplaces.map((m) => m.key)).toEqual(['amazon.com']);
+    expect(() => svc.moneyAnalysis('2026-08', '2026-09', 'nope')).toThrow();
   });
 
   it('never overwrites: a second save of the same book goes to a new folder', async () => {

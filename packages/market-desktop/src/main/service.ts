@@ -738,7 +738,12 @@ export class AppService {
   // ---- Money: analysis, month view, royalty splits and author statements -----------------------------------------------------
 
   moneyMonths(): string[] { return reportMonths(this.need().db); }
-  moneyAnalysis(from: string, to: string): AnalysisReport { assertMonths(from, to); return analysisReport(this.need().db, { from, to }); }
+  /** With `asin`, the report for that one book alone. */
+  moneyAnalysis(from: string, to: string, asin?: string): AnalysisReport {
+    assertMonths(from, to);
+    if (asin !== undefined) assertAsin(asin);
+    return analysisReport(this.need().db, { from, to, asin });
+  }
   moneyMonth(month: string): MonthReport { assertMonths(month, month); return monthReport(this.need().db, month); }
   people(): Person[] { return listPeople(this.need().db); }
   savePerson(p: { id?: number; name: string; penNames?: string[] }): Person { const lib = this.need(); return savePerson(lib.db, lib.root, p); }
@@ -769,6 +774,23 @@ export class AppService {
     if (kind === 'csv') return { filename: `royalty-statement-${payee ? payee.replace(/[^A-Za-z0-9]+/g, '-') + '-' : ''}${span}.csv`, content: statementCsv(s, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
     return { filename: `royalty-statement-${payee.replace(/[^A-Za-z0-9]+/g, '-')}-${span}.pdf`, content: statementHtml(s, payee) };
+  }
+  /**
+   * One book's earnings by month as a spreadsheet: the last `months` months that have any sales, oldest first, with what KDP's figure for each month rests on.
+   * The single place this file is made, for Finance's book page and for My Books.
+   */
+  bookEarningsFile(asin: string, months = 24): { filename: string; content: string } {
+    assertAsin(asin);
+    const all = this.moneyMonths();
+    const title = this.ownBook(asin)?.title ?? asin;
+    const cell = (v: string | number) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    const rows: (string | number)[][] = [['Month', 'Royalties (USD)', 'eBook', 'Print', 'Kindle+', 'Units', 'KENP pages', 'Basis']];
+    if (all.length) {
+      const r = analysisReport(this.need().db, { from: all[all.length - 1]!, to: all[0]!, asin });
+      const used = r.months.filter((m) => m.usd || m.units || m.pages).slice(-Math.max(1, months));
+      for (const m of used) rows.push([m.month, m.usd.toFixed(2), m.ebook.toFixed(2), m.print.toFixed(2), m.kenp.toFixed(2), m.units, m.pages, m.state === 'final' ? 'reported by KDP' : m.state === 'estimated' ? 'estimated KENP rate' : 'not reported yet']);
+    }
+    return { filename: `${title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || asin} earnings.csv`, content: rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n' };
   }
   /** The calculator for one payment: what each author is owed from it, after tax, and whether it has been allocated. */
   paymentOwed(number: string): PaymentOwed { assertPaymentNumber(number); return paymentOwed(this.need().db, number); }

@@ -830,20 +830,24 @@ function registerShellIpc(): void {
   manageLike('mybooks:saveMarket', saveWhat('market'));
   manageLike('mybooks:saveFinance', saveWhat('finance'));
   manageLike('mybooks:saveAll', saveWhat('all'));
+  /** Shows a module and asks its page to show something. The page subscribes just after it loads, so the first ask can land before it is listening; asking twice is harmless (it opens the same book). */
+  const showInModule = async (id: 'market' | 'finance', channel: string, payload: string) => {
+    showPage(id);
+    const wc = views[id]!.webContents;
+    if (wc.isLoading()) await new Promise<void>((r) => wc.once('did-finish-load', () => r()));
+    wc.send(channel, payload);
+    setTimeout(() => !wc.isDestroyed() && wc.send(channel, payload), 400);
+  };
   manageLike('mybooks:openIn', async (module: string, asin: string) => {
     const a = asinOf(asin);
     if (module === 'finance') {
       if (!financeSeen()) throw new Error('Your role does not include Finance.');
-      showPage('finance');
-    } else if (module === 'market') {
-      showPage('market');
-      const wc = views.market!.webContents;
-      if (wc.isLoading()) await new Promise<void>((r) => wc.once('did-finish-load', () => r()));
-      // The page subscribes just after it loads, so the first ask can land before it is listening; asking twice is harmless (it opens the same book).
-      wc.send('navigate', `book:${a}`);
-      setTimeout(() => !wc.isDestroyed() && wc.send('navigate', `book:${a}`), 400);
-    } else throw new Error('unknown module');
+      await showInModule('finance', 'finance:navigate', `book:${a}`);
+    } else if (module === 'market') await showInModule('market', 'navigate', `book:${a}`);
+    else throw new Error('unknown module');
   });
+  // The book's Amazon page in the browser (Market's own "Open on Amazon", so only Amazon addresses are ever opened).
+  manageLike('mybooks:openOnAmazon', async (asin: string) => market.service.openBook(asinOf(asin)));
   // Backup and import. The pickers are dialogs only the shell can open; under test an environment variable stands in for the person's choice.
   const picked = (name: string) => (TEST ? process.env[name] : undefined);
   const stamp = () => new Date().toISOString().slice(0, 10);

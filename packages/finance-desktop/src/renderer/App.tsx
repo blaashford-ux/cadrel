@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { BookView } from './views/BookView.js';
 import { BooksTab } from './views/BooksTab.js';
 import { MoneyAnalysis } from './views/MoneyAnalysis.js';
 import { MoneyMonth } from './views/MoneyMonth.js';
@@ -17,13 +18,20 @@ export function App() {
   /** Bumped when data changes (an import here, a capture in Market) so every view reloads. */
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
+  /** The book whose page is open (on any tab); the tabs stay in view. */
+  const [asin, setAsin] = useState<string | null>(null);
 
   useEffect(() => {
     void api.ready().then(setReady, () => setReady(false));
-    return api.onChange(() => {
+    const offNavigate = api.onNavigate((page) => {
+      const m = /^book:([A-Z0-9]{10})$/.exec(page);
+      if (m) { setTab('books'); setAsin(m[1]!); }
+    });
+    const offChange = api.onChange(() => {
       bump();
       void api.ready().then(setReady, () => setReady(false));
     });
+    return () => { offNavigate(); offChange(); };
   }, [bump]);
 
   if (ready === null) return null;
@@ -40,17 +48,18 @@ export function App() {
     <>
       <header className="tabs" role="tablist">
         {TABS.map(([id, label]) => (
-          <button key={id} role="tab" className="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>
+          <button key={id} role="tab" className="tab" aria-selected={tab === id} onClick={() => { setTab(id); setAsin(null); }}>{label}</button>
         ))}
       </header>
       <main>
-        {tab === 'books' && <BooksTab version={version} onImported={bump} />}
-        {tab === 'analysis' && <MoneyAnalysis version={version} />}
-        {tab === 'month' && <MoneyMonth version={version} />}
-        {tab === 'royalties' && <Royalties version={version} />}
-        {tab === 'payments' && <Payments version={version} onImported={bump} />}
-        {tab === 'payouts' && <Payouts version={version} onChanged={bump} />}
-        {tab === 'estimates' && <SalesCalibration />}
+        {asin && <BookView asin={asin} version={version} onBack={() => setAsin(null)} onSplits={() => { setAsin(null); setTab('royalties'); }} />}
+        {!asin && tab === 'books' && <BooksTab version={version} onImported={bump} onOpen={setAsin} />}
+        {!asin && tab === 'analysis' && <MoneyAnalysis version={version} />}
+        {!asin && tab === 'month' && <MoneyMonth version={version} />}
+        {!asin && tab === 'royalties' && <Royalties version={version} />}
+        {!asin && tab === 'payments' && <Payments version={version} onImported={bump} />}
+        {!asin && tab === 'payouts' && <Payouts version={version} onChanged={bump} />}
+        {!asin && tab === 'estimates' && <SalesCalibration />}
       </main>
     </>
   );

@@ -74,6 +74,19 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
     };
   }, [asin]);
 
+  const [note, setNote] = useState<string | null>(null);
+  const [noteErr, setNoteErr] = useState<string | null>(null);
+  const run = async (job: () => Promise<unknown>, ok?: string) => {
+    setNote(null);
+    setNoteErr(null);
+    try {
+      await job();
+      if (ok) setNote(ok);
+    } catch (e) {
+      setNoteErr(clean(e));
+    }
+  };
+
   const notes = useMemo(() => (studio?.notes ?? []).filter((x) => x.target?.module === 'market' && x.target.kind === 'book' && x.target.id === asin), [studio, asin]);
 
   if (page === undefined) return <p className="muted">Loading…</p>;
@@ -98,9 +111,12 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
             <p className="muted">{page.penNames.join(', ') || page.authors.join(', ') || 'Author not known yet'} · {page.asin}</p>
             <p className="muted small">In My Books {page.source === 'report' ? 'from a KDP report' : 'added by ASIN'} on {page.addedAt.slice(0, 10)}.</p>
             <div className="row">
-              <button type="button" onClick={() => void api.openIn('market', page.asin)}>Open in Market</button>
-              {financeVisible && <button type="button" onClick={() => void api.openIn('finance', page.asin)}>Open Finance</button>}
+              <button type="button" className="primary" onClick={() => void run(() => api.openOnAmazon(page.asin), 'Opened the book’s page on Amazon in your browser.')}>Open on Amazon</button>
+              <button type="button" onClick={() => void run(() => api.openIn('market', page.asin))}>Open in Market</button>
+              {financeVisible && <button type="button" onClick={() => void run(() => api.openIn('finance', page.asin))}>Open in Finance</button>}
             </div>
+            {note && <p className="muted small" role="status">{note}</p>}
+            {noteErr && <div className="banner error" role="alert">{noteErr}</div>}
           </div>
         </div>
       </section>

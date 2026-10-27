@@ -479,7 +479,9 @@ export interface MyBooksApi {
   saveFinance(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
   /** Everything the two above save, in one folder for this book. */
   saveAll(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
-  /** Shows the book in Market's Library; or opens Finance. */
+  /** Opens the book's page on Amazon in the browser, where it can be captured with the extension. */
+  openOnAmazon(asin: string): Promise<void>;
+  /** Shows the book in Market's Library, or on its own page in Finance (only for roles that may see Finance). */
   openIn(module: 'market' | 'finance', asin: string): Promise<void>;
 }
 

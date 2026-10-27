@@ -37,6 +37,7 @@ const api: CadrelApi = {
     saveMarket: (asin) => studioCall('shell:mybooks:saveMarket', asin),
     saveFinance: (asin, o) => studioCall('shell:mybooks:saveFinance', asin, o),
     saveAll: (asin, o) => studioCall('shell:mybooks:saveAll', asin, o),
+    openOnAmazon: (asin) => studioCall('shell:mybooks:openOnAmazon', asin),
     openIn: (module, asin) => studioCall('shell:mybooks:openIn', module, asin)
   },
   backup: {

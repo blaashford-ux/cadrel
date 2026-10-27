@@ -61,8 +61,9 @@ const titles = (db: Db, asins: string[]) => {
 
 const add = (m: Money, source: EarningSource, usd: number) => { m[source] = round2(m[source] + usd); m.usd = round2(m.usd + usd); };
 
-export function analysisReport(db: Db, range: { from: string; to: string }, today = new Date()): AnalysisReport {
-  const rows = details(db, range.from, range.to, today);
+/** `asin` limits everything in the report to one book (its months, marketplaces, rates, daily units and pages). */
+export function analysisReport(db: Db, range: { from: string; to: string; asin?: string }, today = new Date()): AnalysisReport {
+  const rows = details(db, range.from, range.to, today).filter((d) => !range.asin || d.asin === range.asin);
   const totals = { ...zero(), units: 0, freeUnits: 0, pages: 0, estimated: 0, pending: 0 };
   const months = new Map<string, AnalysisMonth>();
   for (const m of monthsBetween(range.from, range.to)) months.set(m, { ...zero(), month: m, units: 0, freeUnits: 0, pages: 0, state: 'final' });
@@ -93,11 +94,12 @@ export function analysisReport(db: Db, range: { from: string; to: string }, toda
   }
   const t = titles(db, [...books.keys()]);
   for (const b of books.values()) { b.title = t.get(b.asin)!; b.share = totals.usd ? b.usd / totals.usd : 0; }
+  const one = range.asin ? ' WHERE asin = ?' : '';
   const daily = db.prepare(
     `SELECT day, SUM(units) AS units, SUM(free) AS free, SUM(pages) AS pages FROM (
-       SELECT day, paid_units AS units, free_units AS free, 0 AS pages FROM sales_day
-       UNION ALL SELECT day, 0, 0, pages FROM kenp_day) WHERE substr(day, 1, 7) >= ? AND substr(day, 1, 7) <= ? GROUP BY day ORDER BY day`,
-  ).all(range.from, range.to) as unknown as AnalysisReport['daily'];
+       SELECT day, paid_units AS units, free_units AS free, 0 AS pages FROM sales_day${one}
+       UNION ALL SELECT day, 0, 0, pages FROM kenp_day${one}) WHERE substr(day, 1, 7) >= ? AND substr(day, 1, 7) <= ? GROUP BY day ORDER BY day`,
+  ).all(...(range.asin ? [range.asin, range.asin] : []), range.from, range.to) as unknown as AnalysisReport['daily'];
   totals.freeUnits = daily.reduce((a, d) => a + d.free, 0);
   for (const d of daily) { const mo = months.get(d.day.slice(0, 7)); if (mo) mo.freeUnits += d.free; }
   // KDP's Summary lists every month, with 0 for the quiet ones, while the royalty sheets list only months with sales

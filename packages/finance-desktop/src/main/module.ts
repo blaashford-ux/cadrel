@@ -84,6 +84,7 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
 
   const handlers: Record<string, (...a: any[]) => unknown> = {
     ready: () => !!service.status().libraryRoot,
+    exportBookEarnings: (asin: string) => saveGenerated('csv', () => service.bookEarningsFile(asin), null, () => []),
     ownBooks: () => service.ownBooks(),
     openBook: (asin: string) => service.openBook(asin),
     exportStatement,

@@ -25,7 +25,7 @@ export interface FinanceApi {
   /** Months with any imported sales, royalties or KENP, newest first. */
   moneyMonths(): Promise<string[]>;
   /** Earnings, units and KENP for a span of months ('2026-01' to '2026-10'): by month, book, marketplace and royalty type. */
-  moneyAnalysis(from: string, to: string): Promise<AnalysisReport>;
+  moneyAnalysis(from: string, to: string, asin?: string): Promise<AnalysisReport>;
   /** Everything for one month, with the previous month and the same month last year for comparison. */
   moneyMonth(month: string): Promise<MonthReport>;
   /** The people who are paid royalties, and the pen names each writes under. */
@@ -86,8 +86,12 @@ export interface FinanceApi {
   resetCalibration(): Promise<void>;
   /** Forget imported sales and rank files (the books and pages stay). */
   clearSalesData(): Promise<void>;
+  /** Saves one book's earnings by month as a spreadsheet (the same file My Books saves). Returns where it went, or null if cancelled. */
+  exportBookEarnings(asin: string): Promise<string | null>;
   /** Subscribe to "something was captured or imported" so figures reload; returns an unsubscribe function. */
   onChange(cb: () => void): () => void;
+  /** Another page asked Finance to show something (`book:<ASIN>`: that book's page); returns an unsubscribe function. */
+  onNavigate(cb: (page: string) => void): () => void;
 }
 
-export const CHANNELS = ['ready', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData'] as const satisfies readonly (keyof FinanceApi)[];
+export const CHANNELS = ['ready', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData'] as const satisfies readonly (keyof FinanceApi)[];

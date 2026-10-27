@@ -26,7 +26,7 @@ export function financeAccess(roleKey: string | null | undefined): boolean {
 /** The part of the library service My Books reads. */
 export type BookService = Pick<
   AppService,
-  'status' | 'ownBooks' | 'ownBook' | 'book' | 'bookLists' | 'cover' | 'moneyMonths' | 'moneyAnalysis' | 'bookSplit' | 'exportContent' | 'statement' | 'statementFile'
+  'status' | 'ownBooks' | 'ownBook' | 'book' | 'bookLists' | 'cover' | 'moneyMonths' | 'moneyAnalysis' | 'bookSplit' | 'exportContent' | 'statement' | 'statementFile' | 'bookEarningsFile'
 >;
 
 const shift = (m: string, by: number): string => {
@@ -95,13 +95,6 @@ export function bookPage(svc: BookService, asin: string, financeVisible: boolean
 // ---- saving -----------------------------------------------------------------------------------------------------------------
 
 const slug = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Book';
-const csvCell = (v: string | number) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
-
-/** This book's earnings by month as a spreadsheet. The state column says whether each month is reported or rests on an estimate. */
-export function earningsCsv(page: NonNullable<BookPage['finance']>): string {
-  const rows = [['Month', 'Royalties (USD)', 'Units', 'KENP pages', 'Basis'], ...[...page.months].reverse().map((m) => [m.month, m.usd.toFixed(2), m.units, m.pages, m.state === 'final' ? 'reported by KDP' : m.state === 'estimated' ? 'estimated KENP rate' : 'not reported yet'])];
-  return rows.map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n';
-}
 
 /** Writes statements as PDFs (Finance's printer); given by the host so this file stays free of Electron. */
 export type PdfStatements = (dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned') => Promise<string[]>;
@@ -133,8 +126,9 @@ async function writeFinance(svc: BookService, page: BookPage, dir: string, month
   if (!page.finance.hasData) return [];
   const out: string[] = [];
   await fsp.mkdir(dir, { recursive: true });
-  const earnings = path.join(dir, `${slug(page.title)} earnings.csv`);
-  await fsp.writeFile(earnings, earningsCsv(page.finance));
+  const book = svc.bookEarningsFile(page.asin, months);
+  const earnings = path.join(dir, book.filename);
+  await fsp.writeFile(earnings, book.content);
   out.push(earnings);
   const latest = svc.moneyMonths()[0];
   if (!latest) return out;
