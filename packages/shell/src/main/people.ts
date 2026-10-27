@@ -36,12 +36,16 @@ export class PeopleHost {
     this.studioId = o.studioId;
     if (!o.owned) return;
     this.db = await openStudioDb(o.file);
+    // One records file belongs to one Studio and keeps the Studio id it was made with. A Studio restored from a backup has a new id of its own
+    // but its old records, so the records' id is the one to use: asking for the new one would find nothing and try to start a second Studio in the file.
+    const made = await this.db.first<{ studio_id: string }>('SELECT studio_id FROM person ORDER BY created_at, id LIMIT 1');
+    if (made) this.studioId = made.studio_id;
     const at = (o.now?.() ?? new Date()).toISOString();
-    await bootstrapStudio(this.db, { studioId: o.studioId, actor: 'system', now: at }, { id: crypto.randomUUID(), name: o.ownerName.trim() || 'Owner' });
+    await bootstrapStudio(this.db, { studioId: this.studioId, actor: 'system', now: at }, { id: crypto.randomUUID(), name: o.ownerName.trim() || 'Owner' });
     // the person using this computer is the Owner who holds the studio-wide Owner role first
-    const row = await this.db.first<{ id: string }>("SELECT subject_id AS id FROM assignment WHERE studio_id = ? AND role_id = 'role_owner' AND scope_kind = 'studio' AND subject_kind = 'person' ORDER BY granted_at, id LIMIT 1", [o.studioId]);
+    const row = await this.db.first<{ id: string }>("SELECT subject_id AS id FROM assignment WHERE studio_id = ? AND role_id = 'role_owner' AND scope_kind = 'studio' AND subject_kind = 'person' ORDER BY granted_at, id LIMIT 1", [this.studioId]);
     this.meId = row!.id;
-    this.svc = new StudioService({ db: this.db, studioId: o.studioId, access: dbAccess(this.db, o.studioId), now: o.now });
+    this.svc = new StudioService({ db: this.db, studioId: this.studioId, access: dbAccess(this.db, this.studioId), now: o.now });
   }
 
   async close(): Promise<void> {
@@ -49,6 +53,13 @@ export class PeopleHost {
     this.db = null;
     this.svc = null;
     this.meId = '';
+  }
+
+  /** A consistent copy of the records for a backup, written to `dest`. False where this computer holds no records. */
+  async snapshot(dest: string): Promise<boolean> {
+    if (!this.db) return false;
+    await this.db.snapshot(dest);
+    return true;
   }
 
   /** The workflow operations as the person using the app, for the project stages; null where this computer holds no records for the Studio. */

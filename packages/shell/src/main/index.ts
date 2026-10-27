@@ -29,7 +29,7 @@ import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { callWorkflow } from './workflowCalls';
@@ -38,7 +38,7 @@ import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
-import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
+import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
@@ -927,7 +927,6 @@ function registerShellIpc(): void {
   const stamp = () => new Date().toISOString().slice(0, 10);
   const schemaNow = Math.max(PROJECT_TREE_VERSION, NOTES_VERSION);
   /** Regenerable or machine-bound things stay out: model downloads, caches, logs. */
-  const regenerable = (rel: string) => /(^|\/)(models?|model-cache|cache|logs)(\/|$)/i.test(rel);
   manageLike('backup:make', async (o?: { projects?: string[] }) => {
     const st = studios.active();
     const only = Array.isArray(o?.projects) && o!.projects.length ? o!.projects.map(String) : undefined;
@@ -943,11 +942,18 @@ function registerShellIpc(): void {
     }
     await studio.studio.read(); // settles any write in flight before the folder is read
     await studios.flush();
-    const made = await createBackup({
-      file, studio: { id: st.id, name: st.name }, appVersion: app.getVersion(), schema: schemaNow,
-      sources: [{ name: 'data', dir: studioDir, exclude: regenerable }, { name: 'Projects', dir: projectsFolder(), only }]
-    });
-    return { file, files: made.files, bytes: made.bytes };
+    // The records (people, tasks, books, files' versions...) are in a SQLite file the app has open: it is copied as a consistent snapshot, never as the live file and its write-ahead log.
+    const stage = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-backup-'));
+    try {
+      const hasRecords = await peopleHost.snapshot(path.join(stage, 'records.db'));
+      const made = await createBackup({
+        file, studio: { id: st.id, name: st.name }, appVersion: app.getVersion(), schema: schemaNow, ...(hasRecords ? { recordsSchema: STUDIO_SCHEMA_VERSION } : {}),
+        sources: studioBackupSources({ studioDir, stage: hasRecords ? stage : null, vaultDir: path.join(studioFolder(), 'Vault'), projectsDir: projectsFolder(), only })
+      });
+      return { file, files: made.files, bytes: made.bytes };
+    } finally {
+      await fsp.rm(stage, { recursive: true, force: true });
+    }
   });
   manageLike('backup:inspect', async () => {
     let file = picked('CADREL_TEST_BACKUP_FROM');
@@ -966,7 +972,7 @@ function registerShellIpc(): void {
   manageLike('backup:restoreAsStudio', async (file: string, name: string) => {
     adminOnly();
     const d = await describeBackup(String(file));
-    if (d.schema > schemaNow) throw new Error('That backup is from a newer Cadrel than this one. Update Cadrel to restore it.');
+    if (d.schema > schemaNow || (d.records ?? 0) > STUDIO_SCHEMA_VERSION) throw new Error('That backup is from a newer Cadrel than this one. Update Cadrel to restore it.');
     const before = new Set(studios.view().studios.map((x) => x.id));
     const view = studios.create(String(name));
     const added = view.studios.find((x) => !before.has(x.id))!;
@@ -974,7 +980,7 @@ function registerShellIpc(): void {
     try {
       await restoreBackup({
         file: String(file), maxSchema: schemaNow,
-        targets: { data: path.join(userData, 'studios', added.id), Projects: path.join(cadrelFolder(), added.folderName, 'Projects') }
+        targets: studioRestoreTargets(d.sources, { studioDir: path.join(userData, 'studios', added.id), studioFolder: path.join(cadrelFolder(), added.folderName) })
       });
     } catch (e) {
       // Nothing half-restored is left behind: the folders were empty or missing before, so they are removed whole.

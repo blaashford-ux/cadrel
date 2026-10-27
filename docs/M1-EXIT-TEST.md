@@ -102,7 +102,7 @@ On "Dragon Rider" (the series):
 
 On the clean Windows profile, with Cadrel installed:
 - [ ] Start Cadrel: it creates its folders without a setup wizard.
-- [ ] **Open a backup…** (copy the backup file there) → **Restore everything as a new Studio**. Switch to it. Projects, notes, workflow definitions and settings are present. *(The records file, with people, tasks and books, is Studio data: say in your notes whether it came back; if tasks, people or books are missing, that is a bug to report.)*
+- [ ] **Open a backup…** (copy the backup file there) → **Restore everything as a new Studio**. Switch to it. Projects, notes, settings and the Studio's records are present: the people (you as Owner under your original name), workflow definitions, catalogue books, tasks and sign-offs, decisions, and Files with its version history. A file you had checked out with unsaved work comes back checked out, with that work in the Vault folder.
 - [ ] **Import from MDEdit → Choose MDEdit projects…**: choose your real project's folder (or the Root Folder). The preview lists its chapter files, size, "with a goal", review files, and what is **not** carried over.
 - [ ] **Import**. The project appears on the Projects page. Open it in Write and check against the MDEdit original: **chapters** identical, **word-count goal** and deadline kept, **active manuscript** kept, **review notes** present, **edited chapters** still marked, **style sheet and book settings** kept.
 - [ ] The project is in the **default workflow's first stage** (MDEdit's own status is not carried over: note whether that surprises you).

@@ -49,6 +49,8 @@ export interface BackupManifest {
   studio: { id: string; name: string };
   /** The studio.json schema this was made with; a restore by an older app refuses. */
   schema: number;
+  /** The Studio records schema (records.db) this was made with, when it holds records; a restore by an older app refuses. */
+  records?: number;
   sources: string[];
   entries: BackupEntry[];
 }
@@ -81,12 +83,39 @@ async function* walk(root: string, rel = ''): AsyncGenerator<{ rel: string; abs:
   }
 }
 
+/** Regenerable or machine-bound things stay out: model downloads, caches, logs. */
+export const regenerable = (rel: string) => /(^|\/)(models?|model-cache|cache|logs)(\/|$)/i.test(rel);
+
+/**
+ * What a Studio backup holds, and how it is laid out: `data` (the Studio's own folder, without the live records file), `records` (a consistent
+ * snapshot of it, staged in `stage`), `Vault` (the working folder, so what is checked out and not yet checked in is kept) and `Projects`.
+ */
+export function studioBackupSources(o: { studioDir: string; stage: string | null; vaultDir: string; projectsDir: string; only?: string[] }): BackupSource[] {
+  return [
+    { name: 'data', dir: o.studioDir, exclude: (rel, isDir) => regenerable(rel) || (!isDir && /^records\.db(-wal|-shm|-journal)?$/.test(rel)) },
+    ...(o.stage ? [{ name: 'records', dir: o.stage }] : []),
+    { name: 'Vault', dir: o.vaultDir },
+    { name: 'Projects', dir: o.projectsDir, only: o.only }
+  ];
+}
+
+/** Where each part of a backup goes when it is restored as a new Studio. Older backups have no records or vault part, so only what is in the backup is mapped. */
+export function studioRestoreTargets(sources: string[], o: { studioDir: string; studioFolder: string }): Record<string, string> {
+  return {
+    data: o.studioDir,
+    Projects: path.join(o.studioFolder, 'Projects'),
+    ...(sources.includes('records') ? { records: o.studioDir } : {}),
+    ...(sources.includes('Vault') ? { Vault: path.join(o.studioFolder, 'Vault') } : {})
+  };
+}
+
 export interface CreateOptions {
   /** Where the backup goes; it must end in `.cadrel-backup` and must not exist. */
   file: string;
   studio: { id: string; name: string };
   appVersion: string;
   schema: number;
+  recordsSchema?: number;
   sources: BackupSource[];
   now?: Date;
 }
@@ -130,7 +159,7 @@ export async function createBackup(o: CreateOptions): Promise<{ manifest: Backup
       }
     }
     const manifest: BackupManifest = {
-      format: BACKUP_FORMAT, app: o.appVersion, created: (o.now ?? new Date()).toISOString(), studio: o.studio, schema: o.schema, sources: names, entries
+      format: BACKUP_FORMAT, app: o.appVersion, created: (o.now ?? new Date()).toISOString(), studio: o.studio, schema: o.schema, ...(o.recordsSchema ? { records: o.recordsSchema } : {}), sources: names, entries
     };
     add(MANIFEST, new TextEncoder().encode(JSON.stringify(manifest, null, 2)));
     zip.end();
@@ -162,7 +191,7 @@ function parseManifest(raw: Uint8Array | undefined): BackupManifest {
   }
   return {
     format: m.format, app: String(m.app ?? ''), created: String(m.created ?? ''), studio: { id: m.studio.id, name: String(m.studio.name ?? '') },
-    schema: typeof m.schema === 'number' ? m.schema : 0, sources: m.sources.filter((s): s is string => typeof s === 'string'), entries
+    schema: typeof m.schema === 'number' ? m.schema : 0, ...(typeof m.records === 'number' ? { records: m.records } : {}), sources: m.sources.filter((s): s is string => typeof s === 'string'), entries
   };
 }
 

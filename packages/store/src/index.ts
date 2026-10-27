@@ -20,6 +20,8 @@ export class StoreError extends Error {}
 export interface StudioDb extends Db {
   /** The schema version the file is at (equal to the number of migrations applied). */
   version(): Promise<number>;
+  /** A consistent copy of the whole database in a new file (SQLite `VACUUM INTO`), safe while the app is using it: what a backup takes. The file must not exist. */
+  snapshot(dest: string): Promise<void>;
   close(): void;
 }
 
@@ -31,6 +33,10 @@ function wrap(sqlite: Sqlite): StudioDb {
   return {
     version,
     close: () => sqlite.close(),
+    async snapshot(dest) {
+      mkdirSync(path.dirname(dest), { recursive: true });
+      sqlite.prepare('VACUUM INTO ?').run(dest);
+    },
     async run(sql, params) {
       return { changes: Number(sqlite.prepare(sql).run(...bind(params)).changes) };
     },
