@@ -212,3 +212,44 @@ describe('the local vault', () => {
     expect(await again.status('ch.md')).toMatchObject({ status: 'latest', localVersion: 1 });
   });
 });
+
+describe('references and data cards through the vault', () => {
+  async function two() {
+    const a = seat('ana', 'pc');
+    await put(a.dir, 'book.epub', 'epub');
+    await put(a.dir, 'cover.psd', 'psd');
+    await a.v.add('book.epub');
+    await a.v.add('cover.psd');
+    return a;
+  }
+  it('adds a reference, shows where the target is used, and keeps it at a version until a person moves it', async () => {
+    const a = await two();
+    await a.v.addReference('book.epub', 'cover.psd', 1, 'front cover');
+    expect((await a.v.references('book.epub')).map((r) => [r.path, r.version, r.stale])).toEqual([['cover.psd', 1, false]]);
+    await a.v.checkOut('cover.psd');
+    await put(a.dir, 'cover.psd', 'new art');
+    await a.v.checkIn('cover.psd', 'redraw');
+    expect((await a.v.whereUsed('cover.psd')).map((r) => [r.path, r.stale])).toEqual([['book.epub', true]]);
+    await a.v.setReferenceVersion('book.epub', 'cover.psd', null);
+    expect((await a.v.whereUsed('cover.psd'))[0]!.stale).toBe(false);
+    expect(await code(a.v.addReference('book.epub', 'cover.psd'))).toBe('exists');
+    await put(a.dir, 'other.md', 'x');
+    await a.v.add('other.md');
+    expect(await code(a.v.addReference('other.md', 'cover.psd', 7))).toBe('invalid');
+    expect(await code(a.v.addReference('other.md', 'ghost.md'))).toBe('not-found');
+    await a.v.removeReference('book.epub', 'cover.psd');
+    expect(await a.v.references('book.epub')).toEqual([]);
+  });
+  it('keeps a data card and follows the capabilities of the files involved', async () => {
+    const a = await two();
+    expect((await a.v.setCard('cover.psd', { Licence: 'Commissioned', 'Trim size': '6x9' }, 'p1')).fields).toEqual({ Licence: 'Commissioned', 'Trim size': '6x9' });
+    expect((await a.v.card('cover.psd')).projectId).toBe('p1');
+    const caps = new Set(['manuscript.read', 'manuscript.write', 'asset.read']);
+    const limited = new LocalVault({ db, studioId: 's1', blobs, dir: a.dir, personId: 'eve', machine: 'm', now: clock, can: async (c) => caps.has(c) });
+    expect((await limited.card('cover.psd')).fields.Licence).toBe('Commissioned'); // may read assets
+    expect(await code(limited.setCard('cover.psd', {}))).toBe('denied'); // may not write them
+    expect(await code(limited.addReference('cover.psd', 'book.epub'))).toBe('denied');
+    await limited.addReference('book.epub', 'cover.psd'); // may write the epub (a manuscript kind? .epub is a manuscript) and read the PSD
+    expect((await limited.references('book.epub')).length).toBe(1);
+  });
+});

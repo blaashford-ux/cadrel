@@ -36,6 +36,24 @@ const api: CadrelApi = {
     options: (projectId) => studioCall('shell:stages:options', projectId),
     move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
   },
+  vault: {
+    state: () => studioCall('shell:vault:state'),
+    add: (path, comment) => studioCall('shell:vault:call', 'add', path, comment),
+    checkOut: (path) => studioCall('shell:vault:call', 'checkOut', path),
+    checkIn: (path, comment) => studioCall('shell:vault:call', 'checkIn', path, comment),
+    undoCheckOut: (path) => studioCall('shell:vault:call', 'undoCheckOut', path),
+    discardLocalChanges: (path) => studioCall('shell:vault:call', 'discardLocalChanges', path),
+    getLatest: (paths, o) => studioCall('shell:vault:call', 'getLatest', paths, o),
+    forceRelease: (path, reason) => studioCall('shell:vault:call', 'forceRelease', path, reason),
+    history: (path) => studioCall('shell:vault:history', path),
+    detail: (path) => studioCall('shell:vault:detail', path),
+    addReference: (path, to, version, note) => studioCall('shell:vault:call', 'addReference', path, to, version, note),
+    setReferenceVersion: (path, to, version) => studioCall('shell:vault:call', 'setReferenceVersion', path, to, version),
+    removeReference: (path, to) => studioCall('shell:vault:call', 'removeReference', path, to),
+    setCard: (path, fields, projectId) => studioCall('shell:vault:call', 'setCard', path, fields, projectId),
+    saveVersionAs: (path, version, as) => studioCall('shell:vault:call', 'saveVersionAs', path, version, as),
+    openFolder: () => studioCall('shell:vault:open')
+  },
   work: {
     state: (projectId) => studioCall('shell:work:state', projectId),
     mine: () => studioCall('shell:work:mine'),

@@ -6,7 +6,7 @@
  */
 import { bootstrapStudio } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
-import { openStudioDb, type StudioDb } from '@cadrel/store';
+import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
 import type { PeopleState, WorkflowState } from '../shared/api';
 
 /** The operations the page may ask for: the service's `people` methods that change things, by the page's names. Nothing else is reachable. */
@@ -75,6 +75,16 @@ export class PeopleHost {
   /** Tasks, approvals and decisions as the person using the app; null where this computer holds no records for the Studio. */
   get work(): StudioWork | null {
     return this.svc ? (this.svc.as(this.meId).work as StudioWork) : null;
+  }
+
+  /**
+   * The local vault for this Studio: the working folder `dir`, the contents of every version under `blobsDir`, this computer as `machine`.
+   * Every operation is checked against what the person using the app may do with that kind of file. Null where this computer holds no records.
+   */
+  vault(o: { dir: string; blobsDir: string; machine: string }): LocalVault | null {
+    if (!this.db || !this.svc) return null;
+    const as = this.svc.as(this.meId);
+    return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c) });
   }
 
   /** Whether the person using the app holds a capability at the studio. */

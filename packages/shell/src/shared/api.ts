@@ -1,4 +1,4 @@
-import type { ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kern
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -644,6 +644,60 @@ export interface MineState {
   tasks: OnProject<TaskRecord>[];
   approvals: OnProject<ApprovalRecord>[];
 }
+/** The files of the Studio: the working folder, and every file's state for this person on this computer. */
+export type VaultState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      dir: string;
+      machine: string;
+      me: string;
+      people: { id: string; name: string }[];
+      may: { force: boolean };
+      entries: {
+        path: string;
+        kind: 'manuscript' | 'asset';
+        fileId: string | null;
+        status: 'untracked' | 'not-local' | 'latest' | 'out-of-date' | 'checked-out-by-me' | 'checked-out-by-other' | 'modified-unprotected' | 'missing';
+        version: number | null;
+        localVersion: number | null;
+        modified: boolean;
+        lock: { personId: string; machine: string; since: string } | null;
+        size: number | null;
+        state: string | null;
+      }[];
+      /** Lock removals found on this computer just now: the unsaved copy was kept aside (`savedAs`, null if there was nothing unsaved). */
+      kept: { path: string; savedAs: string | null; removedBy: string; reason: string }[];
+      /** Every copy kept aside on this computer. */
+      orphans: { path: string; savedAs: string; removedBy: string; removedAt: string; reason: string; version: number }[];
+    };
+export interface VaultApi {
+  state(): Promise<VaultState>;
+  /** Puts a file from the working folder into the vault as its first version. */
+  add(path: string, comment?: string): Promise<void>;
+  checkOut(path: string): Promise<void>;
+  /** Saves the file as a new version and releases it; nothing changed means it is released with no new version. */
+  checkIn(path: string, comment?: string): Promise<{ unchanged: boolean }>;
+  undoCheckOut(path: string): Promise<void>;
+  discardLocalChanges(path: string): Promise<void>;
+  /** Updates read-only copies to the newest versions (files you have checked out are never touched). */
+  getLatest(paths?: string[], o?: { fetchMissing?: boolean }): Promise<{ updated: string[]; skipped: { path: string; why: string }[] }>;
+  /** An administrator releases someone else's check-out; their unsaved work is kept aside on their computer. Needs a reason. */
+  forceRelease(path: string, reason: string): Promise<void>;
+  history(path: string): Promise<FileVersion[]>;
+  /** A file's versions, what it uses, where it is used (and whether each user names an older version) and its data card. */
+  detail(path: string): Promise<{ versions: FileVersion[]; uses: FileRef[]; usedBy: FileRef[]; card: DataCard }>;
+  /** `path` uses `to`, at a version or the latest. A reference never updates itself: `setReferenceVersion` is a person's choice. */
+  addReference(path: string, to: string, version?: number | null, note?: string): Promise<void>;
+  setReferenceVersion(path: string, to: string, version: number | null): Promise<void>;
+  removeReference(path: string, to: string): Promise<void>;
+  /** Replaces the data card; an empty value removes a field. */
+  setCard(path: string, fields: Record<string, string>, projectId?: string | null): Promise<DataCard>;
+  saveVersionAs(path: string, version: number, as: string): Promise<string>;
+  /** Opens the working folder in the file manager. */
+  openFolder(): Promise<void>;
+}
+
 /** One live project in the pipeline: where it is in its workflow and what is due on it. */
 export interface PlanProject {
   id: string;
@@ -727,6 +781,7 @@ export interface CadrelApi {
   stages: StagesApi;
   workflow: WorkflowApi;
   work: WorkApi;
+  vault: VaultApi;
   people: PeopleApi;
   myBooks: MyBooksApi;
   backup: BackupApi;

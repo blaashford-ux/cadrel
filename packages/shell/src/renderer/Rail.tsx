@@ -20,6 +20,7 @@ const TOP: Item[] = [
   { page: 'dashboard', label: 'Dashboard', icon: svg('M4 20V10m6 10V4m6 16v-7m4 7H2') },
   { page: 'planner', label: 'Planner', icon: svg('M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-12ZM4 10h16M8 3.5V7m8-3.5V7') },
   { page: 'projects', label: 'Projects', icon: svg('M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-10Z') },
+  { page: 'files', label: 'Files', icon: svg('M6 3.5h8l4 4V20.5H6V3.5ZM14 3.5V8h4M9 13h6M9 16.5h6') },
   { page: 'notes', label: 'Notes', icon: svg('M5 4.5h14v11.5l-4 4H5v-15.5ZM15 20v-4h4M8 9h8M8 12.5h5') }
 ];
 const MODULES: Item[] = [

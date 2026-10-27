@@ -35,6 +35,7 @@ import { ProjectStages } from './stages';
 import { callWorkflow } from './workflowCalls';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
+import { VaultHost } from './vaultHost';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
@@ -532,7 +533,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
@@ -839,6 +840,16 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
+  manageLike('vault:state', async () => vaultHost().state());
+  manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
+  manageLike('vault:history', async (p: string) => vaultHost().history(String(p)));
+  manageLike('vault:detail', async (p: string) => vaultHost().detail(String(p)));
+  manageLike('vault:open', async () => {
+    const dir = path.join(studioFolder(), 'Vault');
+    await fsp.mkdir(dir, { recursive: true });
+    if (!TEST) await shell.openPath(dir);
+  });
   manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost, stages).state(String(projectId)));
   manageLike('work:plan', async () => new ProjectWork(studio, peopleHost, stages).plan());
   manageLike('work:pulse', async () => {

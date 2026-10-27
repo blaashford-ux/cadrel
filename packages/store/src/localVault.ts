@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
-  acknowledgeOrphans, addVaultFile, checkIn, checkOut, cleanVaultPath, fileKind, fileVersions, forceRelease, listVaultFiles, newRecordId, pendingOrphans, undoCheckOut,
+  FileLinkError, acknowledgeOrphans, addReference, addVaultFile, getCard, referencesOf, removeReference, setCard, setReferenceVersion, whereUsed, type DataCard, type FileRef, checkIn, checkOut, cleanVaultPath, fileKind, fileVersions, forceRelease, listVaultFiles, newRecordId, pendingOrphans, undoCheckOut,
   type Db, type FileVersion, type VaultFileRow
 } from '@cadrel/kernel';
 
@@ -375,6 +375,56 @@ export class LocalVault {
     if (await this.readLocal(target)) throw new VaultError('exists', 'There is already a file with that name.');
     await this.writeLocal(target, await this.read(p, version), true);
     return target;
+  }
+
+  // ---- references, where-used, data cards -----------------------------------------------------------------------------------
+
+  private async known(rel: string, level: 'read' | 'write'): Promise<VaultFileRow> {
+    const p = this.clean(rel);
+    await this.allow(p, level);
+    return (await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.'));
+  }
+  private async linkWork<T>(job: () => Promise<T>): Promise<T> {
+    try {
+      return await job();
+    } catch (e) {
+      if (e instanceof FileLinkError) throw new VaultError(e.code === 'exists' ? 'exists' : e.code === 'not-found' ? 'not-found' : 'invalid', e.message);
+      throw e;
+    }
+  }
+
+  /** What the file uses (a cover's source PSD and fonts), each at a version or the latest. */
+  async references(rel: string): Promise<FileRef[]> {
+    return referencesOf(this.o.db, (await this.known(rel, 'read')).id);
+  }
+  /** Where the file is used: the files that refer to it, and whether each names an older version. */
+  async whereUsed(rel: string): Promise<FileRef[]> {
+    return whereUsed(this.o.db, (await this.known(rel, 'read')).id);
+  }
+  /** `rel` uses `to`, at `version` or the latest. Needs write access to `rel` and read access to `to`. */
+  async addReference(rel: string, to: string, version?: number | null, note?: string): Promise<void> {
+    const from = await this.known(rel, 'write');
+    const target = await this.known(to, 'read');
+    await this.linkWork(() => addReference(this.o.db, { fileId: from.id, refersToId: target.id, version: version ?? null, note, actor: this.o.personId, now: this.now() }));
+  }
+  /** Points a reference at another version (null: the latest). References are never updated automatically. */
+  async setReferenceVersion(rel: string, to: string, version: number | null): Promise<void> {
+    const from = await this.known(rel, 'write');
+    const target = await this.known(to, 'read');
+    await this.linkWork(() => setReferenceVersion(this.o.db, { fileId: from.id, refersToId: target.id, version, actor: this.o.personId, now: this.now() }));
+  }
+  async removeReference(rel: string, to: string): Promise<void> {
+    const from = await this.known(rel, 'write');
+    const target = await this.known(to, 'read');
+    await removeReference(this.o.db, { fileId: from.id, refersToId: target.id, actor: this.o.personId, now: this.now() });
+  }
+  async card(rel: string): Promise<DataCard> {
+    return getCard(this.o.db, (await this.known(rel, 'read')).id);
+  }
+  /** Replaces the file's data card (an empty value removes a field). */
+  async setCard(rel: string, fields: Record<string, string>, projectId?: string | null): Promise<DataCard> {
+    const f = await this.known(rel, 'write');
+    return this.linkWork(() => setCard(this.o.db, { fileId: f.id, fields, projectId: projectId ?? null, actor: this.o.personId, now: this.now() }));
   }
 
   // ---- administration ------------------------------------------------------------------------------------------------------
