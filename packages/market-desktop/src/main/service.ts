@@ -8,7 +8,7 @@ import { zipSync, strToU8 } from 'fflate';
 import {
   ArcticShift, addCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
-  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
+  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
   Library, amazonUrl, getBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
   type BookDetail, type QueueItem, type RemovedBook,
@@ -106,6 +106,11 @@ export interface ServiceOptions {
   fetch?: typeof fetch;
   /** The app icon, shown in Claude Desktop's extension list. */
   iconFile?: () => string | null;
+  /**
+   * The pen names the library is for: null means no restriction, a list (even an empty one) limits imports and My Books to those pen names, so another
+   * pen name's books on the same KDP account never come in. Asked every time it is needed, so a pen name added later takes effect at once.
+   */
+  authorScope?: () => readonly string[] | null;
   /** Test hook: what the MCP server answers to `initialize`; by default it is read from the server (`--print-handshake`). */
   mcpHandshake?: () => Promise<Handshake | null>;
   /** The MCP server's name and the extension's wording. Default: Cadrel Market's. */
@@ -357,7 +362,7 @@ export class AppService {
   async start(): Promise<void> {
     await this.stop();
     if (!this.config.libraryRoot) return;
-    this.lib = Library.open(this.config.libraryRoot);
+    this.lib = Library.open(this.config.libraryRoot, this.scope());
     await this.startServer();
   }
 
@@ -457,7 +462,7 @@ export class AppService {
     this.server = null;
     if (!this.lib) {
       if (!this.config.libraryRoot) return this.status();
-      this.lib = Library.open(this.config.libraryRoot);
+      this.lib = Library.open(this.config.libraryRoot, this.scope());
     }
     await this.startServer();
     return this.status();
@@ -719,12 +724,27 @@ export class AppService {
 
   // ---- My Books: the user's own titles, created from imported KDP reports or flagged by hand ------------------------------
 
-  ownBooks(): OwnBookRow[] { return listOwnBooks(this.need().db); }
+  /** The pen names this library is limited to (null: all). */
+  scope(): AuthorScope {
+    return this.opts.authorScope?.() ?? null;
+  }
+
+  ownBooks(): OwnBookRow[] { return listOwnBooks(this.need().db, this.scope()); }
+
+  /** Books already in the library under pen names the Studio does not have (from before the Studio had pen names, or from a shared library). */
+  booksOutsideScope(): OwnBookRow[] { return booksOutsideScope(this.need().db, this.scope()); }
+
+  /** Removes those books and their sales, pages read and royalties (and KDP's account-wide payments and summaries, which cannot be told apart). Page captures stay. */
+  removeBooksOutsideScope(): number {
+    const lib = this.need();
+    return removeBooksOutsideScope(lib.db, lib.root, this.scope());
+  }
 
   /** The book if it is in My Books (captured or not), else null. */
   ownBook(asin: string): OwnBookRow | null {
     assertAsin(asin);
-    return getOwnBook(this.need().db, asin);
+    const b = getOwnBook(this.need().db, asin);
+    return b && inScope(b, this.scope()) ? b : null;
   }
 
   setOwnBook(asin: string, own: boolean): void {
@@ -857,7 +877,7 @@ export class AppService {
   importSales(name: string, bytes: Uint8Array): ImportSummary {
     this.checkUpload(name, bytes);
     const lib = this.need();
-    return importSalesFile(lib.db, lib.root, name, bytes);
+    return importSalesFile(lib.db, lib.root, name, bytes, undefined, this.scope());
   }
 
   /** A rank-history file (date, rank, optionally ASIN). `asin` says which book it is for when the file has no ASIN column. */

@@ -160,12 +160,14 @@ function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null })
 const MCP_DESCRIPTION = 'Lets Claude read your Cadrel manuscripts and leave review notes in them (it never changes your manuscript), and search your Kindle market research.';
 const CADREL_MCP: McpBrand = { id: 'cadrel', name: 'Cadrel', description: MCP_DESCRIPTION, file: 'Cadrel.mcpb' };
 const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI Kit', description: MCP_DESCRIPTION };
+/** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
+const penNameArgs = (): string[] => { const p = peopleHost.penNameScope(); return p ? ['--pen-names', JSON.stringify(p)] : []; };
 const mcpFile = () => path.join(here, 'mcp.mjs');
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
   // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile())],
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -1292,7 +1294,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
@@ -1317,6 +1319,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         quitting = true;
       },
       defaultLibrary: marketDefault,
+      authorScope: () => peopleHost.penNameScope(),
       mcpLaunch,
       mcpBrand: CADREL_MCP,
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'

@@ -10,6 +10,8 @@ export interface ToolContext {
   lib: Library;
   /** Returns the embedder matching the stored vectors' model, or null if it cannot be loaded here. */
   embedderFor: (model: string) => Promise<Embedder | null>;
+  /** The pen names the Studio publishes under; my_books shows only their books. Null or absent: no limit. */
+  authorScope?: readonly string[] | null;
 }
 
 export type ToolResult = { data: unknown } | { error: string } | { image: { base64: string; mimeType: string }; data?: unknown };
@@ -277,8 +279,8 @@ export const TOOLS: ToolSpec[] = [
       limit: z.number().int().min(1).max(200).default(50),
     },
     readOnly: true,
-    run: ({ lib }, a) => {
-      const all = listOwnBooks(lib.db);
+    run: ({ lib, authorScope }, a) => {
+      const all = listOwnBooks(lib.db, authorScope ?? null);
       const cal = getCalibration(lib.db);
       let rows = all.filter((b) => a.captured === 'all' || (a.captured === 'captured') === b.snapshots > 0);
       const by: Record<string, (x: (typeof all)[number], y: (typeof all)[number]) => number> = {

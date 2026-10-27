@@ -21,6 +21,7 @@ import { setQueueState } from './queries.js';
 import { reindexCommunity } from './community.js';
 import { excludeFromCategory, excludedAsins, insertListEntry, refreshDerived, removeBook, restoreToCategory, type RemovedBook } from './removal.js';
 import { reindexSales } from './sales/import.js';
+import type { AuthorScope } from './sales/scope.js';
 import { reindexManuscripts, removeManuscript, saveManuscript, type ManuscriptInput, type ManuscriptRow, type TextSource } from './manuscripts.js';
 import { categoryKey, coversDir, dbPath, isAsin, listDir, searchDir, snapshotDir, stampOf } from './layout.js';
 
@@ -73,17 +74,18 @@ const gz = (s: string | Buffer) => zlib.gzipSync(s, { level: 9 });
 export class Library {
   readonly db: Db;
 
-  private constructor(readonly root: string) {
+  private constructor(readonly root: string, scope: AuthorScope = null) {
     fs.mkdirSync(root, { recursive: true });
     this.db = openDb(dbPath(root));
     importUserData(this.db, root);
     // a lost database: the community files are still there
-    if (!this.db.scalar('SELECT 1 FROM sales_day') && fs.existsSync(path.join(root, 'sales'))) reindexSales(this.db, root);
+    if (!this.db.scalar('SELECT 1 FROM sales_day') && fs.existsSync(path.join(root, 'sales'))) reindexSales(this.db, root, scope);
     if (!this.db.scalar('SELECT 1 FROM community_source') && !this.db.scalar('SELECT 1 FROM community_item') && fs.existsSync(path.join(root, 'community'))) reindexCommunity(this.db, root);
   }
 
-  static open(root: string): Library {
-    return new Library(root);
+  /** `scope` limits what is rebuilt from the saved reports if the database was lost: the pen names of the Studio this library is for (see sales/scope.ts). */
+  static open(root: string, scope: AuthorScope = null): Library {
+    return new Library(root, scope);
   }
 
   /** Mutations of user-authored data go through here so the on-disk mirror stays current. */

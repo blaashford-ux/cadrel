@@ -112,6 +112,18 @@ async function findWrite(): Promise<Found<{ options: WriteOptions; root: string;
   }
 }
 
+/** The pen names the app limits the library to (--pen-names <JSON array>); absent or unreadable means no limit. */
+function penNameScope(): string[] | null {
+  const raw = flag('pen-names');
+  if (raw === undefined) return null;
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : [];
+  } catch {
+    return []; // an unreadable limit is the safe one: show nothing rather than everything
+  }
+}
+
 /**
  * Market: the library Cadrel Market keeps. A library that is missing or will not open just means these tools are left out.
  * With `open: false` (the handshake) nothing is opened, only the instructions are read.
@@ -125,7 +137,7 @@ async function findMarket(open: boolean): Promise<Found<{ module: McpModule; clo
     const { embedderForModel, SERVER_INSTRUCTIONS } = await import('@cadrel/market-mcp');
     if (!open) return { ok: true, value: { module: { id: 'market', title: 'Market research (the Amazon library)', instructions: SERVER_INSTRUCTIONS, register: () => undefined }, close: () => undefined, root } };
     const lib = Library.open(root);
-    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root) }), close: () => lib.close(), root } };
+    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root), authorScope: penNameScope() }), close: () => lib.close(), root } };
   } catch (e) {
     return { ok: false, reason: `the market tools could not start here (${e instanceof Error ? e.message : String(e)})` };
   }

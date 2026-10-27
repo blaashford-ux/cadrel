@@ -125,6 +125,8 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
     setKenpc: (...a: unknown[]) => (service.setKenpc as (...x: unknown[]) => unknown)(...a),
     setKuCompletion: (...a: unknown[]) => (service.setKuCompletion as (...x: unknown[]) => unknown)(...a),
     resetCalibration: (...a: unknown[]) => (service.resetCalibration as (...x: unknown[]) => unknown)(...a),
+    booksOutsideScope: () => service.booksOutsideScope(),
+    removeBooksOutsideScope: () => service.removeBooksOutsideScope(),
     clearSalesData: (...a: unknown[]) => (service.clearSalesData as (...x: unknown[]) => unknown)(...a),
   };
 
