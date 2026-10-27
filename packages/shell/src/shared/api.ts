@@ -1,3 +1,4 @@
+import type { AssignmentRecord, PenName, Person, RoleRecord, Team } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -492,8 +493,56 @@ export interface MyBooksApi {
   openIn(module: 'market' | 'finance', asin: string): Promise<void>;
 }
 
+/** The studio's people, teams, roles and who holds what, as the Admin page shows them. `may` is what the person using the app may change. */
+export type PeopleState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      /** The person using this computer. */
+      me: string;
+      /** The Studio's id: the scope of a studio-wide role. */
+      studioId: string;
+      people: Person[];
+      deactivated: Person[];
+      teams: Team[];
+      penNames: PenName[];
+      roles: RoleRecord[];
+      assignments: AssignmentRecord[];
+      /** Capabilities a newer version added that no administrator has placed or acknowledged yet. */
+      review: string[];
+      may: { people: boolean; teams: boolean; roles: boolean };
+    };
+
+/** Every change goes through the permission-checked service as the person using the app; a refusal comes back as its reason in words. */
+export interface PeopleApi {
+  state(): Promise<PeopleState>;
+  createPerson(i: { name: string; email?: string | null; kind?: string }): Promise<Person>;
+  updatePerson(id: string, patch: { name?: string; email?: string | null; kind?: string }): Promise<Person>;
+  setPersonActive(id: string, active: boolean): Promise<Person>;
+  createPenName(i: { displayName: string; personIds?: string[] }): Promise<PenName>;
+  setPenNamePeople(id: string, personIds: string[]): Promise<PenName>;
+  createTeam(name: string): Promise<Team>;
+  renameTeam(id: string, name: string): Promise<Team>;
+  setTeamMember(teamId: string, personId: string, member: boolean): Promise<Team>;
+  deleteTeam(id: string): Promise<void>;
+  createRole(i: { name: string; description?: string; capabilities?: string[]; copyFrom?: string }): Promise<RoleRecord>;
+  updateRole(id: string, patch: { name?: string; description?: string; capabilities?: string[] }): Promise<RoleRecord>;
+  resetRole(id: string): Promise<RoleRecord>;
+  /** A role that is still assigned needs `replacementId`: its people are moved to that role. */
+  deleteRole(id: string, replacementId?: string): Promise<void>;
+  acknowledgeCapabilities(caps: string[]): Promise<void>;
+  grant(i: { subject: { kind: 'person' | 'team'; id: string }; roleId: string; scope: { kind: 'studio' | 'project' | 'file'; id: string }; expiresAt?: string | null }): Promise<AssignmentRecord>;
+  revoke(id: string): Promise<void>;
+  setExpiry(id: string, expiresAt: string | null): Promise<AssignmentRecord>;
+  /** Why this person can or cannot do something at the studio, or on one project. */
+  explainAccess(personId: string, capability: string, projectId?: string | null): Promise<{ allowed: boolean; reason: string }>;
+  /** Every capability the person holds at the studio, or on one project when `projectId` is given (`*` means all). */
+  effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
+}
+
 export interface CadrelApi {
   studios: StudiosApi;
+  people: PeopleApi;
   myBooks: MyBooksApi;
   backup: BackupApi;
   studio: StudioApi;

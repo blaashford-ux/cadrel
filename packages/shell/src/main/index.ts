@@ -30,6 +30,7 @@ import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { NOTES_VERSION, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { PeopleHost } from './people';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -105,6 +106,7 @@ async function attachAll(paths: string[]): Promise<UserView> {
 let write: WriteModule;
 let market: MarketModule;
 let finance: FinanceModule;
+const peopleHost = new PeopleHost();
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
@@ -803,6 +805,11 @@ function registerShellIpc(): void {
     await secretsFor(added.id).put('studio-key', JSON.stringify(joined.key));
     return studiosChanged(view);
   });
+  // People and roles. Every change is made by the service as the person using the app, so the page only shows what the service allows.
+  manageLike('people:state', async () => peopleHost.state());
+  manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
+  manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
+  manageLike('people:explain', async (personId: string, capability: string, projectId?: string | null) => peopleHost.explain(String(personId), String(capability), projectId));
   // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
   const roleKey = () => {
     const a = studios.active();
@@ -1174,6 +1181,11 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     users = new UserStore(path.join(studioDir, 'user'));
     await refreshUser();
+    // The Studio's people and roles: a Studio this person owns starts with its default roles and them as Owner.
+    {
+      const here = studios.active();
+      await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+    }
     // The name used to be a setting; it belongs to the profile now.
     const legacy = settings.get().author?.trim();
     if (legacy) {
@@ -1256,6 +1268,7 @@ app.on('before-quit', (e) => {
   quitting = true;
   void write?.flush();
   void settings?.flush();
+  void peopleHost.close();
   write?.stop();
   // Close Market's capture server first and wait for it, so port 47321 is released before this process goes and the next start never finds it taken.
   if (!marketStopped && market) {

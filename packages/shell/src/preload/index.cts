@@ -31,6 +31,28 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
   },
+  people: {
+    state: () => studioCall('shell:people:state'),
+    createPerson: (i) => studioCall('shell:people:call', 'createPerson', i),
+    updatePerson: (id, patch) => studioCall('shell:people:call', 'updatePerson', id, patch),
+    setPersonActive: (id, active) => studioCall('shell:people:call', 'setPersonActive', id, active),
+    createPenName: (i) => studioCall('shell:people:call', 'createPenName', i),
+    setPenNamePeople: (id, personIds) => studioCall('shell:people:call', 'setPenNamePeople', id, personIds),
+    createTeam: (name) => studioCall('shell:people:call', 'createTeam', name),
+    renameTeam: (id, name) => studioCall('shell:people:call', 'renameTeam', id, name),
+    setTeamMember: (teamId, personId, member) => studioCall('shell:people:call', 'setTeamMember', teamId, personId, member),
+    deleteTeam: (id) => studioCall('shell:people:call', 'deleteTeam', id),
+    createRole: (i) => studioCall('shell:people:call', 'createRole', i),
+    updateRole: (id, patch) => studioCall('shell:people:call', 'updateRole', id, patch),
+    resetRole: (id) => studioCall('shell:people:call', 'resetRole', id),
+    deleteRole: (id, replacementId) => studioCall('shell:people:call', 'deleteRole', id, replacementId),
+    acknowledgeCapabilities: (caps) => studioCall('shell:people:call', 'acknowledgeCapabilities', caps),
+    grant: (i) => studioCall('shell:people:call', 'grant', i),
+    revoke: (id) => studioCall('shell:people:call', 'revoke', id),
+    setExpiry: (id, expiresAt) => studioCall('shell:people:call', 'setExpiry', id, expiresAt),
+    explainAccess: (personId, capability, projectId) => studioCall('shell:people:explain', personId, capability, projectId),
+    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
+  },
   myBooks: {
     list: () => studioCall('shell:mybooks:list'),
     book: (asin) => studioCall('shell:mybooks:book', asin),

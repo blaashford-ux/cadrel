@@ -306,3 +306,15 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .mb-cover.empty { display: block; }
 .spark svg { vertical-align: middle; color: var(--accent); }
 .mybooks .table th button.link { font-weight: 600; }
+
+.pr-cols { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 18px; align-items: start; }
+.pr-list li { display: flex; align-items: center; gap: 8px; }
+.pr-list .link.on { font-weight: 600; }
+.pr-add { display: grid; gap: 6px; margin: 10px 0; }
+.pr-detail h4, .pr-detail h5 { margin: 12px 0 6px; }
+.pr-detail h4 { margin-top: 0; }
+.pr-team { padding: 10px 12px; margin: 8px 0; border: 1px solid var(--raised); border-radius: 8px; display: grid; gap: 8px; }
+.pr-caps { display: grid; gap: 10px; margin: 10px 0; }
+.pr-caps fieldset { border: 1px solid var(--raised); border-radius: 8px; padding: 6px 12px 8px; }
+.pr-cap { display: flex; gap: 6px; padding: 2px 0 2px 18px; align-items: baseline; }
+@media (max-width: 800px) { .pr-cols { grid-template-columns: 1fr; } }

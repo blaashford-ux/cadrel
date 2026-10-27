@@ -229,11 +229,11 @@ export class StudioAs {
       return explain(ctx, capability, { path: path?.length ? path : this.studioPath() });
     },
     /** Every capability the person holds at the studio (or `*`), for the "who can do what" view. */
-    effectiveCapabilities: async (personId: string): Promise<string[]> => {
+    effectiveCapabilities: async (personId: string, path?: ScopeRef[]): Promise<string[]> => {
       await this.need('roles.manage');
       const { assignments, roles, teamsOf } = await loadAccess(this.o.db, this.ctx());
       const ctx: PermissionContext = { actor: { personId, teamIds: teamsOf(personId) }, assignments, roles: new Map(roles.map((r) => [r.id, r])), now: this.stamp() };
-      return [...effectiveCapabilities(ctx, this.studioPath())].sort();
+      return [...effectiveCapabilities(ctx, path?.length ? path : this.studioPath())].sort();
     }
   };
 
