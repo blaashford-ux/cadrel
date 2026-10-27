@@ -3,14 +3,17 @@ import {
   KIND_SUGGESTIONS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, queryNotes, subtreeIds, type Project, type ProjectTree
 } from '@cadrel/kernel';
 import type { NotesApi } from '@cadrel/ui';
-import { MANUSCRIPT_STATUSES, type ManuscriptMeta, type ManuscriptTemplate, type ModuleId, type Overview, type StudioState } from '../shared/api';
+import { type ManuscriptMeta, type ManuscriptTemplate, type ModuleId, type Overview, type ProjectStageView, type StageMoveOption, type StudioState, type WorkflowState } from '../shared/api';
+import type { WorkflowRecord } from '@cadrel/kernel';
 import { NotesPanel } from '@cadrel/ui';
-import { ago, formatWords, percent, STATUS_LABEL } from './format';
+import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
+import { WorkCard } from './WorkCard';
 
 const api = window.cadrel.studio;
 const manage = window.cadrel.manage;
-const STATUS_NAMES: Record<string, string> = { planning: 'Planning', drafting: 'Drafting', revising: 'Revising', editing: 'Editing', published: 'Published', paused: 'On hold' };
+const stagesApi = window.cadrel.stages;
+const workflowApi = window.cadrel.workflow;
 
 /** The shared Notes panel's view of the studio, for notes written on one project. */
 export const projectNotes = (projectId: string | null): NotesApi => ({
@@ -34,13 +37,14 @@ interface Props {
 
 type Dialog = { kind: 'new'; parentId: string | null } | { kind: 'rename'; id: string } | { kind: 'delete'; id: string } | null;
 
-function NameDialog({ title, initialName, initialKind, askKind, templates, defaultTemplate, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; templates?: ManuscriptTemplate[]; defaultTemplate?: string | null; action: string; onSubmit(name: string, kind: string, template: string | null): void; onCancel(): void }) {
+function NameDialog({ title, initialName, initialKind, askKind, templates, defaultTemplate, workflows, workflowLevel, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; templates?: ManuscriptTemplate[]; defaultTemplate?: string | null; workflows?: WorkflowRecord[]; workflowLevel?: 'project' | 'subproject'; action: string; onSubmit(name: string, kind: string, template: string | null, workflowId: string | null): void; onCancel(): void }) {
   const [name, setName] = useState(initialName);
   const [kind, setKind] = useState(initialKind);
   const [template, setTemplate] = useState<string>(defaultTemplate ?? '');
+  const [workflow, setWorkflow] = useState<string>(workflows?.find((w) => workflowLevel && w.defaultFor.includes(workflowLevel))?.id ?? workflows?.[0]?.id ?? '');
   return (
     <div className="modal-backdrop" onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
-      <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={(e) => (e.preventDefault(), onSubmit(name, kind, template || null))}>
+      <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={(e) => (e.preventDefault(), onSubmit(name, kind, template || null, workflow || null))}>
         <h3>{title}</h3>
         <label className="field">
           <span className="field-label">Name</span>
@@ -52,6 +56,15 @@ function NameDialog({ title, initialName, initialKind, askKind, templates, defau
             <input list="project-kinds" value={kind} onChange={(e) => setKind(e.target.value)} maxLength={30} placeholder="Series, Book, Campaign…" />
             <datalist id="project-kinds">{KIND_SUGGESTIONS.map((k) => <option key={k} value={k} />)}</datalist>
             <span className="field-hint">A label for you. A project can hold subprojects whatever it is called.</span>
+          </label>
+        )}
+        {workflows && workflows.length > 0 && (
+          <label className="field">
+            <span className="field-label">Workflow</span>
+            <select value={workflow} onChange={(e) => setWorkflow(e.target.value)} aria-label="Workflow">
+              {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}{workflowLevel && w.defaultFor.includes(workflowLevel) ? ' (default)' : ''}</option>)}
+            </select>
+            <span className="field-hint">The stages this {workflowLevel === 'subproject' ? 'subproject' : 'project'} moves through. Chosen now, and it can’t be changed afterwards.</span>
           </label>
         )}
         {templates && (
@@ -79,7 +92,7 @@ function moveTargets(tree: ProjectTree, id: string): { id: string | null; label:
   return [{ id: null, label: 'Top level' }, ...outline(tree).filter((r) => !inside.has(r.project.id)).map((r) => ({ id: r.project.id, label: `${' '.repeat(r.depth)}${r.project.name}` }))];
 }
 
-/** What the project's manuscript folder is: its status and notes, and the way into Write (which only opens it and lets you write). */
+/** What the project's manuscript folder is: its notes, and the way into Write (which only opens it and lets you write). */
 function ManuscriptCard({ p, linked, act }: { p: Project; linked: boolean; act: Props['act'] }) {
   const [m, setM] = useState<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null | undefined>(undefined);
   const [notes, setNotes] = useState('');
@@ -114,7 +127,7 @@ function ManuscriptCard({ p, linked, act }: { p: Project; linked: boolean; act: 
       </section>
     );
   }
-  const save = (patch: { status?: string; notes?: string }) => void act(() => manage.setManuscript(p.id, patch)).then(() => manage.manuscript(p.id).then(setM));
+  const save = (patch: { notes?: string }) => void act(() => manage.setManuscript(p.id, patch)).then(() => manage.manuscript(p.id).then(setM));
   return (
     <section className="card" aria-labelledby="pd-ms">
       <div className="card-head">
@@ -123,12 +136,6 @@ function ManuscriptCard({ p, linked, act }: { p: Project; linked: boolean; act: 
       </div>
       <p className="muted small" title={m.folder}>{m.folder} · made from {m.meta.templateName}</p>
       <div className="row">
-        <label className="inline">
-          <span className="muted small">Status</span>
-          <select value={m.meta.status} onChange={(e) => save({ status: e.target.value })} aria-label="Status">
-            {MANUSCRIPT_STATUSES.map((s) => <option key={s} value={s}>{STATUS_NAMES[s] ?? s}</option>)}
-          </select>
-        </label>
         <button type="button" onClick={() => void act(() => manage.reveal(p.id))}>Show folder</button>
         <button type="button" title="Create any folders from the template that this project is missing" onClick={() => void act(() => manage.addMissingParts(p.id).then((a) => setAdded(a.length ? `Added ${a.join(', ')}.` : 'Nothing was missing.')))}>Add missing folders</button>
         {added && <span role="status" className="muted small">{added}</span>}
@@ -141,8 +148,43 @@ function ManuscriptCard({ p, linked, act }: { p: Project; linked: boolean; act: 
   );
 }
 
+/** Where the project is in the workflow it was made with, and the moves open from here (each checked against the gates). */
+function StageCard({ p, studio, act }: { p: Project; studio: StudioState; act: Props['act'] }) {
+  const [info, setInfo] = useState<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    setInfo(undefined);
+    void stagesApi.options(p.id).then((x) => live && setInfo(x), () => live && setInfo(null));
+    return () => {
+      live = false;
+    };
+  }, [p.id, p.stage, p.workflowId, studio.notes, studio.tree]);
+  if (info === undefined) return null;
+  if (!info) return <section className="card" aria-labelledby="pd-stage"><h3 id="pd-stage">Stage</h3><p className="muted">This project has no workflow.</p></section>;
+  return (
+    <section className="card" aria-labelledby="pd-stage">
+      <h3 id="pd-stage">Stage</h3>
+      <p className="row">
+        {info.current ? <span className="stage-chip" style={{ borderColor: info.current.color, color: info.current.color }}>{info.current.name}</span> : <span className="muted">no stage</span>}
+        <span className="muted small">in the “{info.workflowName}” workflow, fixed when the project was made</span>
+      </p>
+      {info.options.length === 0 ? <p className="muted small">No moves are set up from here.</p> : (
+        <ul className="plain stage-moves" aria-label="Move to">
+          {info.options.map((o) => (
+            <li key={o.key}>
+              <button type="button" disabled={!o.allowed} onClick={() => void act(() => stagesApi.move(p.id, o.key))}>Move to {o.name}</button>
+              {!o.allowed && o.reasons.length > 0 && <span className="muted small"> {o.reasons.join(' · ')}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: Project; studio: StudioState; overview: Overview | null; act: Props['act']; onGo: Props['onGo']; onSelect: Props['onSelect']; openDialog: (d: Dialog) => void }) {
   const tree = studio.tree;
+  const [workTick, setWorkTick] = useState(0); // work changes what a stage gate sees
   const facts = factsFor(tree, overview, p.id);
   const pct = percent(facts.words, facts.goalWords);
   const path = [...ancestorsOf(tree, p.id), p];
@@ -203,6 +245,10 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
         <button type="button" className="quiet" onClick={() => openDialog({ kind: 'delete', id: p.id })}>Delete…</button>
       </div>
 
+      <StageCard key={workTick} p={p} studio={studio} act={act} />
+
+      <WorkCard projectId={p.id} projectName={p.name} act={act} onChanged={() => setWorkTick((n) => n + 1)} />
+
       <ManuscriptCard p={p} linked={mine.some((l) => l.module === 'write')} act={act} />
 
       <section className="card" aria-labelledby="pd-sum">
@@ -243,7 +289,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
               <li key={`${l.module}:${l.ref}`}>
                 <span className="chip">{l.module === 'write' ? 'Manuscript' : 'Market category'}</span>
                 <strong>{labelOf(l.module, l.ref)}</strong>
-                {w && <span className="muted small">{STATUS_LABEL[w.status] ?? w.status} · {w.words === null ? 'no active manuscript' : `${formatWords(w.words)} words`}</span>}
+                {w && <span className="muted small">{w.stage ? `${w.stage} · ` : null}{w.words === null ? 'no active manuscript' : `${formatWords(w.words)} words`}</span>}
                 {gone && <span className="warn small">not found any more</span>}
                 <button type="button" className="link" onClick={() => onGo(l.module as ModuleId)}>Open {l.module === 'write' ? 'Write' : 'Market'}</button>
                 <button type="button" className="quiet" onClick={() => void act(() => api.unlink(l.module, l.ref))}>Unlink</button>
@@ -274,10 +320,18 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
   const [dialog, setDialog] = useState<Dialog>(null);
   const [archived, setArchived] = useState(false);
   const [templates, setTemplates] = useState<ManuscriptTemplate[]>([]);
+  const [wf, setWf] = useState<WorkflowState | null>(null);
+  const [stageOf, setStageOf] = useState<Record<string, ProjectStageView>>({});
   const [unfiled, setUnfiled] = useState<{ projects: { name: string }[]; folders: { name: string }[] }>({ projects: [], folders: [] });
   useEffect(() => {
     void manage.templates().then(setTemplates, () => undefined);
   }, []);
+  useEffect(() => {
+    void workflowApi.state().then(setWf, () => undefined);
+  }, [studio]);
+  useEffect(() => {
+    void stagesApi.views().then(setStageOf, () => undefined);
+  }, [studio]);
   // Folders in the Projects folder that the tree does not know yet (made outside Cadrel, or by an older version).
   useEffect(() => {
     void manage.unfiled().then(setUnfiled, () => undefined);
@@ -293,11 +347,11 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
   if (!studio) return <p className="muted">Loading…</p>;
   const active = current ?? (rows[0]?.project as Project | undefined);
 
-  const submit = async (name: string, kind: string, template: string | null) => {
+  const submit = async (name: string, kind: string, template: string | null, workflowId: string | null) => {
     const d = dialog;
     if (!d) return;
     if (d.kind === 'new') {
-      const r = await act(() => manage.create({ name, parentId: d.parentId, kind: kind || undefined, template }));
+      const r = await act(() => manage.create({ name, parentId: d.parentId, kind: kind || undefined, template, workflowId }));
       if (r.ok) {
         onSelect(r.value.id);
         setDialog(null);
@@ -329,6 +383,7 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
               <li key={p.id} role="treeitem" aria-selected={active?.id === p.id} aria-level={depth + 1}>
                 <button type="button" className={`tree-row${active?.id === p.id ? ' active' : ''}${p.status === 'archived' ? ' archived' : ''}`} style={{ paddingLeft: 10 + depth * 18 }} onClick={() => onSelect(p.id)}>
                   <span className="tree-name">{p.name}</span>
+                  {stageOf[p.id]?.stage && <span className="stage-dot" title={stageOf[p.id]!.stage!.name} style={{ background: stageOf[p.id]!.stage!.color }} aria-label={`Stage: ${stageOf[p.id]!.stage!.name}`} />}
                   {studio.openByProject[p.id] ? <span className="count" title="Open notes">{studio.openByProject[p.id]}</span> : null}
                 </button>
               </li>
@@ -368,8 +423,10 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
           askKind={dialog.kind === 'new'}
           templates={dialog.kind === 'new' ? templates : undefined}
           defaultTemplate={dialog.kind === 'new' ? (dialog.parentId ? 'novel' : 'series') : null}
+          workflows={dialog.kind === 'new' && wf?.available ? wf.workflows : undefined}
+          workflowLevel={dialog.kind === 'new' ? (dialog.parentId ? 'subproject' : 'project') : undefined}
           action={dialog.kind === 'rename' ? 'Rename' : 'Create'}
-          onSubmit={(n, k, t) => void submit(n, k, t)}
+          onSubmit={(n, k, t, w) => void submit(n, k, t, w)}
           onCancel={() => setDialog(null)}
         />
       )}

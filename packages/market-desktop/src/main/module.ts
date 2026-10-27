@@ -147,70 +147,6 @@ export function createMarketModule(host: MarketHost): MarketModule {
     return file ? service.importData(file) : null;
   }
 
-  /** A page of HTML as a PDF, printed by a window that is never shown. */
-  async function htmlToPdf(html: string): Promise<Buffer> {
-    const w = new BrowserWindow({ show: false, webPreferences: { sandbox: true, javascript: false } });
-    try {
-      await w.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-      return await w.webContents.printToPDF({ pageSize: 'Letter', printBackground: false, margins: { top: 0.4, bottom: 0.4, left: 0.4, right: 0.4 } });
-    } finally {
-      w.destroy();
-    }
-  }
-
-  async function exportStatement(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: 'paid' | 'earned' = 'paid'): Promise<string | null> {
-    const testDir = TEST ? process.env.CADREL_MARKET_TEST_EXPORT_DIR : undefined;
-    if (kind === 'pdf' && payee === null) {
-      // one PDF per author, in a folder the user picks
-      const s = service.statement(from, to, basis);
-      const dir = testDir ?? (await pickFolder('Choose a folder for the statements'));
-      if (!dir) return null;
-      for (const p of s.payees) {
-        const f = service.statementFile(from, to, 'html', p.name, basis);
-        fs.writeFileSync(path.join(dir, f.filename), await htmlToPdf(f.content));
-      }
-      return dir;
-    }
-    const f = service.statementFile(from, to, kind === 'csv' ? 'csv' : 'html', payee, basis);
-    let target: string;
-    if (testDir) target = path.join(testDir, f.filename);
-    else {
-      const r = await dialog.showSaveDialog(host.getWindow()!, { defaultPath: path.join(app.getPath('documents'), f.filename), filters: [{ name: kind === 'csv' ? 'Spreadsheet (CSV)' : 'PDF', extensions: [kind] }] });
-      if (r.canceled || !r.filePath) return null;
-      target = r.filePath;
-    }
-    fs.writeFileSync(target, kind === 'csv' ? f.content : await htmlToPdf(f.content));
-    if (!TEST) shell.showItemInFolder(target);
-    return target;
-  }
-
-  /** Write a generated file (CSV, or a PDF printed from HTML) where the user chooses; `many` writes one PDF per author into a chosen folder. */
-  async function saveGenerated(kind: 'csv' | 'pdf', make: (payee: string | null) => { filename: string; content: string }, payee: string | null, everyone: () => string[]): Promise<string | null> {
-    const testDir = TEST ? process.env.CADREL_MARKET_TEST_EXPORT_DIR : undefined;
-    if (kind === 'pdf' && payee === null) {
-      const dir = testDir ?? (await pickFolder('Choose a folder for the statements'));
-      if (!dir) return null;
-      for (const name of everyone()) { const f = make(name); fs.writeFileSync(path.join(dir, f.filename), await htmlToPdf(f.content)); }
-      return dir;
-    }
-    const f = make(payee);
-    let target: string;
-    if (testDir) target = path.join(testDir, f.filename);
-    else {
-      const r = await dialog.showSaveDialog(host.getWindow()!, { defaultPath: path.join(app.getPath('documents'), f.filename), filters: [{ name: kind === 'csv' ? 'Spreadsheet (CSV)' : 'PDF', extensions: [kind] }] });
-      if (r.canceled || !r.filePath) return null;
-      target = r.filePath;
-    }
-    fs.writeFileSync(target, kind === 'csv' ? f.content : await htmlToPdf(f.content));
-    if (!TEST) shell.showItemInFolder(target);
-    return target;
-  }
-
-  const exportPayment = (number: string, kind: 'csv' | 'pdf', payee: string | null) =>
-    saveGenerated(kind, (p) => service.paymentFile(number, kind === 'csv' ? 'csv' : 'html', p), payee, () => service.paymentOwed(number).payees.map((p) => p.name));
-  const exportRollup = (from: string, to: string, kind: 'csv' | 'pdf', payee: string | null) =>
-    saveGenerated(kind, (p) => service.rollupFile(from, to, kind === 'csv' ? 'csv' : 'html', p), payee, () => service.payoutRollup(from, to).payees.filter((p) => p.due || p.owed || p.carriedIn).map((p) => p.name));
-
   async function attachManuscript(asin: string) {
     let file: string | undefined;
     if (TEST && process.env.CADREL_MARKET_TEST_MANUSCRIPT) file = process.env.CADREL_MARKET_TEST_MANUSCRIPT;
@@ -325,41 +261,6 @@ export function createMarketModule(host: MarketHost): MarketModule {
     ownBooks: () => service.ownBooks(),
     ownBook: (a: string) => service.ownBook(a),
     setOwnBook: (a: string, own: boolean) => service.setOwnBook(a, own),
-    salesStatus: () => service.salesStatus(),
-    moneyMonths: () => service.moneyMonths(),
-    moneyAnalysis: (f: string, t: string) => service.moneyAnalysis(f, t),
-    moneyMonth: (m: string) => service.moneyMonth(m),
-    people: () => service.people(),
-    savePerson: (p) => service.savePerson(p),
-    deletePerson: (id: number) => service.deletePerson(id),
-    bookSplit: (a: string) => service.bookSplit(a),
-    allSplits: () => service.allSplits(),
-    detectedAuthors: () => service.detectedAuthors(),
-    setBookSplit: (a: string, s, m?: string) => service.setBookSplit(a, s, m),
-    statement: (f: string, t: string, b: 'paid' | 'earned') => service.statement(f, t, b),
-    payments: () => service.payments(),
-    removePayment: (n: string) => service.removePayment(n),
-    paymentOwed: (n: string) => service.paymentOwed(n),
-    allocatePayment: (n: string) => service.allocatePayment(n),
-    unallocatePayment: (n: string) => service.unallocatePayment(n),
-    exportPayment,
-    payoutRollup: (f: string, t: string) => service.payoutRollup(f, t),
-    allocateRollup: (f: string, t: string) => service.allocateRollup(f, t),
-    exportRollup,
-    payouts: () => service.payouts(),
-    recordPayout: (p) => service.recordPayout(p),
-    deletePayout: (id: number) => service.deletePayout(id),
-    exportStatement,
-    setFxRate: (m: string, c: string, r: number | null) => service.setFxRate(m, c, r),
-    setKenpRate: (m: string, c: string, r: number | null) => service.setKenpRate(m, c, r),
-    importSales: (n: string, b: Uint8Array) => service.importSales(n, b),
-    importRanks: (n: string, b: Uint8Array, a?: string) => service.importRanks(n, b, a),
-    calibrationPreview: (o) => service.calibrationPreview(o),
-    applyCalibration: (o) => service.applyCalibration(o),
-    setKenpc: (a: string, k: number | null) => service.setKenpc(a, k),
-    setKuCompletion: (s: number) => service.setKuCompletion(s),
-    resetCalibration: () => service.resetCalibration(),
-    clearSalesData: () => service.clearSalesData(),
     stopCommunity: () => service.stopCommunity(),
     appInfo: () => service.appInfo(),
     updateState: () => service.updateState(),

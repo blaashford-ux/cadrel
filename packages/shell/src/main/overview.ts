@@ -3,10 +3,12 @@ import type { Overview, MarketCategoryRow, WriteProjectRow } from '../shared/api
 
 /** The facts Home and Dashboard need from each module, flattened so the page never sees a module's internal types. */
 
-export function summariseWrite(listing: RootListing): Overview['write'] {
+/** `stageOf` names the stage of the Cadrel project a manuscript folder belongs to (the folder's name is how the two are linked). */
+export function summariseWrite(listing: RootListing, stageOf: (folder: string) => { name: string; color: string } | null = () => null): Overview['write'] {
   const projects: WriteProjectRow[] = listing.projects.map((p) => ({
     name: p.name,
-    status: p.meta.status,
+    stage: stageOf(p.name)?.name ?? null,
+    stageColor: stageOf(p.name)?.color || null,
     words: p.words,
     goalWords: p.meta.goal?.targetWords ?? null,
     lastEdited: p.lastEdited,

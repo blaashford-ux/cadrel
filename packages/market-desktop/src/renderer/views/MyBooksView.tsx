@@ -1,43 +1,21 @@
 import { useEffect, useState } from 'react';
 import type { OwnBookRow } from '../../shared/api.js';
 import { DataTable, type Column } from './DataTable.js';
-import { KdpReportImport } from './KdpReportImport.js';
-import { MoneyAnalysis } from './MoneyAnalysis.js';
-import { MoneyMonth } from './MoneyMonth.js';
-import { Payments } from './Payments.js';
-import { Payouts } from './Payouts.js';
-import { Royalties } from './Royalties.js';
 
 const api = window.cadrelMarket;
 const n = (v: number | null) => (v === null ? '' : v.toLocaleString('en-US'));
 const TEXT_LABEL = { manuscript: 'book', sample: 'sample' } as const;
 
 /**
- * The user's own books. Importing KDP Orders / KENP Read reports creates them here (before any page is captured); each can then
- * be opened on Amazon and sent with the extension, which is also where the ranks used to calibrate sales estimates come from.
+ * The user's own books: a list of titles, including ones not captured yet. Which books are the user's own is Market's record; the money
+ * side (importing KDP reports, royalties, splits, payments) is in Finance, and a report import there adds its books here. Each book can be
+ * opened on Amazon and sent with the extension, which is also where the ranks used to calibrate sales estimates come from.
  */
 export function MyBooksView({ version, onOpen }: { version: number; onOpen: (asin: string) => void }) {
-  const [tab, setTab] = useState<'books' | 'analysis' | 'month' | 'royalties' | 'payments' | 'payouts'>('books');
-  // an import on the Books tab changes what the other tabs show
-  const [imports, setImports] = useState(0);
-  return (
-    <>
-      <div className="subtabs" aria-label="My Books sections">
-        {([['books', 'Books'], ['analysis', 'Charts and analysis'], ['month', 'Month'], ['royalties', 'Royalties and splits'], ['payments', 'Payments'], ['payouts', 'Pay authors']] as const).map(([id, label]) => (
-          <button key={id} className="tab" aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>
-        ))}
-      </div>
-      {tab === 'books' ? <BooksTab version={version} onOpen={onOpen} onImported={() => setImports((x) => x + 1)} />
-        : tab === 'analysis' ? <MoneyAnalysis version={version + imports} />
-        : tab === 'month' ? <MoneyMonth version={version + imports} />
-        : tab === 'payments' ? <Payments version={version + imports} onImported={() => setImports((x) => x + 1)} />
-        : tab === 'payouts' ? <Payouts version={version + imports} onChanged={() => setImports((x) => x + 1)} />
-        : <Royalties version={version + imports} />}
-    </>
-  );
+  return <BooksTab version={version} onOpen={onOpen} />;
 }
 
-function BooksTab({ version, onOpen, onImported }: { version: number; onOpen: (asin: string) => void; onImported: () => void }) {
+function BooksTab({ version, onOpen }: { version: number; onOpen: (asin: string) => void }) {
   const [books, setBooks] = useState<OwnBookRow[] | null>(null);
   const [asin, setAsin] = useState('');
   const [err, setErr] = useState('');
@@ -62,8 +40,6 @@ function BooksTab({ version, onOpen, onImported }: { version: number; onOpen: (a
     { key: 'captures', label: 'Captures', num: true, get: (b) => b.snapshots, title: (b) => (b.snapshots ? `Last captured ${b.lastCaptured?.slice(0, 10)}` : 'Not captured yet: open it on Amazon and send the page with the extension') },
     { key: 'text', label: 'Text', choices: ['book', 'sample', ''], get: (b) => (b.text ? TEXT_LABEL[b.text] : '') },
     { key: 'penName', label: 'Pen Name', choices: [...penNames, ''], get: (b) => b.penNames.join(', '), values: (b) => (b.penNames.length ? b.penNames : ['']), title: () => 'The author names KDP reports the book under (all of them for a collaboration), or the authors on its captured page. Editors, illustrators and other roles are not included' },
-    { key: 'orders', label: 'Orders', num: true, get: (b) => b.paidUnits, render: (b) => n(b.paidUnits), title: (b) => (b.lastSaleDay ? `Paid units in the Orders reports you imported; last sale ${b.lastSaleDay}` : 'Paid units in the Orders reports you imported') },
-    { key: 'ku', label: 'KU pages read', num: true, get: (b) => b.kenpPages, render: (b) => n(b.kenpPages), title: () => 'Kindle Unlimited pages read in the KENP Read reports you imported' },
     {
       key: 'actions', label: '', get: () => null,
       render: (b) => (
@@ -78,9 +54,8 @@ function BooksTab({ version, onOpen, onImported }: { version: number; onOpen: (a
   return (
     <>
       <p className="muted">
-        Import the report workbook from KDP Reports (kdpreports.amazon.com: the Orders download with its royalty sheets, and/or the KENP Read download) and your books appear here, whether or not you have captured them. The royalties feed the charts, the Month view and author statements on the other tabs. Open each on Amazon and send the page with the extension: that adds its rank, price and reviews to the library, and pairs its rank with your sales to calibrate sales estimates (Settings → Sales estimates).
+        Your own books. Open each on Amazon and send the page with the extension: that adds its rank, price and reviews to the library. Sales, royalties and author payments are in Finance; importing a KDP report there adds its books to this list, whether or not you have captured them.
       </p>
-      <div className="row"><KdpReportImport onImported={() => { void load(); onImported(); }} /></div>
       <div className="row">
         <input value={asin} onChange={(e) => setAsin(e.target.value.toUpperCase().trim())} placeholder="Add a book by ASIN" aria-label="ASIN to add" style={{ width: 160 }} />
         <button disabled={!/^[A-Z0-9]{10}$/.test(asin)} onClick={() => void guard(async () => { await api.setOwnBook(asin, true); setAsin(''); setMsg(`Added ${asin}.`); })}>Add</button>
@@ -89,7 +64,7 @@ function BooksTab({ version, onOpen, onImported }: { version: number; onOpen: (a
       {err && <div className="err" role="alert">{err}</div>}
       {msg && <div className="muted" role="status">{msg}</div>}
       {books === null ? null : books.length === 0 ? (
-        <p className="muted">No books of yours yet. Import a KDP report above, or add a book by its ASIN.</p>
+        <p className="muted">No books of yours yet. Add a book by its ASIN, or import a KDP report in Finance.</p>
       ) : (
         <>
           <div className="muted">{books.length - todo.length} of {books.length} captured.</div>

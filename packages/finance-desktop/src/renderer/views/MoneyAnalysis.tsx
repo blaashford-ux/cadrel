@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { AnalysisReport } from '../../shared/api.js';
-import { ChartCard, HBars, Legend, SERIES, StackedBars } from '../charts.js';
-import { DataTable, type Column } from './DataTable.js';
+import type { AnalysisReport } from './types.js';
+import { ChartCard, HBars, Legend, SERIES, StackedBars } from '@cadrel/market-desktop/src/renderer/charts.js';
+import { DataTable, type Column } from '@cadrel/market-desktop/src/renderer/views/DataTable.js';
 import { currentMonth, int, money, monthName, pct, shiftMonth, shortMonth, usd, SOURCE_NAME } from './moneyUtil.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 
 export const Tile = ({ n, l, sub }: { n: string; l: string; sub?: string }) => (
   <div className="tile"><div className="n">{n}</div><div className="l">{l}</div>{sub && <div className="l">{sub}</div>}</div>
@@ -75,7 +75,7 @@ export function MoneyAnalysis({ version }: { version: number }) {
     if (range && range.from <= range.to) void api.moneyAnalysis(range.from, range.to).then(setR, (e) => setErr(String(e.message ?? e)));
   }, [range, version]);
 
-  if (none) return <p className="muted">Nothing to analyse yet. Import a KDP report from Books (the workbook from KDP Reports with the royalty sheets gives the money; the Orders and KENP Read sheets give units and pages).</p>;
+  if (none) return <p className="muted">Nothing to analyse yet. Import a KDP report on the Reports tab (the workbook from KDP Reports with the royalty sheets gives the money; the Orders and KENP Read sheets give units and pages).</p>;
   if (!range) return err ? <div className="err" role="alert">{err}</div> : null;
   const days = r?.daily ?? [];
   const showDays = range.from === range.to || (r && r.months.length <= 3);

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import type { CalibrationPreview, ImportSummary, SalesStatus } from '../../shared/api.js';
+import type { CalibrationPreview, ImportSummary, SalesStatus } from './types.js';
 import { KdpReportImport, describeImport } from './KdpReportImport.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 const n = (v: number | null, d = 0) => (v === null ? '–' : v.toLocaleString('en-US', { maximumFractionDigits: d }));
 const range = (r: { low: number; high: number } | null) => (r === null ? '–' : `${n(r.low, r.low < 10 ? 1 : 0)} – ${n(r.high, r.high < 10 ? 1 : 0)}`);
 const lohi = (lo: number, hi: number) => range({ low: lo, high: hi });
@@ -50,7 +50,7 @@ export function SalesCalibration({ onApplied }: { onApplied?: () => void }) {
 
       <ol className="muted" style={{ paddingLeft: 18 }}>
         <li>
-          Download from KDP Reports (kdpreports.amazon.com) the <b>Orders</b> report and, if you are in Kindle Unlimited, the <b>KENP Read</b> report, with the dates set as wide as you like, and import them (a workbook holding both tabs works too; you can pick several files at once). This also creates your books under Library → My Books. Import newer ones now and then; overlapping days are replaced.
+          Download from KDP Reports (kdpreports.amazon.com) the <b>Orders</b> report and, if you are in Kindle Unlimited, the <b>KENP Read</b> report, with the dates set as wide as you like, and import them (a workbook holding both tabs works too; you can pick several files at once). This also adds your books to My Books in Market. Import newer ones now and then; overlapping days are replaced.
           <div className="row" style={{ marginTop: 6 }}>
             <KdpReportImport label="Import KDP reports…" onImported={() => void load()} />
           </div>

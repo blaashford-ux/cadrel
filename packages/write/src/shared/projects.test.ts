@@ -88,7 +88,7 @@ describe('project metadata', () => {
   it('a new project copies the template’s defaults, not shares them', () => {
     const t = { ...novel(), chapterLevel: 2, book: defaultBookDetails({ title: '', author: 'Template Author' }) };
     const m = newProjectMeta({ id: 'p1', name: 'The Lost King', template: t, now });
-    expect(m).toMatchObject({ name: 'The Lost King', templateId: 'novel', templateName: 'Novel', status: 'planning', archived: false, goal: null, createdAt: now.toISOString() });
+    expect(m).toMatchObject({ name: 'The Lost King', templateId: 'novel', templateName: 'Novel', archived: false, goal: null, createdAt: now.toISOString() });
     expect(m.excludedFolders).toEqual(['Characters', 'Worldbuilding', 'Research', 'Exports']);
     expect(m.overrides.chapterLevel).toBe(2);
     expect(m.overrides.book).toEqual({ author: 'Template Author' }); // only what the template changes
@@ -105,13 +105,13 @@ describe('project metadata', () => {
   it('round-trips through sanitising', () => {
     const m = newProjectMeta({ id: 'p1', name: 'X', template: novel(), now });
     m.goal = { targetWords: 80000, startDate: '2026-10-05', targetDate: '2027-01-31' };
-    m.status = 'drafting';
     expect(sanitizeProjectMeta(JSON.parse(JSON.stringify(m)), 'X', '2026-10-05')).toEqual(m);
   });
   it('survives garbage', () => {
-    const m = sanitizeProjectMeta({ status: 'nonsense', goal: { targetWords: -4 }, excludedFolders: ['../x', 'ok', 5], overrides: 'x' }, 'Folder Name', '2026-10-05');
+    const m = sanitizeProjectMeta({ status: 'nonsense', stage: { key: 'x' }, goal: { targetWords: -4 }, excludedFolders: ['../x', 'ok', 5], overrides: 'x' }, 'Folder Name', '2026-10-05');
     expect(m.name).toBe('Folder Name');
-    expect(m.status).toBe('planning');
+    expect(m).not.toHaveProperty('status');
+    expect(m.stage).toBeUndefined(); // the stage is the host's; a saved file can't claim one
     expect(m.goal).toBeNull();
     expect(m.excludedFolders).toEqual(['ok']);
     expect(m.overrides).toEqual({ chapterLevel: null, book: {} });

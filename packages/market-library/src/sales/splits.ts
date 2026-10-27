@@ -238,8 +238,11 @@ interface Item {
 
 const lastDay = (m: string) => `${m}-31`;
 
-/** `only` limits a `paid` statement to one payment (by number), whatever its date. */
-export function royaltyStatement(db: Db, range: { from: string; to: string }, today = new Date(), basis: StatementBasis = 'earned', only?: string): Statement {
+/**
+ * `only` limits a `paid` statement to one payment (by number), whatever its date. `book` (an ASIN) limits every line to that book, so each author's
+ * share, tax and total are what that one book gave them; payments are those that include it.
+ */
+export function royaltyStatement(db: Db, range: { from: string; to: string }, today = new Date(), basis: StatementBasis = 'earned', only?: string, book?: string): Statement {
   const reconciled = hasPayments(db);
   const items: Item[] = [];
   const pending: Statement['pending'] = [];
@@ -286,6 +289,10 @@ export function royaltyStatement(db: Db, range: { from: string; to: string }, to
     }
   }
 
+  if (book) {
+    for (let i = items.length - 1; i >= 0; i--) if (items[i]!.asin !== book) items.splice(i, 1);
+    for (let i = pending.length - 1; i >= 0; i--) if (pending[i]!.asin !== book) pending.splice(i, 1);
+  }
   const history = new Map<string, SplitVersion[]>();
   const people0 = listPeople(db);
   const people = new Map<string, PayeeStatement>();
@@ -337,10 +344,12 @@ export function royaltyStatement(db: Db, range: { from: string; to: string }, to
   const lo = `${range.from}-01`; const hi = lastDay(range.to);
   const inScope = (paidOn: string, number: string) => (basis === 'paid' ? (only ? number === only : paidOn >= lo && paidOn <= hi) : items.some((i) => i.paymentNumber === number));
   const payments = reconciled ? listPayments(db).filter((x) => inScope(x.paidOn, x.number)).map((x) => ({ number: x.number, paidOn: x.paidOn, accrued: x.accrued, tax: x.tax, net: x.net, status: x.status, scheduled: x.paidOn > todayIso, payoutAmount: x.payoutAmount, payoutCurrency: x.payoutCurrency, fxRate: x.fxRate })) : [];
-  const numbers = new Set(payments.map((x) => x.number));
+  // for one book, only the payments it appears in; lines KDP could not match to any book are nobody's in particular, so they are left out
+  const shown = book ? payments.filter((x) => items.some((i) => i.paymentNumber === x.number)) : payments;
+  const numbers = new Set(shown.map((x) => x.number));
   return {
-    from: range.from, to: range.to, basis, reconciled, generatedAt: today.toISOString(), payees, pending, payments,
-    unmatched: (rec?.unmatched ?? []).filter((u) => numbers.has(u.paymentNumber)),
+    from: range.from, to: range.to, basis, reconciled, generatedAt: today.toISOString(), payees, pending, payments: shown,
+    unmatched: book ? [] : (rec?.unmatched ?? []).filter((u) => numbers.has(u.paymentNumber)),
     differences: (rec?.differences ?? []).filter((d) => numbers.has(d.paymentNumber)),
     fx: basis === 'paid' && reconciled ? [] : money.fx, months: monthsBetween(range.from, range.to),
   };

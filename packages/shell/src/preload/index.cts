@@ -25,12 +25,106 @@ const api: CadrelApi = {
     revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
     removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
     join: (link, details) => studioCall('shell:studios:join', link, details),
-    backup: (id) => studioCall('shell:studios:backup', id),
     onChange: (cb) => {
       const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
       ipcRenderer.on('shell:studios', h);
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
+  },
+  stages: {
+    views: () => studioCall('shell:stages:views'),
+    options: (projectId) => studioCall('shell:stages:options', projectId),
+    move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
+  },
+  vault: {
+    state: () => studioCall('shell:vault:state'),
+    add: (path, comment) => studioCall('shell:vault:call', 'add', path, comment),
+    checkOut: (path) => studioCall('shell:vault:call', 'checkOut', path),
+    checkIn: (path, comment) => studioCall('shell:vault:call', 'checkIn', path, comment),
+    undoCheckOut: (path) => studioCall('shell:vault:call', 'undoCheckOut', path),
+    discardLocalChanges: (path) => studioCall('shell:vault:call', 'discardLocalChanges', path),
+    getLatest: (paths, o) => studioCall('shell:vault:call', 'getLatest', paths, o),
+    forceRelease: (path, reason) => studioCall('shell:vault:call', 'forceRelease', path, reason),
+    history: (path) => studioCall('shell:vault:history', path),
+    detail: (path) => studioCall('shell:vault:detail', path),
+    addReference: (path, to, version, note) => studioCall('shell:vault:call', 'addReference', path, to, version, note),
+    setReferenceVersion: (path, to, version) => studioCall('shell:vault:call', 'setReferenceVersion', path, to, version),
+    removeReference: (path, to) => studioCall('shell:vault:call', 'removeReference', path, to),
+    setCard: (path, fields, projectId) => studioCall('shell:vault:call', 'setCard', path, fields, projectId),
+    saveVersionAs: (path, version, as) => studioCall('shell:vault:call', 'saveVersionAs', path, version, as),
+    openFolder: () => studioCall('shell:vault:open')
+  },
+  work: {
+    state: (projectId) => studioCall('shell:work:state', projectId),
+    mine: () => studioCall('shell:work:mine'),
+    plan: () => studioCall('shell:work:plan'),
+    pulse: () => studioCall('shell:work:pulse'),
+    createTask: (i) => studioCall('shell:work:call', 'createTask', i),
+    updateTask: (id, patch) => studioCall('shell:work:call', 'updateTask', id, patch),
+    setState: (id, state) => studioCall('shell:work:call', 'setState', id, state),
+    addDependency: (id, on) => studioCall('shell:work:call', 'addDependency', id, on),
+    removeDependency: (id, on) => studioCall('shell:work:call', 'removeDependency', id, on),
+    requestApproval: (i) => studioCall('shell:work:call', 'requestApproval', i),
+    respond: (id, response, reason) => studioCall('shell:work:call', 'respond', id, response, reason),
+    withdraw: (id) => studioCall('shell:work:call', 'withdraw', id),
+    recordDecision: (i) => studioCall('shell:work:call', 'record', i)
+  },
+  workflow: {
+    state: () => studioCall('shell:workflow:state'),
+    create: (i) => studioCall('shell:workflow:call', 'create', i),
+    save: (id, draft) => studioCall('shell:workflow:call', 'save', id, draft),
+    setDefault: (id, levels) => studioCall('shell:workflow:call', 'setDefault', id, levels),
+    delete: (id) => studioCall('shell:workflow:call', 'delete', id)
+  },
+  people: {
+    state: () => studioCall('shell:people:state'),
+    createPerson: (i) => studioCall('shell:people:call', 'createPerson', i),
+    updatePerson: (id, patch) => studioCall('shell:people:call', 'updatePerson', id, patch),
+    setPersonActive: (id, active) => studioCall('shell:people:call', 'setPersonActive', id, active),
+    createPenName: (i) => studioCall('shell:people:call', 'createPenName', i),
+    setPenNamePeople: (id, personIds) => studioCall('shell:people:call', 'setPenNamePeople', id, personIds),
+    createTeam: (name) => studioCall('shell:people:call', 'createTeam', name),
+    renameTeam: (id, name) => studioCall('shell:people:call', 'renameTeam', id, name),
+    setTeamMember: (teamId, personId, member) => studioCall('shell:people:call', 'setTeamMember', teamId, personId, member),
+    deleteTeam: (id) => studioCall('shell:people:call', 'deleteTeam', id),
+    createRole: (i) => studioCall('shell:people:call', 'createRole', i),
+    updateRole: (id, patch) => studioCall('shell:people:call', 'updateRole', id, patch),
+    resetRole: (id) => studioCall('shell:people:call', 'resetRole', id),
+    deleteRole: (id, replacementId) => studioCall('shell:people:call', 'deleteRole', id, replacementId),
+    acknowledgeCapabilities: (caps) => studioCall('shell:people:call', 'acknowledgeCapabilities', caps),
+    grant: (i) => studioCall('shell:people:call', 'grant', i),
+    revoke: (id) => studioCall('shell:people:call', 'revoke', id),
+    setExpiry: (id, expiresAt) => studioCall('shell:people:call', 'setExpiry', id, expiresAt),
+    explainAccess: (personId, capability, projectId) => studioCall('shell:people:explain', personId, capability, projectId),
+    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
+  },
+  myBooks: {
+    catalogue: () => studioCall('shell:mybooks:catalogue'),
+    catalogueBook: (id) => studioCall('shell:mybooks:catalogueBook', id),
+    createBook: (i) => studioCall('shell:mybooks:call', 'createBook', i),
+    createSeries: (i) => studioCall('shell:mybooks:call', 'createSeries', i),
+    updateBook: (id, patch) => studioCall('shell:mybooks:call', 'updateBook', id, patch),
+    moveBook: (id, seriesId, position) => studioCall('shell:mybooks:call', 'moveBook', id, seriesId, position),
+    addEdition: (bookId, i) => studioCall('shell:mybooks:call', 'addEdition', bookId, i),
+    updateEdition: (id, patch) => studioCall('shell:mybooks:call', 'updateEdition', id, patch),
+    archiveBook: (id) => studioCall('shell:mybooks:call', 'archive', 'book', id),
+    linkProject: (bookId, projectId) => studioCall('shell:mybooks:call', 'linkProject', bookId, projectId),
+    addFromMarket: (asins) => studioCall('shell:mybooks:addFromMarket', asins),
+    list: () => studioCall('shell:mybooks:list'),
+    book: (asin) => studioCall('shell:mybooks:book', asin),
+    saveMarket: (asin) => studioCall('shell:mybooks:saveMarket', asin),
+    saveFinance: (asin, o) => studioCall('shell:mybooks:saveFinance', asin, o),
+    saveAll: (asin, o) => studioCall('shell:mybooks:saveAll', asin, o),
+    openOnAmazon: (asin) => studioCall('shell:mybooks:openOnAmazon', asin),
+    openIn: (module, asin) => studioCall('shell:mybooks:openIn', module, asin)
+  },
+  backup: {
+    make: (o) => studioCall('shell:backup:make', o),
+    inspect: () => studioCall('shell:backup:inspect'),
+    restoreProject: (file, project, parentId) => studioCall('shell:backup:restoreProject', file, project, parentId),
+    restoreAsStudio: (file, name) => studioCall('shell:backup:restoreAsStudio', file, name),
+    findMdedit: () => studioCall('shell:backup:findMdedit'),
+    importMdedit: (source, o) => studioCall('shell:backup:importMdedit', source, o)
   },
   manage: {
     templates: () => studioCall('shell:manage:templates'),

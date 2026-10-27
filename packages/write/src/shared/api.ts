@@ -154,7 +154,7 @@ export interface DraftRecord {
 }
 
 /** Fields of a project's metadata that can be changed after it is created. */
-export type ProjectPatch = Partial<Pick<ProjectMeta, 'status' | 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders' | 'editedChapters'>> & {
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders' | 'editedChapters'>> & {
   overrides?: Partial<ProjectMeta['overrides']>;
 };
 

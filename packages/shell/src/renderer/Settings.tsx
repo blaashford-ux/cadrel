@@ -3,6 +3,7 @@ import { AppearanceForm } from '@cadrel/write/src/renderer/AppearanceForm';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { AppFolders, FolderKey, ShellInfo, ThemeState, UpdateStatus } from '../shared/api';
 import type { ThemeSource } from '../shared/theme';
+import { BackupImport } from './BackupImport';
 
 const api = window.cadrel;
 
@@ -176,6 +177,8 @@ export function Settings() {
       </section>
 
       <UpdateCard info={info} />
+
+      <BackupImport />
 
       <section className="card" aria-labelledby="s-about">
         <h3 id="s-about">About</h3>

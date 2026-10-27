@@ -12,11 +12,12 @@ import { createWriteModule, type WriteModule } from '@cadrel/write/electron/modu
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
 import { fileFromArgv } from '@cadrel/write/electron/launch';
 import { createMarketModule, type MarketModule } from '@cadrel/market-desktop/src/main/module.js';
+import { createFinanceModule, type FinanceModule } from '@cadrel/finance-desktop/src/main/module.js';
 import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/launcher.js';
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
 import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
-import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
+import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ProjectStageView, type ThemeState, type UserView } from '../shared/api';
 import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
 import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './controls';
@@ -28,7 +29,16 @@ import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
+import { PeopleHost } from './people';
+import { ProjectStages } from './stages';
+import { callWorkflow } from './workflowCalls';
+import { ProjectWork } from './projectWork';
+import { buildPulse } from './pulse';
+import { VaultHost } from './vaultHost';
+import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
+import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
+import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
@@ -72,6 +82,7 @@ let updater: Updater;
 /** A verified installer to start once the app has exited. */
 let installerToRun: string | null = null;
 let manager: ProjectManager;
+let stages: ProjectStages;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -101,6 +112,8 @@ async function attachAll(paths: string[]): Promise<UserView> {
 }
 let write: WriteModule;
 let market: MarketModule;
+let finance: FinanceModule;
+const peopleHost = new PeopleHost();
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
@@ -109,17 +122,19 @@ const views: Partial<Record<ModuleId, WebContentsView>> = {};
 // Light/dark follows nativeTheme (which reaches every view). The colours are the shell's to set: it paints its own page,
 // tells Write (which already understands the model), and maps the same colours onto Market's differently named variables.
 const themeState = (): ThemeState => ({ source: settings.get().theme ?? 'system', ...(settings.get().themeCustom ? { custom: settings.get().themeCustom } : {}) });
-let marketCssKey: string | undefined;
+// Finance is drawn with Market's stylesheet, so it takes the same mapping.
+const paintedCss: Partial<Record<ModuleId, string>> = {};
 
-function paintMarket(): void {
-  const c = views.market?.webContents;
+function paintMarketStyled(id: 'market' | 'finance'): void {
+  const c = views[id]?.webContents;
   if (!c || c.isDestroyed()) return;
-  const old = marketCssKey;
+  const old = paintedCss[id];
   void c.insertCSS(marketCss(settings.get().themeCustom)).then((key) => {
-    marketCssKey = key;
+    paintedCss[id] = key;
     if (old) void c.removeInsertedCSS(old).catch(() => undefined);
   });
 }
+const paintMarket = (): void => (paintMarketStyled('market'), paintMarketStyled('finance'));
 
 function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null }): ThemeState {
   settings.update((s) => {
@@ -150,7 +165,7 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
   // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile()],
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile())],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -182,7 +197,7 @@ function writeFolders(): WriteFolders {
     deleteProject: (p) => write.deleteProject(p),
     readProject: async (p) => {
       const m = await write.readProject(p);
-      return m ? { status: m.status, notes: m.notes, archived: m.archived, templateName: m.templateName, createdAt: m.createdAt, templateId: m.templateId } : null;
+      return m ? { notes: m.notes, archived: m.archived, templateName: m.templateName, createdAt: m.createdAt, templateId: m.templateId } : null;
     },
     updateProject: (p, patch) => write.updateProject(p, patch),
     convertFolder: (p) => write.convertFolder(p),
@@ -238,6 +253,7 @@ const marketDefault = () => path.join(studioFolder(), 'Market');
 const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefault();
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
+const recordsFile = () => path.join(studioDir, 'records.db');
 const sameDir = (a: string, b: string) => path.resolve(a) === path.resolve(b);
 /** The shell's own last word on a move of the Cadrel folder that did not work. */
 let moveError: string | null = null;
@@ -498,15 +514,15 @@ function ensureView(id: ModuleId): WebContentsView {
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   view.webContents.on('will-navigate', (e) => e.preventDefault());
   view.webContents.on('render-process-gone', (_e, d) => market?.log.error(`${id} renderer gone`, d.reason));
-  // Market has no title bar of its own, so on Windows its tab bar must clear the window buttons and be draggable.
-  if (id === 'market') {
+  // Market and Finance have no title bar of their own, so on Windows their tab bars must clear the window buttons and be draggable.
+  if (id === 'market' || id === 'finance') {
     view.webContents.on('did-finish-load', () => {
       if (win && windowInfo(win).overlay) {
         void view.webContents.insertCSS('header.tabs{padding-right:150px;-webkit-app-region:drag}header.tabs button{-webkit-app-region:no-drag}');
       }
     });
   }
-  if (id === 'market') view.webContents.on('did-finish-load', paintMarket);
+  if (id === 'market' || id === 'finance') view.webContents.on('did-finish-load', () => paintMarketStyled(id));
   void view.webContents.loadFile(path.join(dir, 'renderer', 'index.html'));
   if (id === 'write') write.attach(view.webContents, win!);
   views[id] = view;
@@ -518,13 +534,13 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'projects', 'notes', 'write', 'market']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
   if (!win || win.isDestroyed()) return;
   page = next;
-  for (const id of ['write', 'market'] as const) views[id]?.setVisible(false);
+  for (const id of ['write', 'market', 'finance'] as const) views[id]?.setVisible(false);
   if (isModule(next) && !studios.view().connected) {
     win.webContents.focus(); // the page explains; the module's view stays hidden
   } else if (isModule(next)) {
@@ -614,9 +630,21 @@ function createWindow(): void {
 
 // ---- IPC the shell's own page may call ----------------------------------------------------------
 
+/** The stage (name and colour) of the Cadrel project each Write folder belongs to, looked up by folder name. */
+async function stageByFolder(): Promise<{ (folder: string): { name: string; color: string } | null; all(): Map<string, NonNullable<ProjectStageView['stage']>> }> {
+  const tree = (await studio.studio.read()).tree;
+  const views = await stages.views();
+  const byFolder = new Map<string, NonNullable<ProjectStageView['stage']>>();
+  for (const l of tree.links) {
+    const s = l.module === 'write' ? views[l.projectId]?.stage : null;
+    if (s) byFolder.set(l.ref, s);
+  }
+  return Object.assign((folder: string) => byFolder.get(folder) ?? null, { all: () => byFolder });
+}
+
 async function overview(): Promise<Overview> {
   const [w, m] = await Promise.all([
-    write.listProjects().then(summariseWrite, writeUnavailable),
+    stageByFolder().then((stageOf) => write.listProjects().then((l) => summariseWrite(l, stageOf)), () => write.listProjects().then((l) => summariseWrite(l), writeUnavailable)).catch(writeUnavailable),
     (async () => {
       const status = market.service.status();
       try {
@@ -797,9 +825,190 @@ function registerShellIpc(): void {
     await secretsFor(added.id).put('studio-key', JSON.stringify(joined.key));
     return studiosChanged(view);
   });
-  manageLike('studios:backup', async () => {
+  // People and roles. Every change is made by the service as the person using the app, so the page only shows what the service allows.
+  manageLike('workflow:state', async () => {
+    const st = await peopleHost.workflowState();
+    if (!st.available) return st;
+    const usage: Record<string, Awaited<ReturnType<ProjectStages['usage']>>> = {};
+    for (const w of st.workflows) usage[w.id] = await stages.usage(w.id);
+    return { ...st, usage };
+  });
+  manageLike('workflow:call', async (name: string, ...args: unknown[]) => callWorkflow(String(name), args, peopleHost, stages));
+  // Where projects are in their workflows. A move is checked against the workflow's gates and the person's roles before the tree changes.
+  manageLike('stages:views', async () => stages.views());
+  manageLike('stages:options', async (projectId: string) => {
+    const r = await stages.options(String(projectId));
+    return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
+  });
+  manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
+  manageLike('vault:state', async () => vaultHost().state());
+  manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
+  manageLike('vault:history', async (p: string) => vaultHost().history(String(p)));
+  manageLike('vault:detail', async (p: string) => vaultHost().detail(String(p)));
+  manageLike('vault:open', async () => {
+    const dir = path.join(studioFolder(), 'Vault');
+    await fsp.mkdir(dir, { recursive: true });
+    if (!TEST) await shell.openPath(dir);
+  });
+  manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost, stages).state(String(projectId)));
+  manageLike('work:plan', async () => new ProjectWork(studio, peopleHost, stages).plan());
+  manageLike('work:pulse', async () => {
+    const pw = new ProjectWork(studio, peopleHost, stages);
+    const plan = await pw.plan();
+    const work = peopleHost.work;
+    if (!plan.available || !work) return buildPulse({ plan, approvals: [], decisions: [], catalogue: { available: false, marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] } });
+    const nameOf = new Map(plan.projects.map((x) => [x.id, x.name]));
+    const label = <T extends { projectId: string | null }>(r: T) => ({ ...r, projectName: (r.projectId && nameOf.get(r.projectId)) || '' });
+    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }), work.decisions({ current: true }), catalogueList(await catalogueSources())]);
+    return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
+  });
+  manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
+  manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
+  manageLike('people:state', async () => peopleHost.state());
+  manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
+  manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
+  manageLike('people:explain', async (personId: string, capability: string, projectId?: string | null) => peopleHost.explain(String(personId), String(capability), projectId));
+  // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
+  const roleKey = () => {
+    const a = studios.active();
+    return a.role === 'owner' ? 'owner' : a.memberRole;
+  };
+  const financeSeen = () => financeAccess(roleKey());
+  const asinOf = (v: unknown) => {
+    if (typeof v !== 'string' || !/^[A-Z0-9]{10}$/.test(v)) throw new Error('That is not an ASIN.');
+    return v;
+  };
+  const catalogueSources = async (): Promise<Sources> => ({
+    people: peopleHost, tree: (await studio.studio.read()).tree, stages: await stages.views(),
+    write: await write.listProjects().then((l) => summariseWrite(l).projects, () => []), market: market.service, financeVisible: financeSeen()
+  });
+  manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
+  manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
+  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
+  manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
+  manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));
+  const saveWhat = (what: 'market' | 'finance' | 'all') => async (asin: string, o?: { months?: number }) => {
+    let parent = picked('CADREL_TEST_BOOK_SAVE_TO');
+    if (!parent) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose where to save this book’s files', properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('documents') });
+      if (r.canceled || !r.filePaths[0]) return null;
+      parent = r.filePaths[0];
+    }
+    const months = typeof o?.months === 'number' && o.months >= 1 && o.months <= 60 ? Math.floor(o.months) : 12;
+    const r = await saveBook(market.service, asinOf(asin), what, financeSeen(), { parent, months, pdf: { statements: (dir, from, to, payees, basis, asin) => finance.writeStatementPdfs(dir, from, to, payees, basis, asin), rollups: (dir, from, to, payees, asin) => finance.writeRollupPdfs(dir, from, to, payees, asin) } });
+    if (!TEST) shell.showItemInFolder(r.files[0]!);
+    return r;
+  };
+  manageLike('mybooks:saveMarket', saveWhat('market'));
+  manageLike('mybooks:saveFinance', saveWhat('finance'));
+  manageLike('mybooks:saveAll', saveWhat('all'));
+  /** Shows a module and asks its page to show something. The page subscribes just after it loads, so the first ask can land before it is listening; asking twice is harmless (it opens the same book). */
+  const showInModule = async (id: 'market' | 'finance', channel: string, payload: string) => {
+    showPage(id);
+    const wc = views[id]!.webContents;
+    if (wc.isLoading()) await new Promise<void>((r) => wc.once('did-finish-load', () => r()));
+    wc.send(channel, payload);
+    setTimeout(() => !wc.isDestroyed() && wc.send(channel, payload), 400);
+  };
+  manageLike('mybooks:openIn', async (module: string, asin: string) => {
+    const a = asinOf(asin);
+    if (module === 'finance') {
+      if (!financeSeen()) throw new Error('Your role does not include Finance.');
+      await showInModule('finance', 'finance:navigate', `book:${a}`);
+    } else if (module === 'market') await showInModule('market', 'navigate', `book:${a}`);
+    else throw new Error('unknown module');
+  });
+  // The book's Amazon page in the browser (Market's own "Open on Amazon", so only Amazon addresses are ever opened).
+  manageLike('mybooks:openOnAmazon', async (asin: string) => market.service.openBook(asinOf(asin)));
+  // Backup and import. The pickers are dialogs only the shell can open; under test an environment variable stands in for the person's choice.
+  const picked = (name: string) => (TEST ? process.env[name] : undefined);
+  const stamp = () => new Date().toISOString().slice(0, 10);
+  const schemaNow = Math.max(PROJECT_TREE_VERSION, NOTES_VERSION);
+  /** Regenerable or machine-bound things stay out: model downloads, caches, logs. */
+  manageLike('backup:make', async (o?: { projects?: string[] }) => {
+    const st = studios.active();
+    const only = Array.isArray(o?.projects) && o!.projects.length ? o!.projects.map(String) : undefined;
+    let file = picked('CADREL_TEST_BACKUP_TO');
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, {
+        title: 'Back up this Studio',
+        defaultPath: path.join(app.getPath('documents'), `${st.name} ${stamp()}${BACKUP_EXTENSION}`),
+        filters: [{ name: 'Cadrel backup', extensions: [BACKUP_EXTENSION.slice(1)] }]
+      });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    await studio.studio.read(); // settles any write in flight before the folder is read
+    await studios.flush();
+    // The records (people, tasks, books, files' versions...) are in a SQLite file the app has open: it is copied as a consistent snapshot, never as the live file and its write-ahead log.
+    const stage = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-backup-'));
+    try {
+      const hasRecords = await peopleHost.snapshot(path.join(stage, 'records.db'));
+      const made = await createBackup({
+        file, studio: { id: st.id, name: st.name }, appVersion: app.getVersion(), schema: schemaNow, ...(hasRecords ? { recordsSchema: STUDIO_SCHEMA_VERSION } : {}),
+        sources: studioBackupSources({ studioDir, stage: hasRecords ? stage : null, vaultDir: path.join(studioFolder(), 'Vault'), projectsDir: projectsFolder(), only })
+      });
+      return { file, files: made.files, bytes: made.bytes };
+    } finally {
+      await fsp.rm(stage, { recursive: true, force: true });
+    }
+  });
+  manageLike('backup:inspect', async () => {
+    let file = picked('CADREL_TEST_BACKUP_FROM');
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose a Cadrel backup', properties: ['openFile'], filters: [{ name: 'Cadrel backup', extensions: [BACKUP_EXTENSION.slice(1)] }] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    const d = await describeBackup(file);
+    return { file, studioName: d.studio.name, created: d.created, app: d.app, projects: d.projects, files: d.entries.length };
+  });
+  manageLike('backup:restoreProject', async (file: string, project: string, parentId?: string | null) => {
+    const r = await restoreProject({ file: String(file), project: String(project), projectsDir: projectsFolder() });
+    return { id: await manager.adopt(r.name, parentId ?? null), name: r.name };
+  });
+  manageLike('backup:restoreAsStudio', async (file: string, name: string) => {
     adminOnly();
-    throw new Error('Backup is not connected in this build yet.');
+    const d = await describeBackup(String(file));
+    if (d.schema > schemaNow || (d.records ?? 0) > STUDIO_SCHEMA_VERSION) throw new Error('That backup is from a newer Cadrel than this one. Update Cadrel to restore it.');
+    const before = new Set(studios.view().studios.map((x) => x.id));
+    const view = studios.create(String(name));
+    const added = view.studios.find((x) => !before.has(x.id))!;
+    await studios.flush();
+    try {
+      await restoreBackup({
+        file: String(file), maxSchema: schemaNow,
+        targets: studioRestoreTargets(d.sources, { studioDir: path.join(userData, 'studios', added.id), studioFolder: path.join(cadrelFolder(), added.folderName) })
+      });
+    } catch (e) {
+      // Nothing half-restored is left behind: the folders were empty or missing before, so they are removed whole.
+      await Promise.all([path.join(userData, 'studios', added.id), path.join(cadrelFolder(), added.folderName)].map((d) => fsp.rm(d, { recursive: true, force: true })));
+      studios.remove(added.id);
+      throw e;
+    }
+    return studiosChanged(studios.view());
+  });
+  manageLike('backup:findMdedit', async () => {
+    let dir = picked('CADREL_TEST_MDEDIT');
+    if (!dir) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose an MDEdit project folder, or the Root Folder that holds your projects', properties: ['openDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      dir = r.filePaths[0];
+    }
+    const found = await findMdeditProjects(dir);
+    if (!found.length) throw new Error('No MDEdit projects were found there. An MDEdit project is a folder with a .mdedit folder inside it.');
+    const out = [];
+    for (const f of found) {
+      const { source, name, asName, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried } = await previewMdeditImport(f, projectsFolder());
+      out.push({ source, name, asName, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried });
+    }
+    return out;
+  });
+  manageLike('backup:importMdedit', async (source: string, o?: { asNewCopy?: boolean; parentId?: string | null }) => {
+    const r = await importMdeditProject({ source: String(source), projectsDir: projectsFolder(), asNewCopy: o?.asNewCopy === true });
+    return { id: await manager.adopt(r.name, o?.parentId ?? null), name: r.name };
   });
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
@@ -1045,6 +1254,11 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     users = new UserStore(path.join(studioDir, 'user'));
     await refreshUser();
+    // The Studio's people and roles: a Studio this person owns starts with its default roles and them as Owner.
+    {
+      const here = studios.active();
+      await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+    }
     // The name used to be a setting; it belongs to the profile now.
     const legacy = settings.get().author?.trim();
     if (legacy) {
@@ -1063,7 +1277,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       fs: nodeFs
     });
-    manager = new ProjectManager(studio, writeFolders());
+    stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
+    manager = new ProjectManager(studio, writeFolders(), stages);
 
     write = await createWriteModule({
       getWindow: () => win,
@@ -1072,13 +1287,24 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       defaultRoot: projectsDefault,
       projectsFolder,
       templates: () => admin.templates(),
+      projectStages: async () => (await stageByFolder()).all(),
       theme: { get: themeState, set: setTheme },
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
+    // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
+    await stages.adoptLegacy(async (projectId) => {
+      const link = linksOf((await studio.studio.read()).tree, projectId, 'write')[0];
+      if (!link) return null;
+      try {
+        return (JSON.parse(await fsp.readFile(path.join(write.projectsRoot(), link.ref, '.cadrel', 'project.json'), 'utf8')) as { status?: unknown }).status as string | null;
+      } catch {
+        return null;
+      }
+    }).catch(() => 0);
     market = createMarketModule({
       getWindow: () => win,
       getContents: () => views.market?.webContents ?? null,
@@ -1096,6 +1322,10 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
+    // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
+    finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
+    finance.start();
+    market.service.onCapture(() => finance.notify());
     registerShellIpc();
     watchForUpdates();
 
@@ -1123,6 +1353,7 @@ app.on('before-quit', (e) => {
   quitting = true;
   void write?.flush();
   void settings?.flush();
+  void peopleHost.close();
   write?.stop();
   // Close Market's capture server first and wait for it, so port 47321 is released before this process goes and the next start never finds it taken.
   if (!marketStopped && market) {

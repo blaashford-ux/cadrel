@@ -31,7 +31,8 @@ export class StudioService {
     return { tree: d.tree, notes, author: this.o.author(), openByProject: rollUp(d.tree, notes) };
   }
 
-  createProject = (o: { name: string; parentId?: string | null; kind?: string }) => this.studio.createProject(o);
+  createProject = (o: { name: string; parentId?: string | null; kind?: string; workflowId?: string | null; stage?: string | null }) => this.studio.createProject(o);
+  setStage = (id: string, stage: string) => this.studio.setStage(id, stage);
   updateProject = (id: string, change: { name?: string; kind?: string }) => this.studio.updateProject(id, change);
   moveProject = (id: string, parentId: string | null, index?: number) => this.studio.moveProject(id, parentId, index);
   archiveProject = (id: string, archived: boolean) => this.studio.archiveProject(id, archived);

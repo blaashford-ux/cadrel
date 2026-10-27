@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { MonthReport } from '../../shared/api.js';
-import { ChartCard, SERIES, StackedBars } from '../charts.js';
+import type { MonthReport } from './types.js';
+import { ChartCard, SERIES, StackedBars } from '@cadrel/market-desktop/src/renderer/charts.js';
 import { BookTable, Breakdowns, MoneyNotes, Tile, SERIES_KEYS } from './MoneyAnalysis.js';
 import { currentMonth, int, monthName, shiftMonth, usd } from './moneyUtil.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 
 const delta = (now: number, was: number | undefined) => (was === undefined ? undefined : `${now - was >= 0 ? '+' : ''}${usd(now - was)} (${was ? `${now - was >= 0 ? '+' : ''}${Math.round(((now - was) / was) * 100)}%` : 'new'})`);
 
@@ -22,7 +22,7 @@ export function MoneyMonth({ version }: { version: number }) {
   const load = () => { if (month) void api.moneyMonth(month).then((x) => { setR(x); setErr(''); }, (e) => setErr(String(e.message ?? e))); };
   useEffect(load, [month, version]);
 
-  if (months && !months.length) return <p className="muted">Nothing to show yet. Import a KDP report from Books.</p>;
+  if (months && !months.length) return <p className="muted">Nothing to show yet. Import a KDP report on the Reports tab.</p>;
   if (!month) return err ? <div className="err" role="alert">{err}</div> : null;
   const oldest = months?.[months.length - 1] ?? month;
   const newest = months?.[0] ?? month;

@@ -20,15 +20,6 @@ export function greeting(hour: number): string {
   return 'Good evening';
 }
 
-export const STATUS_LABEL: Record<string, string> = {
-  planning: 'Planning',
-  drafting: 'Drafting',
-  revising: 'Revising',
-  editing: 'Editing',
-  published: 'Published',
-  paused: 'On hold'
-};
-
 /** "1.4 MB". */
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;

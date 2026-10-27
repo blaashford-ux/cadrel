@@ -1,8 +1,10 @@
+import { useEffect, useState } from 'react';
 import { childrenOf, kindLabel } from '@cadrel/kernel';
-import type { Overview, Page, StudioState, StudiosView } from '../shared/api';
+import type { MineState, Overview, Page, StudioState, StudiosView } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
+import { ago, formatWords, greeting, percent, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
+import { GlanceLine, StageTag, usePulse, useStages } from './Glance';
 import { NotConnected } from './NotConnected';
 import { StudioSwitcher } from './StudioSwitcher';
 
@@ -14,8 +16,36 @@ interface Props {
   studios: StudiosView | null;
 }
 
+/** Work that waits on the person using the app: sign-offs they are asked for, then their open tasks, late ones first. */
+function Mine({ studio, onProject }: { studio: StudioState | null; onProject: (id: string) => void }) {
+  const [m, setM] = useState<MineState | null>(null);
+  useEffect(() => {
+    void window.cadrel.work.mine().then(setM, () => setM(null));
+  }, [studio]);
+  if (!m || !m.available || (m.tasks.length === 0 && m.approvals.length === 0)) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <section className="card" aria-labelledby="h-mine">
+      <h3 id="h-mine">Waiting on you</h3>
+      <ul className="plain work-list">
+        {m.approvals.map((a) => (
+          <li key={a.id}><span className="chip">sign-off</span> <button type="button" className="link" onClick={() => onProject(a.projectId)}>{a.label}</button> <span className="muted small">on {a.projectName}</span></li>
+        ))}
+        {m.tasks.map((t) => (
+          <li key={t.id}>
+            <span className="chip">{t.kind}</span> <button type="button" className="link" onClick={() => onProject(t.projectId)}>{t.title}</button> <span className="muted small">on {t.projectName}</span>
+            {t.due && <span className={t.due < today ? 'warn small' : 'muted small'}> · {t.due < today ? 'late: ' : 'due '}{t.due}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 export function Home({ overview, studio, onGo, onProject, studios }: Props) {
   const now = Date.now();
+  const pulse = usePulse(studio);
+  const stageOf = useStages(studio);
   const recent = overview?.write.projects.find((p) => !p.archived);
   const pct = recent ? percent(recent.words, recent.goalWords) : null;
   const m = overview?.market;
@@ -34,6 +64,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
     <>
       <h2 className="hello">{greeting(new Date().getHours())}</h2>
       <p className="muted">Here is where your studio stands.</p>
+      <GlanceLine pulse={pulse} onGo={onGo} />
 
       <section className="card" aria-labelledby="h-projects">
         <div className="card-head">
@@ -56,7 +87,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
               return (
                 <li key={p.id}>
                   <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button>
-                  <span className="chip">{kindLabel(studio.tree, p)}</span>
+                  <span className="chip">{kindLabel(studio.tree, p)}</span> <StageTag view={stageOf[p.id]} />
                   <span className="muted small">
                     {subs.length ? `${subs.length} subproject${subs.length === 1 ? '' : 's'} · ` : ''}
                     {formatWords(f.words)} words{open ? ` · ${open} open note${open === 1 ? '' : 's'}` : ''}
@@ -67,6 +98,8 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
           </ul>
         )}
       </section>
+
+      <Mine studio={studio} onProject={onProject} />
 
       <section className="card" aria-labelledby="h-write">
         <h3 id="h-write">Continue writing</h3>
@@ -82,7 +115,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
           <>
             <div className="row">
               <strong className="project-name">{recent.name}</strong>
-              <span className="chip">{STATUS_LABEL[recent.status] ?? recent.status}</span>
+              {recent.stage && <span className="chip">{recent.stage}</span>}
             </div>
             <p className="muted">
               {wordsLabel(recent.words)} · edited {ago(recent.lastEdited, now)}

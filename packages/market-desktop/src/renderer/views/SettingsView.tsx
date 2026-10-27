@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { SalesCalibration } from './SalesCalibration.js';
 import type { AppSettings, CategorySummary, IndexStatus, MaintenanceStatus, Status, VerifyReport } from '../../shared/api.js';
 
 const api = window.cadrelMarket;
@@ -272,7 +271,6 @@ export function SettingsView({ status, onChange }: { status: Status; onChange: (
       <HealthCard onChange={onChange} />
       <DataPackCard onChange={onChange} />
       <SearchIndexCard />
-      <SalesCalibration />
       <ConnectCard />
       <div role="status">{msg}</div>
     </>

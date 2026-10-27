@@ -27,7 +27,7 @@ describe('createProject', () => {
     expect(await names(r.path)).toEqual(['.cadrel', 'Characters', 'Exports', 'Manuscript', 'Research', 'Worldbuilding']);
     expect(await readFile(path.join(r.path, 'Manuscript', 'Draft.md'), 'utf8')).toBe('# Chapter 1\n\n');
     const meta = await readMeta(r.path);
-    expect(meta).toMatchObject({ id: 'id-1', name: 'The Lost King', templateName: 'Novel', status: 'planning' });
+    expect(meta).toMatchObject({ id: 'id-1', name: 'The Lost King', templateName: 'Novel' });
     expect(meta!.excludedFolders).toContain('Research');
     expect(await isProject(r.path)).toBe(true);
   });
@@ -136,10 +136,10 @@ describe('renameProject / duplicateProject / delete / convert', () => {
   it('duplicate copies files and settings, with a new id and a fresh history', async () => {
     const a = await createProject(root, 'Alpha', novel(), { now: at('2026-10-05T10:00:00'), uuid: () => 'id-a' });
     await writeFile(path.join(a.path, 'Manuscript', 'Draft.md'), 'one two three\n');
-    await updateMeta(a.path, { goal: { targetWords: 5000, startDate: '2026-10-05', targetDate: null }, status: 'drafting' });
+    await updateMeta(a.path, { goal: { targetWords: 5000, startDate: '2026-10-05', targetDate: null } });
     await recordProgress(a.path, at('2026-10-06T09:00:00'));
     const b = await duplicateProject(a.path, 'Alpha Copy', { now: at('2026-10-07T09:00:00'), uuid: () => 'id-b' });
-    expect(b.meta).toMatchObject({ id: 'id-b', name: 'Alpha Copy', status: 'drafting', goal: { targetWords: 5000 } });
+    expect(b.meta).toMatchObject({ id: 'id-b', name: 'Alpha Copy', goal: { targetWords: 5000 } });
     expect(await readFile(path.join(b.path, 'Manuscript', 'Draft.md'), 'utf8')).toBe('one two three\n');
     const p = await readProgress(b.path);
     expect(Object.keys(p.days)).toEqual(['2026-10-07']);
@@ -207,9 +207,10 @@ describe('updateMeta / addMissingTemplateParts', () => {
   it('merges overrides without losing the other half, and sanitises', async () => {
     const a = await createProject(root, 'Alpha', novel());
     await updateMeta(a.path, { overrides: { chapterLevel: 3, book: {} } });
-    const m = await updateMeta(a.path, { status: 'nonsense' as never, notes: 'hello' });
+    const m = await updateMeta(a.path, { stage: { key: 'x' } as never, notes: 'hello' });
     expect(m.overrides.chapterLevel).toBe(3);
-    expect(m.status).toBe('planning');
+    expect(m.stage).toBeUndefined();
+    expect(JSON.stringify(m)).not.toContain('stage');
     expect(m.notes).toBe('hello');
   });
   it('adds only what is missing', async () => {

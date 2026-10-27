@@ -148,22 +148,22 @@ describe('ProjectManager', () => {
 
   it('duplicates a project and its folder as a sibling', async () => {
     const r = await mgr.create({ name: 'Book', kind: 'Book', template: 'novel' });
-    await mgr.setManuscript(r.id, { status: 'drafting' });
+    await mgr.setManuscript(r.id, { notes: 'draft notes' });
     const copyId = await mgr.duplicate(r.id);
     const t = await tree();
     expect(t.projects.find((p) => p.id === copyId)).toMatchObject({ name: 'Book copy', kind: 'Book' });
-    expect(fake.folders.get('Book copy')!.meta.status).toBe('drafting');
+    expect(fake.folders.get('Book copy')!.meta.notes).toBe('draft notes');
     expect(linksOf(t, copyId, 'write')[0]!.ref).toBe('Book copy');
   });
 
-  it('reads and sets what the manuscript folder says: status and notes', async () => {
+  it('reads and sets what the manuscript folder says: its notes', async () => {
     const r = await mgr.create({ name: 'Book', template: 'novel' });
-    expect((await mgr.manuscript(r.id))!.meta).toMatchObject({ status: 'planning', templateId: 'novel' });
-    await mgr.setManuscript(r.id, { status: 'revising', notes: 'Needs a stronger midpoint.' });
-    expect((await mgr.manuscript(r.id))!.meta).toMatchObject({ status: 'revising', notes: 'Needs a stronger midpoint.' });
+    expect((await mgr.manuscript(r.id))!.meta).toMatchObject({ templateId: 'novel' });
+    await mgr.setManuscript(r.id, { notes: 'Needs a stronger midpoint.' });
+    expect((await mgr.manuscript(r.id))!.meta).toMatchObject({ notes: 'Needs a stronger midpoint.' });
     const plain = await mgr.create({ name: 'Plain', template: null });
     expect(await mgr.manuscript(plain.id)).toBeNull();
-    await expect(mgr.setManuscript(plain.id, { status: 'drafting' })).rejects.toThrow(/no manuscript folder/);
+    await expect(mgr.setManuscript(plain.id, { notes: 'x' })).rejects.toThrow(/no manuscript folder/);
     expect(await mgr.addMissingParts(r.id)).toEqual(['Research']);
   });
 

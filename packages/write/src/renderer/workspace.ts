@@ -628,7 +628,7 @@ export class Workspace {
   async offerMarkEdited(tabId: string): Promise<void> {
     const tab = this.tab(tabId);
     const project = this.state.project;
-    if (!tab || !project || project.meta.status !== 'editing' || tab.draft !== null || tab.markDeclined) return;
+    if (!tab || !project || project.meta.stage?.category !== 'review' || tab.draft !== null || tab.markDeclined) return;
     const ref = this.chapterRef(tab.file, tab.chapter);
     if (!ref || isChapterEdited(project.meta, ref.rel, ref.id)) return;
     if (await this.api.confirmMarkEdited(ref.title)) await this.setChapterEdited(tab.file, tab.chapter, true);
@@ -898,10 +898,10 @@ export class Workspace {
     if (!project) return;
     const fresh = await this.api.getProjectMeta(project.path).catch(() => null);
     if (!fresh || this.state.project?.path !== project.path) return;
-    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.status, m.activeManuscript, m.manuscriptGoals, m.goal]);
+    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.stage?.category, m.activeManuscript, m.manuscriptGoals, m.goal]);
     if (pick(fresh) === pick(project.meta)) return;
-    const { editedChapters, status, activeManuscript, manuscriptGoals, goal } = fresh;
-    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, status, activeManuscript, manuscriptGoals, goal } } });
+    const { editedChapters, stage, activeManuscript, manuscriptGoals, goal } = fresh;
+    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, stage, activeManuscript, manuscriptGoals, goal } } });
     if (activeManuscript !== project.meta.activeManuscript) void this.refreshProgress();
   }
 

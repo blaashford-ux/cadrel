@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DetectedAuthor, OwnBookRow, Person, SplitVersion, Statement, StatementBasis } from '../../shared/api.js';
+import type { DetectedAuthor, OwnBookRow, Person, SplitVersion, Statement, StatementBasis } from './types.js';
 import { currentMonth, int, money, monthName, periodRange, periodShortcuts, quarterOf, SOURCE_NAME, usd, type PeriodKind } from './moneyUtil.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 const ALL_MONTHS = '0000-00';
 
 // ---------------------------------------------------------------- people
@@ -293,7 +293,7 @@ function StatementPanel({ version, bump }: { version: number; bump: () => void }
       {!range && <div className="err" role="alert">That period is not valid.</div>}
       {s && (
         <>
-          {!s.reconciled && <div className="banner">{basis === 'paid' ? 'No KDP payment report has been imported, so there is nothing to show as paid. Download the Payments report from KDP Reports and import it on the Books tab.' : 'No KDP payment report has been imported: these are royalties as KDP reports them by sales month, not checked against what Amazon paid or the tax it withheld. Import the Payments report (Books tab) for exact amounts.'}</div>}
+          {!s.reconciled && <div className="banner">{basis === 'paid' ? 'No KDP payment report has been imported, so there is nothing to show as paid. Download the Payments report from KDP Reports and import it on the Reports tab.' : 'No KDP payment report has been imported: these are royalties as KDP reports them by sales month, not checked against what Amazon paid or the tax it withheld. Import the Payments report (Reports tab) for exact amounts.'}</div>}
           {s.payments.length > 0 && <div className="muted">{basis === 'paid' ? 'Payments in this period' : 'Payments that cover these sales'}: {s.payments.map((x) => `${x.number} on ${x.paidOn}${x.scheduled ? ' (scheduled)' : ''}: ${usd(x.accrued)} before ${usd(x.tax)} tax = ${usd(x.net)}`).join('; ')}.</div>}
           {s.pending.length > 0 && <div className="banner">Not owed yet: Kindle+ pages read in {[...new Set(s.pending.map((p) => monthName(p.month)))].join(', ')} (about {usd(s.pending.reduce((a, p) => a + p.usd, 0))}). KDP has not priced them; they will appear once the month is over.</div>}
           {s.unmatched.length > 0 && <div className="banner">A payment includes money for months with no royalty report imported ({[...new Set(s.unmatched.map((u) => u.month))].join(', ')}: {usd(s.unmatched.reduce((a, u) => a + u.net, 0))} after tax), so no book can be credited. Import the royalty report that covers those months.</div>}
