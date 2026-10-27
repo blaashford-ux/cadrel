@@ -7,7 +7,7 @@
 import { bootstrapStudio } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { openStudioDb, type StudioDb } from '@cadrel/store';
-import type { PeopleState } from '../shared/api';
+import type { PeopleState, WorkflowState } from '../shared/api';
 
 /** The operations the page may ask for: the service's `people` methods that change things, by the page's names. Nothing else is reachable. */
 const CALLS: Record<string, string> = {
@@ -17,6 +17,10 @@ const CALLS: Record<string, string> = {
   grant: 'grant', revoke: 'revoke', setExpiry: 'setExpiry'
 };
 export const PEOPLE_CALLS = Object.keys(CALLS);
+
+/** The workflow builder's operations, by the page's names. Reading is `workflowState`; nothing else on the service is reachable. */
+const WORKFLOW_CALLS: Record<string, string> = { create: 'create', save: 'save', setDefault: 'setDefault', delete: 'delete' };
+export const WORKFLOW_CALL_NAMES = Object.keys(WORKFLOW_CALLS);
 
 export class PeopleHost {
   private db: StudioDb | null = null;
@@ -69,6 +73,22 @@ export class PeopleHost {
     if (!this.svc) throw new Error(this.why);
     const people = this.svc.as(this.meId).people as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
     return people[method]!(...args);
+  }
+
+  async workflowState(): Promise<WorkflowState> {
+    if (!this.svc) return { available: false, reason: this.why };
+    const p = this.svc.as(this.meId);
+    const [workflows, roles, may] = await Promise.all([p.workflows.list(), p.people.roles().catch(() => []), p.can('workflow.design')]);
+    return { available: true, workflows, roles: roles.map((r) => ({ id: r.id, name: r.name })), may };
+  }
+
+  /** One workflow-builder change as the person using the app. */
+  async workflowCall(name: string, ...args: unknown[]): Promise<unknown> {
+    const method = Object.hasOwn(WORKFLOW_CALLS, name) ? WORKFLOW_CALLS[name] : undefined;
+    if (!method) throw new Error('That is not something the workflow builder can do.');
+    if (!this.svc) throw new Error(this.why);
+    const w = this.svc.as(this.meId).workflows as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
+    return w[method]!(...args);
   }
 
   async effective(personId: string, projectId?: string | null): Promise<string[]> {

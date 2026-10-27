@@ -9,6 +9,7 @@
  * Records are archived, never deleted, in M1: an ASIN that sales were reported under must stay joined to its book.
  */
 import { newRecordId } from './ids';
+import { defaultWorkflow } from './workflow';
 import type { Db } from './vault';
 
 export type CatalogueCode = 'invalid' | 'exists' | 'not-found' | 'archived' | 'conflict';
@@ -40,7 +41,7 @@ interface Stamped {
 }
 export interface Ip extends Stamped { name: string; description: string }
 export interface Series extends Stamped { ipId: string | null; name: string; description: string }
-export interface Book extends Stamped { seriesId: string | null; position: number | null; title: string; subtitle: string; penName: string; stage: string }
+export interface Book extends Stamped { seriesId: string | null; position: number | null; title: string; subtitle: string; penName: string; stage: string; workflowId: string | null }
 export interface Edition extends Stamped { bookId: string; format: EditionFormat; asin: string | null; isbn: string | null; price: number | null; currency: string; publishedOn: string | null }
 export interface BookWithEditions extends Book { editions: Edition[] }
 
@@ -125,7 +126,7 @@ async function write(db: Db, stmts: { sql: string; params?: unknown[] }[], onUni
 
 const IP_COLS = 'id, studio_id AS studioId, name, description, archived_at AS archivedAt, created_at AS createdAt, created_by AS createdBy, updated_at AS updatedAt, updated_by AS updatedBy';
 const SERIES_COLS = 'id, studio_id AS studioId, ip_id AS ipId, name, description, archived_at AS archivedAt, created_at AS createdAt, created_by AS createdBy, updated_at AS updatedAt, updated_by AS updatedBy';
-const BOOK_COLS = 'id, studio_id AS studioId, series_id AS seriesId, position, title, subtitle, pen_name AS penName, stage, archived_at AS archivedAt, created_at AS createdAt, created_by AS createdBy, updated_at AS updatedAt, updated_by AS updatedBy';
+const BOOK_COLS = 'id, studio_id AS studioId, series_id AS seriesId, position, title, subtitle, pen_name AS penName, stage, workflow_id AS workflowId, archived_at AS archivedAt, created_at AS createdAt, created_by AS createdBy, updated_at AS updatedAt, updated_by AS updatedBy';
 const EDITION_COLS = 'id, studio_id AS studioId, book_id AS bookId, format, asin, isbn, price, currency, published_on AS publishedOn, archived_at AS archivedAt, created_at AS createdAt, created_by AS createdBy, updated_at AS updatedAt, updated_by AS updatedBy';
 
 export async function getIp(db: Db, c: Pick<Ctx, 'studioId'>, id: string): Promise<Ip | null> {
@@ -171,11 +172,13 @@ export async function createSeries(db: Db, c: Ctx, input: { name: string; descri
   return (await getSeries(db, c, id))!;
 }
 
-export async function createBook(db: Db, c: Ctx, input: { title: string; subtitle?: string; penName?: string; seriesId?: string | null; position?: number | null; stage?: string }): Promise<BookWithEditions> {
+/** A new book starts in the studio's default workflow, at its first stage (or, with no workflow built yet, at "planning"). */
+export async function createBook(db: Db, c: Ctx, input: { title: string; subtitle?: string; penName?: string; seriesId?: string | null; position?: number | null }): Promise<BookWithEditions> {
   const title = cleanCatalogueName(input?.title, 'A book');
   const subtitle = cleanText(input?.subtitle, 300, 'The subtitle');
   const penName = cleanText(input?.penName, 200, 'The pen name');
-  const stage = cleanText(input?.stage ?? 'concept', 60, 'The stage') || 'concept';
+  const wf = await defaultWorkflow(db, c);
+  const stage = wf?.stages[0]?.key ?? 'planning';
   const seriesId = input?.seriesId ?? null;
   let position = cleanPosition(input?.position);
   if (seriesId) {
@@ -187,7 +190,7 @@ export async function createBook(db: Db, c: Ctx, input: { title: string; subtitl
   } else if (position !== null) fail('invalid', 'A position needs a series.');
   const id = newRecordId();
   await write(db, [
-    { sql: 'INSERT INTO book (id, studio_id, series_id, position, title, subtitle, pen_name, stage, created_at, created_by, updated_at, updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', params: [id, c.studioId, seriesId, position, title, subtitle, penName, stage, c.now, c.actor, c.now, c.actor] },
+    { sql: 'INSERT INTO book (id, studio_id, series_id, position, title, subtitle, pen_name, stage, workflow_id, created_at, created_by, updated_at, updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)', params: [id, c.studioId, seriesId, position, title, subtitle, penName, stage, wf?.id ?? null, c.now, c.actor, c.now, c.actor] },
     audit(c, 'catalogue.book.create', id, { title, seriesId, position })
   ], position !== null && seriesId ? `Position ${position} in that series is taken, or it already has a book called “${title}”.` : `There is already a book called “${title}” outside any series.`);
   return (await getBook(db, c, id))!;
@@ -220,17 +223,17 @@ async function whichClash(db: Db, c: Ctx, bookId: string, format: string, asin: 
   return `That book already has a ${format} edition.`;
 }
 
-export async function updateBook(db: Db, c: Ctx, id: string, patch: { title?: string; subtitle?: string; penName?: string; stage?: string }): Promise<BookWithEditions> {
+/** Title, subtitle and pen name. The stage is changed only by `setBookStage`, so a gate cannot be walked around. */
+export async function updateBook(db: Db, c: Ctx, id: string, patch: { title?: string; subtitle?: string; penName?: string }): Promise<BookWithEditions> {
   const cur = await getBook(db, c, id);
   if (!cur) return fail('not-found', 'That book is not there.');
   if (cur.archivedAt) fail('archived', 'That book is archived. Restore it first.');
   const title = patch.title !== undefined ? cleanCatalogueName(patch.title, 'A book') : cur.title;
   const subtitle = patch.subtitle !== undefined ? cleanText(patch.subtitle, 300, 'The subtitle') : cur.subtitle;
   const penName = patch.penName !== undefined ? cleanText(patch.penName, 200, 'The pen name') : cur.penName;
-  const stage = patch.stage !== undefined ? cleanText(patch.stage, 60, 'The stage') || cur.stage : cur.stage;
   await write(db, [
-    { sql: 'UPDATE book SET title = ?, subtitle = ?, pen_name = ?, stage = ?, updated_at = ?, updated_by = ? WHERE id = ? AND studio_id = ?', params: [title, subtitle, penName, stage, c.now, c.actor, id, c.studioId] },
-    audit(c, 'catalogue.book.update', id, { from: { title: cur.title, subtitle: cur.subtitle, penName: cur.penName, stage: cur.stage }, to: { title, subtitle, penName, stage } })
+    { sql: 'UPDATE book SET title = ?, subtitle = ?, pen_name = ?, updated_at = ?, updated_by = ? WHERE id = ? AND studio_id = ?', params: [title, subtitle, penName, c.now, c.actor, id, c.studioId] },
+    audit(c, 'catalogue.book.update', id, { from: { title: cur.title, subtitle: cur.subtitle, penName: cur.penName }, to: { title, subtitle, penName } })
   ], `There is already a book called “${title}” in that series.`);
   return (await getBook(db, c, id))!;
 }

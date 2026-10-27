@@ -1,4 +1,4 @@
-import type { AssignmentRecord, PenName, Person, RoleRecord, Team } from '@cadrel/kernel';
+import type { AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -540,8 +540,31 @@ export interface PeopleApi {
   effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
 }
 
+/** The workflows an administrator builds: the stages a book moves through and the gates between them. */
+export type WorkflowState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      workflows: WorkflowRecord[];
+      /** The roles a gate can name. */
+      roles: { id: string; name: string }[];
+      /** May the person using the app build workflows? Everyone may read them. */
+      may: boolean;
+    };
+
+export interface WorkflowApi {
+  state(): Promise<WorkflowState>;
+  /** A blank workflow, or a copy of `copyFrom`. It is not the default until `setDefault`. */
+  create(i: { name: string; description?: string; copyFrom?: string }): Promise<WorkflowRecord>;
+  /** Saves the whole definition (stages, moves, gates). Dropping a stage that has books needs `moveBooks`. */
+  save(id: string, draft: WorkflowDraft): Promise<WorkflowRecord>;
+  setDefault(id: string): Promise<WorkflowRecord>;
+  delete(id: string): Promise<void>;
+}
+
 export interface CadrelApi {
   studios: StudiosApi;
+  workflow: WorkflowApi;
   people: PeopleApi;
   myBooks: MyBooksApi;
   backup: BackupApi;

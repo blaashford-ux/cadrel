@@ -7,12 +7,12 @@
  * once a book is linked to a project; until then they do not reach catalogue calls, which is the safe way round.
  */
 import {
-  acknowledgeCapabilities, addEdition, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
+  acknowledgeCapabilities, addEdition, createWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setBookStage, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
-  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef
+  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage
 } from '@cadrel/kernel';
 
 export class PermissionDenied extends Error {
@@ -117,6 +117,20 @@ export class StudioAs {
     moveBook: async (id: string, seriesId: string | null, position?: number | null): Promise<BookWithEditions> => (await this.need('catalogue.edit'), moveBook(this.o.db, this.ctx(), id, seriesId, position)),
     addEdition: async (bookId: string, i: Parameters<typeof addEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), addEdition(this.o.db, this.ctx(), bookId, i)),
     updateEdition: async (id: string, patch: Parameters<typeof updateEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), updateEdition(this.o.db, this.ctx(), id, patch)),
+
+    /**
+     * Where this book can go from its stage, and for each move whether it is open to this person now and what is in the way. Reading a book's
+     * stage needs catalogue.read; the roles a gate names are checked against the roles this person holds on the book's scope (the studio).
+     */
+    stageOptions: async (bookId: string): Promise<{ workflow: WorkflowRecord | null; current: Stage | null; options: StageOption[] }> => {
+      await this.need('catalogue.read');
+      return stageOptions(this.o.db, this.ctx(), bookId, await this.holdsRole());
+    },
+    /** Moves a book to another stage. Needs catalogue.edit, and the workflow must have the move, its conditions hold and the gate's roles include one of yours. */
+    setStage: async (bookId: string, toKey: string): Promise<{ from: string; to: string; workflowId: string }> => {
+      await this.need('catalogue.edit');
+      return setBookStage(this.o.db, this.ctx(), bookId, toKey, await this.holdsRole());
+    },
 
     archive: async (kind: 'ip' | 'series' | 'book' | 'edition', id: string, archived = true): Promise<void> => (await this.need('catalogue.archive'), setCatalogueArchived(this.o.db, this.ctx(), kind, id, archived))
   };
@@ -247,4 +261,29 @@ export class StudioAs {
       this.allow('roles.manage', keepsAnOwner(assignments, map, a.id, this.stamp()));
     }
   }
+
+  /**
+   * Whether this person holds any of the given roles at the studio. An Owner holds every role (the Owner role is "all", and an Owner may do
+   * what any gate asks). Used for the roles a workflow gate names.
+   */
+  private async holdsRole(): Promise<(roleIds: string[]) => boolean> {
+    const pc = await this.context();
+    const held = new Set<string>();
+    let owner = false;
+    const active = pc.assignments.filter((a) => (!a.expiresAt || a.expiresAt > pc.now) && a.scope.kind === 'studio' && ((a.subject.kind === 'person' && a.subject.id === this.personId) || (a.subject.kind === 'team' && pc.actor.teamIds.includes(a.subject.id))));
+    for (const a of active) {
+      held.add(a.roleId);
+      if (pc.roles.get(a.roleId)?.all) owner = true;
+    }
+    return (roleIds) => owner || roleIds.some((r) => held.has(r));
+  }
+
+  /** The workflow builder's operations. Reading needs catalogue.read (people need to see where a book can go); building needs workflow.design. */
+  readonly workflows = {
+    list: async (): Promise<WorkflowRecord[]> => (await this.need('catalogue.read'), listWorkflows(this.o.db, this.ctx())),
+    create: async (i: Parameters<typeof createWorkflow>[2]): Promise<WorkflowRecord> => (await this.need('workflow.design'), createWorkflow(this.o.db, this.ctx(), i)),
+    save: async (id: string, draft: WorkflowDraft): Promise<WorkflowRecord> => (await this.need('workflow.design'), saveWorkflow(this.o.db, this.ctx(), id, draft)),
+    setDefault: async (id: string): Promise<WorkflowRecord> => (await this.need('workflow.design'), setDefaultWorkflow(this.o.db, this.ctx(), id)),
+    delete: async (id: string): Promise<void> => (await this.need('workflow.design'), deleteWorkflow(this.o.db, this.ctx(), id))
+  };
 }

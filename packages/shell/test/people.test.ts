@@ -88,3 +88,34 @@ describe('the people and roles of this computer’s Studio', () => {
     expect(h.service).toBeNull();
   });
 });
+
+describe('the workflow builder on this computer', () => {
+  it('starts with the MDEdit workflow as the default, and builds, defaults and deletes others as the Owner', async () => {
+    const { h } = await open();
+    const s = await h.workflowState();
+    if (!s.available) throw new Error('expected workflows');
+    expect(s.may).toBe(true);
+    expect(s.workflows.map((w) => [w.name, w.isDefault])).toEqual([['Writing and publishing', true]]);
+    expect(s.roles).toHaveLength(12);
+    const w = (await h.workflowCall('create', { name: 'Audio', copyFrom: s.workflows[0]!.id })) as { id: string };
+    await h.workflowCall('setDefault', w.id);
+    const after = await h.workflowState();
+    if (!after.available) throw new Error('x');
+    expect(after.workflows.find((x) => x.isDefault)!.name).toBe('Audio');
+    await h.workflowCall('delete', s.workflows[0]!.id);
+    expect(((await h.workflowState()) as { workflows: unknown[] }).workflows).toHaveLength(1);
+  });
+
+  it('offers only the changes it lists', async () => {
+    const { h } = await open();
+    await expect(h.workflowCall('list')).rejects.toThrow(/not something/);
+    await expect(h.workflowCall('constructor')).rejects.toThrow(/not something/);
+    await expect(h.workflowCall('__proto__')).rejects.toThrow(/not something/);
+  });
+
+  it('has nothing to build in a Studio this person only joined', async () => {
+    const { h } = await open(false);
+    expect(await h.workflowState()).toMatchObject({ available: false });
+    await expect(h.workflowCall('create', { name: 'X' })).rejects.toThrow(/managed by its owner/);
+  });
+});

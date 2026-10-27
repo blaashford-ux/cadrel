@@ -318,3 +318,12 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .pr-caps fieldset { border: 1px solid var(--raised); border-radius: 8px; padding: 6px 12px 8px; }
 .pr-cap { display: flex; gap: 6px; padding: 2px 0 2px 18px; align-items: baseline; }
 @media (max-width: 800px) { .pr-cols { grid-template-columns: 1fr; } }
+
+.wf-flow { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.wf-chip { border: 1.5px solid var(--muted); border-radius: 999px; padding: 1px 10px; font-size: 12.5px; }
+.wf-stages input[type=color] { width: 36px; height: 28px; padding: 0; border: 1px solid var(--raised); border-radius: 6px; background: none; }
+.wf-actions { white-space: nowrap; text-align: right; }
+.wf-moves { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; margin: 10px 0; }
+.wf-moves fieldset { border: 1px solid var(--raised); border-radius: 8px; padding: 6px 12px 8px; }
+.wf-move { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; padding: 2px 0; }
+.wf-gate { flex-basis: 100%; padding: 8px 10px; margin: 4px 0 6px; background: var(--raised); border-radius: 8px; display: grid; gap: 4px; }

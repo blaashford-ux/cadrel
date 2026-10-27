@@ -31,6 +31,13 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
   },
+  workflow: {
+    state: () => studioCall('shell:workflow:state'),
+    create: (i) => studioCall('shell:workflow:call', 'create', i),
+    save: (id, draft) => studioCall('shell:workflow:call', 'save', id, draft),
+    setDefault: (id) => studioCall('shell:workflow:call', 'setDefault', id),
+    delete: (id) => studioCall('shell:workflow:call', 'delete', id)
+  },
   people: {
     state: () => studioCall('shell:people:state'),
     createPerson: (i) => studioCall('shell:people:call', 'createPerson', i),

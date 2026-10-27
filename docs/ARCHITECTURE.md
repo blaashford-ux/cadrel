@@ -143,6 +143,9 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `vault_file(path, workflow, state, current_version)`, `file_version(hash, size, author, comment, n)`, `checkout(file, person, machine, since, base_version)`, `reference(parent, child, version | latest)`, `datacard_value(file | record, field, value)`.
 - `workflow`, `state`, `transition(from, to, who, conditions, actions)`.
 
+**Workflows** (built: `kernel/src/workflow.ts`, migration `0005_workflow.sql`)
+- `workflow(name, is_default, template_key)`, `workflow_stage(key, name, position, category, color)`, `workflow_transition(from_key, to_key, conditions)` and `workflow_transition_role(transition_id, role_id)`. One default per studio; `book.workflow_id` and `book.stage` (a stage key). The shipped default is MDEdit's stages. Gate conditions are checked from the catalogue; approval, progress and task conditions arrive with those records.
+
 **Production**
 - `deliverable(owner, due)`, `task`, `dependency`.
 - `brief(kind, project, body, version)`: manuscript, edit, cover, blurb, campaign.

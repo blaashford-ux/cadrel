@@ -53,7 +53,7 @@ describe('IP, series and books', () => {
     const two = await createBook(db, ctx(), { title: 'Tidewater', seriesId: series.id, position: 2 });
     expect([one.position, two.position, three.position]).toEqual([1, 2, 3]);
     expect((await listBooks(db, ctx(), { seriesId: series.id })).map((b) => b.title)).toEqual(['Landfall', 'Tidewater', 'Harvest']);
-    expect(one).toMatchObject({ studioId: 's1', penName: 'Ana Reyes', stage: 'concept', createdBy: 'ana', createdAt: '2026-10-27T10:00:00.000Z', archivedAt: null, editions: [] });
+    expect(one).toMatchObject({ studioId: 's1', penName: 'Ana Reyes', stage: 'planning', workflowId: null, createdBy: 'ana', createdAt: '2026-10-27T10:00:00.000Z', archivedAt: null, editions: [] });
     expect((await listSeries(db, ctx(), { ipId: ip.id })).map((s) => s.name)).toEqual(['Salt Road Trilogy']);
     expect((await listIps(db, ctx())).map((i) => i.name)).toEqual(['The Salt Road']);
   });
@@ -106,8 +106,8 @@ describe('IP, series and books', () => {
     const s = await createSeries(db, ctx(), { name: 'S' });
     const t = await createSeries(db, ctx(), { name: 'T' });
     const b = await createBook(db, ctx(), { title: 'Draft Title', seriesId: s.id });
-    const u = await updateBook(db, ctx({ actor: 'bo', now: '2026-10-28T00:00:00.000Z' }), b.id, { title: 'Final Title', stage: 'editing' });
-    expect(u).toMatchObject({ title: 'Final Title', stage: 'editing', updatedBy: 'bo', updatedAt: '2026-10-28T00:00:00.000Z', createdBy: 'ana' });
+    const u = await updateBook(db, ctx({ actor: 'bo', now: '2026-10-28T00:00:00.000Z' }), b.id, { title: 'Final Title' });
+    expect(u).toMatchObject({ title: 'Final Title', updatedBy: 'bo', updatedAt: '2026-10-28T00:00:00.000Z', createdBy: 'ana' });
     const m = await moveBook(db, ctx(), b.id, t.id, 4);
     expect(m).toMatchObject({ seriesId: t.id, position: 4 });
     expect(await moveBook(db, ctx(), b.id, null)).toMatchObject({ seriesId: null, position: null });

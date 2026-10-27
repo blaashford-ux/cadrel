@@ -11,4 +11,5 @@ export * from './studioProtocol';
 export * from './ids';
 export * from './catalogue';
 export * from './people';
+export * from './workflow';
 export * from './sql';

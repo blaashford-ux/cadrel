@@ -806,6 +806,8 @@ function registerShellIpc(): void {
     return studiosChanged(view);
   });
   // People and roles. Every change is made by the service as the person using the app, so the page only shows what the service allows.
+  manageLike('workflow:state', async () => peopleHost.workflowState());
+  manageLike('workflow:call', async (name: string, ...args: unknown[]) => peopleHost.workflowCall(String(name), ...args));
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));

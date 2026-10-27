@@ -11,6 +11,7 @@ import { defaultRole, defaultRoles, ROLE_KEYS, type Role } from './roles';
 import type { Assignment, ScopeKind } from './permissions';
 import type { Ctx } from './catalogue';
 import type { Db } from './vault';
+import { ensureDefaultWorkflow } from './workflow';
 
 export type PeopleCode = 'invalid' | 'exists' | 'not-found' | 'conflict' | 'refused';
 export class PeopleError extends Error {
@@ -302,6 +303,14 @@ export async function deleteRole(db: Db, c: Ctx, id: string, replacementId?: str
   if (!cur) return fail('not-found', 'That role is not there.');
   if (cur.all) fail('refused', 'The Owner role cannot be deleted.');
   const stmts: { sql: string; params?: unknown[] }[] = [];
+  // a role a workflow gate names is not simply dropped: that would open the gate to everyone, so it is replaced or the delete is refused
+  const gates = (await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM workflow_transition_role WHERE role_id = ?', [id]))!.n;
+  if (gates > 0) {
+    if (!replacementId) fail('conflict', `The role is named in ${gates} workflow gate${gates === 1 ? '' : 's'}; choose a role to put in its place.`);
+    if (replacementId === id) fail('invalid', 'Choose a different role to move them to.');
+    if (!(await getRole(db, c, replacementId!))) fail('not-found', 'The replacement role is not there.');
+    stmts.push({ sql: 'UPDATE OR IGNORE workflow_transition_role SET role_id = ? WHERE role_id = ?', params: [replacementId, id] }, { sql: 'DELETE FROM workflow_transition_role WHERE role_id = ?', params: [id] });
+  }
   if (cur.holders > 0) {
     if (!replacementId) fail('conflict', 'The role is still assigned; choose a role to move those people to.');
     if (replacementId === id) fail('invalid', 'Choose a different role to move them to.');
@@ -410,9 +419,11 @@ export async function loadAccess(db: Db, c: Pick<Ctx, 'studioId'>): Promise<{ as
 export async function bootstrapStudio(db: Db, c: Ctx, owner: { id: string; name: string; email?: string | null }): Promise<{ created: boolean }> {
   if ((await db.first<{ n: number }>('SELECT COUNT(*) AS n FROM person WHERE studio_id = ?', [c.studioId]))!.n > 0) {
     await ensureDefaultRoles(db, c);
+    await ensureDefaultWorkflow(db, c); // a studio made before workflows existed gets the default on its next start
     return { created: false };
   }
   await ensureDefaultRoles(db, c);
+  await ensureDefaultWorkflow(db, c);
   await createPerson(db, c, { id: owner.id, name: owner.name, email: owner.email ?? null, kind: 'employee' });
   await grantRole(db, c, { subject: { kind: 'person', id: owner.id }, roleId: 'role_owner', scope: { kind: 'studio', id: c.studioId } });
   return { created: true };
