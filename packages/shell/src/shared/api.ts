@@ -460,6 +460,13 @@ export interface BookPage {
     estimatedUsd: number;
     split: { fromMonth: string; shares: { name: string; pct: number }[] } | null;
     payees: string[];
+    /** The KDP payments this book is in, newest first, with the book's part of each. `reconciled` is false until a payment report is imported. */
+    payments: {
+      reconciled: boolean;
+      items: { number: string; paidOn: string; scheduled: boolean; allocated: boolean; changed: boolean; paymentNet: number; net: number }[];
+      totalNet: number;
+      awaitingUsd: number;
+    };
   };
 }
 

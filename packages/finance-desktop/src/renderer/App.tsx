@@ -52,7 +52,7 @@ export function App() {
         ))}
       </header>
       <main>
-        {asin && <BookView asin={asin} version={version} onBack={() => setAsin(null)} onSplits={() => { setAsin(null); setTab('royalties'); }} />}
+        {asin && <BookView asin={asin} version={version} onBack={() => setAsin(null)} onSplits={() => { setAsin(null); setTab('royalties'); }} onPayments={() => { setAsin(null); setTab('payments'); }} onPayAuthors={() => { setAsin(null); setTab('payouts'); }} />}
         {!asin && tab === 'books' && <BooksTab version={version} onImported={bump} onOpen={setAsin} />}
         {!asin && tab === 'analysis' && <MoneyAnalysis version={version} />}
         {!asin && tab === 'month' && <MoneyMonth version={version} />}

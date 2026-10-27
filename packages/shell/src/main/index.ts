@@ -823,7 +823,7 @@ function registerShellIpc(): void {
       parent = r.filePaths[0];
     }
     const months = typeof o?.months === 'number' && o.months >= 1 && o.months <= 60 ? Math.floor(o.months) : 12;
-    const r = await saveBook(market.service, asinOf(asin), what, financeSeen(), { parent, months, pdf: (dir, from, to, payees, basis) => finance.writeStatementPdfs(dir, from, to, payees, basis) });
+    const r = await saveBook(market.service, asinOf(asin), what, financeSeen(), { parent, months, pdf: { statements: (dir, from, to, payees, basis, asin) => finance.writeStatementPdfs(dir, from, to, payees, basis, asin), rollups: (dir, from, to, payees, asin) => finance.writeRollupPdfs(dir, from, to, payees, asin) } });
     if (!TEST) shell.showItemInFolder(r.files[0]!);
     return r;
   };

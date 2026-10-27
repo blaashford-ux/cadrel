@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ChartCard, Legend, StackedBars } from '@cadrel/market-desktop/src/renderer/charts.js';
 import type { AnalysisReport, OwnBookRow, SplitVersion } from './types.js';
+import { BookPayments } from './BookPayments.js';
 import { Breakdowns, MoneyNotes, SERIES_KEYS, Tile } from './MoneyAnalysis.js';
 import { int, shortMonth, usd } from './moneyUtil.js';
 
@@ -11,7 +12,7 @@ const BASIS = { final: 'reported by KDP', estimated: 'estimated KENP rate', pend
  * One book's money: what it earned by month (reported or estimated, never mixed), where, at which rate, how it is split, and the ways to save
  * it or to open the book on Amazon. The figures are Finance's analysis limited to this book, so they always agree with the Charts tab.
  */
-export function BookView({ asin, version, onBack, onSplits }: { asin: string; version: number; onBack: () => void; onSplits: () => void }) {
+export function BookView({ asin, version, onBack, onSplits, onPayments, onPayAuthors }: { asin: string; version: number; onBack: () => void; onSplits: () => void; onPayments: () => void; onPayAuthors: () => void }) {
   const [book, setBook] = useState<OwnBookRow | null | undefined>(undefined);
   const [r, setR] = useState<AnalysisReport | null>(null);
   const [split, setSplit] = useState<SplitVersion | null>(null);
@@ -89,6 +90,7 @@ export function BookView({ asin, version, onBack, onSplits }: { asin: string; ve
           <Breakdowns r={r} />
         </>
       )}
+      <BookPayments asin={asin} version={version} onPayments={onPayments} onPayAuthors={onPayAuthors} />
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Royalty split</h2>
         {split ? (

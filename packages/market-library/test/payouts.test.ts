@@ -4,7 +4,7 @@ import path from 'node:path';
 import { zipSync, strToU8 } from 'fflate';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  Library, allocatePayment, allocateRollup, deletePayout, importSalesFile, listPayouts, paymentOwed, payoutRollup, recordPayout, rollupCsv, rollupHtml, savePerson, setSplit, unallocatePayment,
+  Library, allocatePayment, allocateRollup, bookPayments, royaltyStatement, deletePayout, importSalesFile, listPayouts, paymentOwed, payoutRollup, recordPayout, rollupCsv, rollupHtml, savePerson, setSplit, unallocatePayment,
 } from '../src/index.js';
 
 const A = 'B0AAAAAAA1';
@@ -226,5 +226,99 @@ describe('the quarterly roll-up', () => {
     expect(after.totals).toEqual(before.totals);
     expect(after.unallocated).toEqual(before.unallocated);
     expect(listPayouts(lib.db)).toHaveLength(1);
+  });
+});
+
+describe('one book at a time', () => {
+  const books = () => [A, B];
+  it('splits each payment calculator between the books, and the parts add up to the whole payment to the cent', () => {
+    for (const number of ['200', '300']) {
+      const whole = paymentOwed(lib.db, number, TODAY);
+      const parts = books().map((b) => paymentOwed(lib.db, number, TODAY, b));
+      expect(parts.every((p) => p.payment.net === whole.payment.net)).toBe(true); // the payment itself is shown whole
+      expect(sum(parts.map((p) => p.totalOwed))).toBe(whole.totalOwed);
+      expect(sum(parts.map((p) => p.totalAccrued))).toBe(whole.totalAccrued);
+      expect(sum(parts.map((p) => p.totalTax))).toBe(whole.totalTax);
+      expect(parts[0]!.book).toBe(A);
+    }
+    const a = paymentOwed(lib.db, '300', TODAY, A);
+    expect(a.payees.map((p) => p.name)).toEqual(['Blake Ashford', 'Loric Thorne']);
+    expect(a.payees.every((p) => p.lines.every((l) => l.asin === A))).toBe(true);
+    const b = paymentOwed(lib.db, '300', TODAY, B);
+    expect(b.payees.map((p) => [p.name, p.accrued])).toEqual([['Ashe Wilder', 0.35]]);
+    expect(paymentOwed(lib.db, '300', TODAY).book).toBeNull();
+  });
+
+  it('uses the frozen amounts for an allocated payment, for one book too, and does not allocate half a payment', () => {
+    allocatePayment(lib.db, root, '300', TODAY, '2026-10-30T00:00:00Z');
+    const blake = lib.db.scalar<number>("SELECT id FROM person WHERE name = 'Blake Ashford'")!;
+    const loric = lib.db.scalar<number>("SELECT id FROM person WHERE name = 'Loric Thorne'")!;
+    const frozenBefore = paymentOwed(lib.db, '300', TODAY, A).allocation!;
+    setSplit(lib.db, root, A, [{ personId: blake, pct: 50 }, { personId: loric, pct: 50 }]);
+    const a = paymentOwed(lib.db, '300', TODAY, A);
+    expect(a.allocation!.changed).toBe(true);
+    expect(a.allocation!.payees.map((p) => [p.name, p.owed])).toEqual(frozenBefore.payees.map((p) => [p.name, p.owed]));
+    expect(paymentOwed(lib.db, '300', TODAY, B).allocation!.changed).toBe(false); // B's split did not change
+    // allocation is the whole payment's: a book's view cannot freeze it
+    expect(paymentOwed(lib.db, '300', TODAY).allocation).not.toBeNull();
+    expect(paymentOwed(lib.db, '200', TODAY, A).allocation).toBeNull();
+  });
+
+  it('rolls up one book for a period: what its payments owe each author, with no carried-in, paid-out or due', () => {
+    recordPayout(lib.db, root, { payee: 'Blake Ashford', paidOn: '2026-11-05', usd: 10, period: '2026-10' });
+    const whole = payoutRollup(lib.db, Q4, TODAY);
+    const a = payoutRollup(lib.db, Q4, TODAY, A);
+    const b = payoutRollup(lib.db, Q4, TODAY, B);
+    expect(a.book).toBe(A);
+    expect(whole.book).toBeNull();
+    expect(a.payments.map((p) => p.number)).toEqual(['300']);
+    expect(sum([a.totals.owed, b.totals.owed])).toBe(whole.totals.owed);
+    expect(a.payees.map((p) => p.name)).toEqual(['Blake Ashford', 'Loric Thorne']);
+    expect(a.payees.every((p) => p.carriedIn === 0 && p.paidOut === 0 && p.due === 0 && p.payouts.length === 0)).toBe(true);
+    expect(a.totals).toMatchObject({ carriedIn: 0, paidOut: 0, due: 0 });
+    expect(a.payments[0]).toMatchObject({ net: a.totals.owed });
+    // the whole roll-up still reflects the payout
+    expect(whole.payees.find((p) => p.name === 'Blake Ashford')!.paidOut).toBe(10);
+    // a quarter with none of this book's payments
+    expect(payoutRollup(lib.db, { from: '2026-07', to: '2026-09' }, TODAY, A).payments.map((p) => p.number)).toEqual(['200']);
+  });
+
+  it('writes the one-book roll-up as CSV and as a printable page for an author', () => {
+    const r = payoutRollup(lib.db, Q4, TODAY, A);
+    const csv = rollupCsv(r);
+    expect(csv.split('\r\n')[0]).toBe(`Book ${A},2026-10 to 2026-12`);
+    expect(csv).toContain('Author,Before tax USD,Tax withheld USD,Owed from this book USD');
+    expect(csv).not.toMatch(/Due now|Carried in/);
+    expect(rollupCsv(r, 'Blake Ashford')).not.toContain('Loric Thorne');
+    const html = rollupHtml(r, 'Blake Ashford', '2026-11-01T00:00:00Z');
+    expect(html).toContain('Book statement');
+    expect(html).toContain(A);
+    expect(html).not.toContain('Due now');
+    expect(() => rollupHtml(r, 'Ashe Wilder')).toThrow(/no payout/);
+  });
+
+  it('lists the payments a book is in with its part of each, newest first, and what it has earned that no payment covers', () => {
+    const p = bookPayments(lib.db, A, TODAY);
+    expect(p.reconciled).toBe(true);
+    expect(p.payments.map((x) => x.number)).toEqual(['300', '200']);
+    const p300 = p.payments[0]!;
+    expect(p300).toMatchObject({ paymentNet: 32.44, allocated: false, scheduled: false });
+    expect(p300.net).toBeLessThan(p300.paymentNet); // Lead Me's 0.35 is not in A's part
+    expect(sum(p300.payees.map((x) => x.owed))).toBe(p300.net);
+    expect(p.totals.net).toBe(sum(p.payments.map((x) => x.net)));
+    // payment 200 is September's Kindle+ for every book that had page reads, so Lead Me is in it too; the two books' parts add up to each payment
+    const pb = bookPayments(lib.db, B, TODAY);
+    expect(pb.payments.map((x) => x.number)).toEqual(['300', '200']);
+    for (const n of ['300', '200']) expect(sum([p.payments, pb.payments].map((l) => l.find((x) => x.number === n)!.net))).toBe(paymentOwed(lib.db, n, TODAY).totalOwed);
+    expect(bookPayments(lib.db, 'B0NOSUCH99', TODAY)).toMatchObject({ payments: [], awaitingUsd: 0 });
+  });
+
+  it('gives one book’s statement: each author’s share of that book only, adding up with the other books to the whole', () => {
+    const whole = royaltyStatement(lib.db, { from: '2026-10', to: '2026-10' }, TODAY, 'paid');
+    const a = royaltyStatement(lib.db, { from: '2026-10', to: '2026-10' }, TODAY, 'paid', undefined, A);
+    const b = royaltyStatement(lib.db, { from: '2026-10', to: '2026-10' }, TODAY, 'paid', undefined, B);
+    expect(a.payees.every((p) => p.lines.every((l) => l.asin === A))).toBe(true);
+    expect(sum([...a.payees, ...b.payees].map((p) => p.totalUsd))).toBe(sum(whole.payees.map((p) => p.totalUsd)));
+    expect(a.unmatched).toEqual([]);
   });
 });

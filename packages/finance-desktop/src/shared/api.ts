@@ -4,12 +4,12 @@
  * store changes nothing on the screens. Types come from where the data layer defines them.
  */
 import type {
-  AnalysisReport, Calibration, CalibrationPreview, DetectedAuthor, ImportSummary, MonthReport, OwnBookRow, PaymentOwed, PaymentsReport, Payout, Person,
+  AnalysisReport, BookPayments, Calibration, CalibrationPreview, DetectedAuthor, ImportSummary, MonthReport, OwnBookRow, PaymentOwed, PaymentsReport, Payout, Person,
   Rollup, SalesStatus, SplitVersion, Statement, StatementBasis
 } from '@cadrel/market-desktop/src/shared/api.js';
 
 export type {
-  AnalysisReport, Calibration, CalibrationPreview, DetectedAuthor, ImportSummary, MonthReport, OwnBookRow, PaymentOwed, PaymentsReport, Payout, Person,
+  AnalysisReport, BookPayments, Calibration, CalibrationPreview, DetectedAuthor, ImportSummary, MonthReport, OwnBookRow, PaymentOwed, PaymentsReport, Payout, Person,
   Rollup, SalesStatus, SplitVersion, Statement, StatementBasis
 };
 
@@ -41,22 +41,24 @@ export interface FinanceApi {
   /** Save a split (shares add up to 100; each names a person by id, or by author name, which finds or creates the person) from a month on ('YYYY-MM'; omitted means every month). An empty list removes the book's split. */
   setBookSplit(asin: string, shares: { personId?: number; name?: string; pct: number }[], fromMonth?: string): Promise<void>;
   /** What each author is owed for a span of months. KENP of the current month is pending and not included. */
-  statement(from: string, to: string, basis: StatementBasis): Promise<Statement>;
+  statement(from: string, to: string, basis: StatementBasis, asin?: string): Promise<Statement>;
   /** The payments imported from KDP payment reports with their lines, what does not reconcile with the royalty reports, and what is earned but unpaid. */
   payments(): Promise<PaymentsReport>;
   /** The calculator for one payment: what each author is owed from it (after tax), and its allocation if it has one. */
-  paymentOwed(number: string): Promise<PaymentOwed>;
+  paymentOwed(number: string, asin?: string): Promise<PaymentOwed>;
+  /** Every payment one book is in, with its part of each, and what it has earned that no payment covers yet. */
+  bookPayments(asin: string): Promise<BookPayments>;
   /** Freeze what each author is owed from a payment; allocating again replaces it. */
   allocatePayment(number: string): Promise<PaymentOwed>;
   unallocatePayment(number: string): Promise<void>;
   /** Save one payment's calculator as CSV (one author or all) or PDF (one author; null writes one PDF per author into a chosen folder). */
-  exportPayment(number: string, kind: 'csv' | 'pdf', payee: string | null): Promise<string | null>;
+  exportPayment(number: string, kind: 'csv' | 'pdf', payee: string | null, asin?: string): Promise<string | null>;
   /** What to pay each author for a period: payments dated in it, plus unpaid balances from before, less what was paid out. */
-  payoutRollup(from: string, to: string): Promise<Rollup>;
+  payoutRollup(from: string, to: string, asin?: string): Promise<Rollup>;
   /** Allocate every unallocated payment dated in the period; returns their numbers. */
   allocateRollup(from: string, to: string): Promise<string[]>;
   /** Save the roll-up as CSV (one author or all) or as each author's payout statement PDF. */
-  exportRollup(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null): Promise<string | null>;
+  exportRollup(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, asin?: string): Promise<string | null>;
   /** What has been paid out to authors. */
   payouts(): Promise<Payout[]>;
   /** Record a payment made to an author, for the period (its first month) it settles. */
@@ -65,7 +67,7 @@ export interface FinanceApi {
   /** Forget one imported payment (its number as shown). */
   removePayment(number: string): Promise<void>;
   /** Save a statement as CSV (one author or all) or PDF (one author; null writes one PDF per author into a chosen folder). Returns where it went, or null if cancelled. */
-  exportStatement(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: StatementBasis): Promise<string | null>;
+  exportStatement(from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: StatementBasis, asin?: string): Promise<string | null>;
   /** The USD value of one unit of a currency for a month; null goes back to the default. */
   setFxRate(month: string, currency: string, toUsd: number | null): Promise<void>;
   /** The Kindle Unlimited rate per page for a month and currency; null goes back to KDP's figure (or the estimate). */
@@ -94,4 +96,4 @@ export interface FinanceApi {
   onNavigate(cb: (page: string) => void): () => void;
 }
 
-export const CHANNELS = ['ready', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData'] as const satisfies readonly (keyof FinanceApi)[];
+export const CHANNELS = ['ready', 'bookPayments', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData'] as const satisfies readonly (keyof FinanceApi)[];

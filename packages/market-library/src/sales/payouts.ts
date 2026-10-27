@@ -21,6 +21,8 @@ export interface PayeeShare {
 }
 
 export interface PaymentOwed {
+  /** The ASIN the shares are limited to, or null for the whole payment. `payment` is always the whole payment as Amazon paid it. */
+  book: string | null;
   payment: PaymentRow & { scheduled: boolean };
   payees: PayeeShare[];
   totalAccrued: number;
@@ -35,11 +37,11 @@ export interface PaymentOwed {
 const sum = (xs: number[]) => round2(xs.reduce((a, b) => a + b, 0));
 
 /** What every author is owed from each payment, worked out now from the splits. One pass over all payments. */
-export function livePaymentShares(db: Db, today = new Date()): Map<string, { payment: PaymentRow & { scheduled: boolean }; payees: PayeeShare[]; unmatchedNet: number }> {
+export function livePaymentShares(db: Db, today = new Date(), book?: string): Map<string, { payment: PaymentRow & { scheduled: boolean }; payees: PayeeShare[]; unmatchedNet: number }> {
   const todayIso = today.toISOString().slice(0, 10);
-  const st = royaltyStatement(db, { from: '0000-01', to: '9999-12' }, today, 'paid');
+  const st = royaltyStatement(db, { from: '0000-01', to: '9999-12' }, today, 'paid', undefined, book);
   const out = new Map<string, { payment: PaymentRow & { scheduled: boolean }; payees: PayeeShare[]; unmatchedNet: number }>();
-  for (const p of listPayments(db)) out.set(p.number, { payment: { ...p, scheduled: p.paidOn > todayIso }, payees: [], unmatchedNet: sum(st.unmatched.filter((u) => u.paymentNumber === p.number).map((u) => u.net)) });
+  for (const p of listPayments(db)) out.set(p.number, { payment: { ...p, scheduled: p.paidOn > todayIso }, payees: [], unmatchedNet: book ? 0 : sum(st.unmatched.filter((u) => u.paymentNumber === p.number).map((u) => u.net)) });
   for (const payee of st.payees) {
     const by = new Map<string, StatementLine[]>();
     for (const l of payee.lines) if (l.paymentNumber) by.set(l.paymentNumber, [...(by.get(l.paymentNumber) ?? []), l]);
@@ -62,6 +64,17 @@ function storedAllocation(db: Db, number: string): Allocation | null {
   return { at: meta.at, unmatchedNet: meta.unmatched, changed: false, payees: rows.map((r) => ({ name: r.payee, personId: r.person_id, accrued: r.accrued, tax: r.tax, owed: r.owed, lines: JSON.parse(r.detail) as StatementLine[] })) };
 }
 
+/** What each author's frozen share of a payment was for one book alone, from the lines frozen with it. */
+function forBook(shares: PayeeShare[], book: string): PayeeShare[] {
+  const out: PayeeShare[] = [];
+  for (const s of shares) {
+    const lines = s.lines.filter((l) => l.asin === book);
+    if (!lines.length) continue;
+    out.push({ name: s.name, personId: s.personId, accrued: sum(lines.map((l) => l.shareGrossUsd)), tax: sum(lines.map((l) => l.shareTaxUsd)), owed: sum(lines.map((l) => l.usd)), lines });
+  }
+  return out;
+}
+
 const differs = (a: PayeeShare[], b: PayeeShare[]) => {
   const m = new Map(a.map((p) => [p.name, p.owed]));
   const n = new Map(b.map((p) => [p.name, p.owed]));
@@ -70,11 +83,13 @@ const differs = (a: PayeeShare[], b: PayeeShare[]) => {
 };
 
 /** The calculator for one payment: what each author is owed from it, and whether it has been allocated. */
-export function paymentOwed(db: Db, number: string, today = new Date()): PaymentOwed {
-  const live = livePaymentShares(db, today).get(number);
+export function paymentOwed(db: Db, number: string, today = new Date(), book?: string): PaymentOwed {
+  const live = livePaymentShares(db, today, book).get(number);
   if (!live) throw new Error(`no payment ${number}`);
-  const stored = storedAllocation(db, number);
+  const frozen = storedAllocation(db, number);
+  const stored = frozen && book ? { ...frozen, unmatchedNet: 0, payees: forBook(frozen.payees, book) } : frozen;
   return {
+    book: book ?? null,
     payment: live.payment, payees: live.payees,
     totalAccrued: sum(live.payees.map((p) => p.accrued)), totalTax: sum(live.payees.map((p) => p.tax)), totalOwed: sum(live.payees.map((p) => p.owed)),
     unmatchedNet: live.unmatchedNet,
@@ -148,6 +163,8 @@ export interface RollupPayee {
   payouts: Payout[];
 }
 export interface Rollup {
+  /** The ASIN this roll-up is limited to, or null. For one book it shows what the book's payments owe each author; carried-in, paid-out and due are all zero, because payouts are made to an author for everything they wrote, not per book. */
+  book: string | null;
   from: string;
   to: string;
   payees: RollupPayee[];
@@ -166,9 +183,9 @@ export interface Rollup {
  * months, plus anything still unpaid from earlier periods, less what has been paid out for the period. Allocated payments use their
  * frozen amounts; the others are worked out now.
  */
-export function payoutRollup(db: Db, range: { from: string; to: string }, today = new Date()): Rollup {
+export function payoutRollup(db: Db, range: { from: string; to: string }, today = new Date(), book?: string): Rollup {
   const lo = `${range.from}-01`; const hi = `${range.to}-31`;
-  const live = livePaymentShares(db, today);
+  const live = livePaymentShares(db, today, book);
   const payees = new Map<string, RollupPayee>();
   const payee = (name: string, personId: number | null) => {
     const k = name.toLowerCase();
@@ -181,7 +198,9 @@ export function payoutRollup(db: Db, range: { from: string; to: string }, today 
   const unallocated: string[] = []; const changed: string[] = [];
   const carriedGross = new Map<string, number>();
   for (const [number, v] of live) {
-    const stored = storedAllocation(db, number);
+    const frozen = storedAllocation(db, number);
+    const stored = frozen && book ? { ...frozen, payees: forBook(frozen.payees, book) } : frozen;
+    if (book && !v.payees.length && !stored?.payees.length) continue; // a payment this book is not in
     const isChanged = !!stored && differs(stored.payees, v.payees);
     const shares = stored ? stored.payees : v.payees;
     const when = v.payment.paidOn;
@@ -195,7 +214,9 @@ export function payoutRollup(db: Db, range: { from: string; to: string }, today 
       for (const s of shares) payee(s.name, s.personId);
       continue;
     }
-    payments.push({ number, paidOn: when, accrued: v.payment.accrued, tax: v.payment.tax, net: v.payment.net, scheduled: v.payment.scheduled, allocated: !!stored, changed: isChanged, unmatchedNet: v.unmatchedNet });
+    // the payment as Amazon paid it, or for one book what that book's lines make of it
+    const row = book ? { accrued: sum(shares.map((s) => s.accrued)), tax: sum(shares.map((s) => s.tax)), net: sum(shares.map((s) => s.owed)) } : { accrued: v.payment.accrued, tax: v.payment.tax, net: v.payment.net };
+    payments.push({ number, paidOn: when, ...row, scheduled: v.payment.scheduled, allocated: !!stored, changed: isChanged, unmatchedNet: v.unmatchedNet });
     if (!stored) unallocated.push(number);
     if (isChanged) changed.push(number);
     for (const s of shares) {
@@ -205,21 +226,22 @@ export function payoutRollup(db: Db, range: { from: string; to: string }, today 
     }
   }
   const priorPaid = new Map<string, number>();
-  for (const o of listPayouts(db)) {
+  // payouts are made to an author for everything they wrote, so they are not part of a one-book roll-up
+  for (const o of book ? [] : listPayouts(db)) {
     const p = payee(o.payee, o.personId);
     if (o.period < range.from) priorPaid.set(o.payee.toLowerCase(), (priorPaid.get(o.payee.toLowerCase()) ?? 0) + o.usd);
     else if (o.period === range.from) { p.paidOut = round2(p.paidOut + o.usd); p.payouts.push(o); }
   }
   for (const p of payees.values()) {
     const k = p.name.toLowerCase();
-    p.carriedIn = round2((carriedGross.get(k) ?? 0) - (priorPaid.get(k) ?? 0));
-    p.due = round2(p.carriedIn + p.owed - p.paidOut);
+    p.carriedIn = book ? 0 : round2((carriedGross.get(k) ?? 0) - (priorPaid.get(k) ?? 0));
+    p.due = book ? 0 : round2(p.carriedIn + p.owed - p.paidOut);
     p.payments.sort((a, b) => a.paidOn.localeCompare(b.paidOn));
   }
   const list = [...payees.values()].filter((p) => p.owed || p.carriedIn || p.paidOut || p.payouts.length).sort((a, b) => a.name.localeCompare(b.name));
   payments.sort((a, b) => a.paidOn.localeCompare(b.paidOn));
   return {
-    from: range.from, to: range.to, payees: list, payments,
+    book: book ?? null, from: range.from, to: range.to, payees: list, payments,
     totals: { accrued: sum(list.map((p) => p.accrued)), tax: sum(list.map((p) => p.tax)), owed: sum(list.map((p) => p.owed)), carriedIn: sum(list.map((p) => p.carriedIn)), paidOut: sum(list.map((p) => p.paidOut)), due: sum(list.map((p) => p.due)) },
     unallocated, changed, unmatchedNet: sum(payments.map((p) => p.unmatchedNet)), scheduled,
   };
@@ -240,6 +262,7 @@ const usd = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits
 
 /** The roll-up as CSV: one row per author with what to pay, then each payment that makes it up. `only` limits it to one author. */
 export function rollupCsv(r: Rollup, only?: string): string {
+  if (r.book) return bookRollupCsv(r, only);
   const rows: (string | number)[][] = [['Author', 'Carried in USD', 'Owed from payments in the period USD', 'Before tax USD', 'Tax withheld USD', 'Paid out for the period USD', 'Due now USD']];
   const ps = r.payees.filter((p) => !only || p.name === only);
   for (const p of ps) rows.push([p.name, p.carriedIn.toFixed(2), p.owed.toFixed(2), p.accrued.toFixed(2), p.tax.toFixed(2), p.paidOut.toFixed(2), p.due.toFixed(2)]);
@@ -255,10 +278,23 @@ export function rollupCsv(r: Rollup, only?: string): string {
   return rows.map((x) => x.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }
 
+/** One book's roll-up as CSV: what its payments in the period owe each author, then each payment. No due or paid-out columns (see `Rollup.book`). */
+function bookRollupCsv(r: Rollup, only?: string): string {
+  const rows: (string | number)[][] = [[`Book ${r.book}`, r.from === r.to ? r.from : `${r.from} to ${r.to}`], [], ['Author', 'Before tax USD', 'Tax withheld USD', 'Owed from this book USD']];
+  const ps = r.payees.filter((p) => !only || p.name === only);
+  for (const p of ps) rows.push([p.name, p.accrued.toFixed(2), p.tax.toFixed(2), p.owed.toFixed(2)]);
+  if (!only) rows.push(['Total', r.totals.accrued.toFixed(2), r.totals.tax.toFixed(2), r.totals.owed.toFixed(2)]);
+  rows.push([]);
+  rows.push(['Author', 'Payment', 'Paid on', 'Before tax USD', 'Tax withheld USD', 'Owed USD', 'Allocation']);
+  for (const p of ps) for (const x of p.payments) rows.push([p.name, x.number, x.paidOn, x.accrued.toFixed(2), x.tax.toFixed(2), x.owed.toFixed(2), x.allocated ? (x.changed ? 'Allocated (split changed since)' : 'Allocated') : 'Not allocated (worked out now)']);
+  return rows.map((x) => x.map(csvCell).join(',')).join('\r\n') + '\r\n';
+}
+
 /** A printable payout statement for one author. */
 export function rollupHtml(r: Rollup, name: string, generatedAt = new Date().toISOString()): string {
   const p = r.payees.find((x) => x.name === name);
   if (!p) throw new Error(`no payout for ${name}`);
+  if (r.book) return bookRollupHtml(r, p, generatedAt);
   const span = r.from === r.to ? esc(r.from) : `${esc(r.from)} to ${esc(r.to)}`;
   const rows = p.payments.map((x) => `<tr><td>${esc(x.number)}</td><td>${esc(x.paidOn)}</td><td class="n">${usd(x.accrued)}</td><td class="n">${usd(x.tax)}</td><td class="n">${usd(x.owed)}</td></tr>`).join('');
   const pay = p.payouts.map((o) => `<tr><td>${esc(o.paidOn)}</td><td>${esc(o.note ?? '')}</td><td class="n">${usd(o.usd)}</td></tr>`).join('');
@@ -279,4 +315,56 @@ ${pay ? `<h3>Paid to you for this period</h3><table><thead><tr><th>Date</th><th>
 <div class="note">Amounts are USD, as Amazon paid them, after the tax Amazon withheld. Your share of each payment is its royalties (eBook, print and Kindle+) multiplied by your percentage for the month they were earned in. No expenses are deducted.</div>
 ${p.payments.some((x) => !x.allocated) ? '<div class="note">Some of these payments have not been allocated yet; their amounts are worked out from the current splits.</div>' : ''}
 </body></html>`;
+}
+
+/** The printable page for one author's share of one book's payments in a period. */
+function bookRollupHtml(r: Rollup, p: RollupPayee, generatedAt: string): string {
+  const span = r.from === r.to ? esc(r.from) : `${esc(r.from)} to ${esc(r.to)}`;
+  const rows = p.payments.map((x) => `<tr><td>${esc(x.number)}</td><td>${esc(x.paidOn)}</td><td class="n">${usd(x.accrued)}</td><td class="n">${usd(x.tax)}</td><td class="n">${usd(x.owed)}</td></tr>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Book statement ${esc(p.name)} ${esc(r.book ?? '')} ${span}</title><style>
+body{font:12px/1.4 -apple-system,Segoe UI,Arial,sans-serif;color:#111;margin:32px}h1{font-size:20px;margin:0 0 2px}h3{margin:18px 0 4px;font-size:13px}.m{color:#555}
+table{border-collapse:collapse;width:100%}th,td{padding:4px 6px;border-bottom:1px solid #ddd;text-align:left}.n{text-align:right}.t td,.t th{font-weight:600;border-top:1px solid #999}.note{margin-top:12px;color:#555;font-size:11px}</style></head><body>
+<h1>Book statement</h1><div class="m">${esc(p.name)} · book ${esc(r.book ?? '')} · payments received from Amazon ${span} · prepared ${esc(generatedAt.slice(0, 10))}</div>
+<h3>Amazon payments that include this book</h3>
+${rows ? `<table><thead><tr><th>Payment</th><th>Paid on</th><th class="n">Your share before tax</th><th class="n">Tax withheld</th><th class="n">Owed (after tax)</th></tr></thead><tbody>${rows}<tr class="t"><td colspan="2">Total</td><td class="n">${usd(p.accrued)}</td><td class="n">${usd(p.tax)}</td><td class="n">${usd(p.owed)}</td></tr></tbody></table>` : '<p>Amazon paid nothing for this book in this period.</p>'}
+<div class="note">Amounts are USD, as Amazon paid them, after the tax Amazon withheld. This covers this book only; what is due to an author is worked out across all their books on the payout statement.</div>
+${p.payments.some((x) => !x.allocated) ? '<div class="note">Some of these payments have not been allocated yet; their amounts are worked out from the current splits.</div>' : ''}
+</body></html>`;
+}
+
+// ---------------------------------------------------------------- one book's payments
+
+export interface BookPayments {
+  asin: string;
+  /** A KDP payment report has been imported. Without one there are no payments to list and nothing is paid. */
+  reconciled: boolean;
+  /** Newest first. `net` and the payee figures are this book's part of the payment; `paymentNet` is the whole payment as Amazon paid it. */
+  payments: { number: string; paidOn: string; scheduled: boolean; allocated: boolean; changed: boolean; paymentNet: number; accrued: number; tax: number; net: number; payees: { name: string; accrued: number; tax: number; owed: number }[] }[];
+  totals: { accrued: number; tax: number; net: number };
+  /** Earned by this book (by authors' shares, an estimate for Kindle+ where KDP has not finalised the rate) and not yet in any payment. */
+  awaitingUsd: number;
+}
+
+/** Every payment this book is in, with its part of each, and what it has earned that no payment covers yet. */
+export function bookPayments(db: Db, asin: string, today = new Date()): BookPayments {
+  const live = livePaymentShares(db, today, asin);
+  const payments: BookPayments['payments'] = [];
+  for (const [number, v] of live) {
+    const frozen = storedAllocation(db, number);
+    const stored = frozen && { ...frozen, payees: forBook(frozen.payees, asin) };
+    if (!v.payees.length && !stored?.payees.length) continue;
+    const shares = stored ? stored.payees : v.payees;
+    payments.push({
+      number, paidOn: v.payment.paidOn, scheduled: v.payment.scheduled, allocated: !!stored, changed: !!stored && differs(stored.payees, v.payees), paymentNet: v.payment.net,
+      accrued: sum(shares.map((s) => s.accrued)), tax: sum(shares.map((s) => s.tax)), net: sum(shares.map((s) => s.owed)),
+      payees: shares.map((s) => ({ name: s.name, accrued: s.accrued, tax: s.tax, owed: s.owed }))
+    });
+  }
+  payments.sort((a, b) => b.paidOn.localeCompare(a.paidOn));
+  const earned = royaltyStatement(db, { from: '0000-01', to: '9999-12' }, today, 'earned', undefined, asin);
+  return {
+    asin, reconciled: live.size > 0, payments,
+    totals: { accrued: sum(payments.map((p) => p.accrued)), tax: sum(payments.map((p) => p.tax)), net: sum(payments.map((p) => p.net)) },
+    awaitingUsd: sum(earned.payees.map((p) => p.awaitingUsd))
+  };
 }

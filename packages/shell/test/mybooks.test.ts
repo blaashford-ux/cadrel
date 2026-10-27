@@ -49,8 +49,9 @@ afterEach(async () => {
 /** The real service, except that the library has no captured category lists (a capture needs the browser extension). */
 const withCategory = (): BookService => ({
   status: () => svc.status(), ownBooks: () => svc.ownBooks(), ownBook: (a) => svc.ownBook(a), book: (a) => svc.book(a), cover: (a) => svc.cover(a),
-  moneyMonths: () => svc.moneyMonths(), moneyAnalysis: (f, t) => svc.moneyAnalysis(f, t), bookSplit: (a) => svc.bookSplit(a), statement: (f, t, b) => svc.statement(f, t, b),
-  statementFile: (f, t, k, p, b) => svc.statementFile(f, t, k, p, b), bookEarningsFile: (a, m) => svc.bookEarningsFile(a, m),
+  moneyMonths: () => svc.moneyMonths(), moneyAnalysis: (f, t, a) => svc.moneyAnalysis(f, t, a), bookSplit: (a) => svc.bookSplit(a), statement: (f, t, b, a) => svc.statement(f, t, b, a),
+  statementFile: (f, t, k, p, b, a) => svc.statementFile(f, t, k, p, b, a), bookEarningsFile: (a, m) => svc.bookEarningsFile(a, m),
+  bookPayments: (a) => svc.bookPayments(a), paymentFile: (n, k, p, a) => svc.paymentFile(n, k, p, a), payoutRollup: (f, t, a) => svc.payoutRollup(f, t, a), rollupFile: (f, t, k, p, a) => svc.rollupFile(f, t, k, p, a),
   bookLists: () => [{ key: 'romance', name: 'Romance' }],
   exportContent: async (key, kind) => ({ filename: `${key}.${kind}`, content: `category ${key} as ${kind}` })
 });
@@ -127,7 +128,7 @@ describe('saving from My Books', () => {
     expect(rel).toContain('Market/romance.csv');
     expect(rel).toContain('Market/romance.md');
     expect(rel).toContain('Finance/Anthology earnings.csv');
-    const stmt = svc.statementFile('2025-10', '2026-09', 'csv', 'Blake Ashford', 'earned');
+    const stmt = svc.statementFile('2025-10', '2026-09', 'csv', 'Blake Ashford', 'earned', A);
     expect(rel).toContain(`Finance/${stmt.filename}`);
     expect(fs.readFileSync(path.join(r.folder, 'Finance', stmt.filename), 'utf8')).toBe(stmt.content);
     expect(fs.readFileSync(path.join(r.folder, 'Market', 'romance.csv'), 'utf8')).toBe('category romance as csv');
@@ -180,5 +181,70 @@ describe('saving from My Books', () => {
     await expect(saveBook(svc, 'B0CCCCCCC3', 'finance', true, { parent })).rejects.toThrow(/nothing to save/);
     expect(fs.existsSync(parent) ? fs.readdirSync(parent) : []).toEqual([]);
     await expect(saveBook(svc, 'B0ZZZZZZZ9', 'all', true, { parent })).rejects.toThrow(/not in My Books/);
+  });
+});
+
+
+// ---- payments: a KDP payment report, so the book is in real payments ----
+const PHEAD = ['Sales Period - Start Date', 'Sales Period - End Date', 'Marketplace', 'Payment Number', 'Detail', 'Date', 'Payment Method', 'Currency', 'Accrued Royalty', 'Tax Withholding', 'Net Earnings', 'Source', 'FX Rate', 'Currency', 'Payout Amount', 'Payment Status'];
+const payment = (num: string, paidOn: string, accrued: number, tax: number, net: number, lines: [string, string, number, number, number, string][]) =>
+  xlsx({ Payments: [PHEAD, ['2026-09-01', '2026-09-30', 'Amazon.com', num, '', paidOn, 'WIRE', 'USD', accrued, tax, net, '', 'Pending info from Bank', 'NZD', 'Pending info from Bank', 'Paid'], ...lines.map((l) => ['', '', '', '', l[0], '', '', l[1], l[2], l[3], l[4], l[5], '', '', '', ''])] });
+
+describe('payments in My Books', () => {
+  const seedPaid = () => {
+    seed();
+    svc.importSales('KDP Payments.xlsx', payment('300', '2026-09-29', 30, 1.5, 28.5, [['2026-09', 'USD', 30, 1.5, 28.5, 'Sales']]));
+  };
+
+  it('lists the payments a book is in on its page, with its part of each, and says so when no payment report is imported', () => {
+    seed();
+    expect(bookPage(svc, A, true)!.finance!.payments).toMatchObject({ reconciled: false, items: [] });
+    svc.importSales('KDP Payments.xlsx', payment('300', '2026-09-29', 30, 1.5, 28.5, [['2026-09', 'USD', 30, 1.5, 28.5, 'Sales']]));
+    const p = bookPage(svc, A, true)!.finance!.payments;
+    expect(p.reconciled).toBe(true);
+    expect(p.items.map((x) => x.number)).toEqual(['300']);
+    expect(p.items[0]).toMatchObject({ paidOn: '2026-09-29', allocated: false, scheduled: false, paymentNet: 28.5 });
+    expect(p.totalNet).toBe(p.items[0]!.net);
+    expect(JSON.stringify(bookPage(svc, A, false)!)).not.toMatch(/paymentNet|reconciled/);
+  });
+
+  it('saves the book’s payment calculators and roll-up, and they are the files Finance’s own generators make', async () => {
+    seedPaid();
+    const pdfCalls: string[] = [];
+    const pdf = {
+      statements: async (dir: string, _f: string, _t: string, payees: string[], basis: string, asin: string) => (pdfCalls.push(`statements:${asin}:${basis}:${payees.join('+')}`), [path.join(dir, 'x.pdf')]),
+      rollups: async (dir: string, from: string, to: string, payees: string[], asin: string) => (pdfCalls.push(`rollups:${asin}:${payees.join('+')}`), [path.join(dir, 'r.pdf')])
+    };
+    const r = await saveBook(withCategory(), A, 'finance', true, { parent: path.join(tmp, 'out'), months: 60, pdf });
+    const rel = r.files.map((f) => path.relative(r.folder, f).replace(/\\/g, '/'));
+    const calc = svc.paymentFile('300', 'csv', null, A);
+    expect(rel).toContain(`Finance/Payments/${calc.filename}`);
+    expect(fs.readFileSync(path.join(r.folder, 'Finance', 'Payments', calc.filename), 'utf8')).toBe(calc.content);
+    expect(calc.filename).toBe(`payment-300-${A}.csv`);
+    const now = new Date().toISOString().slice(0, 7);
+    const from = `${(() => { const [y, m] = now.split('-').map(Number) as [number, number]; return new Date(Date.UTC(y, m - 1 - 59, 1)).toISOString().slice(0, 7); })()}`;
+    const roll = svc.rollupFile(from, now, 'csv', null, A);
+    expect(fs.readFileSync(path.join(r.folder, 'Finance', 'Payments', roll.filename), 'utf8')).toBe(roll.content);
+    expect(roll.content.split('\r\n')[0]).toBe(`Book ${A},${from} to ${now}`);
+    // PDFs were asked for, limited to this book, for the authors on it only; statements are on the paid basis now a payment report is in
+    expect(pdfCalls).toContain(`statements:${A}:paid:Blake Ashford+Loric Thorne`);
+    expect(pdfCalls.some((c) => c.startsWith(`rollups:${A}:`))).toBe(true);
+  });
+
+  it('writes no Payments folder for a book that is in no payment, and still saves its earnings', async () => {
+    seed();
+    const r = await saveBook(withCategory(), A, 'finance', true, { parent: path.join(tmp, 'out'), months: 60 });
+    expect(fs.existsSync(path.join(r.folder, 'Finance', 'Payments'))).toBe(false);
+    expect(r.files.some((f) => f.endsWith('earnings.csv'))).toBe(true);
+  });
+
+  it('a one-book statement holds only that book', async () => {
+    seedPaid();
+    const r = await saveBook(withCategory(), A, 'finance', true, { parent: path.join(tmp, 'out'), months: 60 });
+    const stmtFile = r.files.find((f) => /royalty-statement-Blake-Ashford/.test(f))!;
+    expect(stmtFile).toContain(A);
+    const text = fs.readFileSync(stmtFile, 'utf8');
+    expect(text).toContain(A);
+    expect(text).not.toContain(B);
   });
 });

@@ -1,11 +1,11 @@
 import type { ContentMetrics } from '@cadrel/market-core';
 import type { HealthRow, VerifyReport } from '@cadrel/market-library';
 import type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource } from '@cadrel/market-library';
-import type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, Person, SplitVersion, Statement, StatementBasis } from '@cadrel/market-library';
+import type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, BookPayments, Person, SplitVersion, Statement, StatementBasis } from '@cadrel/market-library';
 import type { BookDetail, BookRow, CategoryReport, CategorySummary, ManuscriptRow, QueueItem, SampleSession, Weights, Opportunity, OpportunityWeights, SalesCurve } from '@cadrel/market-library';
 
 export type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource };
-export type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, Person, SplitVersion, Statement, StatementBasis };
+export type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, BookPayments, Person, SplitVersion, Statement, StatementBasis };
 export type { HealthRow, VerifyReport, ContentMetrics, BookDetail, BookRow, CategoryReport, CategorySummary, ManuscriptRow, QueueItem, SampleSession, Weights, Opportunity, OpportunityWeights, SalesCurve };
 
 export interface Status {

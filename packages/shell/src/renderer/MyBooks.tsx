@@ -55,7 +55,7 @@ function SaveBar({ page, financeVisible }: { page: BookPage; financeVisible: boo
       <div className="row">
         <button type="button" className="primary" disabled={busy} onClick={() => void run(() => api.saveAll(page.asin))}>Save everything for this book…</button>
         <button type="button" disabled={busy || page.market.categories.length === 0} title={page.market.categories.length ? undefined : 'This book is not on any captured category list yet'} onClick={() => void run(() => api.saveMarket(page.asin))}>Market exports…</button>
-        {financeVisible && <button type="button" disabled={busy || !page.finance?.hasData} title={page.finance?.hasData ? undefined : 'Import a KDP report in Finance first'} onClick={() => void run(() => api.saveFinance(page.asin))}>Earnings and author statements…</button>}
+        {financeVisible && <button type="button" disabled={busy || !page.finance?.hasData} title={page.finance?.hasData ? undefined : 'Import a KDP report in Finance first'} onClick={() => void run(() => api.saveFinance(page.asin))}>Earnings, payments and statements…</button>}
       </div>
       {err && <div className="banner error" role="alert">{err}</div>}
       {result && <div className="banner info" role="status">Saved {result.files.length} file{result.files.length === 1 ? '' : 's'} to {result.folder}</div>}
@@ -171,6 +171,27 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
               <p>{f.split.shares.map((s) => `${s.name} ${s.pct}%`).join(' · ')}<span className="muted small"> from {f.split.fromMonth === '0000-00' ? 'the first month' : f.split.fromMonth}</span></p>
             ) : (
               <p className="muted">No split is set, so everything goes to the author KDP reports. Set one in Finance → Royalties and splits.</p>
+            )}
+          </section>
+          <section className="card" aria-labelledby="mb-pay">
+            <h3 id="mb-pay">Payments</h3>
+            {!f.payments.reconciled ? (
+              <p className="muted">No KDP payment report has been imported, so there is nothing to show as paid. Import the Payments report in Finance.</p>
+            ) : f.payments.items.length === 0 ? (
+              <p className="muted">None of the payments you have imported includes this book.</p>
+            ) : (
+              <>
+                <table className="table">
+                  <thead><tr><th>Payment</th><th>Paid on</th><th className="num">Whole payment</th><th className="num">This book</th><th>Allocation</th></tr></thead>
+                  <tbody>
+                    {f.payments.items.map((p) => (
+                      <tr key={p.number}><th>{p.number}</th><td>{p.paidOn}{p.scheduled ? <span className="muted small"> scheduled</span> : null}</td><td className="num">{usd(p.paymentNet)}</td><td className="num">{usd(p.net)}</td><td className="muted small">{p.allocated ? (p.changed ? 'allocated; split changed since' : 'allocated') : 'not allocated'}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="muted small">This book’s part of each payment, after the tax Amazon withheld. {f.payments.awaitingUsd > 0 ? `A further ${usd(f.payments.awaitingUsd)} is earned but not in any payment yet. ` : ''}The calculators for each payment, the roll-up by period and allocation are in Finance.</p>
+                <button type="button" onClick={() => void run(() => api.openIn('finance', page.asin))}>Calculators and roll-up in Finance</button>
+              </>
             )}
           </section>
         </>

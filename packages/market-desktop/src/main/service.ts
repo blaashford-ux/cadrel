@@ -8,7 +8,7 @@ import { zipSync, strToU8 } from 'fflate';
 import {
   ArcticShift, addCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
-  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
+  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
   Library, amazonUrl, getBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
   type BookDetail, type QueueItem, type RemovedBook,
@@ -763,14 +763,19 @@ export class AppService {
     const lib = this.need();
     setSplit(lib.db, lib.root, asin, shares, fromMonth);
   }
-  statement(from: string, to: string, basis: StatementBasis = 'paid'): Statement { assertMonths(from, to); assertBasis(basis); return royaltyStatement(this.need().db, { from, to }, new Date(), basis); }
+  /** With `asin`, each author's share of that one book only. */
+  statement(from: string, to: string, basis: StatementBasis = 'paid', asin?: string): Statement {
+    assertMonths(from, to); assertBasis(basis);
+    if (asin !== undefined) assertAsin(asin);
+    return royaltyStatement(this.need().db, { from, to }, new Date(), basis, undefined, asin);
+  }
   /** Payments imported from KDP payment reports, what does not reconcile, and what is unpaid. */
   payments(): PaymentsReport { return paymentsReport(this.need().db); }
   removePayment(number: string): void { if (typeof number !== 'string' || !/^\d{3,30}$/.test(number)) throw new Error('bad payment number'); const lib = this.need(); removePayment(lib.db, number); }
   /** The statement's file contents: CSV for one author or all, or the printable page of one author. */
-  statementFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, basis: StatementBasis = 'paid'): { filename: string; content: string } {
-    const s = this.statement(from, to, basis);
-    const span = `${basis === 'paid' ? 'paid-' : 'earned-'}${from === to ? from : `${from}_to_${to}`}`;
+  statementFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, basis: StatementBasis = 'paid', asin?: string): { filename: string; content: string } {
+    const s = this.statement(from, to, basis, asin);
+    const span = `${asin ? asin + '-' : ''}${basis === 'paid' ? 'paid-' : 'earned-'}${from === to ? from : `${from}_to_${to}`}`;
     if (kind === 'csv') return { filename: `royalty-statement-${payee ? payee.replace(/[^A-Za-z0-9]+/g, '-') + '-' : ''}${span}.csv`, content: statementCsv(s, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
     return { filename: `royalty-statement-${payee.replace(/[^A-Za-z0-9]+/g, '-')}-${span}.pdf`, content: statementHtml(s, payee) };
@@ -793,12 +798,24 @@ export class AppService {
     return { filename: `${title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || asin} earnings.csv`, content: rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n' };
   }
   /** The calculator for one payment: what each author is owed from it, after tax, and whether it has been allocated. */
-  paymentOwed(number: string): PaymentOwed { assertPaymentNumber(number); return paymentOwed(this.need().db, number); }
+  /** With `asin`, the calculator limited to that book: its part of the payment for each author. The payment itself is shown whole. */
+  paymentOwed(number: string, asin?: string): PaymentOwed {
+    assertPaymentNumber(number);
+    if (asin !== undefined) assertAsin(asin);
+    return paymentOwed(this.need().db, number, new Date(), asin);
+  }
+  /** Every payment one book is in, with its part of each, and what it has earned that no payment covers yet. */
+  bookPayments(asin: string): BookPayments { assertAsin(asin); return bookPayments(this.need().db, asin); }
   /** Freeze what each author is owed from a payment (allocating again replaces it). */
   allocatePayment(number: string): PaymentOwed { assertPaymentNumber(number); const lib = this.need(); return allocatePayment(lib.db, lib.root, number); }
   unallocatePayment(number: string): void { assertPaymentNumber(number); const lib = this.need(); unallocatePayment(lib.db, lib.root, number); }
   /** What to pay each author for a period, from the payments dated in it, plus what is still unpaid from before, less what has been paid out. */
-  payoutRollup(from: string, to: string): Rollup { assertMonths(from, to); return payoutRollup(this.need().db, { from, to }); }
+  /** With `asin`, the roll-up limited to one book (what its payments owe each author; no due or paid-out: see `Rollup.book`). */
+  payoutRollup(from: string, to: string, asin?: string): Rollup {
+    assertMonths(from, to);
+    if (asin !== undefined) assertAsin(asin);
+    return payoutRollup(this.need().db, { from, to }, new Date(), asin);
+  }
   /** Allocate every unallocated payment dated in the period; returns their numbers. */
   allocateRollup(from: string, to: string): string[] { assertMonths(from, to); const lib = this.need(); return allocateRollup(lib.db, lib.root, { from, to }); }
   payouts(): Payout[] { return listPayouts(this.need().db); }
@@ -809,20 +826,22 @@ export class AppService {
   }
   deletePayout(id: number): void { if (!Number.isInteger(id)) throw new Error('bad payout'); const lib = this.need(); deletePayout(lib.db, lib.root, id); }
   /** One payment's calculator as a file: CSV (one author or all) or the printable page of one author. */
-  paymentFile(number: string, kind: 'csv' | 'html', payee: string | null): { filename: string; content: string } {
+  paymentFile(number: string, kind: 'csv' | 'html', payee: string | null, asin?: string): { filename: string; content: string } {
     assertPaymentNumber(number);
+    if (asin !== undefined) assertAsin(asin);
     const db = this.need().db;
     const o = paymentOwed(db, number);
     const m = o.payment.paidOn.slice(0, 7);
-    const st = royaltyStatement(db, { from: m, to: m }, new Date(), 'paid', number);
-    if (kind === 'csv') return { filename: `payment-${number}${payee ? '-' + payee.replace(/[^A-Za-z0-9]+/g, '-') : ''}.csv`, content: statementCsv(st, payee ?? undefined) };
+    const st = royaltyStatement(db, { from: m, to: m }, new Date(), 'paid', number, asin);
+    const tag = `${number}${asin ? '-' + asin : ''}`;
+    if (kind === 'csv') return { filename: `payment-${tag}${payee ? '-' + payee.replace(/[^A-Za-z0-9]+/g, '-') : ''}.csv`, content: statementCsv(st, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
-    return { filename: `payment-${number}-${payee.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: statementHtml(st, payee) };
+    return { filename: `payment-${tag}-${payee.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: statementHtml(st, payee) };
   }
   /** The roll-up as a file: CSV (one author or all) or one author's printable payout statement. */
-  rollupFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null): { filename: string; content: string } {
-    const r = this.payoutRollup(from, to);
-    const span = from === to ? from : `${from}_to_${to}`;
+  rollupFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, asin?: string): { filename: string; content: string } {
+    const r = this.payoutRollup(from, to, asin);
+    const span = `${asin ? asin + '-' : ''}${from === to ? from : `${from}_to_${to}`}`;
     if (kind === 'csv') return { filename: `payouts-${payee ? payee.replace(/[^A-Za-z0-9]+/g, '-') + '-' : ''}${span}.csv`, content: rollupCsv(r, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
     return { filename: `payout-${payee.replace(/[^A-Za-z0-9]+/g, '-')}-${span}.pdf`, content: rollupHtml(r, payee) };

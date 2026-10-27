@@ -26,7 +26,9 @@ export interface FinanceModule {
   /** Tells the view something changed under it (a capture or an import in Market) so it reloads. */
   notify(): void;
   /** Prints each author's statement for the period as a PDF into `dir` (the same pages Finance's own Save writes); returns the files. */
-  writeStatementPdfs(dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned'): Promise<string[]>;
+  writeStatementPdfs(dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned', asin?: string): Promise<string[]>;
+  /** Prints each author's roll-up for the period as a PDF into `dir`; with `asin`, the one-book roll-up. */
+  writeRollupPdfs(dir: string, from: string, to: string, payees: string[], asin?: string): Promise<string[]>;
 }
 
 export function createFinanceModule(host: FinanceHost): FinanceModule {
@@ -75,15 +77,17 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
     return target;
   }
 
-  const exportStatement = (from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: 'paid' | 'earned' = 'paid') =>
-    saveGenerated(kind, (p) => service.statementFile(from, to, kind === 'csv' ? 'csv' : 'html', p, basis), payee, () => service.statement(from, to, basis).payees.map((p) => p.name));
-  const exportPayment = (number: string, kind: 'csv' | 'pdf', payee: string | null) =>
-    saveGenerated(kind, (p) => service.paymentFile(number, kind === 'csv' ? 'csv' : 'html', p), payee, () => service.paymentOwed(number).payees.map((p) => p.name));
-  const exportRollup = (from: string, to: string, kind: 'csv' | 'pdf', payee: string | null) =>
-    saveGenerated(kind, (p) => service.rollupFile(from, to, kind === 'csv' ? 'csv' : 'html', p), payee, () => service.payoutRollup(from, to).payees.filter((p) => p.due || p.owed || p.carriedIn).map((p) => p.name));
+  // `asin` limits each to one book (the same generators, so a book's file is the whole file with only that book's lines)
+  const exportStatement = (from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, basis: 'paid' | 'earned' = 'paid', asin?: string) =>
+    saveGenerated(kind, (p) => service.statementFile(from, to, kind === 'csv' ? 'csv' : 'html', p, basis, asin), payee, () => service.statement(from, to, basis, asin).payees.map((p) => p.name));
+  const exportPayment = (number: string, kind: 'csv' | 'pdf', payee: string | null, asin?: string) =>
+    saveGenerated(kind, (p) => service.paymentFile(number, kind === 'csv' ? 'csv' : 'html', p, asin), payee, () => service.paymentOwed(number, asin).payees.map((p) => p.name));
+  const exportRollup = (from: string, to: string, kind: 'csv' | 'pdf', payee: string | null, asin?: string) =>
+    saveGenerated(kind, (p) => service.rollupFile(from, to, kind === 'csv' ? 'csv' : 'html', p, asin), payee, () => service.payoutRollup(from, to, asin).payees.filter((p) => p.due || p.owed || p.carriedIn).map((p) => p.name));
 
   const handlers: Record<string, (...a: any[]) => unknown> = {
     ready: () => !!service.status().libraryRoot,
+    bookPayments: (asin: string) => service.bookPayments(asin),
     exportBookEarnings: (asin: string) => saveGenerated('csv', () => service.bookEarningsFile(asin), null, () => []),
     ownBooks: () => service.ownBooks(),
     openBook: (asin: string) => service.openBook(asin),
@@ -134,11 +138,21 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
       }
     },
     notify: () => host.getContents()?.send('finance:change'),
-    async writeStatementPdfs(dir, from, to, payees, basis) {
+    async writeStatementPdfs(dir, from, to, payees, basis, asin) {
       const out: string[] = [];
       for (const name of payees) {
-        const f = service.statementFile(from, to, 'html', name, basis);
+        const f = service.statementFile(from, to, 'html', name, basis, asin);
         const file = path.join(dir, f.filename.replace(/\.html$/, '.pdf'));
+        fs.writeFileSync(file, await htmlToPdf(f.content));
+        out.push(file);
+      }
+      return out;
+    },
+    async writeRollupPdfs(dir, from, to, payees, asin) {
+      const out: string[] = [];
+      for (const name of payees) {
+        const f = service.rollupFile(from, to, 'html', name, asin);
+        const file = path.join(dir, f.filename);
         fs.writeFileSync(file, await htmlToPdf(f.content));
         out.push(file);
       }

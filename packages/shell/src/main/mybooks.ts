@@ -26,7 +26,7 @@ export function financeAccess(roleKey: string | null | undefined): boolean {
 /** The part of the library service My Books reads. */
 export type BookService = Pick<
   AppService,
-  'status' | 'ownBooks' | 'ownBook' | 'book' | 'bookLists' | 'cover' | 'moneyMonths' | 'moneyAnalysis' | 'bookSplit' | 'exportContent' | 'statement' | 'statementFile' | 'bookEarningsFile'
+  'status' | 'ownBooks' | 'ownBook' | 'book' | 'bookLists' | 'cover' | 'moneyMonths' | 'moneyAnalysis' | 'bookSplit' | 'exportContent' | 'statement' | 'statementFile' | 'bookEarningsFile' | 'bookPayments' | 'paymentFile' | 'payoutRollup' | 'rollupFile'
 >;
 
 const shift = (m: string, by: number): string => {
@@ -80,13 +80,15 @@ export function bookPage(svc: BookService, asin: string, financeVisible: boolean
     const months = monthsFor(svc, asin, monthsShown);
     const splits = svc.bookSplit(asin);
     const cur = splits[splits.length - 1] ?? null;
+    const pay = svc.bookPayments(asin);
     const detailed = months.length ? svc.moneyAnalysis(months[months.length - 1]!.month, months[0]!.month).books.find((b) => b.asin === asin) : undefined;
     page.finance = {
       hasData: own.paidUnits > 0 || own.kenpPages > 0 || months.length > 0,
       paidUnits: own.paidUnits, kenpPages: own.kenpPages, firstSaleDay: own.firstSaleDay, lastSaleDay: own.lastSaleDay,
       months, totalUsd: months.reduce((a, m) => a + m.usd, 0), estimatedUsd: detailed?.estimated ?? 0,
       split: cur ? { fromMonth: cur.fromMonth, shares: cur.shares.map((s) => ({ name: s.name, pct: s.pct })) } : null,
-      payees: cur ? cur.shares.map((s) => s.name) : []
+      payees: cur ? cur.shares.map((s) => s.name) : [],
+      payments: { reconciled: pay.reconciled, items: pay.payments.map((p) => ({ number: p.number, paidOn: p.paidOn, scheduled: p.scheduled, allocated: p.allocated, changed: p.changed, paymentNet: p.paymentNet, net: p.net })), totalNet: pay.totals.net, awaitingUsd: pay.awaitingUsd }
     };
   }
   return page;
@@ -96,8 +98,11 @@ export function bookPage(svc: BookService, asin: string, financeVisible: boolean
 
 const slug = (s: string) => s.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || 'Book';
 
-/** Writes statements as PDFs (Finance's printer); given by the host so this file stays free of Electron. */
-export type PdfStatements = (dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned') => Promise<string[]>;
+/** Prints PDFs (Finance's printer); given by the host so this file stays free of Electron. Each is limited to the one book. */
+export interface PdfWriters {
+  statements(dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned', asin: string): Promise<string[]>;
+  rollups(dir: string, from: string, to: string, payees: string[], asin: string): Promise<string[]>;
+}
 
 async function freshFolder(parent: string, name: string): Promise<string> {
   const existing = await fsp.readdir(parent).catch(() => [] as string[]);
@@ -121,7 +126,7 @@ async function writeMarket(svc: BookService, page: BookPage, dir: string, topN: 
   return out;
 }
 
-async function writeFinance(svc: BookService, page: BookPage, dir: string, months: number, pdf: PdfStatements | null): Promise<string[]> {
+async function writeFinance(svc: BookService, page: BookPage, dir: string, months: number, pdf: PdfWriters | null, today: Date): Promise<string[]> {
   if (!page.finance) throw new MyBooksError('Your role does not include royalties, so there are no figures to save.');
   if (!page.finance.hasData) return [];
   const out: string[] = [];
@@ -133,18 +138,40 @@ async function writeFinance(svc: BookService, page: BookPage, dir: string, month
   const latest = svc.moneyMonths()[0];
   if (!latest) return out;
   const from = shift(latest, -(Math.max(1, months) - 1));
-  // What authors were paid, once a KDP payment report has been imported; until then what they have earned (Finance shows the same choice).
-  const paid = svc.statement(from, latest, 'paid');
+  // This book's statement for each author on it: what they were paid for it, once a KDP payment report is imported; until then what they have earned.
+  const paid = svc.statement(from, latest, 'paid', page.asin);
   const basis = paid.reconciled ? 'paid' : 'earned';
-  const statement = paid.reconciled ? paid : svc.statement(from, latest, 'earned');
-  const payees = statement.payees.filter((p) => p.lines.some((l) => l.asin === page.asin)).map((p) => p.name);
+  const statement = paid.reconciled ? paid : svc.statement(from, latest, 'earned', page.asin);
+  const payees = statement.payees.map((p) => p.name);
   for (const name of payees) {
-    const f = svc.statementFile(from, latest, 'csv', name, basis);
+    const f = svc.statementFile(from, latest, 'csv', name, basis, page.asin);
     const file = path.join(dir, f.filename);
     await fsp.writeFile(file, f.content);
     out.push(file);
   }
-  if (pdf && payees.length) out.push(...(await pdf(dir, from, latest, payees, basis)));
+  if (pdf && payees.length) out.push(...(await pdf.statements(dir, from, latest, payees, basis, page.asin)));
+  // The payments this book is in, within the same period: each payment's calculator limited to the book, and the roll-up of those payments.
+  const pay = svc.bookPayments(page.asin);
+  const since = `${shift(today.toISOString().slice(0, 7), -(Math.max(1, months) - 1))}-01`;
+  const inPeriod = pay.payments.filter((p) => !p.scheduled && p.paidOn >= since);
+  if (inPeriod.length) {
+    const pdir = path.join(dir, 'Payments');
+    await fsp.mkdir(pdir, { recursive: true });
+    for (const p of inPeriod) {
+      const f = svc.paymentFile(p.number, 'csv', null, page.asin);
+      const file = path.join(pdir, f.filename);
+      await fsp.writeFile(file, f.content);
+      out.push(file);
+    }
+    const rFrom = since.slice(0, 7);
+    const rTo = today.toISOString().slice(0, 7);
+    const roll = svc.payoutRollup(rFrom, rTo, page.asin);
+    const rf = svc.rollupFile(rFrom, rTo, 'csv', null, page.asin);
+    const rfile = path.join(pdir, rf.filename);
+    await fsp.writeFile(rfile, rf.content);
+    out.push(rfile);
+    if (pdf && roll.payees.length) out.push(...(await pdf.rollups(pdir, rFrom, rTo, roll.payees.map((p) => p.name), page.asin)));
+  }
   return out;
 }
 
@@ -154,7 +181,9 @@ export interface SaveOptions {
   months?: number;
   /** Categories exported per book are the top this many books. Market's own Export uses its page's setting; 50 is the page's usual. */
   topN?: number;
-  pdf?: PdfStatements | null;
+  pdf?: PdfWriters | null;
+  /** The day to measure "the last N months" of payments from; now by default. */
+  today?: Date;
 }
 
 export async function saveBook(svc: BookService, asin: string, what: 'market' | 'finance' | 'all', financeVisible: boolean, o: SaveOptions): Promise<BookSaveResult> {
@@ -166,7 +195,7 @@ export async function saveBook(svc: BookService, asin: string, what: 'market' | 
   const folder = await freshFolder(o.parent, `${slug(page.title)} (${asin})`);
   const files: string[] = [];
   if (what !== 'finance') files.push(...(await writeMarket(svc, page, path.join(folder, 'Market'), o.topN ?? 50)));
-  if (what !== 'market' && page.finance) files.push(...(await writeFinance(svc, page, path.join(folder, 'Finance'), o.months ?? 12, o.pdf ?? null)));
+  if (what !== 'market' && page.finance) files.push(...(await writeFinance(svc, page, path.join(folder, 'Finance'), o.months ?? 12, o.pdf ?? null, o.today ?? new Date())));
   if (!files.length) {
     await fsp.rm(folder, { recursive: true, force: true });
     throw new MyBooksError(what === 'market' ? 'This book is in none of the captured category lists, so there is no Market export for it yet.' : 'There is nothing to save for this book yet. Import a KDP report in Finance first.');
