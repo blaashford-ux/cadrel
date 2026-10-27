@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fsp, appendFileSync, readFileSync } from 'node:fs';
+import { promises as fsp, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
@@ -1347,10 +1347,24 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
   });
 }
 
+/**
+ * Asks the AI server processes AI apps started from this installation to leave. They run as this program (Cadrel's runtime acting as Node), so
+ * while one is alive Windows will not let an update replace the files. A fresh marker next to the program is their signal (see packages/mcp/src/lifecycle.ts).
+ */
+function retireAssistantServers(): void {
+  if (!app.isPackaged) return;
+  try {
+    writeFileSync(path.join(path.dirname(process.execPath), '.cadrel-retire'), '');
+  } catch (e) {
+    updateLog(`could not signal the assistant servers: ${(e as Error).message}`);
+  }
+}
+
 let finalSyncStarted = false;
 let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
+  if (installerToRun) retireAssistantServers();
   void write?.flush();
   void settings?.flush();
   void peopleHost.close();
@@ -1371,8 +1385,13 @@ app.on('before-quit', (e) => {
   }
 });
 
+// Windows are closed and nothing can cancel the quit now (a person still deciding about unsaved edits has not got here): from this point the process is
+// gone within 8 s whatever is still winding down, because a Cadrel that is "closed" but still running is what stops the next install or update.
+app.on('will-quit', () => setTimeout(() => app.exit(0), 8000).unref());
+
 app.on('quit', () => {
   if (!installerToRun) return;
+  retireAssistantServers();
   updateLog(`starting ${installerToRun}`);
   // Started the way a double-click starts it, through the shell: started directly it has failed its own integrity check now and then.
   const [cmd, args] = process.platform === 'win32' ? ['explorer.exe', [installerToRun]] : [installerToRun, []];

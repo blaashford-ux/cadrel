@@ -18,7 +18,7 @@ function PairCard() {
   return (
     <div className="card" aria-label="Pair the extension">
       <h2>Pair the browser extension</h2>
-      <p className="muted">Load the extension in Chrome (chrome://extensions, Developer mode, Load unpacked), click its icon, and type the code shown here. The code works once and expires after two minutes.</p>
+      <p className="muted">Load the extension in Chrome (chrome://extensions, Developer mode, Load unpacked, choosing the folder this button opens), click its icon, and type the code shown here. The code works once and expires after two minutes.</p>
       <div className="row">
         <button className="primary" onClick={() => { void api.pairingCode().then((r) => { setC(r); setLeft(120); }); }}>Show a pairing code</button>
         {c && <code style={{ fontSize: 22, letterSpacing: 4 }} aria-label="Pairing code">{c.code}</code>}

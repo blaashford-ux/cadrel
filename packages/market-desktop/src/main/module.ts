@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { ensureExtensionCopy } from './extensionCopy';
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { Logger } from './log.js';
 import { AppService, type McpBrand } from './service.js';
@@ -205,7 +206,8 @@ export function createMarketModule(host: MarketHost): MarketModule {
     exportData,
     importData,
     pairingCode: () => service.pairingCode(),
-    openExtensionFolder: () => shell.openPath(path.join(host.resourcesDir, 'extension')),
+    // Opened from a copy outside the install folder, so Chrome never holds the installed files open and an update is never blocked by it.
+    openExtensionFolder: async () => shell.openPath(await ensureExtensionCopy(path.join(host.resourcesDir, 'extension'), path.join(host.dataDir, 'chrome-extension'))),
     openLogs: async () => void (TEST ? undefined : shell.showItemInFolder(log.file)),
     settings: () => service.settings(),
     setSettings: (s) => {
@@ -279,6 +281,8 @@ export function createMarketModule(host: MarketHost): MarketModule {
   const send = (channel: string) => () => host.getContents()?.send(channel);
 
   async function start(): Promise<void> {
+    // Keep the Chrome extension's copy outside the install folder current (see extensionCopy.ts); not needed for anything else to start.
+    void ensureExtensionCopy(path.join(host.resourcesDir, 'extension'), path.join(host.dataDir, 'chrome-extension')).catch((e) => log.warn('could not refresh the extension copy', e));
     for (const ch of CHANNELS) {
       ipcMain.handle(ch, async (_e, ...args) => {
         try {
