@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { emptyTree, createProject, type ProjectTree } from '@cadrel/kernel';
-import { CATALOGUE_CALLS, CatalogueError, addFromMarket, catalogueCall, catalogueDetail, catalogueList, primaryAsin, type Sources } from '../src/main/catalogueBooks';
+import { CATALOGUE_CALLS, CatalogueError, addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, primaryAsin, type Sources } from '../src/main/catalogueBooks';
 import type { BookService } from '../src/main/mybooks';
 import { PeopleHost } from '../src/main/people';
 
@@ -93,5 +93,36 @@ describe('My Books on the catalogue', () => {
     await joined.open({ file: path.join(dir, 'j.db'), studioId: 'x', owned: false, ownerName: 'Ana' });
     expect(await catalogueList(sources({ people: joined }))).toMatchObject({ available: false, reason: expect.stringMatching(/owner/) });
     await expect(catalogueCall(joined, emptyTree(), 'createBook', [{ title: 'x' }])).rejects.toThrow(/owner/);
+  });
+});
+
+describe('deleting a book added by mistake', () => {
+  it('removes it from the catalogue and tells Market to remove what it holds under its ASINs', async () => {
+    const cat = host.service!.as(host.me).catalogue;
+    const b = await cat.createBook({ title: 'Oops' });
+    await cat.addEdition(b.id, { format: 'ebook', asin: 'B0AAAAAAA1' });
+    await cat.addEdition(b.id, { format: 'paperback', asin: 'B0CCCCCCC3' });
+    const seen: string[][] = [];
+    const out = await deleteBookEverywhere(host, { purgeBooks: (a) => (seen.push(a), a.length) }, b.id);
+    expect(out.asins.sort()).toEqual(['B0AAAAAAA1', 'B0CCCCCCC3']);
+    expect(seen).toEqual([out.asins]);
+    expect(await cat.book(b.id)).toBeNull();
+    await expect(deleteBookEverywhere(host, { purgeBooks: () => 0 }, b.id)).rejects.toThrow(/not there/);
+  });
+
+  it('touches Market only after the records agreed, and works without a library', async () => {
+    let called = false;
+    await expect(deleteBookEverywhere(host, { purgeBooks: () => ((called = true), 0) }, 'ghost')).rejects.toThrow();
+    expect(called).toBe(false);
+    const b = await host.service!.as(host.me).catalogue.createBook({ title: 'No library' });
+    expect(await deleteBookEverywhere(host, null, b.id)).toEqual({ asins: [] });
+  });
+
+  it('is refused for a role that may not archive', async () => {
+    const svc = host.service!;
+    const b = await svc.as(host.me).catalogue.createBook({ title: 'Mine' });
+    const stranger = await svc.as(host.me).people.create({ name: 'Cy Park', kind: 'contractor' });
+    await expect(svc.as(stranger.id).catalogue.deleteBook(b.id)).rejects.toThrow();
+    expect(await svc.as(host.me).catalogue.book(b.id)).not.toBeNull();
   });
 });

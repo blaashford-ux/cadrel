@@ -66,3 +66,19 @@ describe('a Studio’s pen names limit what Market imports and shows', () => {
     expect(svc.ownBooks().map((b) => b.asin)).toEqual([B]);
   });
 });
+
+describe('deleting a book from the library', () => {
+  it('removes its entry, sales, pages read, royalties and splits, and leaves the other books', () => {
+    scope = null;
+    svc.importSales('KDP.xlsx', report());
+    const person = svc.savePerson({ name: 'Bo' });
+    svc.setBookSplit(A, [{ personId: person.id, pct: 100 }]);
+    expect(Object.keys(svc.allSplits())).toContain(A);
+    expect(svc.purgeBooks([A])).toBe(1);
+    expect(svc.ownBooks().map((b) => b.asin)).toEqual([B]);
+    expect(svc.moneyMonths().length).toBeGreaterThan(0); // the other book's royalties remain
+    expect(Object.keys(svc.allSplits())).not.toContain(A);
+    expect(svc.ownBook(A)).toBeNull();
+    expect(() => svc.purgeBooks(['not an asin'])).toThrow();
+  });
+});

@@ -88,6 +88,19 @@ export async function catalogueCall(people: PeopleHost, tree: ProjectTree, name:
   return (svc.catalogue as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>)[name]!(...args);
 }
 
+/**
+ * Deletes a book added by mistake from everywhere this Studio keeps it: the catalogue's records (editions, project link, business records,
+ * log rows) and, under each ASIN its editions had, Market's pages and Finance's sales, royalties and splits. The project it was made in stays.
+ * The records go first and are checked against the person's permission; Market is cleaned only after that succeeded.
+ */
+export async function deleteBookEverywhere(people: PeopleHost, market: { purgeBooks(asins: string[]): number } | null, bookId: string): Promise<{ asins: string[] }> {
+  const svc = people.service?.as(people.me);
+  if (!svc) throw new CatalogueError('This Studio’s books are managed by its owner.');
+  const { asins } = await svc.catalogue.deleteBook(String(bookId));
+  if (market && asins.length) market.purgeBooks(asins);
+  return { asins };
+}
+
 /** Adds Market's own books to the catalogue as one book each, with an ebook edition carrying the ASIN. A book whose title is taken is added under its title and ASIN. */
 export async function addFromMarket(people: PeopleHost, market: BookService, asins: string[]): Promise<{ added: string[]; skipped: { asin: string; reason: string }[] }> {
   const svc = people.service?.as(people.me);

@@ -37,7 +37,7 @@ import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
-import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
+import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
@@ -888,6 +888,7 @@ function registerShellIpc(): void {
   manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
   manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
   manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
   manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));

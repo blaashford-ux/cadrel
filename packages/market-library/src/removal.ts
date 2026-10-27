@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Db } from './schema.js';
 import { removeVec } from './chunks.js';
 import { isAsin } from './layout.js';
+import { exportUserData } from './userdata.js';
 
 /**
  * Taking books out. Two different things:
@@ -154,4 +155,22 @@ export function refreshDerived(db: Db): { coverMetrics: number; chunks: number }
     for (const c of orphans) { removeVec(db, c.id); db.prepare('DELETE FROM chunk WHERE id = ?').run(c.id); }
     return { coverMetrics, chunks: orphans.length };
   })();
+}
+
+/**
+ * Removes every trace of a book from the library, for one added by mistake: its captured pages, covers, text and notes (as removeBook), and
+ * also the own-book entry, imported sales, pages read, royalties, rank history, page count, splits and category exclusions under its ASIN.
+ * KDP's payment report and monthly summary are account-wide and stay. The KDP files saved on disk stay as the person downloaded them, so
+ * importing the same report again would bring the book back (a Studio limited to its pen names will not take it unless it is theirs).
+ */
+export function purgeBook(db: Db, root: string, asin: string): { asin: string; rows: number } {
+  if (!isAsin(asin)) throw new Error('bad ASIN');
+  try { removeBook(db, root, asin); } catch (e) { if (!/no captured book/.test(String((e as Error).message))) throw e; }
+  let rows = 0;
+  db.transaction(() => {
+    for (const t of ['own_book', 'sales_day', 'kenp_day', 'royalty_month', 'rank_point', 'book_kenpc', 'book_split', 'category_exclusion', 'search_entry', 'queue_item', 'annotation'])
+      rows += Number(db.prepare(`DELETE FROM ${t} WHERE asin = ?`).run(asin).changes);
+  })();
+  exportUserData(db, root);
+  return { asin, rows };
 }

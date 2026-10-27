@@ -19,7 +19,7 @@ import { resetVectors } from './embeddings.js';
 import { addAnnotation, exportUserData, importUserData, removeAnnotation } from './userdata.js';
 import { setQueueState } from './queries.js';
 import { reindexCommunity } from './community.js';
-import { excludeFromCategory, excludedAsins, insertListEntry, refreshDerived, removeBook, restoreToCategory, type RemovedBook } from './removal.js';
+import { excludeFromCategory, excludedAsins, insertListEntry, refreshDerived, removeBook, purgeBook, restoreToCategory, type RemovedBook } from './removal.js';
 import { reindexSales } from './sales/import.js';
 import type { AuthorScope } from './sales/scope.js';
 import { reindexManuscripts, removeManuscript, saveManuscript, type ManuscriptInput, type ManuscriptRow, type TextSource } from './manuscripts.js';
@@ -133,6 +133,13 @@ export class Library {
     const r = removeBook(this.db, this.root, asin, o);
     refreshDerived(this.db);
     exportUserData(this.db, this.root);
+    return r;
+  }
+
+  /** Remove every trace of a book added by mistake (see purgeBook). */
+  purge(asin: string): { asin: string; rows: number } {
+    const r = purgeBook(this.db, this.root, asin);
+    refreshDerived(this.db);
     return r;
   }
 
