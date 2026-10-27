@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kern
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -585,7 +585,35 @@ export interface MineState {
   tasks: OnProject<TaskRecord>[];
   approvals: OnProject<ApprovalRecord>[];
 }
+/** One live project in the pipeline: where it is in its workflow and what is due on it. */
+export interface PlanProject {
+  id: string;
+  name: string;
+  /** The names of the projects above it, outermost first. */
+  path: string[];
+  kind: string;
+  workflowId: string | null;
+  stage: string | null;
+  openTasks: number;
+  late: number;
+  /** The earliest date of an open task or deadline on the project itself, or null. */
+  nextDue: string | null;
+}
+/** The pipeline and the calendar: every live project by workflow and stage, and every task and deadline that is not cancelled. */
+export type PlanState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      today: string;
+      people: { id: string; name: string }[];
+      /** The workflows in use, with their stages in order. */
+      workflows: { id: string; name: string; stages: { key: string; name: string; color: string; category: string }[] }[];
+      projects: PlanProject[];
+      tasks: OnProject<TaskRecord>[];
+    };
 export interface WorkApi {
+  plan(): Promise<PlanState>;
   state(projectId: string): Promise<WorkState>;
   mine(): Promise<MineState>;
   createTask(i: NewTask): Promise<TaskRecord>;

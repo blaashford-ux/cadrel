@@ -100,6 +100,12 @@ export class ProjectStages {
     return out;
   }
 
+  /** The workflows with these ids (those in use, for the pipeline). */
+  async workflowsInUse(ids: string[]): Promise<WorkflowRecord[]> {
+    const wfs = this.workflows();
+    return wfs ? (await wfs.list()).filter((w) => ids.includes(w.id)) : [];
+  }
+
   /** How many projects use a workflow, and how many are in each of its stages. */
   async usage(workflowId: string): Promise<WorkflowUsage> {
     const used = (await this.studio.studio.read()).tree.projects.filter((p) => p.workflowId === workflowId);

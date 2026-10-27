@@ -190,4 +190,24 @@ describe('gates that ask for finished tasks and sign-off', () => {
     await expect(work().call('createTask', [{ projectId: p.id, title: 'x' }])).rejects.toThrow(/archived/);
     for (const bad of ['tasks', 'constructor', '__proto__', 'state']) await expect(work().call(bad, [])).rejects.toThrow(/not something/);
   });
+
+  it('plans: each live project in its workflow and stage with its open work, late work counted, archived ones left out', async () => {
+    const series = await mgr.create({ name: 'Series', template: null });
+    const book = await mgr.create({ name: 'Book', parentId: series.id, template: null });
+    const old = await mgr.create({ name: 'Old', template: null });
+    const w = work();
+    await w.call('createTask', [{ projectId: book.id, title: 'Late one', due: '2020-01-01' }]);
+    await w.call('createTask', [{ projectId: book.id, title: 'Launch', kind: 'deadline', due: '2999-01-01' }]);
+    const gone = (await w.call('createTask', [{ projectId: book.id, title: 'Dropped' }])) as { id: string };
+    await w.call('setState', [gone.id, 'cancelled']);
+    await w.call('createTask', [{ projectId: old.id, title: 'Hidden' }]);
+    await mgr.archive(old.id, true);
+    const plan = await new ProjectWork(studio, host, stages).plan();
+    if (!plan.available) throw new Error('expected a plan');
+    expect(plan.projects.map((p) => p.name).sort()).toEqual(['Book', 'Series']);
+    expect(plan.projects.find((p) => p.name === 'Book')).toMatchObject({ path: ['Series'], stage: 'planning', openTasks: 1, late: 1, nextDue: '2020-01-01' });
+    expect(plan.workflows).toHaveLength(1);
+    expect(plan.workflows[0]!.stages.map((s) => s.name)).toEqual(['Planning', 'Drafting', 'Revising', 'Editing', 'Published', 'On hold']);
+    expect(plan.tasks.map((t) => t.title).sort()).toEqual(['Late one', 'Launch']); // cancelled and archived work is not planned
+  });
 });

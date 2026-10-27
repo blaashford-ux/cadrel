@@ -3,9 +3,10 @@
  * service) joined to the project tree (a file) for names and for "this project and its subprojects". Electron-free; tested in
  * test/projectWork.test.ts.
  */
-import { getProject, subtreeIds } from '@cadrel/kernel';
-import type { WorkState, MineState } from '../shared/api';
+import { ancestorsOf, getProject, kindLabel, subtreeIds } from '@cadrel/kernel';
+import type { MineState, PlanState, WorkState } from '../shared/api';
 import type { PeopleHost } from './people';
+import type { ProjectStages } from './stages';
 import type { StudioService } from './studio';
 
 export class WorkError extends Error {}
@@ -15,7 +16,7 @@ export const WORK_CALL_NAMES = ['createTask', 'updateTask', 'setState', 'addDepe
 const NEEDS_PROJECT = new Set(['createTask', 'requestApproval', 'record']);
 
 export class ProjectWork {
-  constructor(private readonly studio: StudioService, private readonly people: PeopleHost) {}
+  constructor(private readonly studio: StudioService, private readonly people: PeopleHost, private readonly stages: ProjectStages | null = null) {}
 
   private async tree() {
     return (await this.studio.studio.read()).tree;
@@ -38,6 +39,34 @@ export class ProjectWork {
       tasks: tasks.map((t) => ({ ...t, projectName: name(t.projectId) })),
       approvals: approvals.map((a) => ({ ...a, projectName: name(a.projectId) })),
       decisions: decisions.map((d) => ({ ...d, projectName: name(d.projectId) }))
+    };
+  }
+
+  /** The pipeline and the calendar: every live project with its stage, and every task and deadline (finished ones too, so the calendar shows what was done). */
+  async plan(): Promise<PlanState> {
+    const work = this.people.work;
+    if (!work) return { available: false, reason: 'Planning for this Studio is managed by its owner.' };
+    const tree = await this.tree();
+    const live = tree.projects.filter((p) => p.status !== 'archived' && !ancestorsOf(tree, p.id).some((a) => a.status === 'archived'));
+    const liveIds = new Set(live.map((p) => p.id));
+    const [tasks, people, views] = await Promise.all([work.tasks({ projectIds: [...liveIds], state: 'any' }), this.people.peopleList(), this.stages ? this.stages.views() : Promise.resolve({})]);
+    const today = new Date().toISOString().slice(0, 10);
+    const shown = tasks.filter((t) => t.state !== 'cancelled');
+    const inUse = new Map<string, { id: string; name: string; stages: { key: string; name: string; color: string; category: string }[] }>();
+    if (this.stages) for (const w of await this.stages.workflowsInUse([...new Set(live.map((p) => p.workflowId).filter((x): x is string => !!x))])) inUse.set(w.id, { id: w.id, name: w.name, stages: w.stages.map(({ key, name, color, category }) => ({ key, name, color, category })) });
+    return {
+      available: true, me: this.people.me, today, people,
+      workflows: [...inUse.values()],
+      projects: live.map((p) => {
+        const mine = shown.filter((t) => t.projectId === p.id && t.state === 'open');
+        const dated = mine.filter((t) => t.due).map((t) => t.due!).sort();
+        return {
+          id: p.id, name: p.name, path: ancestorsOf(tree, p.id).map((a) => a.name), kind: kindLabel(tree, p),
+          workflowId: p.workflowId, stage: (views as Record<string, { stage: { key: string } | null }>)[p.id]?.stage?.key ?? null,
+          openTasks: mine.filter((t) => t.kind === 'task').length, late: mine.filter((t) => t.due && t.due < today).length, nextDue: dated[0] ?? null
+        };
+      }),
+      tasks: shown.map((t) => ({ ...t, projectName: getProject(tree, t.projectId)?.name ?? '(removed project)' }))
     };
   }
 

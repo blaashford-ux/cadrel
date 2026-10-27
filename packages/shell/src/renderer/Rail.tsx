@@ -18,6 +18,7 @@ const TOP: Item[] = [
   { page: 'home', label: 'Home', icon: svg('M3 11.5 12 4l9 7.5M5.5 10v9.5h5v-5.5h3v5.5h5V10') },
   { page: 'mybooks', label: 'My Books', icon: svg('M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15.5H6.5A1.5 1.5 0 0 0 5 20V4.5ZM5 20a1.5 1.5 0 0 0 1.5 1.5H19M9 7h6M9 10.5h6') },
   { page: 'dashboard', label: 'Dashboard', icon: svg('M4 20V10m6 10V4m6 16v-7m4 7H2') },
+  { page: 'planner', label: 'Planner', icon: svg('M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5v12a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-12ZM4 10h16M8 3.5V7m8-3.5V7') },
   { page: 'projects', label: 'Projects', icon: svg('M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-10Z') },
   { page: 'notes', label: 'Notes', icon: svg('M5 4.5h14v11.5l-4 4H5v-15.5ZM15 20v-4h4M8 9h8M8 12.5h5') }
 ];

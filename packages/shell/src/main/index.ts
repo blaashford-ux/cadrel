@@ -530,7 +530,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
@@ -837,9 +837,10 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
-  manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost).state(String(projectId)));
-  manageLike('work:mine', async () => new ProjectWork(studio, peopleHost).mine());
-  manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost).call(String(name), args));
+  manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost, stages).state(String(projectId)));
+  manageLike('work:plan', async () => new ProjectWork(studio, peopleHost, stages).plan());
+  manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
+  manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
