@@ -86,10 +86,10 @@ export function makeProjects(fs: FsPort) {
     await writeFileAtomic(marksPath(dir), JSON.stringify(marks, null, 2) + '\n');
   }
 
-  /** project.json never holds the marks (they would be overwritten, not merged, when two devices sync). */
+  /** project.json never holds the marks (they would be overwritten, not merged, when two devices sync), nor the host's stage. */
   async function writeMeta(dir: string, meta: ProjectMeta): Promise<void> {
     await fs.mkdir(joinPath(dir, PROJECT_DIR), { recursive: true });
-    await writeFileAtomic(metaPath(dir), JSON.stringify({ ...meta, editedChapters: {} }, null, 2) + '\n');
+    await writeFileAtomic(metaPath(dir), JSON.stringify({ ...meta, stage: undefined, editedChapters: {} }, null, 2) + '\n');
   }
 
   /** Merges a partial change into a project's metadata (sanitised) and saves it. */

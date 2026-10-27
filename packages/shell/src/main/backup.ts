@@ -266,7 +266,6 @@ export interface ImportPreview {
   name: string;
   /** The name it will have in Cadrel (the same unless that is taken). */
   asName: string;
-  status: string;
   files: number;
   bytes: number;
   chapterFiles: number;
@@ -334,7 +333,7 @@ export async function previewMdeditImport(source: string, projectsDir: string): 
   const prior = (await importedIds(projectsDir)).get(meta.id) ?? null;
   const drive = notCarried.some((n) => n.endsWith('collab-base.json'));
   return {
-    source, sourceId: meta.id, name: meta.name, asName: uniqueName(path.basename(source), existing), status: meta.status, files, bytes, chapterFiles,
+    source, sourceId: meta.id, name: meta.name, asName: uniqueName(path.basename(source), existing), files, bytes, chapterFiles,
     hasGoal: !!meta.goal || Object.keys(meta.manuscriptGoals).length > 0, reviewFiles,
     editedMarks: marks ? Object.values(marks.files).reduce((n, f) => n + Object.keys(f).length, 0) : Object.values(meta.editedChapters).reduce((n, a) => n + a.length, 0),
     alreadyImportedAs: prior,

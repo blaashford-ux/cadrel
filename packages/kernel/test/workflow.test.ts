@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  MDEDIT_STAGES, WorkflowError, newStageKey, addEdition, bootstrapStudio, createBook, createRole, createSeries, createWorkflow, defaultWorkflow, deleteRole, deleteWorkflow, ensureDefaultWorkflow, getBook, grantRole,
-  listWorkflows, saveWorkflow, setBookStage, setDefaultWorkflow, stageOptions, unmetConditions, updateBook, type Ctx, type WorkflowDraft, type WorkflowRecord
+  MDEDIT_STAGES, PROJECT_LEVELS, WorkflowError, adoptWorkflow, checkMove, createProject, createRole, createWorkflow, defaultWorkflow, deleteRole, deleteWorkflow, ensureDefaultWorkflow, initialStage,
+  listWorkflows, newStageKey, saveWorkflow, setDefaultWorkflow, setProjectStage, stageOptions, unmetConditions, updateProject, emptyTree, ProjectError, sanitizeTree,
+  type Ctx, type ProjectFacts, type WorkflowDraft, type WorkflowRecord
 } from '../src/index';
 import type { Db } from '../src/vault';
 import { memoryDb } from './sqlite';
@@ -15,22 +16,23 @@ beforeEach(async () => {
 const code = async (p: Promise<unknown>) => p.then(() => 'ok', (e) => (e instanceof WorkflowError ? e.code : `other:${(e as Error).message}`));
 const anyone = () => true;
 const nobody = () => false;
-/** A draft that keeps a workflow as it is. */
+const facts = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], ...over });
 const asDraft = (w: WorkflowRecord): WorkflowDraft => ({ name: w.name, description: w.description, stages: w.stages.map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color })), transitions: w.transitions });
 
 describe('the shipped default', () => {
-  it('is MDEdit’s stages in its order, with every move open, and is the default', async () => {
+  it('is MDEdit’s stages in its order with every move open, and the default for projects and for subprojects', async () => {
     const [w] = await listWorkflows(db, ctx());
-    expect(w).toMatchObject({ name: 'Writing and publishing', isDefault: true, templateKey: 'mdedit', books: 0 });
+    expect(w).toMatchObject({ name: 'Writing and publishing', defaultFor: ['project', 'subproject'], templateKey: 'mdedit' });
     expect(w!.stages.map((s) => [s.key, s.name])).toEqual([['planning', 'Planning'], ['drafting', 'Drafting'], ['revising', 'Revising'], ['editing', 'Editing'], ['published', 'Published'], ['paused', 'On hold']]);
-    expect(w!.stages.map((s) => s.position)).toEqual([0, 1, 2, 3, 4, 5]);
-    expect(w!.transitions).toHaveLength(30); // each of six stages to the five others
+    expect(w!.transitions).toHaveLength(30);
     expect(w!.transitions.every((t) => t.roleIds.length === 0 && t.conditions.length === 0)).toBe(true);
-    expect((await defaultWorkflow(db, ctx()))!.id).toBe(w!.id);
+    expect((await defaultWorkflow(db, ctx(), 'project'))!.id).toBe(w!.id);
+    expect((await defaultWorkflow(db, ctx(), 'subproject'))!.id).toBe(w!.id);
     expect(MDEDIT_STAGES.map((s) => s.key)).toEqual(w!.stages.map((s) => s.key));
+    expect(initialStage(w!)).toBe('planning');
   });
 
-  it('is made once: asking again does nothing, and a studio that deleted or replaced it does not get it back', async () => {
+  it('is made once, and does not come back when an administrator has replaced it', async () => {
     expect(await ensureDefaultWorkflow(db, ctx())).toBe(false);
     const mine = await createWorkflow(db, ctx(), { name: 'Mine' });
     await setDefaultWorkflow(db, ctx(), mine.id);
@@ -39,61 +41,65 @@ describe('the shipped default', () => {
     expect(await ensureDefaultWorkflow(db, ctx())).toBe(false);
     expect((await listWorkflows(db, ctx())).map((w) => w.name)).toEqual(['Mine']);
   });
-
-  it('starts a new book at the first stage of the default, and a book keeps its workflow when the default changes', async () => {
-    const b = await createBook(db, ctx(), { title: 'Landfall' });
-    expect(b).toMatchObject({ stage: 'planning', workflowId: 'workflow_default' });
-    const other = await createWorkflow(db, ctx(), { name: 'Short run', copyFrom: 'workflow_default' });
-    await setDefaultWorkflow(db, ctx(), other.id);
-    expect((await createBook(db, ctx(), { title: 'Second' })).workflowId).toBe(other.id);
-    expect((await getBook(db, ctx(), b.id))!.workflowId).toBe('workflow_default');
-    expect((await listWorkflows(db, ctx())).find((w) => w.id === 'workflow_default')!.books).toBe(1);
-  });
 });
 
-describe('building workflows', () => {
-  it('makes a blank one with a single stage, or a copy, never the default until chosen, with unique names', async () => {
+describe('several workflows, with a default for each level', () => {
+  it('lets a Series live by one workflow and its Books by another: each level has its own default', async () => {
+    const series = await createWorkflow(db, ctx(), { name: 'Series lifecycle', copyFrom: 'workflow_default' });
+    const book = await createWorkflow(db, ctx(), { name: 'Book production' });
+    await setDefaultWorkflow(db, ctx(), series.id, ['project']);
+    await setDefaultWorkflow(db, ctx(), book.id, ['subproject']);
+    expect((await defaultWorkflow(db, ctx(), 'project'))!.name).toBe('Series lifecycle');
+    expect((await defaultWorkflow(db, ctx(), 'subproject'))!.name).toBe('Book production');
+    const all = await listWorkflows(db, ctx());
+    expect(all.find((w) => w.id === 'workflow_default')!.defaultFor).toEqual([]);
+    expect(all.filter((w) => w.defaultFor.includes('project'))).toHaveLength(1);
+    expect(all.filter((w) => w.defaultFor.includes('subproject'))).toHaveLength(1);
+    await setDefaultWorkflow(db, ctx(), series.id); // both
+    expect((await defaultWorkflow(db, ctx(), 'subproject'))!.name).toBe('Series lifecycle');
+    expect(await code(setDefaultWorkflow(db, ctx(), series.id, []))).toBe('invalid');
+    expect(await code(setDefaultWorkflow(db, ctx(), series.id, ['galaxy' as never]))).toBe('invalid');
+    expect(await code(setDefaultWorkflow(db, ctx(), 'nope'))).toBe('not-found');
+    expect([...PROJECT_LEVELS]).toEqual(['project', 'subproject']);
+  });
+
+  it('refuses to delete a default (for either level) or a workflow projects use, and deletes an unused one cleanly', async () => {
+    const a = await createWorkflow(db, ctx(), { name: 'A' });
+    expect(await code(deleteWorkflow(db, ctx(), 'workflow_default'))).toBe('conflict');
+    await setDefaultWorkflow(db, ctx(), a.id, ['subproject']);
+    expect(await code(deleteWorkflow(db, ctx(), a.id))).toBe('conflict');
+    await setDefaultWorkflow(db, ctx(), 'workflow_default');
+    expect(await code(deleteWorkflow(db, ctx(), a.id, { projects: 2, byStage: {} }))).toBe('conflict'); // two projects use it
+    await deleteWorkflow(db, ctx(), a.id, { projects: 0, byStage: {} });
+    expect(await db.all('SELECT 1 FROM workflow_stage WHERE workflow_id = ?', [a.id])).toEqual([]);
+    expect(await code(deleteWorkflow(db, ctx(), 'nope'))).toBe('not-found');
+  });
+
+  it('makes a blank one with a single stage, or a copy; never a default until chosen; unique names', async () => {
     const blank = await createWorkflow(db, ctx(), { name: 'Audio', description: 'Narration' });
-    expect(blank).toMatchObject({ isDefault: false, templateKey: null, stages: [{ key: 'start', name: 'Start', category: 'start' }], transitions: [] });
+    expect(blank).toMatchObject({ defaultFor: [], templateKey: null, stages: [{ key: 'start', name: 'Start', category: 'start' }], transitions: [] });
     const copy = await createWorkflow(db, ctx(), { name: 'Copy', copyFrom: 'workflow_default' });
     expect(copy.stages).toHaveLength(6);
     expect(copy.transitions).toHaveLength(30);
     expect(await code(createWorkflow(db, ctx(), { name: 'audio' }))).toBe('exists');
     expect(await code(createWorkflow(db, ctx(), { name: ' ' }))).toBe('invalid');
     expect(await code(createWorkflow(db, ctx(), { name: 'X', copyFrom: 'nope' }))).toBe('not-found');
-    expect((await listWorkflows(db, ctx())).filter((w) => w.isDefault)).toHaveLength(1);
   });
+});
 
-  it('keeps exactly one default, and refuses to delete it or a workflow with books in it', async () => {
-    const a = await createWorkflow(db, ctx(), { name: 'A' });
-    await setDefaultWorkflow(db, ctx(), a.id);
-    expect((await listWorkflows(db, ctx())).filter((w) => w.isDefault).map((w) => w.name)).toEqual(['A']);
-    expect(await code(deleteWorkflow(db, ctx(), a.id))).toBe('conflict');
-    await createBook(db, ctx(), { title: 'In A' });
-    await setDefaultWorkflow(db, ctx(), 'workflow_default');
-    expect(await code(deleteWorkflow(db, ctx(), a.id))).toBe('conflict'); // a book is in it
-    const empty = await createWorkflow(db, ctx(), { name: 'Empty' });
-    await deleteWorkflow(db, ctx(), empty.id);
-    expect(await db.all('SELECT 1 FROM workflow_stage WHERE workflow_id = ?', [empty.id])).toEqual([]);
-    expect(await code(setDefaultWorkflow(db, ctx(), 'nope'))).toBe('not-found');
-  });
-
-  it('saves a whole definition: new stages get keys from their names, existing keys are kept, renaming and reordering move no book', async () => {
-    const book = await createBook(db, ctx(), { title: 'Landfall' });
+describe('building a workflow', () => {
+  it('saves a whole definition: new stages get keys from their names, existing keys are kept, renaming and reordering keep the keys', async () => {
     const w = (await defaultWorkflow(db, ctx()))!;
-    const draft = asDraft(w);
-    draft.stages = [{ key: 'planning', name: 'Concept' }, { name: 'Proof reading', category: 'review', color: '#aabbcc' }, ...draft.stages.slice(1)];
-    draft.transitions = [...w.transitions, { from: 'planning', to: 'proof-reading' }, { from: 'proof-reading', to: 'drafting' }];
-    const saved = await saveWorkflow(db, ctx(), w.id, draft);
+    const d = asDraft(w);
+    d.stages = [{ key: 'planning', name: 'Concept' }, { name: 'Proof reading', category: 'review', color: '#aabbcc' }, ...d.stages.slice(1)];
+    d.transitions = [...w.transitions, { from: 'planning', to: 'proof-reading' }, { from: 'proof-reading', to: 'drafting' }];
+    const saved = await saveWorkflow(db, ctx(), w.id, d);
     expect(saved.stages.map((s) => [s.key, s.name])).toEqual([['planning', 'Concept'], ['proof-reading', 'Proof reading'], ['drafting', 'Drafting'], ['revising', 'Revising'], ['editing', 'Editing'], ['published', 'Published'], ['paused', 'On hold']]);
     expect(saved.stages[1]).toMatchObject({ category: 'review', color: '#aabbcc', position: 1 });
-    expect((await getBook(db, ctx(), book.id))!.stage).toBe('planning'); // still the same stage, now called Concept
-    // a second stage with the same name gets a different key
-    const again = await saveWorkflow(db, ctx(), w.id, { ...asDraft(saved), stages: [...asDraft(saved).stages, { name: 'Proof-reading' }].slice(0, 7) });
-    expect(again.stages).toHaveLength(7);
+    expect(saved.defaultFor).toEqual(['project', 'subproject']); // saving keeps what it is the default for
   });
 
-  it('lets a new stage bring its own key, so a move can name it in the same save, and gives clashing names different keys', async () => {
+  it('lets a new stage bring its own key so a move can name it in the same save, and gives clashing names different keys', async () => {
     const w = (await defaultWorkflow(db, ctx()))!;
     const d = asDraft(w);
     const saved = await saveWorkflow(db, ctx(), w.id, { ...d, stages: [...d.stages, { key: 'proof', name: 'Proofing' }, { name: 'Drafting 2' }], transitions: [...d.transitions, { from: 'editing', to: 'proof' }] });
@@ -122,15 +128,15 @@ describe('building workflows', () => {
     expect((await defaultWorkflow(db, ctx()))!.stages).toHaveLength(6); // a refused save changed nothing
   });
 
-  it('removing a stage that has books needs a stage to move them to, and does move them', async () => {
+  it('removing a stage that projects are in needs a stage for them to go to', async () => {
     const w = (await defaultWorkflow(db, ctx()))!;
-    const b = await createBook(db, ctx(), { title: 'Landfall' }); // in planning
     const without = { ...asDraft(w), stages: asDraft(w).stages.filter((s) => s.key !== 'planning'), transitions: w.transitions.filter((t) => t.from !== 'planning' && t.to !== 'planning') };
-    expect(await code(saveWorkflow(db, ctx(), w.id, without))).toBe('conflict');
-    expect(await code(saveWorkflow(db, ctx(), w.id, { ...without, moveBooks: { planning: 'nowhere' } }))).toBe('invalid');
-    await saveWorkflow(db, ctx(), w.id, { ...without, moveBooks: { planning: 'drafting' } });
-    expect((await getBook(db, ctx(), b.id))!.stage).toBe('drafting');
+    const usage = { projects: 3, byStage: { planning: 2, drafting: 1 } };
+    expect(await code(saveWorkflow(db, ctx(), w.id, without, usage))).toBe('conflict');
+    expect(await code(saveWorkflow(db, ctx(), w.id, { ...without, moveProjects: { planning: 'nowhere' } }, usage))).toBe('invalid');
+    await saveWorkflow(db, ctx(), w.id, { ...without, moveProjects: { planning: 'drafting' } }, usage);
     expect((await defaultWorkflow(db, ctx()))!.stages.map((s) => s.key)).not.toContain('planning');
+    expect(await code(saveWorkflow(db, ctx(), w.id, { ...asDraft((await defaultWorkflow(db, ctx()))!), stages: [{ key: 'published', name: 'Published' }], transitions: [] }, { projects: 1, byStage: { editing: 0 } }))).toBe('ok'); // an unused stage may go
   });
 
   it('keeps a gate’s roles and conditions, validates them, and one saved workflow does not touch another', async () => {
@@ -138,17 +144,16 @@ describe('building workflows', () => {
     const a = await createWorkflow(db, ctx(), { name: 'A', copyFrom: 'workflow_default' });
     const b = await createWorkflow(db, ctx(), { name: 'B', copyFrom: 'workflow_default' });
     const d = asDraft(a);
-    d.transitions = d.transitions.map((t) => (t.from === 'editing' && t.to === 'published' ? { ...t, roleIds: [role.id], conditions: [{ kind: 'asin' as const }, { kind: 'published_date' as const, format: 'ebook' }, { kind: 'asin' as const }] } : t));
+    d.transitions = d.transitions.map((t) => (t.from === 'editing' && t.to === 'published' ? { ...t, roleIds: [role.id], conditions: [{ kind: 'no_open_notes' as const }, { kind: 'has_manuscript' as const }, { kind: 'no_open_notes' as const }] } : t));
     const saved = await saveWorkflow(db, ctx(), a.id, d);
     const gate = saved.transitions.find((t) => t.from === 'editing' && t.to === 'published')!;
     expect(gate.roleIds).toEqual([role.id]);
-    expect(gate.conditions).toEqual([{ kind: 'asin' }, { kind: 'published_date', format: 'ebook' }]); // the repeat was dropped
+    expect(gate.conditions).toEqual([{ kind: 'no_open_notes' }, { kind: 'has_manuscript' }]); // the repeat was dropped
     expect((await listWorkflows(db, ctx())).find((w) => w.id === b.id)!.transitions.find((t) => t.from === 'editing' && t.to === 'published')).toMatchObject({ roleIds: [], conditions: [] });
     const bad = (conditions: unknown, roleIds: string[] = []) => code(saveWorkflow(db, ctx(), a.id, { ...d, transitions: [{ from: 'editing', to: 'published', roleIds, conditions: conditions as never }] }));
     expect(await bad([{ kind: 'vibes' }])).toBe('invalid');
-    expect(await bad([{ kind: 'series', format: 'ebook' }])).toBe('invalid');
-    expect(await bad([{ kind: 'asin', format: 'vinyl' }])).toBe('invalid');
-    expect(await bad('asin')).toBe('invalid');
+    expect(await bad([{ kind: 'asin' }])).toBe('invalid'); // a catalogue check from an earlier design is not a condition any more
+    expect(await bad('no_open_notes')).toBe('invalid');
     expect(await bad([], ['no-such-role'])).toBe('not-found');
     expect(await bad([{ kind: 'constructor' }])).toBe('invalid');
   });
@@ -165,82 +170,56 @@ describe('building workflows', () => {
   });
 });
 
-describe('moving a book through its stages', () => {
-  it('moves freely in the shipped workflow, as MDEdit did, and records each move', async () => {
-    const b = await createBook(db, ctx(), { title: 'Landfall' });
-    expect(await setBookStage(db, ctx({ actor: 'bo' }), b.id, 'drafting', anyone)).toMatchObject({ from: 'planning', to: 'drafting' });
-    await setBookStage(db, ctx(), b.id, 'published', anyone);
-    await setBookStage(db, ctx(), b.id, 'planning', anyone); // backwards is fine too
-    expect((await getBook(db, ctx(), b.id))!.stage).toBe('planning');
-    const log = await db.all<{ actor: string; detail: string }>("SELECT actor, detail FROM audit WHERE action = 'catalogue.book.stage' ORDER BY id");
-    expect(log).toHaveLength(3);
-    expect(log[0]!.actor).toBe('bo');
-    expect(JSON.parse(log[0]!.detail)).toMatchObject({ from: 'planning', to: 'drafting' });
-    expect(await code(setBookStage(db, ctx(), b.id, 'planning', anyone))).toBe('invalid'); // already there
-    expect(await code(setBookStage(db, ctx(), b.id, 'nowhere', anyone))).toBe('gated');
-    expect(await code(setBookStage(db, ctx(), 'nope', 'drafting', anyone))).toBe('not-found');
+describe('moving a project through its stages', () => {
+  const wf = async () => (await defaultWorkflow(db, ctx()))!;
+
+  it('moves freely in the shipped workflow, as MDEdit did, forward and back', async () => {
+    const w = await wf();
+    expect(() => checkMove(w, 'planning', 'drafting', facts(), anyone)).not.toThrow();
+    expect(() => checkMove(w, 'drafting', 'published', facts(), anyone)).not.toThrow();
+    expect(() => checkMove(w, 'published', 'planning', facts(), anyone)).not.toThrow();
+    expect(() => checkMove(w, 'planning', 'planning', facts(), anyone)).toThrow(/already in Planning/);
+    expect(() => checkMove(w, 'planning', 'nowhere', facts(), anyone)).toThrow(/not in this project’s workflow/);
+    const { current, options } = stageOptions(w, 'planning', facts(), anyone);
+    expect(current).toMatchObject({ key: 'planning' });
+    expect(options.map((o) => o.name)).toEqual(['Drafting', 'Revising', 'Editing', 'Published', 'On hold']);
   });
 
   it('refuses a move the workflow does not have, and one whose gate is closed, saying every reason', async () => {
-    const w = (await defaultWorkflow(db, ctx()))!;
-    await saveWorkflow(db, ctx(), w.id, {
-      ...asDraft(w),
+    const w0 = await wf();
+    const w = await saveWorkflow(db, ctx(), w0.id, {
+      ...asDraft(w0),
       transitions: [
         { from: 'planning', to: 'drafting' }, { from: 'drafting', to: 'editing' },
-        { from: 'editing', to: 'published', conditions: [{ kind: 'edition' }, { kind: 'asin', format: 'ebook' }, { kind: 'series' }, { kind: 'pen_name' }] }
+        { from: 'editing', to: 'published', conditions: [{ kind: 'has_manuscript' }, { kind: 'no_open_notes' }, { kind: 'subprojects_done' }] }
       ]
     });
-    const b = await createBook(db, ctx(), { title: 'Landfall' });
-    await expect(setBookStage(db, ctx(), b.id, 'published', anyone)).rejects.toThrow(/no move from Planning to Published/);
-    await setBookStage(db, ctx(), b.id, 'drafting', anyone);
-    await setBookStage(db, ctx(), b.id, 'editing', anyone);
-    const err = await setBookStage(db, ctx(), b.id, 'published', anyone).then(() => null, (e) => e as WorkflowError);
+    expect(() => checkMove(w, 'planning', 'published', facts(), anyone)).toThrow(/no move from Planning to Published/);
+    let err: WorkflowError | null = null;
+    try { checkMove(w, 'editing', 'published', facts({ openNotes: 3, subprojects: ['done', 'active'] }), anyone); } catch (e) { err = e as WorkflowError; }
     expect(err).toBeInstanceOf(WorkflowError);
     expect(err!.code).toBe('gated');
-    expect(err!.reasons).toEqual(['The book has at least one edition', 'An edition has an ASIN on the ebook edition', 'The book is in a series', 'The book has a pen name']);
+    expect(err!.reasons).toEqual(['A manuscript is linked to it', '3 open notes to resolve first (it and its subprojects have no open notes)', 'Every subproject has reached a Done stage']);
     expect(err!.message).toMatch(/Published is not open yet/);
-    // meeting them one by one opens the gate
-    const s = await createSeries(db, ctx(), { name: 'Salt Road' });
-    const b2 = await createBook(db, ctx(), { title: 'Tidewater', seriesId: s.id, penName: 'A. Reyes' });
-    await setBookStage(db, ctx(), b2.id, 'drafting', anyone);
-    await setBookStage(db, ctx(), b2.id, 'editing', anyone);
-    await addEdition(db, ctx(), b2.id, { format: 'paperback', asin: 'B0AAAAAAA1' });
-    await expect(setBookStage(db, ctx(), b2.id, 'published', anyone)).rejects.toThrow(/ASIN on the ebook edition/); // the paperback's ASIN is not the ebook's
-    await addEdition(db, ctx(), b2.id, { format: 'ebook', asin: 'B0BBBBBBB2' });
-    await setBookStage(db, ctx(), b2.id, 'published', anyone);
-    expect((await getBook(db, ctx(), b2.id))!.stage).toBe('published');
+    expect(() => checkMove(w, 'editing', 'published', facts({ hasManuscript: true, subprojects: ['done', 'done'] }), anyone)).not.toThrow();
   });
 
   it('lets only the roles a gate names make the move, and says so in the options', async () => {
     const role = await createRole(db, ctx(), { name: 'Series Lead', capabilities: ['catalogue.read'] });
-    const w = (await defaultWorkflow(db, ctx()))!;
-    await saveWorkflow(db, ctx(), w.id, { ...asDraft(w), transitions: w.transitions.map((t) => (t.from === 'editing' && t.to === 'published' ? { ...t, roleIds: [role.id] } : t)) });
-    const b = await createBook(db, ctx(), { title: 'Landfall' });
-    await setBookStage(db, ctx(), b.id, 'editing', anyone);
-    const asOther = await stageOptions(db, ctx(), b.id, nobody);
-    expect(asOther.current).toMatchObject({ key: 'editing', name: 'Editing' });
+    const w0 = await wf();
+    const w = await saveWorkflow(db, ctx(), w0.id, { ...asDraft(w0), transitions: w0.transitions.map((t) => (t.from === 'editing' && t.to === 'published' ? { ...t, roleIds: [role.id] } : t)) });
+    const asOther = stageOptions(w, 'editing', facts(), nobody);
     expect(asOther.options.find((o) => o.key === 'published')).toMatchObject({ allowed: false, reasons: ['Only people with certain roles can make this move'] });
     expect(asOther.options.find((o) => o.key === 'revising')!.allowed).toBe(true);
-    expect(await code(setBookStage(db, ctx(), b.id, 'published', nobody))).toBe('gated');
-    expect((await stageOptions(db, ctx(), b.id, (ids) => ids.includes(role.id))).options.find((o) => o.key === 'published')!.allowed).toBe(true);
-    await setBookStage(db, ctx(), b.id, 'published', (ids) => ids.includes(role.id));
+    expect(() => checkMove(w, 'editing', 'published', facts(), nobody)).toThrow(/Published is not open yet/);
+    expect(stageOptions(w, 'editing', facts(), (ids) => ids.includes(role.id)).options.find((o) => o.key === 'published')!.allowed).toBe(true);
   });
 
-  it('cannot be walked around: changing a book’s details leaves its stage alone, and an archived book cannot move', async () => {
-    const b = await createBook(db, ctx(), { title: 'Landfall' });
-    await updateBook(db, ctx(), b.id, { title: 'Landfall II', stage: 'published' } as never);
-    expect((await getBook(db, ctx(), b.id))!.stage).toBe('planning');
-    await db.run('UPDATE book SET archived_at = ? WHERE id = ?', ['2026-10-28T00:00:00.000Z', b.id]);
-    expect(await code(setBookStage(db, ctx(), b.id, 'drafting', anyone))).toBe('conflict');
-  });
-
-  it('checks conditions the same way whatever the gate: pure and in words', () => {
-    const book = { seriesId: null, penName: '  ', editions: [{ format: 'ebook', asin: 'B0AAAAAAA1', isbn: null, publishedOn: null }] };
-    expect(unmetConditions(book, [])).toEqual([]);
-    expect(unmetConditions(book, [{ kind: 'asin' }, { kind: 'edition', format: 'ebook' }])).toEqual([]);
-    expect(unmetConditions(book, [{ kind: 'isbn' }, { kind: 'published_date' }, { kind: 'series' }, { kind: 'pen_name' }, { kind: 'edition', format: 'audiobook' }])).toEqual([
-      'An edition has an ISBN', 'An edition has a publication date', 'The book is in a series', 'The book has a pen name', 'The book has at least one edition on the audiobook edition'
-    ]);
+  it('answers every condition in words, from facts alone', () => {
+    expect(unmetConditions(facts(), [])).toEqual([]);
+    expect(unmetConditions(facts(), [{ kind: 'has_subprojects' }, { kind: 'subprojects_done' }])).toEqual(['It has at least one subproject', 'Every subproject has reached a Done stage']); // no subprojects is not "all done"
+    expect(unmetConditions(facts({ subprojects: ['done', null] }), [{ kind: 'subprojects_done' }])).toEqual(['Every subproject has reached a Done stage']); // one with no workflow is not done
+    expect(unmetConditions(facts({ openNotes: 1 }), [{ kind: 'no_open_notes' }])).toEqual(['1 open note to resolve first (it and its subprojects have no open notes)']);
   });
 
   it('keeps one studio’s workflows from another’s', async () => {
@@ -249,8 +228,47 @@ describe('moving a book through its stages', () => {
     expect(await code(saveWorkflow(db, other, 'workflow_default', { name: 'Hijack', stages: [{ name: 'X' }], transitions: [] }))).toBe('not-found');
     expect(await code(setDefaultWorkflow(db, other, 'workflow_default'))).toBe('not-found');
     expect(await code(deleteWorkflow(db, other, 'workflow_default'))).toBe('not-found');
-    expect(await createBook(db, other, { title: 'Theirs' })).toMatchObject({ workflowId: null, stage: 'planning' });
-    void bootstrapStudio;
-    void grantRole;
+  });
+});
+
+describe('projects hold a workflow and a stage, and the workflow never changes', () => {
+  const NOW = '2026-10-27T00:00:00.000Z';
+  it('gives a project its workflow and starting stage at creation, and a subproject its own', () => {
+    let t = emptyTree();
+    const s = createProject(t, { name: 'Salt Road', workflowId: 'wf-series', stage: 'planning', now: NOW });
+    t = s.tree;
+    const b = createProject(t, { name: 'Landfall', parentId: s.project.id, workflowId: 'wf-book', stage: 'drafting', now: NOW });
+    expect(s.project).toMatchObject({ workflowId: 'wf-series', stage: 'planning' });
+    expect(b.project).toMatchObject({ workflowId: 'wf-book', stage: 'drafting', parentId: s.project.id });
+    expect(createProject(t, { name: 'Legacy', now: NOW }).project).toMatchObject({ workflowId: null, stage: null });
+    expect(() => createProject(t, { name: 'No stage', workflowId: 'wf', now: NOW })).toThrow(ProjectError);
+    expect(() => createProject(t, { name: 'Bad stage', workflowId: 'wf', stage: 'Not A Key', now: NOW })).toThrow(ProjectError);
+  });
+
+  it('changes the stage, but not the workflow: renaming, moving and the stage move leave it, and nothing offers a way to change it', () => {
+    let t = createProject(emptyTree(), { name: 'Salt Road', workflowId: 'wf-series', stage: 'planning', now: NOW }).tree;
+    const id = t.projects[0]!.id;
+    t = setProjectStage(t, id, 'drafting', NOW);
+    expect(t.projects[0]).toMatchObject({ workflowId: 'wf-series', stage: 'drafting' });
+    t = updateProject(t, id, { name: 'Salt Road Saga', kind: 'Series' });
+    expect(t.projects[0]).toMatchObject({ workflowId: 'wf-series', stage: 'drafting', name: 'Salt Road Saga' });
+    const smuggled = updateProject(t, id, { name: 'X', workflowId: 'other' } as never);
+    expect(smuggled.projects[0]!.workflowId).toBe('wf-series');
+    expect(() => adoptWorkflow(t, id, 'other', 'planning')).toThrow(/cannot be changed/);
+    expect(() => setProjectStage(createProject(emptyTree(), { name: 'Old', now: NOW }).tree, 'x', 'drafting')).toThrow(ProjectError);
+  });
+
+  it('gives a project made before workflows existed one, once', () => {
+    const old = createProject(emptyTree(), { name: 'Old book', now: NOW });
+    expect(() => setProjectStage(old.tree, old.project.id, 'drafting')).toThrow(/no workflow yet/);
+    const t = adoptWorkflow(old.tree, old.project.id, 'wf-default', 'editing', NOW);
+    expect(t.projects[0]).toMatchObject({ workflowId: 'wf-default', stage: 'editing' });
+    expect(() => adoptWorkflow(t, old.project.id, 'wf-other', 'planning')).toThrow(/already has a workflow/);
+  });
+
+  it('survives a trip through the file: kept as written, and a stage with no workflow is dropped', () => {
+    const t = createProject(emptyTree(), { name: 'Salt Road', workflowId: 'wf', stage: 'drafting', now: NOW }).tree;
+    expect(sanitizeTree(JSON.parse(JSON.stringify(t))).projects[0]).toMatchObject({ workflowId: 'wf', stage: 'drafting' });
+    expect(sanitizeTree({ projects: [{ id: 'a', name: 'A', stage: 'drafting' }, { id: 'b', name: 'B', workflowId: 'wf', stage: 'BAD KEY' }] }).projects.map((p) => [p.workflowId, p.stage])).toEqual([[null, null], ['wf', null]]);
   });
 });

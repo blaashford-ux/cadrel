@@ -85,6 +85,7 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 
 Notes on the defaults:
+- **Moving a project between stages** (`project.stage`) is part of the Tasks and deadlines row, and a move can also name roles in its gate; the workflow, not this table, says which.
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.

@@ -75,6 +75,7 @@ A PDM workflow is **states, transitions, conditions and actions**. Cadrel's book
 - A **transition** has who may perform it, conditions (the brief exists, the edit pass is approved), and actions (notify the next role, unlock the next stage, create tasks from a template).
 - Workflows are **data**, editable by the studio, not code, so each project type can have its own.
 - Each file or record sits in exactly one state of its workflow; the state decides what is read-only and who sees it.
+- **Projects and subprojects hold the stage.** Several workflows can exist; each level (project, subproject) has its own default, so a series can use a different workflow from its books. The workflow is chosen when a project is created and **never changed afterwards**; the stage moves only through a gate-checked move. Gate conditions read the project (a manuscript is linked, no open notes under it, it has subprojects, its subprojects are all done). Write has no statuses of its own: Cadrel hands it the project's stage, read-only, and a stage of kind "review" turns on Write's editing pass.
 
 ### Metadata and references
 

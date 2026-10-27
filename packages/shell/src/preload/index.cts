@@ -31,11 +31,16 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
   },
+  stages: {
+    views: () => studioCall('shell:stages:views'),
+    options: (projectId) => studioCall('shell:stages:options', projectId),
+    move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
+  },
   workflow: {
     state: () => studioCall('shell:workflow:state'),
     create: (i) => studioCall('shell:workflow:call', 'create', i),
     save: (id, draft) => studioCall('shell:workflow:call', 'save', id, draft),
-    setDefault: (id) => studioCall('shell:workflow:call', 'setDefault', id),
+    setDefault: (id, levels) => studioCall('shell:workflow:call', 'setDefault', id, levels),
     delete: (id) => studioCall('shell:workflow:call', 'delete', id)
   },
   people: {

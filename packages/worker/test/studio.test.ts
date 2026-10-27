@@ -25,7 +25,7 @@ async function studio() {
 
 describe('the Studio server', () => {
   it('keeps the migrations in the worker identical to the files Wrangler applies', () => {
-    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
+    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
   });
 
   it('reports a schema version equal to the number of migrations', () => {
@@ -36,7 +36,7 @@ describe('the Studio server', () => {
     const { owner, call, env } = await studio();
     const info = await call('GET', '/v1/info', null);
     expect(info.status).toBe(200);
-    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 5 });
+    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 6 });
     const health = await worker.fetch(new Request('https://studio.test/v1/health'), env);
     expect(health.status).toBe(200);
   });

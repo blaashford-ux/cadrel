@@ -17,7 +17,7 @@ import { launcherSource, readHandshake } from '@cadrel/market-desktop/src/main/l
 import type { McpBrand } from '@cadrel/market-desktop/src/main/service.js';
 import type { KitBrand } from '@cadrel/write/src/shared/agent/kit';
 import { sanitizeThemeCustom, type ThemeCustom } from '@cadrel/write/src/shared/theme';
-import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ThemeState, type UserView } from '../shared/api';
+import { isModule, isPage, type AppFolders, type FolderKey, type ModuleId, type Overview, type Page, type ProjectStageView, type ThemeState, type UserView } from '../shared/api';
 import { isThemeSource, marketCss, type ThemeSource } from '../shared/theme';
 import { moduleBounds } from './layout';
 import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './controls';
@@ -29,8 +29,10 @@ import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
+import { ProjectStages } from './stages';
+import { callWorkflow } from './workflowCalls';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -76,6 +78,7 @@ let updater: Updater;
 /** A verified installer to start once the app has exited. */
 let installerToRun: string | null = null;
 let manager: ProjectManager;
+let stages: ProjectStages;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -190,7 +193,7 @@ function writeFolders(): WriteFolders {
     deleteProject: (p) => write.deleteProject(p),
     readProject: async (p) => {
       const m = await write.readProject(p);
-      return m ? { status: m.status, notes: m.notes, archived: m.archived, templateName: m.templateName, createdAt: m.createdAt, templateId: m.templateId } : null;
+      return m ? { notes: m.notes, archived: m.archived, templateName: m.templateName, createdAt: m.createdAt, templateId: m.templateId } : null;
     },
     updateProject: (p, patch) => write.updateProject(p, patch),
     convertFolder: (p) => write.convertFolder(p),
@@ -622,9 +625,21 @@ function createWindow(): void {
 
 // ---- IPC the shell's own page may call ----------------------------------------------------------
 
+/** The stage (name and colour) of the Cadrel project each Write folder belongs to, looked up by folder name. */
+async function stageByFolder(): Promise<{ (folder: string): { name: string; color: string } | null; all(): Map<string, NonNullable<ProjectStageView['stage']>> }> {
+  const tree = (await studio.studio.read()).tree;
+  const views = await stages.views();
+  const byFolder = new Map<string, NonNullable<ProjectStageView['stage']>>();
+  for (const l of tree.links) {
+    const s = l.module === 'write' ? views[l.projectId]?.stage : null;
+    if (s) byFolder.set(l.ref, s);
+  }
+  return Object.assign((folder: string) => byFolder.get(folder) ?? null, { all: () => byFolder });
+}
+
 async function overview(): Promise<Overview> {
   const [w, m] = await Promise.all([
-    write.listProjects().then(summariseWrite, writeUnavailable),
+    stageByFolder().then((stageOf) => write.listProjects().then((l) => summariseWrite(l, stageOf)), () => write.listProjects().then((l) => summariseWrite(l), writeUnavailable)).catch(writeUnavailable),
     (async () => {
       const status = market.service.status();
       try {
@@ -806,8 +821,21 @@ function registerShellIpc(): void {
     return studiosChanged(view);
   });
   // People and roles. Every change is made by the service as the person using the app, so the page only shows what the service allows.
-  manageLike('workflow:state', async () => peopleHost.workflowState());
-  manageLike('workflow:call', async (name: string, ...args: unknown[]) => peopleHost.workflowCall(String(name), ...args));
+  manageLike('workflow:state', async () => {
+    const st = await peopleHost.workflowState();
+    if (!st.available) return st;
+    const usage: Record<string, Awaited<ReturnType<ProjectStages['usage']>>> = {};
+    for (const w of st.workflows) usage[w.id] = await stages.usage(w.id);
+    return { ...st, usage };
+  });
+  manageLike('workflow:call', async (name: string, ...args: unknown[]) => callWorkflow(String(name), args, peopleHost, stages));
+  // Where projects are in their workflows. A move is checked against the workflow's gates and the person's roles before the tree changes.
+  manageLike('stages:views', async () => stages.views());
+  manageLike('stages:options', async (projectId: string) => {
+    const r = await stages.options(String(projectId));
+    return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
+  });
+  manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
@@ -930,8 +958,8 @@ function registerShellIpc(): void {
     if (!found.length) throw new Error('No MDEdit projects were found there. An MDEdit project is a folder with a .mdedit folder inside it.');
     const out = [];
     for (const f of found) {
-      const { source, name, asName, status, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried } = await previewMdeditImport(f, projectsFolder());
-      out.push({ source, name, asName, status, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried });
+      const { source, name, asName, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried } = await previewMdeditImport(f, projectsFolder());
+      out.push({ source, name, asName, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried });
     }
     return out;
   });
@@ -1206,7 +1234,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       fs: nodeFs
     });
-    manager = new ProjectManager(studio, writeFolders());
+    stages = new ProjectStages(studio, () => peopleHost.workflows);
+    manager = new ProjectManager(studio, writeFolders(), stages);
 
     write = await createWriteModule({
       getWindow: () => win,
@@ -1215,6 +1244,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       defaultRoot: projectsDefault,
       projectsFolder,
       templates: () => admin.templates(),
+      projectStages: async () => (await stageByFolder()).all(),
       theme: { get: themeState, set: setTheme },
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
@@ -1222,6 +1252,16 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
+    // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
+    await stages.adoptLegacy(async (projectId) => {
+      const link = linksOf((await studio.studio.read()).tree, projectId, 'write')[0];
+      if (!link) return null;
+      try {
+        return (JSON.parse(await fsp.readFile(path.join(write.projectsRoot(), link.ref, '.cadrel', 'project.json'), 'utf8')) as { status?: unknown }).status as string | null;
+      } catch {
+        return null;
+      }
+    }).catch(() => 0);
     market = createMarketModule({
       getWindow: () => win,
       getContents: () => views.market?.webContents ?? null,

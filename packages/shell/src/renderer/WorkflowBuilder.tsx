@@ -1,26 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CONDITION_KINDS, EDITION_FORMATS, STAGE_CATEGORIES, newStageKey, type Condition, type ConditionKind, type WorkflowDraft, type WorkflowRecord } from '@cadrel/kernel';
+import { CONDITION_KINDS, STAGE_CATEGORIES, PROJECT_LEVELS, newStageKey, type Condition, type ConditionKind, type WorkflowDraft, type WorkflowRecord } from '@cadrel/kernel';
 import type { WorkflowState } from '../shared/api';
 
 const api = window.cadrel.workflow;
 type Ready = Extract<WorkflowState, { available: true }>;
 const clean = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
-const FORMAT_AWARE = new Set<ConditionKind>(['edition', 'asin', 'isbn', 'published_date']);
 const CATEGORY_LABEL: Record<(typeof STAGE_CATEGORIES)[number], string> = { start: 'Start', active: 'In progress', review: 'In review', done: 'Done', hold: 'On hold' };
 
 /** One stage in the draft. `key` is set for a stage that exists (or one this draft has named); it never changes once made. */
 interface DraftStage { key: string; name: string; category: string; color: string; isNew: boolean }
 interface DraftMove { from: string; to: string; roleIds: string[]; conditions: Condition[] }
-interface Draft { name: string; description: string; stages: DraftStage[]; moves: DraftMove[]; moveBooks: Record<string, string> }
+interface Draft { name: string; description: string; stages: DraftStage[]; moves: DraftMove[]; moveProjects: Record<string, string> }
 
 const toDraft = (w: WorkflowRecord): Draft => ({
-  name: w.name, description: w.description, moveBooks: {},
+  name: w.name, description: w.description, moveProjects: {},
   stages: w.stages.map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color, isNew: false })),
   moves: w.transitions.map((t) => ({ from: t.from, to: t.to, roleIds: [...t.roleIds], conditions: t.conditions.map((c) => ({ ...c })) }))
 });
+const defaultLabel = (levels: string[]) => (levels.length === 2 ? 'default' : `default for ${levels[0]}s`);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
-/** Builds workflows: the stages a book moves through, which stage can move to which, and the gate on each move (who may make it and what must be true of the book). */
+/** Builds workflows: the stages a project moves through, which stage can move to which, and the gate on each move (who may make it and what must be true of the project). */
 export function WorkflowBuilder() {
   const [s, setS] = useState<WorkflowState | null>(null);
   const [pick, setPick] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function WorkflowBuilder() {
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(() => api.state().then((v) => { setS(v); return v; }, (e) => { setError(clean(e)); return null; }), []);
-  useEffect(() => { void load().then((v) => v && v.available && setPick((p) => p ?? v.workflows.find((w) => w.isDefault)?.id ?? v.workflows[0]?.id ?? null)); }, [load]);
+  useEffect(() => { void load().then((v) => v && v.available && setPick((p) => p ?? v.workflows.find((w) => w.defaultFor.includes('project'))?.id ?? v.workflows[0]?.id ?? null)); }, [load]);
 
   const act = useCallback(async <T,>(job: () => Promise<T>, saved?: string): Promise<T | undefined> => {
     setError(null);
@@ -52,7 +52,7 @@ export function WorkflowBuilder() {
     <section className="card workflow-builder" aria-labelledby="wf-title">
       <div className="card-head"><h3 id="wf-title">Workflows</h3></div>
       <p className="muted small">
-        A workflow is the list of stages a book moves through. Each move from one stage to another can have a gate: who may make it, and what must be true of the book first. A new book starts in the default workflow; a book keeps the workflow it started in.
+        A workflow is the list of stages a project moves through. Each move from one stage to another can have a gate: who may make it, and what must be true of the project first. Projects and subprojects each have their own default workflow, so a series can use a different one from its books. Whoever creates a project picks its workflow then; it can’t be changed afterwards.
         {!s.may && ' You can see the workflows here; building them needs the workflow design permission.'}
       </p>
       {error && <div className="banner error" role="alert">{error} <button type="button" className="link" onClick={() => setError(null)}>Dismiss</button></div>}
@@ -63,8 +63,8 @@ export function WorkflowBuilder() {
             {s.workflows.map((x) => (
               <li key={x.id}>
                 <button type="button" className={`link grow-text${x.id === pick ? ' on' : ''}`} aria-pressed={x.id === pick} onClick={() => setPick(x.id)}>{x.name}</button>
-                {x.isDefault && <span className="chip">default</span>}
-                <span className="muted small" title="Books in this workflow">{x.books}</span>
+                {x.defaultFor.length > 0 && <span className="chip">{defaultLabel(x.defaultFor)}</span>}
+                <span className="muted small" title="Projects using this workflow">{s.usage[x.id]?.projects ?? 0}</span>
               </li>
             ))}
           </ul>
@@ -145,9 +145,9 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
       name: d.name, description: d.description,
       stages: d.stages.map((x) => ({ key: x.key, name: x.name, category: x.category, color: x.color })),
       transitions: d.moves.filter((m) => keys.includes(m.from) && keys.includes(m.to)),
-      moveBooks: Object.fromEntries(removed.map((x) => [x.key, d.moveBooks[x.key] || d.stages[0]?.key || '']))
+      moveProjects: Object.fromEntries(removed.filter((x) => (s.usage[w.id]?.byStage[x.key] ?? 0) > 0).map((x) => [x.key, d.moveProjects[x.key] || d.stages[0]?.key || '']))
     };
-    void act(() => api.save(w.id, draft), 'Saved. Books already in this workflow keep their stage.');
+    void act(() => api.save(w.id, draft), 'Saved. Projects keep their stage unless it was removed.');
   };
 
   const gateSummary = (m: DraftMove) => {
@@ -157,7 +157,7 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
 
   return (
     <div className="pr-detail">
-      <h4>{w.name} {w.isDefault && <span className="chip">default</span>}</h4>
+      <h4>{w.name} {w.defaultFor.length > 0 && <span className="chip">{defaultLabel(w.defaultFor)}</span>}</h4>
       <div className="wf-flow" aria-label="Stages in order">
         {d.stages.map((x, i) => <span key={x.key} className="wf-chip" style={x.color ? { borderColor: x.color, color: x.color } : undefined}>{x.name}{i < d.stages.length - 1 ? ' →' : ''}</span>)}
       </div>
@@ -185,12 +185,12 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
         </tbody>
       </table>
       {editable && <button type="button" onClick={addStage}>Add a stage</button>}
-      {removed.length > 0 && (
+      {removed.filter((x) => (s.usage[w.id]?.byStage[x.key] ?? 0) > 0).length > 0 && (
         <div className="banner" role="status">
-          {removed.map((x) => (
+          {removed.filter((x) => (s.usage[w.id]?.byStage[x.key] ?? 0) > 0).map((x) => (
             <div key={x.key} className="row">
-              <span>Books in “{x.name}” go to</span>
-              <select aria-label={`Where books in ${x.name} go`} value={d.moveBooks[x.key] ?? d.stages[0]?.key ?? ''} onChange={(e) => setD({ ...d, moveBooks: { ...d.moveBooks, [x.key]: e.target.value } })}>
+              <span>{s.usage[w.id]!.byStage[x.key]} project{s.usage[w.id]!.byStage[x.key] === 1 ? '' : 's'} in “{x.name}” go to</span>
+              <select aria-label={`Where projects in ${x.name} go`} value={d.moveProjects[x.key] ?? d.stages[0]?.key ?? ''} onChange={(e) => setD({ ...d, moveProjects: { ...d.moveProjects, [x.key]: e.target.value } })}>
                 {d.stages.map((t) => <option key={t.key} value={t.key}>{t.name}</option>)}
               </select>
             </div>
@@ -199,7 +199,7 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
       )}
 
       <h5>Moves and gates</h5>
-      <p className="muted small">Tick where each stage can go. A move with a gate lists who may make it and what the book needs first; with no gate, anyone who can edit the book can make it.</p>
+      <p className="muted small">Tick where each stage can go. A move with a gate lists who may make it and what the project needs first; with no gate, anyone who can move projects can make it.</p>
       {editable && (
         <div className="row">
           <button type="button" onClick={everyMove}>Every stage can go to every other</button>
@@ -229,17 +229,19 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
         <div className="row">
           <button type="button" className="primary" disabled={!dirty} onClick={save}>Save workflow</button>
           <button type="button" disabled={!dirty} onClick={() => setD(original)}>Discard changes</button>
-          {!w.isDefault && <button type="button" disabled={dirty} title={dirty ? 'Save first' : undefined} onClick={() => void act(() => api.setDefault(w.id), `“${w.name}” is now the default: new books start in it.`)}>Make this the default</button>}
+          {PROJECT_LEVELS.map((level) => !w.defaultFor.includes(level) && (
+            <button key={level} type="button" disabled={dirty} title={dirty ? 'Save first' : undefined} onClick={() => void act(() => api.setDefault(w.id, [level]), `“${w.name}” is now the default for new ${level === 'project' ? 'projects' : 'subprojects'}.`)}>Default for new {level === 'project' ? 'projects' : 'subprojects'}</button>
+          ))}
           <button type="button" onClick={() => { const n = window.prompt('Name for the copy', `${w.name} (copy)`); if (n) void act(() => api.create({ name: n, copyFrom: w.id })).then((r) => r && onPick(r.id)); }}>Copy…</button>
-          <button type="button" className="link" disabled={w.isDefault || w.books > 0} title={w.isDefault ? 'Make another workflow the default first' : w.books ? 'Books are still in this workflow' : undefined} onClick={() => { if (window.confirm(`Delete “${w.name}”?`)) void act(() => api.delete(w.id)).then(() => onPick(null)); }}>Delete</button>
+          <button type="button" className="link" disabled={w.defaultFor.length > 0 || (s.usage[w.id]?.projects ?? 0) > 0} title={w.defaultFor.length ? 'Make another workflow the default first' : (s.usage[w.id]?.projects ?? 0) ? 'Projects still use this workflow' : undefined} onClick={() => { if (window.confirm(`Delete “${w.name}”?`)) void act(() => api.delete(w.id)).then(() => onPick(null)); }}>Delete</button>
         </div>
       )}
-      {w.isDefault && <p className="muted small">This is the default workflow. {w.templateKey === 'mdedit' ? 'It is the one Cadrel ships, with the stages from MDEdit; edit it, or build another and make that the default.' : ''}</p>}
+      {w.defaultFor.length > 0 && <p className="muted small">This is the default for new {w.defaultFor.length === 2 ? 'projects and subprojects' : `${w.defaultFor[0]}s`}. {w.templateKey === 'mdedit' ? 'It is the one Cadrel ships, with the stages from MDEdit; edit it, or build another and make that the default.' : ''}</p>}
     </div>
   );
 }
 
-/** Who may make a move, and what must be true of the book. */
+/** Who may make a move, and what must be true of the project. */
 function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: boolean; onChange: (patch: Partial<DraftMove>) => void }) {
   const has = (kind: ConditionKind) => m.conditions.find((c) => c.kind === kind);
   const toggle = (kind: ConditionKind, on: boolean) => onChange({ conditions: on ? [...m.conditions, { kind }] : m.conditions.filter((c) => c.kind !== kind) });
@@ -251,19 +253,13 @@ function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: 
           <label key={r.id} className="inline small"><input type="checkbox" disabled={!editable} checked={m.roleIds.includes(r.id)} onChange={(e) => onChange({ roleIds: e.target.checked ? [...m.roleIds, r.id] : m.roleIds.filter((x) => x !== r.id) })} /> {r.name}</label>
         ))}
       </div>
-      <p className="muted small">{m.roleIds.length ? 'Only people holding one of these roles (an Owner always may).' : 'No role chosen: anyone who may edit the book.'}</p>
-      <div><strong className="small">The book needs</strong></div>
+      <p className="muted small">{m.roleIds.length ? 'Only people holding one of these roles (an Owner always may).' : 'No role chosen: anyone who may move projects.'}</p>
+      <div><strong className="small">The project needs</strong></div>
       {(Object.keys(CONDITION_KINDS) as ConditionKind[]).map((kind) => {
         const c = has(kind);
         return (
           <div key={kind} className="row">
             <label className="inline small"><input type="checkbox" disabled={!editable} checked={!!c} onChange={(e) => toggle(kind, e.target.checked)} /> {CONDITION_KINDS[kind]}</label>
-            {c && FORMAT_AWARE.has(kind) && (
-              <select aria-label={`Format for ${CONDITION_KINDS[kind]}`} disabled={!editable} value={c.format ?? ''} onChange={(e) => onChange({ conditions: m.conditions.map((x) => (x.kind === kind ? { kind, ...(e.target.value ? { format: e.target.value } : {}) } : x)) })}>
-                <option value="">on any edition</option>
-                {EDITION_FORMATS.map((f) => <option key={f} value={f}>on the {f} edition</option>)}
-              </select>
-            )}
           </div>
         );
       })}

@@ -7,12 +7,12 @@
  * once a book is linked to a project; until then they do not reach catalogue calls, which is the safe way round.
  */
 import {
-  acknowledgeCapabilities, addEdition, createWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setBookStage, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
+  acknowledgeCapabilities, addEdition, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
-  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage
+  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage
 } from '@cadrel/kernel';
 
 export class PermissionDenied extends Error {
@@ -117,20 +117,6 @@ export class StudioAs {
     moveBook: async (id: string, seriesId: string | null, position?: number | null): Promise<BookWithEditions> => (await this.need('catalogue.edit'), moveBook(this.o.db, this.ctx(), id, seriesId, position)),
     addEdition: async (bookId: string, i: Parameters<typeof addEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), addEdition(this.o.db, this.ctx(), bookId, i)),
     updateEdition: async (id: string, patch: Parameters<typeof updateEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), updateEdition(this.o.db, this.ctx(), id, patch)),
-
-    /**
-     * Where this book can go from its stage, and for each move whether it is open to this person now and what is in the way. Reading a book's
-     * stage needs catalogue.read; the roles a gate names are checked against the roles this person holds on the book's scope (the studio).
-     */
-    stageOptions: async (bookId: string): Promise<{ workflow: WorkflowRecord | null; current: Stage | null; options: StageOption[] }> => {
-      await this.need('catalogue.read');
-      return stageOptions(this.o.db, this.ctx(), bookId, await this.holdsRole());
-    },
-    /** Moves a book to another stage. Needs catalogue.edit, and the workflow must have the move, its conditions hold and the gate's roles include one of yours. */
-    setStage: async (bookId: string, toKey: string): Promise<{ from: string; to: string; workflowId: string }> => {
-      await this.need('catalogue.edit');
-      return setBookStage(this.o.db, this.ctx(), bookId, toKey, await this.holdsRole());
-    },
 
     archive: async (kind: 'ip' | 'series' | 'book' | 'edition', id: string, archived = true): Promise<void> => (await this.need('catalogue.archive'), setCatalogueArchived(this.o.db, this.ctx(), kind, id, archived))
   };
@@ -278,12 +264,34 @@ export class StudioAs {
     return (roleIds) => owner || roleIds.some((r) => held.has(r));
   }
 
-  /** The workflow builder's operations. Reading needs catalogue.read (people need to see where a book can go); building needs workflow.design. */
+  /**
+   * The workflow builder and the stage moves. Reading workflows needs task.read (anyone who sees tasks sees where work can go); building
+   * needs workflow.design; moving a project needs project.stage, a move its workflow has, every gate condition met, and (if the gate names
+   * roles) one of those roles held at the studio. Projects live in the project tree, so what a gate sees of a project (`facts`) and how many
+   * projects use a workflow (`usage`) are passed in by the caller that holds the tree.
+   */
   readonly workflows = {
-    list: async (): Promise<WorkflowRecord[]> => (await this.need('catalogue.read'), listWorkflows(this.o.db, this.ctx())),
+    list: async (): Promise<WorkflowRecord[]> => (await this.need('task.read'), listWorkflows(this.o.db, this.ctx())),
+    /** The workflow a new project (or a new subproject) starts in. */
+    defaultFor: async (level: ProjectLevel): Promise<WorkflowRecord | null> => (await this.need('task.read'), defaultWorkflow(this.o.db, this.ctx(), level)),
     create: async (i: Parameters<typeof createWorkflow>[2]): Promise<WorkflowRecord> => (await this.need('workflow.design'), createWorkflow(this.o.db, this.ctx(), i)),
-    save: async (id: string, draft: WorkflowDraft): Promise<WorkflowRecord> => (await this.need('workflow.design'), saveWorkflow(this.o.db, this.ctx(), id, draft)),
-    setDefault: async (id: string): Promise<WorkflowRecord> => (await this.need('workflow.design'), setDefaultWorkflow(this.o.db, this.ctx(), id)),
-    delete: async (id: string): Promise<void> => (await this.need('workflow.design'), deleteWorkflow(this.o.db, this.ctx(), id))
+    save: async (id: string, draft: WorkflowDraft, usage?: WorkflowUsage): Promise<WorkflowRecord> => (await this.need('workflow.design'), saveWorkflow(this.o.db, this.ctx(), id, draft, usage)),
+    setDefault: async (id: string, levels?: ProjectLevel[]): Promise<WorkflowRecord> => (await this.need('workflow.design'), setDefaultWorkflow(this.o.db, this.ctx(), id, levels)),
+    delete: async (id: string, usage?: WorkflowUsage): Promise<void> => (await this.need('workflow.design'), deleteWorkflow(this.o.db, this.ctx(), id, usage)),
+
+    /** Where a project in `current` can go, and for each move whether it is open to this person now and what is in the way. */
+    stageOptions: async (workflowId: string, current: string | null, facts: ProjectFacts): Promise<{ workflow: WorkflowRecord; current: Stage | null; options: StageOption[] }> => {
+      await this.need('task.read');
+      const workflow = (await listWorkflows(this.o.db, this.ctx())).find((w) => w.id === workflowId);
+      if (!workflow) throw new Error('That workflow is not there.');
+      return { workflow, ...stageOptions(workflow, current, facts, await this.holdsRole()) };
+    },
+    /** Checks that this person may move a project from one stage to another (throws with every reason if not). The caller then changes the tree. */
+    allowMove: async (workflowId: string, from: string | null, to: string, facts: ProjectFacts): Promise<void> => {
+      await this.need('project.stage');
+      const workflow = (await listWorkflows(this.o.db, this.ctx())).find((w) => w.id === workflowId);
+      if (!workflow) throw new Error('That workflow is not there.');
+      checkMove(workflow, from, to, facts, await this.holdsRole());
+    }
   };
 }

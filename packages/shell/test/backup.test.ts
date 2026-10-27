@@ -179,20 +179,20 @@ describe('importing from MDEdit', () => {
   it('previews what will be created and what is left behind, writing nothing', async () => {
     const m = await mdedit();
     const p = await previewMdeditImport(m.proj, m.projects);
-    expect(p).toMatchObject({ name: 'The Lost King', asName: 'The Lost King', status: 'editing', chapterFiles: 2, hasGoal: true, reviewFiles: 1, editedMarks: 1, alreadyImportedAs: null });
+    expect(p).toMatchObject({ name: 'The Lost King', asName: 'The Lost King', chapterFiles: 2, hasGoal: true, reviewFiles: 1, editedMarks: 1, alreadyImportedAs: null });
     expect(p.notCarried.join()).toMatch(/Google Drive/);
     expect(await exists(m.projects)).toBe(false);
     await expect(previewMdeditImport(m.root, m.projects)).rejects.toThrow(/not an MDEdit project/);
   });
 
-  it('copies the project with its goal, status, active manuscript, edited marks, notes and settings, and leaves the original untouched', async () => {
+  it('copies the project with its goal, active manuscript, edited marks, notes and settings, and leaves the original untouched', async () => {
     const m = await mdedit();
     const before = await tree(m.proj);
     const r = await importMdeditProject({ source: m.proj, projectsDir: m.projects });
     expect(await tree(m.proj)).toEqual(before);
     expect(await readFile(path.join(r.dir, 'Manuscript', 'Draft.md'), 'utf8')).toBe('# One\n\nText.\n\n# Two\n\nMore.\n');
     const meta = JSON.parse(await readFile(path.join(r.dir, '.cadrel', 'project.json'), 'utf8'));
-    expect(meta).toMatchObject({ id: 'abc123', name: 'The Lost King', status: 'editing', notes: 'keep going', activeManuscript: 'Manuscript/Draft.md', excludedFolders: ['Notes'], overrides: { chapterLevel: 1 } });
+    expect(meta).toMatchObject({ id: 'abc123', name: 'The Lost King', notes: 'keep going', activeManuscript: 'Manuscript/Draft.md', excludedFolders: ['Notes'], overrides: { chapterLevel: 1 } });
     expect(meta.goal.targetWords).toBe(80000);
     expect(JSON.parse(await readFile(path.join(r.dir, '.cadrel', 'edited.json'), 'utf8')).files['Manuscript/Draft.md'].One.edited).toBe(true);
     expect(await exists(path.join(r.dir, '.cadrel', 'review', 'owner.json'))).toBe(true);
@@ -219,7 +219,7 @@ describe('importing from MDEdit', () => {
     const m = await mdedit();
     await put(m.proj, '.mdedit/project.json', '{"status":"nonsense","goal":42,"activeManuscript":"../../etc/passwd"}');
     const r = await importMdeditProject({ source: m.proj, projectsDir: m.projects });
-    expect(r.meta).toMatchObject({ status: 'planning', goal: null, activeManuscript: null, name: 'The Lost King' });
+    expect(r.meta).toMatchObject({ goal: null, activeManuscript: null, name: 'The Lost King' });
     await put(m.proj, '.mdedit/project.json', 'not json');
     await expect(previewMdeditImport(m.proj, path.join(m.root, 'other'))).rejects.toThrow();
   });

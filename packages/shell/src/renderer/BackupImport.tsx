@@ -91,7 +91,7 @@ export function BackupImport({ onChanged }: { onChanged?: () => void }) {
             <li key={c.source}>
               <span className="grow-text">
                 <strong>{c.name}</strong>{c.asName !== c.name ? ` → ${c.asName}` : ''}
-                <span className="muted small"> {c.chapterFiles} chapter files, {size(c.bytes)}, {c.status}{c.hasGoal ? ', with a goal' : ''}{c.reviewFiles ? `, ${c.reviewFiles} review files` : ''}</span>
+                <span className="muted small"> {c.chapterFiles} chapter files, {size(c.bytes)}{c.hasGoal ? ', with a goal' : ''}{c.reviewFiles ? `, ${c.reviewFiles} review files` : ''}</span>
                 {c.notCarried.length > 0 && <span className="muted small"> Not carried over: {c.notCarried.join('; ')}.</span>}
                 {c.alreadyImportedAs && <span className="muted small"> Already imported as “{c.alreadyImportedAs}”.</span>}
               </span>

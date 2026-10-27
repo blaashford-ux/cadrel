@@ -10,6 +10,7 @@ import path from 'node:path';
 import { descendantsOf, getProject, linksOf } from '@cadrel/kernel';
 import { projectNameError, uniqueName } from '@cadrel/write/src/shared/projects';
 import type { StudioService } from './studio';
+import type { ProjectStages } from './stages';
 import type { ManuscriptMeta, ManuscriptTemplate } from '../shared/api';
 
 /** What the manager needs of Write. WriteModule satisfies it; tests supply a fake. */
@@ -22,7 +23,7 @@ export interface WriteFolders {
   duplicateProject(folder: string, name: string): Promise<{ path: string }>;
   deleteProject(folder: string): Promise<void>;
   readProject(folder: string): Promise<(ManuscriptMeta & { templateId: string }) | null>;
-  updateProject(folder: string, patch: { status?: string; notes?: string; archived?: boolean }): Promise<unknown>;
+  updateProject(folder: string, patch: { notes?: string; archived?: boolean }): Promise<unknown>;
   convertFolder(folder: string): Promise<unknown>;
   addMissingTemplateParts(folder: string, templateId: string): Promise<string[]>;
   openProject(folder: string): void;
@@ -34,7 +35,8 @@ const fail = (m: string): never => {
 };
 
 export class ProjectManager {
-  constructor(private readonly studio: StudioService, private readonly write: WriteFolders) {}
+  /** `stages` is absent where this computer holds no workflow records (a Studio that was only joined): projects are then made without one. */
+  constructor(private readonly studio: StudioService, private readonly write: WriteFolders, private readonly stages: ProjectStages | null = null) {}
 
   /** The folder of a project's manuscript, if it has one. */
   private async folderOf(projectId: string): Promise<{ ref: string; dir: string } | null> {
@@ -55,8 +57,10 @@ export class ProjectManager {
    * Creates a project and, when `template` is given, its manuscript folder from that template, linked to it. If the folder cannot be
    * made (a name Windows will not allow), the project is not created either.
    */
-  async create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null }): Promise<{ id: string; folder: string | null }> {
+  async create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }> {
     const template = o.template ?? null;
+    // the workflow is chosen here, once, before anything is made; a bad choice makes nothing
+    const wf = this.stages ? await this.stages.forNewProject(o.parentId, o.workflowId) : { workflowId: null, stage: null };
     if (template && !this.write.templates().some((t) => t.id === template)) fail('That template no longer exists.');
     let folder: string | null = null;
     if (template) {
@@ -64,7 +68,7 @@ export class ProjectManager {
       folder = (await this.write.createProject(name, template)).path;
     }
     try {
-      const p = await this.studio.createProject({ name: o.name, parentId: o.parentId, kind: o.kind });
+      const p = await this.studio.createProject({ name: o.name, parentId: o.parentId, kind: o.kind, workflowId: wf.workflowId, stage: wf.stage });
       if (folder) await this.studio.link(p.id, 'write', path.basename(folder));
       return { id: p.id, folder };
     } catch (e) {
@@ -128,7 +132,8 @@ export class ProjectManager {
     const f = await this.folderOf(projectId);
     const siblings = tree.projects.filter((x) => x.parentId === p.parentId).map((x) => x.name);
     const name = uniqueName(`${p.name} copy`, siblings);
-    const made = await this.create({ name, parentId: p.parentId, kind: p.kind, template: null });
+    // a copy lives by the same workflow as the project it was copied from, starting at the beginning
+    const made = await this.create({ name, parentId: p.parentId, kind: p.kind, template: null, workflowId: p.workflowId });
     if (f) {
       const copy = await this.write.duplicateProject(f.dir, await this.freeFolderName(name));
       await this.studio.link(made.id, 'write', path.basename(copy.path));
@@ -136,14 +141,14 @@ export class ProjectManager {
     return made.id;
   }
 
-  /** What Write knows about a project's folder: its status, notes and the template it was made from. */
+  /** What Write knows about a project's folder: its notes and the template it was made from. */
   async manuscript(projectId: string): Promise<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null> {
     const f = await this.folderOf(projectId);
     const meta = f && (await this.write.readProject(f.dir));
     return f && meta ? { folder: f.dir, meta } : null;
   }
 
-  async setManuscript(projectId: string, patch: { status?: string; notes?: string }): Promise<void> {
+  async setManuscript(projectId: string, patch: { notes?: string }): Promise<void> {
     const f = (await this.folderOf(projectId)) ?? fail('That project has no manuscript folder.');
     await this.write.updateProject(f.dir, patch);
   }
@@ -178,7 +183,8 @@ export class ProjectManager {
       if (!others.some((p) => p.name === folderName)) fail(`There is no folder called "${folderName}" to bring in.`);
       await this.write.convertFolder(dir);
     }
-    const p = await this.studio.createProject({ name: folderName, parentId });
+    const wf = this.stages ? await this.stages.forNewProject(parentId) : { workflowId: null, stage: null };
+    const p = await this.studio.createProject({ name: folderName, parentId, workflowId: wf.workflowId, stage: wf.stage });
     await this.studio.link(p.id, 'write', folderName);
     return p.id;
   }

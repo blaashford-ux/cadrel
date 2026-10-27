@@ -95,15 +95,16 @@ describe('the workflow builder on this computer', () => {
     const s = await h.workflowState();
     if (!s.available) throw new Error('expected workflows');
     expect(s.may).toBe(true);
-    expect(s.workflows.map((w) => [w.name, w.isDefault])).toEqual([['Writing and publishing', true]]);
+    expect(s.workflows.map((w) => [w.name, w.defaultFor])).toEqual([['Writing and publishing', ['project', 'subproject']]]);
     expect(s.roles).toHaveLength(12);
     const w = (await h.workflowCall('create', { name: 'Audio', copyFrom: s.workflows[0]!.id })) as { id: string };
-    await h.workflowCall('setDefault', w.id);
+    await h.workflowCall('setDefault', w.id, ['project']);
     const after = await h.workflowState();
     if (!after.available) throw new Error('x');
-    expect(after.workflows.find((x) => x.isDefault)!.name).toBe('Audio');
-    await h.workflowCall('delete', s.workflows[0]!.id);
-    expect(((await h.workflowState()) as { workflows: unknown[] }).workflows).toHaveLength(1);
+    expect(after.workflows.find((x) => x.defaultFor.includes('project'))!.name).toBe('Audio');
+    expect(after.workflows.find((x) => x.defaultFor.includes('subproject'))!.name).toBe('Writing and publishing'); // each level has its own default
+    await h.workflowCall('setDefault', w.id, ['subproject']);
+    expect((await h.workflowState() as { workflows: { defaultFor: string[] }[] }).workflows.find((x) => x.name === 'Writing and publishing')!.defaultFor).toEqual([]);
   });
 
   it('offers only the changes it lists', async () => {

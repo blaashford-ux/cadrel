@@ -1,4 +1,4 @@
-import type { AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord } from '@cadrel/kernel';
+import type { AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -24,7 +24,9 @@ export interface WindowInfo {
 
 export interface WriteProjectRow {
   name: string;
-  status: string;
+  /** The name of the stage of the project this manuscript belongs to (from its workflow); null when it has none. */
+  stage: string | null;
+  stageColor: string | null;
   /** Words in the project's active manuscript, or null when none has been chosen (nothing is counted then). */
   words: number | null;
   /** Words the project aims for, or null if no goal is set. */
@@ -62,12 +64,8 @@ export interface Overview {
   };
 }
 
-/** The statuses a manuscript project can be in (Write's own list). */
-export const MANUSCRIPT_STATUSES = ['planning', 'drafting', 'revising', 'editing', 'published', 'paused'] as const;
-
 /** What a project's manuscript folder says about itself. */
 export interface ManuscriptMeta {
-  status: string;
   notes: string;
   archived: boolean;
   templateName: string;
@@ -88,7 +86,8 @@ export interface ManuscriptTemplate {
 export interface ManageApi {
   templates(): Promise<ManuscriptTemplate[]>;
   /** A project, and with `template` its manuscript folder too. */
-  create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null }): Promise<{ id: string; folder: string | null }>;
+  /** `workflowId` is chosen here, once: the project keeps it. Without one, the default for a project (or for a subproject, when it has a parent) is used. */
+  create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }>;
   addManuscript(projectId: string, template: string): Promise<string>;
   rename(projectId: string, name: string): Promise<void>;
   archive(projectId: string, archived: boolean): Promise<void>;
@@ -96,7 +95,7 @@ export interface ManageApi {
   remove(projectId: string): Promise<string[]>;
   duplicate(projectId: string): Promise<string>;
   manuscript(projectId: string): Promise<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null>;
-  setManuscript(projectId: string, patch: { status?: string; notes?: string }): Promise<void>;
+  setManuscript(projectId: string, patch: { notes?: string }): Promise<void>;
   addMissingParts(projectId: string): Promise<string[]>;
   /** Opens the project's manuscript folder in Write. */
   open(projectId: string): Promise<void>;
@@ -375,7 +374,6 @@ export interface MdeditCandidate {
   source: string;
   name: string;
   asName: string;
-  status: string;
   files: number;
   bytes: number;
   chapterFiles: number;
@@ -546,6 +544,8 @@ export type WorkflowState =
   | {
       available: true;
       workflows: WorkflowRecord[];
+      /** How many projects use each workflow, and how many are in each of its stages. */
+      usage: Record<string, WorkflowUsage>;
       /** The roles a gate can name. */
       roles: { id: string; name: string }[];
       /** May the person using the app build workflows? Everyone may read them. */
@@ -556,14 +556,33 @@ export interface WorkflowApi {
   state(): Promise<WorkflowState>;
   /** A blank workflow, or a copy of `copyFrom`. It is not the default until `setDefault`. */
   create(i: { name: string; description?: string; copyFrom?: string }): Promise<WorkflowRecord>;
-  /** Saves the whole definition (stages, moves, gates). Dropping a stage that has books needs `moveBooks`. */
+  /** Saves the whole definition (stages, moves, gates). Dropping a stage that has projects in it needs `moveProjects` to say where they go. */
   save(id: string, draft: WorkflowDraft): Promise<WorkflowRecord>;
-  setDefault(id: string): Promise<WorkflowRecord>;
+  /** Makes it the default for new projects, new subprojects, or both (the default when `levels` is left out). */
+  setDefault(id: string, levels?: ('project' | 'subproject')[]): Promise<WorkflowRecord>;
   delete(id: string): Promise<void>;
+}
+
+/** A project's workflow and where it is in it, as the pages show them. */
+export interface ProjectStageView {
+  workflowId: string;
+  workflowName: string;
+  stage: { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold' } | null;
+}
+export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
+
+/** Where projects are in their workflows, and the moves between stages. A move is checked against the workflow's gates and the person's roles. */
+export interface StagesApi {
+  /** Every project's stage (by project id), for the tree and the lists. */
+  views(): Promise<Record<string, ProjectStageView>>;
+  /** Where one project can go, and for each move whether it is open now and what is in the way. Null for a project with no workflow. */
+  options(projectId: string): Promise<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null>;
+  move(projectId: string, to: string): Promise<void>;
 }
 
 export interface CadrelApi {
   studios: StudiosApi;
+  stages: StagesApi;
   workflow: WorkflowApi;
   people: PeopleApi;
   myBooks: MyBooksApi;

@@ -27,7 +27,7 @@ import { nodeFs } from './nodeFs';
 import { bundledFont } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
-import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig, type ProjectTemplate } from '../src/shared/projects';
+import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig, type ProjectStage, type ProjectSummary, type ProjectMeta, type RootListing, type ProjectTemplate } from '../src/shared/projects';
 import * as projects from './projects';
 import { existingFolder, SettingsStore } from './settings';
 import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
@@ -80,6 +80,8 @@ export interface WriteHost {
   projectsFolder?: () => string;
   /** When set, the project templates are the host's (Cadrel's Admin page governs them); Write's own are ignored and not editable. */
   templates?: () => ProjectTemplate[];
+  /** When set, the host's workflow stage per project folder name. Write has no statuses of its own; this is shown read-only and never saved. */
+  projectStages?: () => Promise<ReadonlyMap<string, ProjectStage>>;
   /** When set, Cadrel Write's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
 }
@@ -225,6 +227,16 @@ const SYNC_TRIGGERS = new Set([
 
 const defaultRoot = () => host?.defaultRoot?.() ?? defaultRootFolder(app.getPath('home'));
 const projectsRoot = () => host?.projectsFolder?.() ?? settings.projects().rootFolder ?? defaultRoot();
+/** Puts the host's stage on a project's metadata (by folder name); without a host there is none. */
+const stagesNow = async (): Promise<ReadonlyMap<string, ProjectStage> | null> => (host?.projectStages ? host.projectStages().catch(() => new Map<string, ProjectStage>()) : null);
+const stagedList = async (listing: RootListing): Promise<RootListing> => {
+  const stages = await stagesNow();
+  return stages ? { ...listing, projects: listing.projects.map((p: ProjectSummary) => ({ ...p, meta: { ...p.meta, stage: stages.get(path.basename(p.path)) ?? null } })) } : listing;
+};
+const staged = async <T extends ProjectMeta | null>(dir: string, meta: T): Promise<T> => {
+  const stages = await stagesNow();
+  return meta && stages ? { ...meta, stage: stages.get(path.basename(dir)) ?? null } : meta;
+};
 const templatesList = (): ProjectTemplate[] => host?.templates?.() ?? settings.projects().templates;
 const dirExists = (p: string) => fsp.stat(p).then((st) => st.isDirectory(), () => false);
 
@@ -489,9 +501,9 @@ function registerIpc(): void {
     });
     return config();
   });
-  handle('projects:list', () => projects.listProjects(projectsRoot()));
+  handle('projects:list', async () => stagedList(await projects.listProjects(projectsRoot())));
   handle('projects:create', (_e, name: string, templateId: string) => createProjectFolder(name, templateId));
-  handle('projects:meta', (_e, p: string) => (path.isAbsolute(p) ? projects.readMeta(path.resolve(p)) : null)); // read-only, any folder
+  handle('projects:meta', async (_e, p: string) => (path.isAbsolute(p) ? await staged(p, await projects.readMeta(path.resolve(p))) : null)); // read-only, any folder
   handle('projects:update', (_e, p: string, patch: Record<string, unknown>) => projects.updateMeta(projectPath(p), patch as never));
   handle('projects:rename', (_e, p: string, name: string) => renameProjectFolder(p, name));
   handle('projects:duplicate', (_e, p: string, name: string) => projects.duplicateProject(projectPath(p), String(name)));

@@ -7,8 +7,8 @@ export function seededPreviewFs(): MemoryFs {
   fs.seed('/Cadrel Write/The Lost King/Manuscript/The Lost King.md', book);
   fs.seed('/Cadrel Write/The Lost King/Characters/Mara.md', '# Mara\n\nHarbour girl, sharp with numbers, sharper with her tongue.\n');
   fs.seed('/Cadrel Write/The Lost King/Worldbuilding/The Coast.md', '# The Coast\n\nSalt, rope and long memories.\n');
-  fs.seed('/Cadrel Write/The Lost King/.cadrel/project.json', JSON.stringify({ version: 1, id: 'p1', name: 'The Lost King', templateId: 'novel', templateName: 'Novel', createdAt: '2026-09-01T10:00:00.000Z', status: 'drafting' }));
+  fs.seed('/Cadrel Write/The Lost King/.cadrel/project.json', JSON.stringify({ version: 1, id: 'p1', name: 'The Lost King', templateId: 'novel', templateName: 'Novel', createdAt: '2026-09-01T10:00:00.000Z' }));
   fs.seed('/Cadrel Write/Short Stories/Drafts/Lantern.md', '# Lantern\n\nA small light in a large dark.\n');
-  fs.seed('/Cadrel Write/Short Stories/.cadrel/project.json', JSON.stringify({ version: 1, id: 'p2', name: 'Short Stories', templateId: 'short-story', templateName: 'Short Story', createdAt: '2026-09-10T10:00:00.000Z', status: 'planning' }));
+  fs.seed('/Cadrel Write/Short Stories/.cadrel/project.json', JSON.stringify({ version: 1, id: 'p2', name: 'Short Stories', templateId: 'short-story', templateName: 'Short Story', createdAt: '2026-09-10T10:00:00.000Z' }));
   return fs;
 }

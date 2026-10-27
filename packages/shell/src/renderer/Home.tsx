@@ -1,7 +1,7 @@
 import { childrenOf, kindLabel } from '@cadrel/kernel';
 import type { Overview, Page, StudioState, StudiosView } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, greeting, percent, STATUS_LABEL, wordsLabel } from './format';
+import { ago, formatWords, greeting, percent, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
 import { NotConnected } from './NotConnected';
 import { StudioSwitcher } from './StudioSwitcher';
@@ -82,7 +82,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
           <>
             <div className="row">
               <strong className="project-name">{recent.name}</strong>
-              <span className="chip">{STATUS_LABEL[recent.status] ?? recent.status}</span>
+              {recent.stage && <span className="chip">{recent.stage}</span>}
             </div>
             <p className="muted">
               {wordsLabel(recent.words)} · edited {ago(recent.lastEdited, now)}

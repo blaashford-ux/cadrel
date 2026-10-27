@@ -53,7 +53,7 @@ describe('IP, series and books', () => {
     const two = await createBook(db, ctx(), { title: 'Tidewater', seriesId: series.id, position: 2 });
     expect([one.position, two.position, three.position]).toEqual([1, 2, 3]);
     expect((await listBooks(db, ctx(), { seriesId: series.id })).map((b) => b.title)).toEqual(['Landfall', 'Tidewater', 'Harvest']);
-    expect(one).toMatchObject({ studioId: 's1', penName: 'Ana Reyes', stage: 'planning', workflowId: null, createdBy: 'ana', createdAt: '2026-10-27T10:00:00.000Z', archivedAt: null, editions: [] });
+    expect(one).toMatchObject({ studioId: 's1', penName: 'Ana Reyes', createdBy: 'ana', createdAt: '2026-10-27T10:00:00.000Z', archivedAt: null, editions: [] });
     expect((await listSeries(db, ctx(), { ipId: ip.id })).map((s) => s.name)).toEqual(['Salt Road Trilogy']);
     expect((await listIps(db, ctx())).map((i) => i.name)).toEqual(['The Salt Road']);
   });

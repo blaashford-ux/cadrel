@@ -34,8 +34,6 @@ describe('the catalogue behind the permission check', () => {
     expect(await denied(me.books()), 'read').toBe(rank < 1);
     expect(await denied(me.byAsin('B0AAAAAAA1')), 'read by asin').toBe(rank < 1);
     expect(await denied(me.updateBook(book.id, { subtitle: 'x' })), 'edit').toBe(rank < 2);
-    expect(await denied(me.setStage(book.id, 'drafting')), 'move stage').toBe(rank < 2);
-    expect(await denied(me.stageOptions(book.id)), 'see stages').toBe(rank < 1);
     expect(await denied(me.addEdition(book.id, { format: 'paperback' })), 'add edition').toBe(rank < 2);
     expect(await denied(me.updateEdition(edition.id, { price: 1 })), 'edit edition').toBe(rank < 2);
     expect(await denied(me.moveBook(book.id, null)), 'move').toBe(rank < 2);

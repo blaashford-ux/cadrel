@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { kindLabel, outline } from '@cadrel/kernel';
 import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, percent, STATUS_LABEL } from './format';
+import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
 
 const api = window.cadrel;
@@ -33,7 +33,7 @@ function ProjectsTable({ rows, now }: { rows: WriteProjectRow[]; now: number }) 
           return (
             <tr key={p.name}>
               <th scope="row">{p.name}</th>
-              <td>{STATUS_LABEL[p.status] ?? p.status}</td>
+              <td>{p.stage ?? <span className="muted">none</span>}</td>
               <td className="num">{p.words === null ? <span className="muted">none active</span> : formatWords(p.words)}</td>
               <td>
                 {pct === null ? (

@@ -16,11 +16,11 @@ const CALLS: Record<string, string> = {
   createRole: 'createRole', updateRole: 'updateRole', resetRole: 'resetRole', deleteRole: 'deleteRole', acknowledgeCapabilities: 'acknowledgeCapabilities',
   grant: 'grant', revoke: 'revoke', setExpiry: 'setExpiry'
 };
+export type StudioWorkflows = ReturnType<StudioService['as']>['workflows'];
 export const PEOPLE_CALLS = Object.keys(CALLS);
 
-/** The workflow builder's operations, by the page's names. Reading is `workflowState`; nothing else on the service is reachable. */
-const WORKFLOW_CALLS: Record<string, string> = { create: 'create', save: 'save', setDefault: 'setDefault', delete: 'delete' };
-export const WORKFLOW_CALL_NAMES = Object.keys(WORKFLOW_CALLS);
+/** The workflow builder's operations that need only the records, by the page's names (`save` and `delete` also move projects, so they go through `ProjectStages`). */
+const WORKFLOW_CALLS: Record<string, string> = { create: 'create', setDefault: 'setDefault' };
 
 export class PeopleHost {
   private db: StudioDb | null = null;
@@ -50,6 +50,11 @@ export class PeopleHost {
     this.meId = '';
   }
 
+  /** The workflow operations as the person using the app, for the project stages; null where this computer holds no records for the Studio. */
+  get workflows(): StudioWorkflows | null {
+    return this.svc ? (this.svc.as(this.meId).workflows as StudioWorkflows) : null;
+  }
+
   /** The Studio's records, for other parts of the app (the catalogue) that read them through the same service. */
   get service(): StudioService | null {
     return this.svc;
@@ -75,7 +80,7 @@ export class PeopleHost {
     return people[method]!(...args);
   }
 
-  async workflowState(): Promise<WorkflowState> {
+  async workflowState(): Promise<Exclude<WorkflowState, { available: true }> | Omit<Extract<WorkflowState, { available: true }>, 'usage'>> {
     if (!this.svc) return { available: false, reason: this.why };
     const p = this.svc.as(this.meId);
     const [workflows, roles, may] = await Promise.all([p.workflows.list(), p.people.roles().catch(() => []), p.can('workflow.design')]);
