@@ -7,7 +7,7 @@
  * once a book is linked to a project; until then they do not reach catalogue calls, which is the safe way round.
  */
 import {
-  acknowledgeCapabilities, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
+  acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles,
@@ -118,6 +118,10 @@ export class StudioAs {
     moveBook: async (id: string, seriesId: string | null, position?: number | null): Promise<BookWithEditions> => (await this.need('catalogue.edit'), moveBook(this.o.db, this.ctx(), id, seriesId, position)),
     addEdition: async (bookId: string, i: Parameters<typeof addEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), addEdition(this.o.db, this.ctx(), bookId, i)),
     updateEdition: async (id: string, patch: Parameters<typeof updateEdition>[3]): Promise<Edition> => (await this.need('catalogue.edit'), updateEdition(this.o.db, this.ctx(), id, patch)),
+
+    /** Which project each book is made in. */
+    projectLinks: async (): Promise<{ bookId: string; projectId: string }[]> => (await this.need('catalogue.read'), bookProjectLinks(this.o.db, this.ctx())),
+    linkProject: async (bookId: string, projectId: string | null): Promise<void> => (await this.need('catalogue.edit'), linkBookProject(this.o.db, this.ctx(), bookId, projectId)),
 
     archive: async (kind: 'ip' | 'series' | 'book' | 'edition', id: string, archived = true): Promise<void> => (await this.need('catalogue.archive'), setCatalogueArchived(this.o.db, this.ctx(), kind, id, archived))
   };

@@ -80,6 +80,17 @@ const api: CadrelApi = {
     effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
   },
   myBooks: {
+    catalogue: () => studioCall('shell:mybooks:catalogue'),
+    catalogueBook: (id) => studioCall('shell:mybooks:catalogueBook', id),
+    createBook: (i) => studioCall('shell:mybooks:call', 'createBook', i),
+    createSeries: (i) => studioCall('shell:mybooks:call', 'createSeries', i),
+    updateBook: (id, patch) => studioCall('shell:mybooks:call', 'updateBook', id, patch),
+    moveBook: (id, seriesId, position) => studioCall('shell:mybooks:call', 'moveBook', id, seriesId, position),
+    addEdition: (bookId, i) => studioCall('shell:mybooks:call', 'addEdition', bookId, i),
+    updateEdition: (id, patch) => studioCall('shell:mybooks:call', 'updateEdition', id, patch),
+    archiveBook: (id) => studioCall('shell:mybooks:call', 'archive', 'book', id),
+    linkProject: (bookId, projectId) => studioCall('shell:mybooks:call', 'linkProject', bookId, projectId),
+    addFromMarket: (asins) => studioCall('shell:mybooks:addFromMarket', asins),
     list: () => studioCall('shell:mybooks:list'),
     book: (asin) => studioCall('shell:mybooks:book', asin),
     saveMarket: (asin) => studioCall('shell:mybooks:saveMarket', asin),

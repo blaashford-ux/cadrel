@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   CatalogueError, addEdition, bookByAsin, createBook, createIp, createSeries, getBook, getEdition, isId, listBooks, listIps, listSeries, moveBook, newRecordId, normalizeAsin, normalizeIsbn,
-  setCatalogueArchived, updateBook, updateEdition, type Ctx
+  bookProjectLinks, linkBookProject, setCatalogueArchived, updateBook, updateEdition, type Ctx
 } from '../src/index';
 import type { Db } from '../src/vault';
 import { memoryDb } from './sqlite';
@@ -219,5 +219,27 @@ describe('studios and the audit log', () => {
     const log = await audits();
     expect(log.map((l) => [l.actor, l.action])).toEqual([['ana', 'catalogue.ip.create'], ['bo', 'catalogue.series.create']]);
     expect(log[0]!.target).toBe(ip.id);
+  });
+});
+
+describe('the project a book is made in', () => {
+  it('links a book to one project and a project to one book, and unlinks', async () => {
+    const a = await createBook(db, ctx(), { title: 'A' });
+    const b = await createBook(db, ctx(), { title: 'B' });
+    await linkBookProject(db, ctx(), a.id, 'proj1');
+    expect(await bookProjectLinks(db, ctx())).toEqual([{ bookId: a.id, projectId: 'proj1' }]);
+    expect(await code(linkBookProject(db, ctx(), b.id, 'proj1'))).toBe('exists'); // that project is taken
+    await linkBookProject(db, ctx(), a.id, 'proj2'); // relinking replaces
+    expect(await bookProjectLinks(db, ctx())).toEqual([{ bookId: a.id, projectId: 'proj2' }]);
+    await linkBookProject(db, ctx(), b.id, 'proj1'); // free now
+    await linkBookProject(db, ctx(), a.id, null);
+    expect((await bookProjectLinks(db, ctx())).map((l) => l.bookId)).toEqual([b.id]);
+    expect(await code(linkBookProject(db, ctx(), 'nope', 'p'))).toBe('not-found');
+    expect((await audits()).map((x) => x.action).filter((x) => x.startsWith('book.') && x !== 'book.create')).toEqual(['book.link', 'book.link', 'book.link', 'book.unlink']);
+  });
+  it('is separate by studio', async () => {
+    const a = await createBook(db, ctx(), { title: 'A' });
+    await linkBookProject(db, ctx(), a.id, 'p');
+    expect(await bookProjectLinks(db, ctx({ studioId: 's2' }))).toEqual([]);
   });
 });

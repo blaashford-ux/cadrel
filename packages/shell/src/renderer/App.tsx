@@ -116,7 +116,7 @@ export function App() {
           {!blocked && page === 'projects' && (
             <Projects studio={studio.state} overview={overview} error={studio.error} clearError={studio.clearError} act={studio.act} onGo={go} selected={selected} onSelect={select} />
           )}
-          {!blocked && page === 'mybooks' && <MyBooks studio={studio.state} act={studio.act} error={studio.error} clearError={studio.clearError} />}
+          {!blocked && page === 'mybooks' && <MyBooks studio={studio.state} act={studio.act} error={studio.error} clearError={studio.clearError} onProject={(id) => (select(id), go('projects'))} />}
           {!blocked && page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
           {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} onRefresh={refresh} />}
           {!blocked && page === 'planner' && <Planner studio={studio.state} onProject={(id) => (select(id), go('projects'))} />}

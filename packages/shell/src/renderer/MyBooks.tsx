@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NotesPanel } from '@cadrel/ui';
-import type { BookPage, BookSaveResult, MyBookRow, MyBooksList, StudioState } from '../shared/api';
+import type { BookPage, BookSaveResult, CatalogueBookRow, CatalogueDetail, CatalogueList, MyBookRow, MyBooksList, StudioState } from '../shared/api';
 
 const api = window.cadrel.myBooks;
 const studioApi = window.cadrel.studio;
@@ -63,7 +63,7 @@ function SaveBar({ page, financeVisible }: { page: BookPage; financeVisible: boo
   );
 }
 
-function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string; financeVisible: boolean; studio: StudioState | null; act: Props['act']; onBack: () => void }) {
+function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string; financeVisible: boolean; studio: StudioState | null; act: Props['act']; onBack?: () => void }) {
   const [page, setPage] = useState<BookPage | null | undefined>(undefined);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
@@ -93,7 +93,7 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
   if (page === null) {
     return (
       <>
-        <button type="button" className="link" onClick={onBack}>← My Books</button>
+        {onBack && <button type="button" className="link" onClick={onBack}>← My Books</button>}
         <p className="muted">{err ?? 'That book is not in My Books any more.'}</p>
       </>
     );
@@ -102,7 +102,7 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
   const f = page.finance;
   return (
     <div className="mybook">
-      <button type="button" className="link" onClick={onBack}>← My Books</button>
+      {onBack && <button type="button" className="link" onClick={onBack}>← My Books</button>}
       <section className="card" aria-labelledby="mb-over">
         <div className="mb-head">
           {page.cover ? <img className="mb-cover" src={page.cover} alt={`Cover of ${page.title}`} /> : <div className="mb-cover empty" aria-hidden />}
@@ -217,7 +217,8 @@ function BookView({ asin, financeVisible, studio, act, onBack }: { asin: string;
   );
 }
 
-export function MyBooks({ studio, act, error, clearError }: Props) {
+/** The list from Market alone: used where this computer holds no catalogue records for the Studio. */
+function MarketList({ studio, act, error, clearError }: Props) {
   const [list, setList] = useState<MyBooksList | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -297,5 +298,333 @@ export function MyBooks({ studio, act, error, clearError }: Props) {
       )}
       {!money && list.books.length > 0 && <p className="muted small">Sales and royalties are not part of your role, so they are not shown.</p>}
     </div>
+  );
+}
+
+const FORMATS = ['ebook', 'paperback', 'hardcover', 'audiobook', 'other'];
+const num = (v: string): number | null => (v.trim() === '' ? null : Number(v));
+
+/** Runs a change and reports a refusal in words. */
+function useRun(reload: () => void) {
+  const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const run = async <T,>(job: () => Promise<T>, ok?: string): Promise<{ ok: true; value: T } | { ok: false }> => {
+    setErr(null);
+    setNote(null);
+    try {
+      const value = await job();
+      if (ok) setNote(ok);
+      reload();
+      return { ok: true, value };
+    } catch (e) {
+      setErr(clean(e));
+      return { ok: false };
+    }
+  };
+  return { err, note, run, clear: () => (setErr(null), setNote(null)) };
+}
+
+function Progress({ b }: { b: Pick<CatalogueBookRow, 'words' | 'goalWords'> }) {
+  if (b.words === null) return <span className="muted small">no manuscript</span>;
+  const pct = b.goalWords ? Math.min(100, Math.round((b.words / b.goalWords) * 100)) : null;
+  return <span className="small">{n(b.words)} words{pct !== null ? <span className="muted"> · {pct}% of {n(b.goalWords)}</span> : null}</span>;
+}
+
+function NewBook({ list, onDone }: { list: CatalogueList; onDone: (id: string) => void }) {
+  const [title, setTitle] = useState('');
+  const [pen, setPen] = useState('');
+  const [seriesId, setSeriesId] = useState('');
+  const [position, setPosition] = useState('');
+  const [newSeries, setNewSeries] = useState('');
+  const { err, run } = useRun(() => undefined);
+  const make = async () => {
+    const r = await run(async () => {
+      let sid: string | null = seriesId || null;
+      if (seriesId === '__new') sid = (await api.createSeries({ name: newSeries })).id;
+      return api.createBook({ title, penName: pen, seriesId: sid, position: sid ? num(position) : null });
+    });
+    if (r.ok) onDone(r.value.id);
+  };
+  return (
+    <form className="card" aria-label="New book" onSubmit={(e) => (e.preventDefault(), void make())}>
+      <h3>New book</h3>
+      <div className="row">
+        <input aria-label="Title" placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} autoFocus />
+        <input aria-label="Pen name" placeholder="Pen name" value={pen} onChange={(e) => setPen(e.target.value)} list="mb-pens" />
+        <datalist id="mb-pens">{[...new Set(list.books.map((b) => b.penName).filter(Boolean))].map((p) => <option key={p} value={p} />)}</datalist>
+      </div>
+      <div className="row">
+        <select aria-label="Series" value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
+          <option value="">Not in a series</option>
+          {list.series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <option value="__new">A new series…</option>
+        </select>
+        {seriesId === '__new' && <input aria-label="New series name" placeholder="Series name" value={newSeries} onChange={(e) => setNewSeries(e.target.value)} />}
+        {seriesId !== '' && <input aria-label="Position in the series" placeholder="Position (1, 2, 2.5…)" value={position} onChange={(e) => setPosition(e.target.value)} inputMode="decimal" />}
+        <button type="submit" className="primary" disabled={!title.trim() || (seriesId === '__new' && !newSeries.trim())}>Create</button>
+      </div>
+      {err && <div className="banner error" role="alert">{err}</div>}
+    </form>
+  );
+}
+
+function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; reload: () => void; onOpen: (id: string) => void }) {
+  const [search, setSearch] = useState('');
+  const [seriesF, setSeriesF] = useState('');
+  const [adding, setAdding] = useState(false);
+  const { err, note, run } = useRun(reload);
+  const money = list.financeVisible;
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return list.books.filter((b) => (!seriesF || (seriesF === '__none' ? !b.seriesId : b.seriesId === seriesF)) && (!q || `${b.title} ${b.penName} ${b.seriesName ?? ''} ${b.editions.map((e) => `${e.asin ?? ''} ${e.isbn ?? ''}`).join(' ')}`.toLowerCase().includes(q)));
+  }, [list, search, seriesF]);
+  const grouped = useMemo(() => {
+    const out: { key: string; name: string | null; books: CatalogueBookRow[] }[] = [];
+    for (const s of list.series) {
+      const books = rows.filter((b) => b.seriesId === s.id).sort((a, b) => (a.position ?? 1e9) - (b.position ?? 1e9) || a.title.localeCompare(b.title));
+      if (books.length) out.push({ key: s.id, name: s.name, books });
+    }
+    const alone = rows.filter((b) => !b.seriesId).sort((a, b) => a.title.localeCompare(b.title));
+    if (alone.length) out.push({ key: '__none', name: list.series.length ? 'Standalone' : null, books: alone });
+    return out;
+  }, [list, rows]);
+  return (
+    <div className="mybooks">
+      <p className="muted">Every book in your catalogue, in its series, with its stage and manuscript progress from its project, and its listing, sales and royalties joined from Market and Finance by ASIN.</p>
+      {list.unlisted.length > 0 && (
+        <section className="banner" aria-label="Books not in the catalogue yet">
+          <strong>{list.unlisted.length} book{list.unlisted.length === 1 ? '' : 's'} from your KDP reports and Market {list.unlisted.length === 1 ? 'is' : 'are'} not in the catalogue yet.</strong>{' '}
+          {list.may.create && <button type="button" className="primary" onClick={() => void run(() => api.addFromMarket(list.unlisted.map((u) => u.asin)).then((r) => { if (r.skipped.length) throw new Error(`Added ${r.added.length}. ${r.skipped.map((s) => `${s.asin}: ${s.reason}`).join(' ')}`); return r; }), 'Added to the catalogue.')}>Add {list.unlisted.length === 1 ? 'it' : 'them all'}</button>}
+          <ul className="plain small">{list.unlisted.slice(0, 6).map((u) => <li key={u.asin}>{u.title} <span className="muted">{u.asin}{u.penNames.length ? ` · ${u.penNames.join(', ')}` : ''}</span></li>)}</ul>
+        </section>
+      )}
+      {err && <div className="banner error" role="alert">{err}</div>}
+      {note && <div className="banner info" role="status">{note}</div>}
+      <div className="row">
+        <input aria-label="Search books" placeholder="Search title, pen name, series, ASIN or ISBN" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <select aria-label="Series" value={seriesF} onChange={(e) => setSeriesF(e.target.value)}>
+          <option value="">All series</option><option value="__none">Standalone</option>
+          {list.series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        {list.may.create && <button type="button" onClick={() => setAdding(!adding)}>{adding ? 'Cancel' : 'New book…'}</button>}
+      </div>
+      {adding && <NewBook list={list} onDone={(id) => (setAdding(false), reload(), onOpen(id))} />}
+      {list.books.length === 0 ? (
+        <div className="empty"><p><strong>No books in the catalogue yet.</strong></p><p className="muted">Create one with New book, or add the books Market already knows from your KDP reports.</p></div>
+      ) : (
+        grouped.map((g) => (
+          <section key={g.key} aria-label={g.name ?? 'Books'}>
+            {g.name && <h3>{g.name}</h3>}
+            <table className="table">
+              <thead><tr>{g.key !== '__none' && <th className="num">#</th>}<th>Title</th><th>Pen name</th><th>Stage</th><th>Manuscript</th><th className="num">Store rank</th><th className="num">Price</th>{money && <th className="num">Last month</th>}</tr></thead>
+              <tbody>
+                {g.books.map((b) => (
+                  <tr key={b.bookId} data-book={b.bookId}>
+                    {g.key !== '__none' && <td className="num">{b.position ?? ''}</td>}
+                    <th><button type="button" className="link" onClick={() => onOpen(b.bookId)}>{b.title}</button>{!b.asin && <span className="muted small"> not published</span>}</th>
+                    <td>{b.penName}</td>
+                    <td>{b.stage ? <span className="stage-chip" style={{ borderColor: b.stageColor ?? undefined, color: b.stageColor ?? undefined }}>{b.stage}</span> : <span className="muted small">{b.projectName ? 'no stage' : 'no project'}</span>}</td>
+                    <td><Progress b={b} /></td>
+                    <td className="num">{n(b.market?.overallRank)}</td>
+                    <td className="num">{b.market?.kindlePrice != null ? usd(b.market.kindlePrice) : ''}</td>
+                    {money && <td className="num">{b.market?.money?.lastMonthUsd != null ? usd(b.market.money.lastMonthUsd) : ''}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        ))
+      )}
+      {!money && list.books.length > 0 && <p className="muted small">Sales and royalties are not part of your role, so they are not shown.</p>}
+    </div>
+  );
+}
+
+function RecordCard({ d, reload }: { d: CatalogueDetail; reload: () => void }) {
+  const b = d.book;
+  const [title, setTitle] = useState(b.title);
+  const [subtitle, setSubtitle] = useState(b.subtitle);
+  const [pen, setPen] = useState(b.penName);
+  const [seriesId, setSeriesId] = useState(b.seriesId ?? '');
+  const [position, setPosition] = useState(b.position === null ? '' : String(b.position));
+  const { err, note, run } = useRun(reload);
+  useEffect(() => {
+    setTitle(b.title);
+    setSubtitle(b.subtitle);
+    setPen(b.penName);
+    setSeriesId(b.seriesId ?? '');
+    setPosition(b.position === null ? '' : String(b.position));
+  }, [b.title, b.subtitle, b.penName, b.seriesId, b.position]);
+  const edit = d.may.edit;
+  const detailsDirty = title !== b.title || subtitle !== b.subtitle || pen !== b.penName;
+  const placeDirty = seriesId !== (b.seriesId ?? '') || position !== (b.position === null ? '' : String(b.position));
+  return (
+    <section className="card" aria-labelledby="mb-rec">
+      <h3 id="mb-rec">In the catalogue</h3>
+      <div className="row">
+        <label className="field"><span className="field-label">Title</span><input value={title} disabled={!edit} onChange={(e) => setTitle(e.target.value)} maxLength={200} /></label>
+        <label className="field"><span className="field-label">Subtitle</span><input value={subtitle} disabled={!edit} onChange={(e) => setSubtitle(e.target.value)} /></label>
+        <label className="field"><span className="field-label">Pen name</span><input value={pen} disabled={!edit} onChange={(e) => setPen(e.target.value)} /></label>
+        {edit && <button type="button" className="primary" disabled={!detailsDirty || !title.trim()} onClick={() => void run(() => api.updateBook(b.bookId, { title, subtitle, penName: pen }), 'Saved.')}>Save</button>}
+      </div>
+      <div className="row">
+        <label className="field"><span className="field-label">Series</span>
+          <select value={seriesId} disabled={!edit} onChange={(e) => setSeriesId(e.target.value)} aria-label="Series">
+            <option value="">Not in a series</option>
+            {d.series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        {seriesId && <label className="field"><span className="field-label">Position</span><input value={position} disabled={!edit} onChange={(e) => setPosition(e.target.value)} inputMode="decimal" aria-label="Position in the series" placeholder="next free" /></label>}
+        {edit && <button type="button" disabled={!placeDirty} onClick={() => void run(() => api.moveBook(b.bookId, seriesId || null, seriesId ? num(position) : null), 'Moved.')}>Move</button>}
+      </div>
+      {err && <div className="banner error" role="alert">{err}</div>}
+      {note && <p className="muted small" role="status">{note}</p>}
+    </section>
+  );
+}
+
+function EditionsCard({ d, reload }: { d: CatalogueDetail; reload: () => void }) {
+  const b = d.book;
+  const { err, note, run } = useRun(reload);
+  const [format, setFormat] = useState('');
+  const [asin, setAsin] = useState('');
+  const [isbn, setIsbn] = useState('');
+  const free = FORMATS.filter((f) => !b.editions.some((e) => e.format === f));
+  const f = format || free[0] || '';
+  const edit = d.may.edit;
+  return (
+    <section className="card" aria-labelledby="mb-ed">
+      <h3 id="mb-ed">Editions</h3>
+      {b.editions.length === 0 && <p className="muted">No editions yet. Add the format and its ASIN to join this book to Market and Finance.</p>}
+      {b.editions.length > 0 && (
+        <table className="table">
+          <thead><tr><th>Format</th><th>ASIN</th><th>ISBN</th><th className="num">Price</th><th>Published</th></tr></thead>
+          <tbody>{b.editions.map((e) => <EditionRow key={e.id} e={e} edit={edit} run={run} />)}</tbody>
+        </table>
+      )}
+      {edit && free.length > 0 && (
+        <form className="row" aria-label="Add an edition" onSubmit={(ev) => (ev.preventDefault(), void run(() => api.addEdition(b.bookId, { format: f, asin: asin.trim() || null, isbn: isbn.trim() || null }), 'Edition added.').then((r) => r.ok && (setAsin(''), setIsbn(''), setFormat(''))))}>
+          <select aria-label="Format" value={f} onChange={(e) => setFormat(e.target.value)}>{free.map((x) => <option key={x} value={x}>{x}</option>)}</select>
+          <input aria-label="ASIN" placeholder="ASIN" value={asin} onChange={(e) => setAsin(e.target.value)} maxLength={10} />
+          <input aria-label="ISBN" placeholder="ISBN" value={isbn} onChange={(e) => setIsbn(e.target.value)} />
+          <button type="submit">Add edition</button>
+        </form>
+      )}
+      {err && <div className="banner error" role="alert">{err}</div>}
+      {note && <p className="muted small" role="status">{note}</p>}
+    </section>
+  );
+}
+
+function EditionRow({ e, edit, run }: { e: CatalogueBookRow['editions'][number]; edit: boolean; run: ReturnType<typeof useRun>['run'] }) {
+  const [asin, setAsin] = useState(e.asin ?? '');
+  const [isbn, setIsbn] = useState(e.isbn ?? '');
+  const [price, setPrice] = useState(e.price === null ? '' : String(e.price));
+  const [date, setDate] = useState(e.publishedOn ?? '');
+  useEffect(() => {
+    setAsin(e.asin ?? '');
+    setIsbn(e.isbn ?? '');
+    setPrice(e.price === null ? '' : String(e.price));
+    setDate(e.publishedOn ?? '');
+  }, [e.asin, e.isbn, e.price, e.publishedOn]);
+  const dirty = asin !== (e.asin ?? '') || isbn !== (e.isbn ?? '') || price !== (e.price === null ? '' : String(e.price)) || date !== (e.publishedOn ?? '');
+  return (
+    <tr>
+      <th>{e.format}</th>
+      <td><input aria-label={`${e.format} ASIN`} value={asin} disabled={!edit} onChange={(ev) => setAsin(ev.target.value)} maxLength={10} /></td>
+      <td><input aria-label={`${e.format} ISBN`} value={isbn} disabled={!edit} onChange={(ev) => setIsbn(ev.target.value)} /></td>
+      <td className="num"><input aria-label={`${e.format} price`} value={price} disabled={!edit} onChange={(ev) => setPrice(ev.target.value)} inputMode="decimal" size={6} /> <span className="muted small">{e.currency}</span></td>
+      <td><input type="date" aria-label={`${e.format} published on`} value={date} disabled={!edit} onChange={(ev) => setDate(ev.target.value)} /></td>
+      <td>{edit && <button type="button" disabled={!dirty} onClick={() => void run(() => api.updateEdition(e.id, { asin: asin.trim() || null, isbn: isbn.trim() || null, price: num(price), publishedOn: date || null }), 'Saved.')}>Save</button>}</td>
+    </tr>
+  );
+}
+
+function ProjectCard({ d, reload, onProject }: { d: CatalogueDetail; reload: () => void; onProject?: (id: string) => void }) {
+  const b = d.book;
+  const [pick, setPick] = useState('');
+  const { err, run } = useRun(reload);
+  return (
+    <section className="card" aria-labelledby="mb-proj">
+      <h3 id="mb-proj">Project and manuscript</h3>
+      {b.projectId ? (
+        <>
+          <p>
+            Made in <strong>{onProject ? <button type="button" className="link" onClick={() => onProject(b.projectId!)}>{b.projectName}</button> : b.projectName}</strong>
+            {b.stage && <> · <span className="stage-chip" style={{ borderColor: b.stageColor ?? undefined, color: b.stageColor ?? undefined }}>{b.stage}</span></>}
+          </p>
+          <p><Progress b={b} /></p>
+          {d.may.edit && <button type="button" className="quiet" onClick={() => void run(() => api.linkProject(b.bookId, null))}>Unlink</button>}
+        </>
+      ) : (
+        <>
+          <p className="muted">Link the project this book is made in, and its stage and manuscript progress show here and in the list.</p>
+          {d.may.edit && (
+            <div className="row">
+              <select aria-label="Project" value={pick} onChange={(e) => setPick(e.target.value)}><option value="">Choose a project…</option>{d.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+              <button type="button" disabled={!pick} onClick={() => void run(() => api.linkProject(b.bookId, pick))}>Link</button>
+            </div>
+          )}
+        </>
+      )}
+      {err && <div className="banner error" role="alert">{err}</div>}
+    </section>
+  );
+}
+
+function CatalogueBookView({ bookId, financeVisible, studio, act, onBack, onProject }: { bookId: string; financeVisible: boolean; studio: StudioState | null; act: Props['act']; onBack: () => void; onProject?: (id: string) => void }) {
+  const [d, setD] = useState<CatalogueDetail | null | undefined>(undefined);
+  const [asin, setAsin] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const reload = () => setTick((t) => t + 1);
+  useEffect(() => {
+    let live = true;
+    void api.catalogueBook(bookId).then((x) => live && setD(x), () => live && setD(null));
+    return () => {
+      live = false;
+    };
+  }, [bookId, tick]);
+  const asins = (d?.book.editions ?? []).filter((e) => e.asin).map((e) => ({ asin: e.asin!, format: e.format }));
+  const shown = asin && asins.some((a) => a.asin === asin) ? asin : d?.book.asin ?? null;
+  if (d === undefined) return <p className="muted">Loading…</p>;
+  if (d === null) return <><button type="button" className="link" onClick={onBack}>← My Books</button><p className="muted">That book is not in the catalogue any more.</p></>;
+  return (
+    <div className="mybook">
+      <button type="button" className="link" onClick={onBack}>← My Books</button>
+      <h2>{d.book.title}{d.book.seriesName ? <span className="muted small"> · {d.book.seriesName}{d.book.position !== null ? ` #${d.book.position}` : ''}</span> : null}</h2>
+      <RecordCard d={d} reload={reload} />
+      <EditionsCard d={d} reload={reload} />
+      <ProjectCard d={d} reload={reload} onProject={onProject} />
+      {asins.length > 1 && (
+        <label className="inline"><span className="muted small">Listing, sales and royalties for</span>
+          <select value={shown ?? ''} onChange={(e) => setAsin(e.target.value)} aria-label="Edition shown below">{asins.map((a) => <option key={a.asin} value={a.asin}>{a.format} · {a.asin}</option>)}</select>
+        </label>
+      )}
+      {shown ? <BookView key={shown} asin={shown} financeVisible={financeVisible} studio={studio} act={act} /> : <section className="card"><p className="muted">This book has no ASIN yet, so there is no listing, sales or royalty data to join. Add an edition with its ASIN above once it is published.</p></section>}
+    </div>
+  );
+}
+
+export function MyBooks(props: Props & { onProject?: (id: string) => void }) {
+  const [list, setList] = useState<CatalogueList | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const load = () => void api.catalogue().then(setList, (e) => setLoadError(clean(e)));
+  useEffect(() => {
+    if (open) return;
+    load();
+    window.addEventListener('focus', load);
+    return () => window.removeEventListener('focus', load);
+  }, [open]);
+  if (loadError) return <div className="banner error" role="alert">{loadError}</div>;
+  if (!list) return <p className="muted">Loading…</p>;
+  if (!list.available) return <MarketList {...props} />;
+  return open ? (
+    <>
+      {props.error && <div className="banner error" role="alert">{props.error} <button type="button" className="link" onClick={props.clearError}>Dismiss</button></div>}
+      <CatalogueBookView bookId={open} financeVisible={list.financeVisible} studio={props.studio} act={props.act} onBack={() => setOpen(null)} onProject={props.onProject} />
+    </>
+  ) : (
+    <CatalogueListView list={list} reload={load} onOpen={setOpen} />
   );
 }

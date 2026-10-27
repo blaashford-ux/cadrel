@@ -423,6 +423,49 @@ export interface MyBooksList {
   financeVisible: boolean;
 }
 
+/** One format of a book in the catalogue. The ASIN is the join to Market and Finance. */
+export interface CatalogueEdition { id: string; format: string; asin: string | null; isbn: string | null; price: number | null; currency: string; publishedOn: string | null }
+/** A book in the catalogue, with its project's stage and progress and (when it has an ASIN Market knows) its listing and money. */
+export interface CatalogueBookRow {
+  bookId: string;
+  title: string;
+  subtitle: string;
+  penName: string;
+  seriesId: string | null;
+  seriesName: string | null;
+  position: number | null;
+  editions: CatalogueEdition[];
+  /** The ASIN that stands for the book in Market and Finance; null until an edition has one. */
+  asin: string | null;
+  market: MyBookRow | null;
+  projectId: string | null;
+  projectName: string | null;
+  stage: string | null;
+  stageColor: string | null;
+  words: number | null;
+  goalWords: number | null;
+}
+export interface CatalogueList {
+  /** False where this computer holds no records for the Studio: the page falls back to Market's list. */
+  available: boolean;
+  reason?: string;
+  marketAvailable: boolean;
+  financeVisible: boolean;
+  may: { create: boolean; edit: boolean; archive: boolean };
+  series: { id: string; name: string }[];
+  books: CatalogueBookRow[];
+  /** Books Market knows as yours that the catalogue does not have yet. */
+  unlisted: { asin: string; title: string; penNames: string[] }[];
+  /** Projects a book could be linked to (live and not linked to a book yet). */
+  projects: { id: string; name: string }[];
+}
+export interface CatalogueDetail {
+  book: CatalogueBookRow;
+  series: { id: string; name: string }[];
+  projects: { id: string; name: string }[];
+  may: CatalogueList['may'];
+}
+
 /** Everything about one published book, assembled from Market and (for roles that may see it) Finance. Nothing is stored here. */
 export interface BookPage {
   asin: string;
@@ -477,6 +520,20 @@ export interface BookSaveResult {
 
 /** My Books: the portal for a published book. It reads Market and Finance and saves through their own generators; it keeps no data. */
 export interface MyBooksApi {
+  /** The catalogue's books with Market and Finance joined by ASIN. Where this computer has no records, `available` is false and `list()` is the fallback. */
+  catalogue(): Promise<CatalogueList>;
+  catalogueBook(bookId: string): Promise<CatalogueDetail | null>;
+  createBook(i: { title: string; subtitle?: string; penName?: string; seriesId?: string | null; position?: number | null }): Promise<{ id: string }>;
+  createSeries(i: { name: string; description?: string }): Promise<{ id: string; name: string }>;
+  updateBook(id: string, patch: { title?: string; subtitle?: string; penName?: string }): Promise<unknown>;
+  moveBook(id: string, seriesId: string | null, position?: number | null): Promise<unknown>;
+  addEdition(bookId: string, i: { format: string; asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
+  updateEdition(id: string, patch: { asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
+  archiveBook(id: string): Promise<void>;
+  /** Links the book to the project it is made in (or unlinks with null). */
+  linkProject(bookId: string, projectId: string | null): Promise<void>;
+  /** Adds books Market knows as yours to the catalogue. */
+  addFromMarket(asins: string[]): Promise<{ added: string[]; skipped: { asin: string; reason: string }[] }>;
   list(): Promise<MyBooksList>;
   book(asin: string): Promise<BookPage | null>;
   /** Asks for a folder, then saves the Market exports for the categories this book is listed in. Null if cancelled. */

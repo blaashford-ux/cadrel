@@ -75,3 +75,16 @@ describe('tasks, approvals and decisions behind the permission check', () => {
     expect(Object.keys(ana.work).filter((k) => /decision|record/i.test(k)).sort()).toEqual(['decision', 'decisions', 'record']); // read and add: no way to change or remove an entry
   });
 });
+
+describe('linking a book to its project', () => {
+  it.each(ROLE_KEYS)('%s: sees the links with catalogue.read, changes them with catalogue.edit', async (key) => {
+    const { svc, ana, person } = await studio();
+    const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const book = await ana.catalogue.createBook({ title: `B-${key}` });
+    const me = svc.as(id).catalogue;
+    expect(await denied(me.projectLinks()), 'read').toBe(!has('catalogue.read'));
+    expect(await denied(me.linkProject(book.id, `p-${key}`)), 'link').toBe(!has('catalogue.edit'));
+  });
+});

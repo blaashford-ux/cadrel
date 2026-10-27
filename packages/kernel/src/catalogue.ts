@@ -354,3 +354,26 @@ export async function bookByAsin(db: Db, c: Pick<Ctx, 'studioId'>, asin: string)
   const b = await db.first<Book>(`SELECT ${BOOK_COLS} FROM book WHERE id = ?`, [e.bookId]);
   return b ? { book: b, edition: e } : null;
 }
+
+// ---- the project a book is made in -------------------------------------------------------------------------------------------
+
+export interface BookProjectLink { bookId: string; projectId: string }
+
+/** Links a book to the project it is made in, or unlinks it (`projectId` null). A book has one project and a project one book. */
+export async function linkBookProject(db: Db, c: Ctx, bookId: string, projectId: string | null): Promise<void> {
+  if (!(await getBook(db, c, bookId))) fail('not-found', 'That book is not there.');
+  if (projectId === null) {
+    await db.batch([{ sql: 'DELETE FROM book_project WHERE book_id = ? AND studio_id = ?', params: [bookId, c.studioId] }, audit(c, 'book.unlink', bookId, {})]);
+    return;
+  }
+  if (typeof projectId !== 'string' || !projectId) fail('invalid', 'A project is needed.');
+  await write(db, [
+    { sql: 'DELETE FROM book_project WHERE book_id = ? AND studio_id = ?', params: [bookId, c.studioId] },
+    { sql: 'INSERT INTO book_project (book_id, studio_id, project_id, linked_at, linked_by) VALUES (?,?,?,?,?)', params: [bookId, c.studioId, projectId, c.now, c.actor] },
+    audit(c, 'book.link', bookId, { projectId })
+  ], 'That project is already linked to another book.');
+}
+
+export async function bookProjectLinks(db: Db, c: Pick<Ctx, 'studioId'>): Promise<BookProjectLink[]> {
+  return db.all<BookProjectLink>('SELECT book_id AS bookId, project_id AS projectId FROM book_project WHERE studio_id = ?', [c.studioId]);
+}

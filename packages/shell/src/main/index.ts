@@ -35,6 +35,7 @@ import { ProjectStages } from './stages';
 import { callWorkflow } from './workflowCalls';
 import { ProjectWork } from './projectWork';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
+import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
@@ -855,6 +856,14 @@ function registerShellIpc(): void {
     if (typeof v !== 'string' || !/^[A-Z0-9]{10}$/.test(v)) throw new Error('That is not an ASIN.');
     return v;
   };
+  const catalogueSources = async (): Promise<Sources> => ({
+    people: peopleHost, tree: (await studio.studio.read()).tree, stages: await stages.views(),
+    write: await write.listProjects().then((l) => summariseWrite(l).projects, () => []), market: market.service, financeVisible: financeSeen()
+  });
+  manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
+  manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
+  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
   manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));
   const saveWhat = (what: 'market' | 'finance' | 'all') => async (asin: string, o?: { months?: number }) => {
