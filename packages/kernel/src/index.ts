@@ -8,3 +8,6 @@ export * from './notes';
 export * from './kinds';
 export * from './user';
 export * from './studioProtocol';
+export * from './ids';
+export * from './catalogue';
+export * from './sql';

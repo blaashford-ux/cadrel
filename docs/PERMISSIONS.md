@@ -80,7 +80,7 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Launch and marketing | M | R | A | C | R | — | C | C | M | R | — | — |
 | Market research | M | R | R | R | R | — | R | R | W | M | — | — |
 | Sales (aggregates) | M | R | R | R | R | — | — | — | R | R | R | — |
-| Royalties, payments, payouts (Finance module; shown in My Books to the same roles) | M | R | R | — | R | — | — | — | — | — | M | — |
+| Royalties, payments, payouts | M | R | R | — | R | — | — | — | — | — | M | — |
 | Contracts, credits, rights, revenue shares, costs | M | R | M | — | R | — | — | — | — | — | M | — |
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 
@@ -88,6 +88,7 @@ Notes on the defaults:
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.
+- **Finance and My Books.** The *Royalties, payments, payouts* row governs the Finance module and the Finance sections of a book's page in My Books. Until agreements exist (M7) an Author's own-books-only access cannot be enforced, so an Author is shown no Finance figures.
 - **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant). Beta readers with no account do not get a role at all: they read and comment through a Google Drive review package (see [FILES.md](FILES.md)). Guest: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
 

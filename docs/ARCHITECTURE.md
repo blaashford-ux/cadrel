@@ -134,9 +134,9 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `studio`, `person`, `membership(person, studio, kind: employee | contractor | guest)`, `role`, `role_assignment(person, role, scope)`.
 - `pen_name(person(s), display name)`: a credited identity, separate from the person.
 
-**IP and catalogue**
+**IP and catalogue** (built: `kernel/src/catalogue.ts`, migration `0003_catalogue.sql`)
 - `ip`: a property the studio develops (a world / concept). Has many series.
-- `series`, `work` (a title across formats), `book` (a work's place in a series), `edition(book, format, asin, isbn, price, dates)`.
+- `series`, `book` (a title: standalone, or at a position in a series; `work` is folded into it, since its formats are its editions), `edition(book, format, asin, isbn, price, dates)`. Archived, never deleted, in M1.
 - BookScout already has `work`, `book(asin)`, `own_book(asin)`: `edition.asin` is the join to market and sales data. This is the "connected book record".
 
 **Vault**
@@ -195,8 +195,8 @@ interface ModuleManifest {
 | Package | Contents | From |
 |---|---|---|
 | `kernel` | records, lifecycle and gate rules, permissions, audit | new |
-| `store` | async SQL interface, `node:sqlite` and D1 implementations, migrations, change log | new, BookScout's migration approach |
-| `service` | `StudioService`, actor context, transports | new |
+| `store` | async SQL interface, `node:sqlite` and D1 implementations, migrations, change log. Built: the file-backed implementation over the Worker's own migrations; D1's is the Worker's | new, BookScout's migration approach |
+| `service` | `StudioService`, actor context, transports. Built: the catalogue behind `can`, in-process; the Worker transport is M2 | new |
 | `vault` | working-folder manager, check-out / check-in, file status, sync with the Worker | new (M1 local, M2 cloud) |
 | `worker` | Cloudflare Worker, D1 and R2 bindings, migrations, update feed | new (M2) |
 | `ui` | design tokens, title/menu bar, dialogs, tree, tabs, charts, dark mode | MDEdit chrome + BookScout charts |

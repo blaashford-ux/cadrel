@@ -80,6 +80,8 @@ Not done or not yet verified (carry into M1):
 - Code signing; the installer is unsigned.
 
 ### M1: Shared records (0.3.0)
+**Progress on the shared-records list below.** Built: the `store` (file-backed async `Db`, the Worker's migrations applied in order, newer files refused), the `catalogue` records (IP, series, books at positions, editions with ASIN and ISBN; unique names, positions, ASINs and ISBNs enforced by the database; archive with cascade; every change and its audit row in one transaction; one studio cannot reach another's), and the `service` (every catalogue call checked with `can` for a named person; the one-person Studio runs as its Owner). The role matrix is tested against each operation. Not yet built: people and membership records, the stages-and-gates lifecycle, tasks, deadlines, approvals and decisions, the credit / contribution / rights / revenue-share tables, the role editor, the local vault, the Catalogue screens in the app, "adopt an MDEdit project as a book", Home and Dashboard on real records, and the MCP skeleton. My Books still lists Market's own-books list; it moves onto the catalogue (the ASIN join) once the app opens the store.
+
 Three additions are in scope before any M1 code: **Backup and Import**, a **Finance** module split out of Market, and **My Books**. Their design is in "M1 additions" below; the build order puts them first because they are restructuring and safety work that the shared records then sit on.
 
 - `kernel`, `store`, `service`: studio, people, roles, IP, series, books, editions, projects, stages and gates, tasks, deadlines, approvals, decisions, audit log; the credit / contribution / rights / revenue-share tables exist (no screens).
