@@ -207,7 +207,7 @@ interface ModuleManifest {
 | `market` | parsers, analysis, keywords, community, search/chunks | BookScout `core`, `library` |
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |
-| `sales` | KDP import, royalties, payments, payouts | BookScout `library/sales` |
+| `sales` (module: **Finance**) | KDP import, royalties, splits, payments, payouts; moves out of Market in M1 | BookScout `library/sales` |
 | `studio` | the project tree and notes store (one file, shared by the app and the AI server), Write notes reader | new |
 | `mcp` | one server, actor-scoped, tools registered by modules | BookScout `mcp` |
 | `mod-*` | one UI package per further module | new |

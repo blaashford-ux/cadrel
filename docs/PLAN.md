@@ -36,6 +36,7 @@ The suite is a shell with **Home** (my work) and **Dashboard** (the studio), wit
 |---|---|---|
 | **Vault** | working folder, check-out / check-in, versions, locks, where-used, data cards, workflows | new (PDM model) |
 | **Home** | each person's tasks, approvals, queries, recent work | new |
+| **My Books** | the portal for a published book: its listing, market data, sales and royalties, payments and splits in one place, with the save and export features of Market and Finance | new, consolidating Market and Finance views |
 | **Dashboard** | portfolio pipeline, calendar and capacity, risks, finance and market snapshots (gated) | new |
 | **Catalogue** | IP, series, books, editions, metadata, the connected book record | new + BookScout `work` / `book` |
 | **Write** | manuscripts, chapters, goals, progress | MDEdit |
@@ -44,8 +45,8 @@ The suite is a shell with **Home** (my work) and **Dashboard** (the studio), wit
 | **Art & Assets** | briefs, concepts, feedback pinned to designs, versions, usage tracking, licences (Cover Creator later) | new |
 | **Preflight** | EPUB / metadata / cover / front-matter checks, error vs warning vs suggestion | MDEdit export + epubcheck |
 | **Launch** | marketing briefs, launch plans, ARC tracking, campaign asset requests, post-launch review | new |
-| **Market** | category, keyword and comp research, cover and blurb analysis | BookScout |
-| **Sales** | KDP import, royalties, payments, series and backlist reporting | BookScout |
+| **Market** | category, keyword and comp research, cover and blurb analysis. Research only: no money. | BookScout |
+| **Finance** | KDP import, sales, royalties, splits, payments and payouts, series and backlist reporting | BookScout `library/sales` and the Money / Royalties / Payments / Payouts views |
 | **Business** | agreements, credits, contributions, rights, costs, revenue allocation, profitability, capacity planning | new + BookScout splits and payouts |
 | **Assistant** | MCP tools from every module, proposals inbox | BookScout MCP |
 
@@ -79,14 +80,46 @@ Not done or not yet verified (carry into M1):
 - Code signing; the installer is unsigned.
 
 ### M1: Shared records (0.3.0)
+Three additions are in scope before any M1 code: **Backup and Import**, a **Finance** module split out of Market, and **My Books**. Their design is in "M1 additions" below; the build order puts them first because they are restructuring and safety work that the shared records then sit on.
+
 - `kernel`, `store`, `service`: studio, people, roles, IP, series, books, editions, projects, stages and gates, tasks, deadlines, approvals, decisions, audit log; the credit / contribution / rights / revenue-share tables exist (no screens).
 - Permission engine and **role editor** per [PERMISSIONS.md](PERMISSIONS.md): Owner bootstrap, default roles, teams, scoped assignments, confidential projects, Explain access, guardrails; matrix and property tests.
 - Permission engine with the actor model, in-process transport, matrix tests. `kernel` is runtime-neutral (no `node:` imports) and `store` is async, so the same code runs in Electron and in a Worker.
 - **Local vault**: working folder, file states, check-out / check-in / undo / get-latest against a local vault, with the same rules the server will enforce; workflows as data (states, transitions, conditions, actions); data cards; references and where-used.
-- Catalogue module; "adopt MDEdit project as a book"; `edition.asin` joins Market and Sales data (`own_book`).
+- Catalogue module; "adopt MDEdit project as a book"; `edition.asin` joins Market and Finance data (`own_book`).
 - Lifecycle with configurable stages and gates; calendar; Home and Dashboard on real records.
 - MCP server skeleton, actor-scoped, with first Catalogue and Dashboard tools.
-- **Exit:** create a series of three books, assign people and deadlines, see the pipeline and calendar, and see the same book's manuscript progress and KDP earnings on its record.
+- **Backup and Import projects** (below), **Finance** (below) and **My Books** (below).
+- **Exit:** create a series of three books, assign people and deadlines, see the pipeline and calendar, and see the same book's manuscript progress and KDP earnings on its record, and open that book from My Books to reach its Market and Finance records and save them. Also: back up a Studio, restore it on a clean profile, and import a real MDEdit project into Cadrel with its chapters, goals, notes and settings intact.
+
+#### M1 additions
+
+**A. Backup and Import projects**
+Two jobs with different shapes, built on one archive format.
+- **Backup** (STUDIOS.md lists the button as present and disabled): a Studio's backup is a single `.cadrel-backup` file (a zip with a `manifest.json`: Cadrel version, schema versions, Studio id and name, date, contents, a checksum per entry). It can cover the whole Studio or chosen projects. Contents: project records and links, Notes, the project working folders, Write's data, Finance data, and Market's library (optional, because it is large; BookScout's existing "Back up…" is reused for it). Never included: the owner key, API tokens, `secrets\`, and the pairing codes. A backup is read-only and does not stop the app; it is verified on write by reading the archive back and checking every checksum. Backups can be manual or scheduled, with a keep-last-N rule, into a folder the person picks. Restore is into an empty Studio or as a new Studio and never overwrites silently; a manifest with a newer schema than the app refuses with "update Cadrel".
+- **Import project from MDEdit**: pick an MDEdit Root Folder or a single project folder (or an MDEdit export of one). Cadrel reads `.mdedit/project.json` (status, goals, active manuscript, excluded folders, edited marks, per-book settings), the Markdown files and style sheet, and the manuscript notes/review files, and creates a Cadrel project (placed in the project tree, Series → Book by convention) whose files are **copied**, never moved, so the MDEdit original is untouched and can be removed by the person once satisfied. A preview lists what will be created and what could not be carried over before anything is written; a project of the same name offers rename, skip or merge-as-new-copy. Google Drive sync state is not imported (the vault replaces it); the report says so. Notes become Notes (origin kept). Safe to run twice: it recognises a project it already imported by a recorded source id.
+- **Import a Cadrel project** from a backup (restore one project into the current Studio), using the same reader.
+- **Tests:** round-trip (back up then restore equals the original, byte for byte on files); a corrupted archive and a newer-schema archive refuse; secrets are absent from a backup (plant-and-assert, as with captures); import runs against MDEdit's real fixture projects with their goals, notes and settings; running an import twice creates one project.
+
+**B. Finance module** (out of Market)
+Market becomes research only. Everything about money moves to a new **Finance** module on the rail, with no change to its behaviour and its tests as the proof (as in M0).
+- **Moves out of Market:** KDP report import (Orders, KENP), the Money views (months, analysis, calibration), Royalties, Payments, Payouts and statements, people and book splits, FX and KENP rates, "clear sales data". Their code is the `sales` part of `market-library` and the corresponding Market views and bridge calls, which gain a `finance` package and bridge.
+- **Stays in Market:** captures, queue, library (the books, their pages, ranks, text), categories, keywords, analysis, community, parser health, settings. The one cross-over is **My Books' ownership flag and `edition.asin`**: Market keeps knowing which books are the studio's own (`own_book`), and Finance reads it; Finance never writes to the Market library.
+- **Data stays where it is for now.** Sales data lives in the library schema; Finance reads and writes it through an interface so a later move to the Studio's own store (and, in M7, kernel `person` / `revenue_share`) does not touch screens. No data migration in M1, so an existing BookScout/Market user loses nothing and needs no conversion.
+- **Permissions:** the Finance module is gated by the *Royalties, payments, payouts* row in PERMISSIONS.md (Owner and Finance modify; Admin, Director, Series Lead read). Author sees their own books only. Market's gate no longer covers money. With roles not yet applied (M2), the module is simply visible to the Owner.
+- **Moves in the shell:** a new rail entry, a `finance` module id beside `write` and `market`, its own view and bridge, the same close guard and remembered page. Dashboard and Home money snapshots read from Finance. Market's About, Settings and MCP lose the money tools; the MCP money tools are served by Finance and keep their names so existing assistants still work.
+- **Tests:** Market's remaining suite and Finance's moved suite together equal the pre-split counts; a test asserts Market's renderer and bridge expose no money calls; the shell end-to-end gains a Finance page.
+
+**C. My Books** (new module, directly below Home on the rail)
+The portal for everything about a **published** book, so a person does not hunt through Market and Finance for it. It consolidates; it does not own data, and nothing is stored twice.
+- **A list** of the studio's published books (editions with an ASIN, from the Catalogue and the `own_book` flag), filterable by series and pen name, with cover, rank, last-30-day units and royalties.
+- **A book page** with sections that are views of the owning modules: *Overview* (cover, metadata, status, links to its project and manuscript), *Listing and market* (rank and price history, comps, categories and keywords it is in, from Market), *Sales* (units, KENP, trend), *Royalties and splits* (what was earned, who is owed what, payments and payouts, from Finance, shown only to roles that may see it), *Notes and tasks* for the book. Each section opens the full Market or Finance screen for that book when more depth is wanted.
+- **The same save features as Market and Finance, in one place.** Anything that can be saved or exported from either module for a book can be saved from its My Books page: Market's category export (csv / md report), data packs, and the book's captured pages; Finance's payment calculators (csv / pdf), roll-ups, author statements (csv / pdf) and payout statements. The page adds **Save everything for this book**: one folder with its Market export and its Finance statements. These actions call the owning module's existing save code, so output is identical and there is one implementation to test.
+- **Rules:** My Books never shows what the person's role may not see (Finance sections hidden, not blank); a book with no sales data says so instead of showing zeros; figures say whether they were reported, estimated or forecast (principle 4).
+- **Tests:** each save action from My Books produces byte-identical output to the same action in its module; role-gated sections are absent for a role without access; a book without an ASIN or without sales renders its empty states.
+
+**Build order inside M1:** (1) docs and this plan; (2) Backup and Import, because it protects every later migration and the existing users' data; (3) Finance split, a behaviour-preserving move; (4) My Books on top of the split; (5) the shared-records work listed above, with Catalogue giving My Books its list. The shell's page list becomes: Home, **My Books**, Dashboard, Projects, Notes, Write, Market, **Finance**, Assistants, Admin, Profile, Settings.
+
 
 ### M2: The team vault on Cloudflare (0.4.0)
 Where it becomes a studio tool.
@@ -122,13 +155,13 @@ Where it becomes a studio tool.
 ### M6: Launch and market (0.8.0)
 - Release plans from templates, worked backwards from the date; dependencies and outstanding assets.
 - Marketing briefs from Market comps; ARC recruitment, distribution and review tracking; campaign asset requests to Art; post-launch review.
-- Market becomes studio-facing: shared comps, category reports and cover/blurb comparisons tied to briefs; decision history (change cover, blurb, keywords, price → outcome).
+- Market (research only since M1) becomes studio-facing: shared comps, category reports and cover/blurb comparisons tied to briefs; decision history (change cover, blurb, keywords, price → outcome).
 - **Exit:** a release is planned, executed and reviewed from one record.
 
 ### M7: Business (0.9.0)
 - Agreements, credits, contributions and rights as the four separate concepts, with restricted access.
 - Production costs and ad spend per book and series; budgets; unit economics and break-even.
-- Royalty reconciliation and revenue allocation generalised from BookScout payments and splits to all contributors; actual vs estimated vs forecast clearly separated.
+- Royalty reconciliation and revenue allocation generalised from the Finance module's payments and splits (moved out of Market in M1) to all contributors; actual vs estimated vs forecast clearly separated.
 - Backlist health, series sell-through (only where the data allows; labelled measured vs estimated), marketing ROI, capacity planning.
 - **Exit:** a studio director can answer "which series earn the best margin" and "how much money is committed to unreleased books" from real records.
 

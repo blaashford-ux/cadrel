@@ -80,7 +80,7 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Launch and marketing | M | R | A | C | R | — | C | C | M | R | — | — |
 | Market research | M | R | R | R | R | — | R | R | W | M | — | — |
 | Sales (aggregates) | M | R | R | R | R | — | — | — | R | R | R | — |
-| Royalties, payments, payouts | M | R | R | — | R | — | — | — | — | — | M | — |
+| Royalties, payments, payouts (Finance module; shown in My Books to the same roles) | M | R | R | — | R | — | — | — | — | — | M | — |
 | Contracts, credits, rights, revenue shares, costs | M | R | M | — | R | — | — | — | — | — | M | — |
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 

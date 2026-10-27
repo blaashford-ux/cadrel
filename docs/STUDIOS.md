@@ -55,7 +55,7 @@ The protocol is `@cadrel/kernel` `studioProtocol`; the server is `@cadrel/worker
 
 ## Not built yet
 
-- **Backup** (the button is there and disabled).
+- **Backup** and **Import project** (the Backup button is there and disabled). Planned for M1: see PLAN.md, "M1 additions" A.
 - **What a role may do.** Members have a role recorded and the Admin page is hidden from non-administrators, but the permission engine is not yet applied to a member's actions: the vault (check-out, sync of files between members) is M2. Until then a member's folders are their own copy.
 - **Recovery code** and a second owner device: lose the owner's computer and you lose the owner key.
 - **Folder rename follows Studio rename**, and **moving one Studio's folder** by itself (the Cadrel folder moves as a whole).
