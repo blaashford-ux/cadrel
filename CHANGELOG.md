@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (M1)
+## 0.3.0 (M1: shared records, in development)
 
 - **Fixed: backing up and restoring a Studio lost or broke its records.** A review of the backup code found three problems, all in whole-Studio backups (a backup of one project was fine). (1) **A Studio restored as a new Studio could not open its records**: the records file keeps the Studio id it was made with, the restored Studio has a new id, so the app found no people for it and tried to start a second Studio in the same file, failing with "A role with that name already exists". A records file now keeps its own Studio id. (2) **The records were copied as the live file** (with its write-ahead log, while the app had it open), which can give a torn copy; the backup now takes a consistent snapshot (`VACUUM INTO`) and leaves out the live file and its log. (3) **The vault's working folder was not in the backup**, so work checked out and not yet checked in was lost; the `Vault` folder is now a part of the backup and comes back (the vault's versions were already in the Studio folder). Backups also record the records' schema so an older Cadrel refuses one it cannot read, and an older backup without these parts still restores. A new test backs up a Studio with a project, a task, a book, a share and a checked-out vault file, restores it under a different Studio id, and checks that everything is there; it fails without the fix.
 
