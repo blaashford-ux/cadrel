@@ -31,6 +31,14 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
   },
+  myBooks: {
+    list: () => studioCall('shell:mybooks:list'),
+    book: (asin) => studioCall('shell:mybooks:book', asin),
+    saveMarket: (asin) => studioCall('shell:mybooks:saveMarket', asin),
+    saveFinance: (asin, o) => studioCall('shell:mybooks:saveFinance', asin, o),
+    saveAll: (asin, o) => studioCall('shell:mybooks:saveAll', asin, o),
+    openIn: (module, asin) => studioCall('shell:mybooks:openIn', module, asin)
+  },
   backup: {
     make: (o) => studioCall('shell:backup:make', o),
     inspect: () => studioCall('shell:backup:inspect'),

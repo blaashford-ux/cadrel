@@ -30,6 +30,7 @@ import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { NOTES_VERSION, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
@@ -801,6 +802,47 @@ function registerShellIpc(): void {
     const added = view.studios.find((x) => !before.has(x.id))!;
     await secretsFor(added.id).put('studio-key', JSON.stringify(joined.key));
     return studiosChanged(view);
+  });
+  // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
+  const roleKey = () => {
+    const a = studios.active();
+    return a.role === 'owner' ? 'owner' : a.memberRole;
+  };
+  const financeSeen = () => financeAccess(roleKey());
+  const asinOf = (v: unknown) => {
+    if (typeof v !== 'string' || !/^[A-Z0-9]{10}$/.test(v)) throw new Error('That is not an ASIN.');
+    return v;
+  };
+  manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
+  manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));
+  const saveWhat = (what: 'market' | 'finance' | 'all') => async (asin: string, o?: { months?: number }) => {
+    let parent = picked('CADREL_TEST_BOOK_SAVE_TO');
+    if (!parent) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose where to save this book’s files', properties: ['openDirectory', 'createDirectory'], defaultPath: app.getPath('documents') });
+      if (r.canceled || !r.filePaths[0]) return null;
+      parent = r.filePaths[0];
+    }
+    const months = typeof o?.months === 'number' && o.months >= 1 && o.months <= 60 ? Math.floor(o.months) : 12;
+    const r = await saveBook(market.service, asinOf(asin), what, financeSeen(), { parent, months, pdf: (dir, from, to, payees, basis) => finance.writeStatementPdfs(dir, from, to, payees, basis) });
+    if (!TEST) shell.showItemInFolder(r.files[0]!);
+    return r;
+  };
+  manageLike('mybooks:saveMarket', saveWhat('market'));
+  manageLike('mybooks:saveFinance', saveWhat('finance'));
+  manageLike('mybooks:saveAll', saveWhat('all'));
+  manageLike('mybooks:openIn', async (module: string, asin: string) => {
+    const a = asinOf(asin);
+    if (module === 'finance') {
+      if (!financeSeen()) throw new Error('Your role does not include Finance.');
+      showPage('finance');
+    } else if (module === 'market') {
+      showPage('market');
+      const wc = views.market!.webContents;
+      if (wc.isLoading()) await new Promise<void>((r) => wc.once('did-finish-load', () => r()));
+      // The page subscribes just after it loads, so the first ask can land before it is listening; asking twice is harmless (it opens the same book).
+      wc.send('navigate', `book:${a}`);
+      setTimeout(() => !wc.isDestroyed() && wc.send('navigate', `book:${a}`), 400);
+    } else throw new Error('unknown module');
   });
   // Backup and import. The pickers are dialogs only the shell can open; under test an environment variable stands in for the person's choice.
   const picked = (name: string) => (TEST ? process.env[name] : undefined);

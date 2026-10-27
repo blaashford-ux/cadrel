@@ -25,6 +25,8 @@ export interface FinanceModule {
   start(): void;
   /** Tells the view something changed under it (a capture or an import in Market) so it reloads. */
   notify(): void;
+  /** Prints each author's statement for the period as a PDF into `dir` (the same pages Finance's own Save writes); returns the files. */
+  writeStatementPdfs(dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned'): Promise<string[]>;
 }
 
 export function createFinanceModule(host: FinanceHost): FinanceModule {
@@ -130,6 +132,16 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
         });
       }
     },
-    notify: () => host.getContents()?.send('finance:change')
+    notify: () => host.getContents()?.send('finance:change'),
+    async writeStatementPdfs(dir, from, to, payees, basis) {
+      const out: string[] = [];
+      for (const name of payees) {
+        const f = service.statementFile(from, to, 'html', name, basis);
+        const file = path.join(dir, f.filename.replace(/\.html$/, '.pdf'));
+        fs.writeFileSync(file, await htmlToPdf(f.content));
+        out.push(file);
+      }
+      return out;
+    }
   };
 }

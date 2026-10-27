@@ -299,3 +299,10 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .plain { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
 .plain li { display: flex; align-items: center; gap: 10px; }
 .backup-found { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border, currentColor); border-radius: 8px; }
+
+.mybook { display: grid; gap: 14px; }
+.mb-head { display: flex; gap: 16px; align-items: flex-start; }
+.mb-cover { width: 96px; height: 144px; object-fit: cover; border-radius: 6px; background: var(--raised); flex: none; }
+.mb-cover.empty { display: block; }
+.spark svg { vertical-align: middle; color: var(--accent); }
+.mybooks .table th button.link { font-weight: 600; }

@@ -8,7 +8,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kern
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -401,8 +401,91 @@ export interface BackupApi {
   importMdedit(source: string, o?: { asNewCopy?: boolean; parentId?: string | null }): Promise<{ id: string; name: string }>;
 }
 
+/** One published book in the My Books list. `money` is null when the person's role may not see Finance's figures (not zero: absent). */
+export interface MyBookRow {
+  asin: string;
+  title: string;
+  penNames: string[];
+  authors: string[];
+  captured: boolean;
+  overallRank: number | null;
+  listRank: number | null;
+  kindlePrice: number | null;
+  ratingValue: number | null;
+  ratingCount: number | null;
+  money: null | { paidUnits: number; kenpPages: number; lastSaleDay: string | null; lastMonth: string | null; lastMonthUsd: number | null; lastMonthState: 'final' | 'estimated' | 'pending' | null };
+}
+
+export interface MyBooksList {
+  /** False until Market has a library: there is nothing to list. */
+  available: boolean;
+  books: MyBookRow[];
+  /** Whether Finance's figures are shown at all to this person. */
+  financeVisible: boolean;
+}
+
+/** Everything about one published book, assembled from Market and (for roles that may see it) Finance. Nothing is stored here. */
+export interface BookPage {
+  asin: string;
+  title: string;
+  penNames: string[];
+  authors: string[];
+  cover: string | null;
+  source: 'report' | 'manual';
+  addedAt: string;
+  market: {
+    captured: boolean;
+    lastCaptured: string | null;
+    overallRank: number | null;
+    listRank: number | null;
+    listCategory: string | null;
+    kindlePrice: number | null;
+    ratingValue: number | null;
+    ratingCount: number | null;
+    text: 'manuscript' | 'sample' | null;
+    history: { capturedAt: string; price: number | null; rank: number | null; ratings: number | null }[];
+    categories: { key: string; name: string }[];
+  };
+  /** Null when the person's role does not include royalties: the sections are left out, not shown empty. */
+  finance: null | {
+    hasData: boolean;
+    paidUnits: number;
+    kenpPages: number;
+    firstSaleDay: string | null;
+    lastSaleDay: string | null;
+    /** Newest first. `state` says whether KDP has reported the month (final), it rests on an estimated KENP rate, or it is not in yet. */
+    months: { month: string; usd: number; units: number; pages: number; state: 'final' | 'estimated' | 'pending' }[];
+    totalUsd: number;
+    /** The part of `totalUsd` that rests on estimates. */
+    estimatedUsd: number;
+    split: { fromMonth: string; shares: { name: string; pct: number }[] } | null;
+    payees: string[];
+  };
+}
+
+export interface BookSaveResult {
+  /** The folder the files went into. */
+  folder: string;
+  files: string[];
+}
+
+/** My Books: the portal for a published book. It reads Market and Finance and saves through their own generators; it keeps no data. */
+export interface MyBooksApi {
+  list(): Promise<MyBooksList>;
+  book(asin: string): Promise<BookPage | null>;
+  /** Asks for a folder, then saves the Market exports for the categories this book is listed in. Null if cancelled. */
+  saveMarket(asin: string): Promise<BookSaveResult | null>;
+  /** Asks for a folder, then saves this book's earnings and the statements of the authors on it (CSV and PDF). Null if cancelled, or refused when the role may not see Finance. */
+  saveFinance(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
+  /** Everything the two above save, in one folder for this book. */
+  saveAll(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
+  /** Shows the book in Market's Library; or opens Finance. */
+  openIn(module: 'market' | 'finance', asin: string): Promise<void>;
+}
+
 export interface CadrelApi {
   studios: StudiosApi;
+  myBooks: MyBooksApi;
   backup: BackupApi;
   studio: StudioApi;
   manage: ManageApi;

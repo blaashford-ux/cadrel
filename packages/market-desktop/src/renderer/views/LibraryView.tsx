@@ -11,13 +11,14 @@ const TEXT_LABEL = { manuscript: 'book', sample: 'sample' } as const;
 const daysSince = (iso: string): number => Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 86_400_000));
 const money = (v: number | null) => (v != null ? `$${v.toFixed(2)}` : '');
 
-export function LibraryView({ version }: { version: number }) {
+export function LibraryView({ version, show = null }: { version: number; show?: { asin: string } | null }) {
   const [cats, setCats] = useState<CategorySummary[]>([]);
   const [books, setBooks] = useState<BookRow[]>([]);
   const [cat, setCat] = useState('');
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [sub, setSub] = useState<'all' | 'mine'>('all');
+  useEffect(() => { if (show) setOpen(show.asin); }, [show]);
 
   useEffect(() => { void api.categories().then(setCats); }, [version]);
   useEffect(() => {
