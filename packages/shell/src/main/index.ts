@@ -28,7 +28,8 @@ import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NoteError, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, NoteError, PROJECT_TREE_VERSION, ProjectError, UserError, type UserProfile } from '@cadrel/kernel';
+import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
@@ -797,9 +798,87 @@ function registerShellIpc(): void {
     await secretsFor(added.id).put('studio-key', JSON.stringify(joined.key));
     return studiosChanged(view);
   });
-  manageLike('studios:backup', async () => {
+  // Backup and import. The pickers are dialogs only the shell can open; under test an environment variable stands in for the person's choice.
+  const picked = (name: string) => (TEST ? process.env[name] : undefined);
+  const stamp = () => new Date().toISOString().slice(0, 10);
+  const schemaNow = Math.max(PROJECT_TREE_VERSION, NOTES_VERSION);
+  /** Regenerable or machine-bound things stay out: model downloads, caches, logs. */
+  const regenerable = (rel: string) => /(^|\/)(models?|model-cache|cache|logs)(\/|$)/i.test(rel);
+  manageLike('backup:make', async (o?: { projects?: string[] }) => {
+    const st = studios.active();
+    const only = Array.isArray(o?.projects) && o!.projects.length ? o!.projects.map(String) : undefined;
+    let file = picked('CADREL_TEST_BACKUP_TO');
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, {
+        title: 'Back up this Studio',
+        defaultPath: path.join(app.getPath('documents'), `${st.name} ${stamp()}${BACKUP_EXTENSION}`),
+        filters: [{ name: 'Cadrel backup', extensions: [BACKUP_EXTENSION.slice(1)] }]
+      });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    await studio.studio.read(); // settles any write in flight before the folder is read
+    await studios.flush();
+    const made = await createBackup({
+      file, studio: { id: st.id, name: st.name }, appVersion: app.getVersion(), schema: schemaNow,
+      sources: [{ name: 'data', dir: studioDir, exclude: regenerable }, { name: 'Projects', dir: projectsFolder(), only }]
+    });
+    return { file, files: made.files, bytes: made.bytes };
+  });
+  manageLike('backup:inspect', async () => {
+    let file = picked('CADREL_TEST_BACKUP_FROM');
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose a Cadrel backup', properties: ['openFile'], filters: [{ name: 'Cadrel backup', extensions: [BACKUP_EXTENSION.slice(1)] }] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    const d = await describeBackup(file);
+    return { file, studioName: d.studio.name, created: d.created, app: d.app, projects: d.projects, files: d.entries.length };
+  });
+  manageLike('backup:restoreProject', async (file: string, project: string, parentId?: string | null) => {
+    const r = await restoreProject({ file: String(file), project: String(project), projectsDir: projectsFolder() });
+    return { id: await manager.adopt(r.name, parentId ?? null), name: r.name };
+  });
+  manageLike('backup:restoreAsStudio', async (file: string, name: string) => {
     adminOnly();
-    throw new Error('Backup is not connected in this build yet.');
+    const d = await describeBackup(String(file));
+    if (d.schema > schemaNow) throw new Error('That backup is from a newer Cadrel than this one. Update Cadrel to restore it.');
+    const before = new Set(studios.view().studios.map((x) => x.id));
+    const view = studios.create(String(name));
+    const added = view.studios.find((x) => !before.has(x.id))!;
+    await studios.flush();
+    try {
+      await restoreBackup({
+        file: String(file), maxSchema: schemaNow,
+        targets: { data: path.join(userData, 'studios', added.id), Projects: path.join(cadrelFolder(), added.folderName, 'Projects') }
+      });
+    } catch (e) {
+      // Nothing half-restored is left behind: the folders were empty or missing before, so they are removed whole.
+      await Promise.all([path.join(userData, 'studios', added.id), path.join(cadrelFolder(), added.folderName)].map((d) => fsp.rm(d, { recursive: true, force: true })));
+      studios.remove(added.id);
+      throw e;
+    }
+    return studiosChanged(studios.view());
+  });
+  manageLike('backup:findMdedit', async () => {
+    let dir = picked('CADREL_TEST_MDEDIT');
+    if (!dir) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Choose an MDEdit project folder, or the Root Folder that holds your projects', properties: ['openDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      dir = r.filePaths[0];
+    }
+    const found = await findMdeditProjects(dir);
+    if (!found.length) throw new Error('No MDEdit projects were found there. An MDEdit project is a folder with a .mdedit folder inside it.');
+    const out = [];
+    for (const f of found) {
+      const { source, name, asName, status, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried } = await previewMdeditImport(f, projectsFolder());
+      out.push({ source, name, asName, status, files, bytes, chapterFiles, hasGoal, reviewFiles, editedMarks, alreadyImportedAs, notCarried });
+    }
+    return out;
+  });
+  manageLike('backup:importMdedit', async (source: string, o?: { asNewCopy?: boolean; parentId?: string | null }) => {
+    const r = await importMdeditProject({ source: String(source), projectsDir: projectsFolder(), asNewCopy: o?.asNewCopy === true });
+    return { id: await manager.adopt(r.name, o?.parentId ?? null), name: r.name };
   });
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));

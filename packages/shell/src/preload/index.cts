@@ -25,12 +25,19 @@ const api: CadrelApi = {
     revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
     removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
     join: (link, details) => studioCall('shell:studios:join', link, details),
-    backup: (id) => studioCall('shell:studios:backup', id),
     onChange: (cb) => {
       const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
       ipcRenderer.on('shell:studios', h);
       return () => ipcRenderer.removeListener('shell:studios', h);
     }
+  },
+  backup: {
+    make: (o) => studioCall('shell:backup:make', o),
+    inspect: () => studioCall('shell:backup:inspect'),
+    restoreProject: (file, project, parentId) => studioCall('shell:backup:restoreProject', file, project, parentId),
+    restoreAsStudio: (file, name) => studioCall('shell:backup:restoreAsStudio', file, name),
+    findMdedit: () => studioCall('shell:backup:findMdedit'),
+    importMdedit: (source, o) => studioCall('shell:backup:importMdedit', source, o)
   },
   manage: {
     templates: () => studioCall('shell:manage:templates'),

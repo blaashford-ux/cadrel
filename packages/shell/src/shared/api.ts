@@ -356,11 +356,54 @@ export interface StudiosApi {
   removeMember(id: string, memberId: string): Promise<StudioPeople>;
   /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */
   join(link: string, details: { yourName: string; studioName?: string }): Promise<StudiosView>;
-  backup(id: string): Promise<string>;
+}
+
+/** What a backup holds, read (and checked) before anything is restored. */
+export interface BackupSummary {
+  file: string;
+  studioName: string;
+  created: string;
+  app: string;
+  /** Project folder names in the backup. */
+  projects: string[];
+  files: number;
+}
+
+/** A project found in an MDEdit folder, with what importing it would do. */
+export interface MdeditCandidate {
+  source: string;
+  name: string;
+  asName: string;
+  status: string;
+  files: number;
+  bytes: number;
+  chapterFiles: number;
+  hasGoal: boolean;
+  reviewFiles: number;
+  editedMarks: number;
+  alreadyImportedAs: string | null;
+  notCarried: string[];
+}
+
+/** Backing up the Studio, restoring from a backup, and bringing projects over from MDEdit. Every picker is a dialog the page cannot fill in itself. */
+export interface BackupApi {
+  /** Asks where to save, then backs up this Studio's data and project folders (all projects, or just the ones named). Null if cancelled. */
+  make(o?: { projects?: string[] }): Promise<{ file: string; files: number; bytes: number } | null>;
+  /** Asks for a backup file and checks it. Null if cancelled. */
+  inspect(): Promise<BackupSummary | null>;
+  /** Puts one project of a checked backup into this Studio's Projects folder, under a free name, and in the project tree. */
+  restoreProject(file: string, project: string, parentId?: string | null): Promise<{ id: string; name: string }>;
+  /** Restores a whole backup as a new Studio on this computer (nothing here is overwritten); switch to it from the Studio menu. */
+  restoreAsStudio(file: string, name: string): Promise<StudiosView>;
+  /** Asks for an MDEdit project folder, or a Root Folder holding several, and previews each project in it. Null if cancelled. */
+  findMdedit(): Promise<MdeditCandidate[] | null>;
+  /** Copies one previewed project into this Studio as a Cadrel project. The MDEdit original is not touched. */
+  importMdedit(source: string, o?: { asNewCopy?: boolean; parentId?: string | null }): Promise<{ id: string; name: string }>;
 }
 
 export interface CadrelApi {
   studios: StudiosApi;
+  backup: BackupApi;
   studio: StudioApi;
   manage: ManageApi;
   theme: {

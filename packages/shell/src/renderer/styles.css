@@ -295,3 +295,7 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .count-list { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .count-row { display: flex; align-items: center; gap: 8px; padding: 3px 8px; }
 .count-row input { display: inline-block; width: auto; margin: 0; }
+
+.plain { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 8px; }
+.plain li { display: flex; align-items: center; gap: 10px; }
+.backup-found { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--border, currentColor); border-radius: 8px; }
