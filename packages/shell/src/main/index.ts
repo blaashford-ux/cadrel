@@ -165,7 +165,7 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
   // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile()],
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile())],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -253,6 +253,7 @@ const marketDefault = () => path.join(studioFolder(), 'Market');
 const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefault();
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
+const recordsFile = () => path.join(studioDir, 'records.db');
 const sameDir = (a: string, b: string) => path.resolve(a) === path.resolve(b);
 /** The shell's own last word on a move of the Cadrel folder that did not work. */
 let moveError: string | null = null;
@@ -1285,7 +1286,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.

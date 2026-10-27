@@ -60,6 +60,10 @@ export class PeopleHost {
   get service(): StudioService | null {
     return this.svc;
   }
+  /** What the AI server needs to open the Studio's records as this person: the file, who, and which Studio. Empty where this computer holds none. */
+  mcpArgs(file: string): string[] {
+    return this.svc && this.meId ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId] : [];
+  }
   get me(): string {
     return this.meId;
   }
