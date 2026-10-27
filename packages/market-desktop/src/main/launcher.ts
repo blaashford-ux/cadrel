@@ -145,7 +145,11 @@ if (hs) {
 } else {
   process.stdin.pipe(child.stdin);
 }
-for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => { if (!exited) child.kill(s); });
+for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) process.on(s, () => { if (!exited) child.kill(); });
+// The server must never outlive this launcher (it holds the installed program's files open, and an update cannot replace them): when the client is
+// gone give the server a moment to finish by itself, then stop it; and whenever this process leaves, take the server with it.
+process.stdin.on('end', () => setTimeout(() => { if (!exited) { log('the client closed its connection; stopping the server'); child.kill(); } }, 3000).unref());
+process.on('exit', () => { try { if (!exited) child.kill(); } catch (e) { /* already gone */ } });
 setTimeout(() => { if (!ready && !exited) log('the server has not finished starting after 60 s'); }, 60000).unref();
 `;
 

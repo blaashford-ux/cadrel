@@ -26,6 +26,7 @@ import { Studio, studioFile, UserStore } from '@cadrel/studio';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { openStudioDb, type StudioDb } from '@cadrel/store';
 import { RECORDS_INSTRUCTIONS } from './modules/records.js';
+import { watchLifecycle } from './lifecycle.js';
 
 const VERSION = process.env.CADREL_VERSION || '0.0.0';
 
@@ -38,6 +39,26 @@ function flag(name: string): string | undefined {
 }
 
 const say = (m: string) => process.stderr.write(`${m}\n`);
+
+/**
+ * Stops cleanly, once: closes what is open, then leaves. A server that lingers holds the installed program's files open, which stops an update
+ * from replacing them, so it also leaves by force if closing takes more than three seconds.
+ */
+let stopping = false;
+function stopNow(why: string, close: () => void): never | void {
+  if (stopping) return;
+  stopping = true;
+  say(`Cadrel MCP server stopping: ${why}.`);
+  setTimeout(() => process.exit(0), 3000).unref();
+  try {
+    close();
+  } catch {
+    /* leaving anyway */
+  }
+  process.exit(0);
+}
+/** The marker Cadrel or its installer writes next to the program when an update starts (see lifecycle.ts). */
+const retireFile = () => flag('retire-file') ?? path.join(path.dirname(process.execPath), '.cadrel-retire');
 
 type Found<T> = { ok: true; value: T } | { ok: false; reason: string };
 
@@ -156,6 +177,7 @@ async function main(): Promise<void> {
       port: Number(flag('port') ?? 47831),
       makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
     });
+    watchLifecycle({ retireFile: retireFile(), onStop: (why) => stopNow(why, () => { records.ok && records.value.close(); market?.ok && market.value.close(); }) });
     say(`Cadrel AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)`);
     say(`Projects folder: ${write.value.root} (${write.value.source})${market?.ok ? `; market library: ${market.value.root}` : ''}`);
     say(`Access token: ${token}`);
@@ -169,12 +191,16 @@ async function main(): Promise<void> {
   if (!market.ok) say(`Market tools left out: ${market.reason}.`);
   const server = createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
   await server.connect(new StdioServerTransport());
-  say(`Cadrel MCP server ready.${write.ok ? ` Projects folder: ${write.value.root} (${write.value.source}).` : ''}${market.ok ? ` Market library: ${market.value.root}.` : ''}`);
-  process.on('SIGINT', () => {
+  const closeAll = () => {
     if (market.ok) market.value.close();
     if (records.ok) records.value.close();
-    process.exit(0);
-  });
+  };
+  // Over stdio the server lives exactly as long as the AI app's connection: when that ends, or the program that started it is gone, or an update
+  // starts, it closes and leaves, so it is never left running (and never holds the app's files open).
+  watchLifecycle({ stdin: process.stdin, parentPid: process.ppid, retireFile: retireFile(), onStop: (why) => stopNow(why, closeAll) });
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) process.on(sig, () => stopNow(`received ${sig}`, closeAll));
+  say(`Cadrel MCP server ready.${write.ok ? ` Projects folder: ${write.value.root} (${write.value.source}).` : ''}${market.ok ? ` Market library: ${market.value.root}.` : ''}`);
+
 }
 
 main().catch((e) => {

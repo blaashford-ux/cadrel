@@ -65,4 +65,13 @@ describe('packaging', () => {
   it('the native modules are unpacked from the asar', () => {
     for (const mod of ['sqlite-vec', 'sharp', 'onnxruntime-node', 'tesseract.js']) expect(yml, mod).toContain(`node_modules/${mod}`);
   });
+
+  it('the installer, the app and the assistant server all use the same "let go" marker, so an update is never blocked by a running assistant server', () => {
+    const nsh = fs.readFileSync(path.join(PKG, 'build', 'installer.nsh'), 'utf8');
+    const app = fs.readFileSync(path.join(PKG, 'src', 'main', 'index.ts'), 'utf8');
+    const server = fs.readFileSync(path.join(PKG, '..', 'mcp', 'src', 'main.ts'), 'utf8');
+    for (const [name, text] of [['installer.nsh', nsh], ['main/index.ts', app], ['mcp/main.ts', server]] as const) expect(text, name).toContain('.cadrel-retire');
+    expect(nsh).toContain('!macro customInit');
+    expect(nsh).toContain('!macro customInstall'); // the marker is removed once the new files are in
+  });
 });
