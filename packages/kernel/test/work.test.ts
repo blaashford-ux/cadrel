@@ -12,7 +12,10 @@ const code = async (p: Promise<unknown>) => p.then(() => 'ok', (e) => (e instanc
 beforeEach(async () => {
   db = memoryDb();
   const c = { studioId: 's1', actor: 'system', now: '2026-10-27T09:00:00.000Z' };
-  [ana, bo, cy] = await Promise.all(['Ana', 'Bo', 'Cy'].map(async (name) => (await createPerson(db, c, { name })).id));
+  const make = async (name: string) => (await createPerson(db, c, { name })).id;
+  ana = await make('Ana');
+  bo = await make('Bo');
+  cy = await make('Cy');
 });
 
 describe('tasks and deadlines', () => {
