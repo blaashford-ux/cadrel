@@ -130,7 +130,7 @@ Notes on the defaults:
 
 ## 7. Data model (D1 and the desktop cache)
 
-`person`, `team`, `team_member`, `role(id, studio_id, name, description, template_key, is_default, locked)`, `role_capability(role_id, capability)`, `assignment(id, subject_kind person | team, subject_id, role_id, scope_kind, scope_id, expires_at, granted_by, granted_at)`, `node.confidential`, `invite`, `device_session`, `policy(key, value)`, `audit(at, actor, action, target, detail)`, and `workflow_transition_role(transition_id, role_id)` so each transition says which roles may perform it.
+`person` (with its membership `kind`: employee, contractor or guest, folded in since one database is one studio), `pen_name` and `pen_name_person`, `team`, `team_member`, `role(id, studio_id, name, description, template_key, all_caps)`, `role_capability(role_id, capability)`, `capability_seen(capability)` (what the capability review has shown), `assignment(id, subject_kind person | team, subject_id, role_id, scope_kind, scope_id, expires_at, granted_by, granted_at)` (built: migration `0004_people_roles.sql`), `node.confidential`, `invite`, `device_session`, `policy(key, value)`, `audit(at, actor, action, target, detail)`, and `workflow_transition_role(transition_id, role_id)` so each transition says which roles may perform it.
 
 ## 8. Tests
 
