@@ -4,6 +4,7 @@ import type { MineState, Overview, Page, StudioState, StudiosView } from '../sha
 import { captureState } from './capture';
 import { ago, formatWords, greeting, percent, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
+import { GlanceLine, StageTag, usePulse, useStages } from './Glance';
 import { NotConnected } from './NotConnected';
 import { StudioSwitcher } from './StudioSwitcher';
 
@@ -43,6 +44,8 @@ function Mine({ studio, onProject }: { studio: StudioState | null; onProject: (i
 
 export function Home({ overview, studio, onGo, onProject, studios }: Props) {
   const now = Date.now();
+  const pulse = usePulse(studio);
+  const stageOf = useStages(studio);
   const recent = overview?.write.projects.find((p) => !p.archived);
   const pct = recent ? percent(recent.words, recent.goalWords) : null;
   const m = overview?.market;
@@ -61,6 +64,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
     <>
       <h2 className="hello">{greeting(new Date().getHours())}</h2>
       <p className="muted">Here is where your studio stands.</p>
+      <GlanceLine pulse={pulse} onGo={onGo} />
 
       <section className="card" aria-labelledby="h-projects">
         <div className="card-head">
@@ -83,7 +87,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
               return (
                 <li key={p.id}>
                   <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button>
-                  <span className="chip">{kindLabel(studio.tree, p)}</span>
+                  <span className="chip">{kindLabel(studio.tree, p)}</span> <StageTag view={stageOf[p.id]} />
                   <span className="muted small">
                     {subs.length ? `${subs.length} subproject${subs.length === 1 ? '' : 's'} · ` : ''}
                     {formatWords(f.words)} words{open ? ` · ${open} open note${open === 1 ? '' : 's'}` : ''}

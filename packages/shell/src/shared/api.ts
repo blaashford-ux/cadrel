@@ -442,6 +442,8 @@ export interface CatalogueBookRow {
   projectName: string | null;
   stage: string | null;
   stageColor: string | null;
+  /** The kind of the stage (start, active, review, done, hold), so a gate or a count can tell a finished book from one in production. */
+  stageCategory: string | null;
   words: number | null;
   goalWords: number | null;
 }
@@ -669,7 +671,24 @@ export type PlanState =
       projects: PlanProject[];
       tasks: OnProject<TaskRecord>[];
     };
+/** The studio at a glance, for Home and the Dashboard. */
+export type Pulse =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      today: string;
+      work: { open: number; late: number; dueSoon: number; approvalsPending: number; doneThisWeek: number };
+      late: PulseTask[];
+      upcoming: PulseTask[];
+      approvals: { id: string; label: string; projectId: string; projectName: string; waiting: string[] }[];
+      decisions: { id: string; title: string; outcome: string; projectName: string | null; decidedAt: string }[];
+      pipeline: { id: string; name: string; total: number; stages: { key: string; name: string; color: string; category: string; count: number }[] }[];
+      books: { total: number; published: number; unpublished: number; series: number; inProduction: number; unlisted: number; money: null | { month: string; usd: number; estimated: boolean } };
+      people: { id: string; name: string }[];
+    };
+export interface PulseTask { id: string; title: string; kind: string; due: string | null; projectId: string; projectName: string; assigneeId: string | null }
 export interface WorkApi {
+  pulse(): Promise<Pulse>;
   plan(): Promise<PlanState>;
   state(projectId: string): Promise<WorkState>;
   mine(): Promise<MineState>;

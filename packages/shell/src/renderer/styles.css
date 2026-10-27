@@ -351,3 +351,9 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .cal-item.done { text-decoration: line-through; opacity: 0.6; }
 .cal-item.late { color: var(--danger, #b3402f); }
 .cal-title { margin: 0 8px; min-width: 150px; text-align: center; }
+.glance-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 8px; }
+.glance-cols h4 { margin: 0 0 4px; font-size: 13px; }
+.stage-strip { display: flex; flex-wrap: wrap; gap: 8px; }
+.stage-strip li { border-left: 4px solid var(--muted); background: var(--raised); padding: 4px 10px; border-radius: 4px; }
+.stat { margin-right: 16px; }
+button.stat { background: none; border: 0; padding: 0; cursor: pointer; }

@@ -40,6 +40,7 @@ const api: CadrelApi = {
     state: (projectId) => studioCall('shell:work:state', projectId),
     mine: () => studioCall('shell:work:mine'),
     plan: () => studioCall('shell:work:plan'),
+    pulse: () => studioCall('shell:work:pulse'),
     createTask: (i) => studioCall('shell:work:call', 'createTask', i),
     updateTask: (id, patch) => studioCall('shell:work:call', 'updateTask', id, patch),
     setState: (id, state) => studioCall('shell:work:call', 'setState', id, state),

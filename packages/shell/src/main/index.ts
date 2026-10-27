@@ -34,6 +34,7 @@ import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { callWorkflow } from './workflowCalls';
 import { ProjectWork } from './projectWork';
+import { buildPulse } from './pulse';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { addFromMarket, catalogueCall, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
@@ -840,6 +841,16 @@ function registerShellIpc(): void {
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
   manageLike('work:state', async (projectId: string) => new ProjectWork(studio, peopleHost, stages).state(String(projectId)));
   manageLike('work:plan', async () => new ProjectWork(studio, peopleHost, stages).plan());
+  manageLike('work:pulse', async () => {
+    const pw = new ProjectWork(studio, peopleHost, stages);
+    const plan = await pw.plan();
+    const work = peopleHost.work;
+    if (!plan.available || !work) return buildPulse({ plan, approvals: [], decisions: [], catalogue: { available: false, marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] } });
+    const nameOf = new Map(plan.projects.map((x) => [x.id, x.name]));
+    const label = <T extends { projectId: string | null }>(r: T) => ({ ...r, projectName: (r.projectId && nameOf.get(r.projectId)) || '' });
+    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }), work.decisions({ current: true }), catalogueList(await catalogueSources())]);
+    return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
+  });
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
   manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());

@@ -39,9 +39,9 @@ function progress(tree: ProjectTree, projectId: string, write: Sources['write'])
 
 function projectOf(src: Sources, projectId: string | undefined) {
   const p = projectId ? getProject(src.tree, projectId) : undefined;
-  if (!p) return { projectId: null, projectName: null, stage: null, stageColor: null, words: null, goalWords: null };
+  if (!p) return { projectId: null, projectName: null, stage: null, stageColor: null, stageCategory: null, words: null, goalWords: null };
   const s = src.stages[p.id]?.stage ?? null;
-  return { projectId: p.id, projectName: p.name, stage: s?.name ?? null, stageColor: s?.color ?? null, ...progress(src.tree, p.id, src.write) };
+  return { projectId: p.id, projectName: p.name, stage: s?.name ?? null, stageColor: s?.color ?? null, stageCategory: s?.category ?? null, ...progress(src.tree, p.id, src.write) };
 }
 
 export async function catalogueList(src: Sources): Promise<CatalogueList> {
