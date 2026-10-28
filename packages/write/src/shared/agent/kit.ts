@@ -63,7 +63,7 @@ function extension(i: KitInput, b: KitBrand): Uint8Array {
     name: b.id,
     display_name: b.name,
     version: i.version,
-    description: b.description ?? rebrand('Lets Claude read your Cadrel Write chapters and leave comments and suggestions in your Notes panel. It never changes your manuscript.', b),
+    description: b.description ?? rebrand('Lets Claude read your Cadrel Write chapters and leave comments and suggestions in your Notes panel. It only creates or edits files if you allow it in Cadrel’s Settings → MCP.', b),
     author: { name: b.name },
     server: {
       type: 'node',

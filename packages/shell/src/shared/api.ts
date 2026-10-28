@@ -177,6 +177,14 @@ export interface UserApi {
 
 export type { Attachment };
 
+/** Settings → MCP: the things an AI tool may do to a person's documents. */
+export interface McpAccess {
+  /** Make new files in projects (never replacing one). */
+  createFiles: boolean;
+  /** Change the text of existing files. */
+  editFiles: boolean;
+}
+
 /** Where everything lives, for the Settings page. */
 export interface AppFolders {
   /** This Studio's folder inside the Cadrel folder; Projects, Write and Market are inside it. */
@@ -796,6 +804,11 @@ export interface CadrelApi {
     onChange(cb: (t: ThemeState) => void): () => void;
   };
   user: UserApi;
+  /** What AI tools (the MCP server) may do to documents. Everything that changes a file is off until the person turns it on. */
+  mcp: {
+    get(): Promise<McpAccess>;
+    set(change: Partial<McpAccess>): Promise<McpAccess>;
+  };
   prefs: {
     folders(): Promise<AppFolders>;
     /** Opens a folder picker and moves the Cadrel folder there; null if cancelled. Write and Market follow it unless they were given folders of their own. */

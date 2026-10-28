@@ -27,6 +27,7 @@ import { SettingsStore } from './settings';
 import { StudioService } from './studio';
 import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
+import { AI_ACCESS_FILE, accessReader, sanitizeAccess, type AiAccess } from '@cadrel/write/src/shared/agent/access';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
@@ -157,7 +158,7 @@ function setTheme(change: { source?: ThemeSource; custom?: ThemeCustom | null })
 
 // ---- the one MCP server --------------------------------------------------------------------
 // Write's AI Kit and Market's "connect to Claude" both end up here: one server, one Claude Desktop extension, one name.
-const MCP_DESCRIPTION = 'Lets Claude read your Cadrel manuscripts and leave review notes in them (it never changes your manuscript), and search your Kindle market research.';
+const MCP_DESCRIPTION = 'Lets Claude read your Cadrel manuscripts and leave review notes in them (it only creates or edits files if you allow it in Settings → MCP), and search your Kindle market research.';
 const CADREL_MCP: McpBrand = { id: 'cadrel', name: 'Cadrel', description: MCP_DESCRIPTION, file: 'Cadrel.mcpb' };
 const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI Kit', description: MCP_DESCRIPTION };
 /** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
@@ -167,7 +168,7 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
   // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
+  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
   env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
 });
 /**
@@ -256,6 +257,9 @@ const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefa
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
 const recordsFile = () => path.join(studioDir, 'records.db');
+/** What the person lets AI tools create or edit; the MCP server reads it on every change, so a switch applies at once. Missing means nothing is allowed. */
+const aiAccessFile = () => path.join(studioDir, AI_ACCESS_FILE);
+const accessNow = async (): Promise<AiAccess> => accessReader(nodeFs, aiAccessFile())();
 const sameDir = (a: string, b: string) => path.resolve(a) === path.resolve(b);
 /** The shell's own last word on a move of the Cadrel folder that did not work. */
 let moveError: string | null = null;
@@ -1149,6 +1153,15 @@ function registerShellIpc(): void {
     // The Cadrel folder is the one the person points at, or a Cadrel folder inside what they picked; the others are used exactly as chosen.
     return moveFolder(which, which === 'cadrel' ? (path.basename(picked).toLowerCase() === 'cadrel' ? picked : path.join(picked, 'Cadrel')) : picked);
   }));
+  ipcMain.handle('shell:mcp:get', guard(async () => accessNow()));
+  ipcMain.handle('shell:mcp:set', guard(async (change: unknown) => {
+    const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
+    const next = sanitizeAccess({ ...(await accessNow()), ...(typeof c.createFiles === 'boolean' ? { createFiles: c.createFiles } : {}), ...(typeof c.editFiles === 'boolean' ? { editFiles: c.editFiles } : {}) });
+    const tmp = `${aiAccessFile()}.${process.pid}.tmp`;
+    await fsp.writeFile(tmp, JSON.stringify(next, null, 2) + '\n');
+    await fsp.rename(tmp, aiAccessFile());
+    return next;
+  }));
   ipcMain.handle('shell:prefs:restart', guard(() => restartApp()));
   ipcMain.handle('shell:prefs:reset', guard((which: unknown) => {
     if (!isKey(which)) throw new Error('unknown folder');
@@ -1296,7 +1309,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
