@@ -1,7 +1,8 @@
 import { splitPenNames } from '../authors.js';
 import type { Db } from '../schema.js';
 import type { KenpParse, SalesParse } from './import.js';
-import type { PaymentParse } from './payments.js';
+import type { PaymentParse, PaymentRow } from './payments.js';
+import { fxRate, monthlyEarnings } from './earnings.js';
 import type { RoyaltyParse } from './royalty.js';
 
 /**
@@ -52,6 +53,19 @@ export interface Excluded {
   accountTotalsSkipped: boolean;
 }
 
+/** What a Studio's share of an account-wide payment report came to (see scopePayments). */
+export interface PaymentShare {
+  /** Payment lines in the file, and how many were kept (whole or in part). */
+  lines: number;
+  kept: number;
+  /** The Studio's part of the royalties the file pays out, 0 to 1; null when nothing was kept. */
+  share: number | null;
+  /** Lines kept in part: the Studio's figure is worked out from its own sales, not reported by KDP. */
+  estimated: number;
+  /** Lines left out because the Studio has no sales or pages read for that month and source ("2025-07 Kindle+"): another pen name's, or not imported yet. */
+  unmatched: string[];
+}
+
 export interface KdpParts { orders: SalesParse | null; kenp: KenpParse | null; royalty: RoyaltyParse | null; payments: PaymentParse | null }
 
 /**
@@ -59,10 +73,10 @@ export interface KdpParts { orders: SalesParse | null; kenp: KenpParse | null; r
  * author for is the Studio's only if the library already has it as one (`known`). Rows are dropped by book, so a book's orders, pages read and royalties
  * stay or go together.
  */
-export function scopeKdpFile(p: KdpParts, scope: AuthorScope, known: (asin: string) => boolean): { parts: KdpParts; excluded: Excluded } {
+export function scopeKdpFile(p: KdpParts, scope: AuthorScope, known: (asin: string) => boolean): { parts: KdpParts; excluded: Excluded; accountPayments: PaymentParse | null } {
   const none: Excluded = { books: 0, rows: 0, authors: [], accountTotalsSkipped: false };
   const m = scopeMatcher(scope);
-  if (!m.restricted) return { parts: p, excluded: none };
+  if (!m.restricted) return { parts: p, excluded: none, accountPayments: null };
   const status = new Map<string, boolean>();
   const names = new Map<string, string>();
   const see = (rows: { asin: string; author?: string }[]) => {
@@ -86,10 +100,11 @@ export function scopeKdpFile(p: KdpParts, scope: AuthorScope, known: (asin: stri
   const out = [...everyAsin].filter((a) => !keep(a));
   const authors = [...new Set(out.map((a) => names.get(a)).filter((x): x is string => !!x))].slice(0, 20);
   const hasAuthorData = !!(p.orders?.rows.length || p.kenp?.rows.length || p.royalty?.rows.length);
-  // The payment report and the monthly summary are totals for the whole KDP account. They say nothing about which pen name earned what, so they can only be
-  // kept when the same file shows nothing belongs to anyone else.
+  // The monthly summary is a total for the whole KDP account and says nothing about which pen name earned what, so it is only kept when the same file shows
+  // nothing belongs to anyone else. The payment report is a total too, but its lines are per month and source, so the Studio's part of it is worked out
+  // from its own sales (scopePayments) once this file's sales are saved; the caller does that with `accountPayments`.
   const complete = out.length === 0 && hasAuthorData;
-  const accountTotalsSkipped = !complete && !!(p.payments?.payments.length || p.royalty?.summary.length);
+  const accountTotalsSkipped = !complete && !!p.royalty?.summary.length;
   return {
     parts: {
       orders: orders && orders.rows.length ? orders : null,
@@ -97,8 +112,58 @@ export function scopeKdpFile(p: KdpParts, scope: AuthorScope, known: (asin: stri
       royalty: royalty && (royalty.rows.length || complete) ? { ...royalty, summary: complete ? royalty.summary : [] } : null,
       payments: complete ? p.payments : null
     },
-    excluded: { books: out.length, rows: dropped, authors, accountTotalsSkipped }
+    excluded: { books: out.length, rows: dropped, authors, accountTotalsSkipped },
+    accountPayments: !complete && p.payments?.payments.length ? p.payments : null
   };
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * The Studio's part of an account-wide payment report. KDP pays one lump sum for every pen name on the account, but lists it per sales month and source (Sales,
+ * Kindle+ Royalties). The Studio's own sales for that month and source say how much of the line is its: when they come to (nearly) the whole line, the Studio
+ * is the only one paid for it; when they come to less, the Studio's part is what they come to and the rest is another pen name's; when the Studio has none, the
+ * line is left out. The Studio's figure uses the exchange rates the app holds, so it is an estimate, and a line within 5% (Kindle+: 15%, since its rate per
+ * page is not reported) of the whole counts as the whole. Run after the file's sales are saved, since it reads them.
+ */
+export function scopePayments(db: Db, parse: PaymentParse, today = new Date()): { payments: PaymentRow[]; share: PaymentShare } {
+  const mine = new Map<string, number>(); // "month|sales" / "month|kenp" -> USD
+  for (const e of monthlyEarnings(db, {}, today)) {
+    const k = `${e.month}|${e.source === 'kenp' ? 'kenp' : 'sales'}`;
+    mine.set(k, (mine.get(k) ?? 0) + e.amount * fxRate(db, e.month, e.currency).toUsd);
+  }
+  const unmatched: string[] = [];
+  const out: PaymentRow[] = [];
+  let lines = 0, kept = 0, estimated = 0, allAccrued = 0, keptAccrued = 0;
+  for (const p of parse.payments) {
+    const usdOf = (l: { month: string; currency: string; accrued: number }) => l.accrued * fxRate(db, l.month, l.currency).toUsd;
+    const keep: PaymentRow['lines'] = [];
+    let all = 0, got = 0;
+    for (const l of p.lines) {
+      lines++;
+      const whole = usdOf(l);
+      all += whole;
+      const est = mine.get(`${l.month}|${l.source}`) ?? 0;
+      if (!(est > 0) || !(l.accrued > 0)) { unmatched.push(`${l.month} ${l.source === 'kenp' ? 'Kindle+' : 'sales'}`); continue; }
+      const f = Math.min(1, est / whole);
+      if (f >= (l.source === 'kenp' ? 0.85 : 0.95)) { keep.push(l); got += whole; continue; }
+      const accrued = round2(l.accrued * f);
+      const tax = round2(l.tax * f);
+      keep.push({ ...l, accrued, tax, net: round2(accrued - tax) });
+      got += whole * f;
+      estimated++;
+    }
+    allAccrued += all;
+    keptAccrued += got;
+    kept += keep.length;
+    if (!keep.length) continue;
+    const r = all > 0 ? got / all : 1;
+    const whole = r >= 0.9999;
+    const accrued = whole ? p.accrued : round2(p.accrued * r);
+    const tax = whole ? p.tax : round2(p.tax * r);
+    out.push({ ...p, lines: keep, accrued, tax, net: whole ? p.net : round2(accrued - tax), payoutAmount: p.payoutAmount === null || whole ? p.payoutAmount : round2(p.payoutAmount * r) });
+  }
+  return { payments: out, share: { lines, kept, share: kept ? round2(keptAccrued / (allAccrued || 1)) : null, estimated, unmatched } };
 }
 
 /** Whether the library already holds this book as one of the Studio's: it was flagged by hand (no author known), or its author matches. */

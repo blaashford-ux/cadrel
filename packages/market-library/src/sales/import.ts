@@ -4,9 +4,9 @@ import type { Db } from '../schema.js';
 import { stampOf } from '../layout.js';
 import { exportUserData } from '../userdata.js';
 import { registerOwnBooks, type OwnCandidate } from './own.js';
-import { parsePaymentFile, savePayments, type PaymentParse } from './payments.js';
+import { parsePaymentFile, removePayment, savePayments, type PaymentParse } from './payments.js';
 import { parseRoyaltyFile, saveRoyaltyRows, type RoyaltyParse } from './royalty.js';
-import { knownInScope, scopeKdpFile, type AuthorScope, type Excluded } from './scope.js';
+import { knownInScope, scopeKdpFile, scopePayments, type AuthorScope, type Excluded, type PaymentShare } from './scope.js';
 import { readXlsx, readCsv, isXlsx, norm, findHeader, parseDates, cell, num, type Grid } from './grid.js';
 
 /**
@@ -202,6 +202,8 @@ export interface ImportSummary {
   titles?: number;
   /** Set when the library is limited to the Studio's pen names: what the file held that was left out because it belongs to other pen names. */
   excluded?: Excluded;
+  /** Set when a payment report covered the whole KDP account: how much of it is the Studio's (see scopePayments). */
+  paymentShare?: PaymentShare;
   /** The library is limited to the Studio's pen names and the Studio has none, so nothing could be brought in. */
   noPenNames?: boolean;
 }
@@ -232,7 +234,7 @@ function ownRoyaltyBooks(r: RoyaltyParse | null): { asin: string; title?: string
 export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8Array, now = new Date(), scope: AuthorScope = null): ImportSummary {
   const parsed = parseKdpFile(name, bytes);
   // Only the Studio's pen names come in (see scope.ts); everything else in the report is left out, and so is its trace in the library.
-  const { parts: p, excluded } = scopeKdpFile(parsed, scope, knownInScope(db, scope));
+  const { parts: p, excluded, accountPayments } = scopeKdpFile(parsed, scope, knownInScope(db, scope));
   const file = `${stampOf(now)}-${safe(name)}`;
   fs.mkdirSync(path.join(dirOf(root), 'orders'), { recursive: true });
   fs.writeFileSync(path.join(dirOf(root), 'orders', file), bytes);
@@ -240,19 +242,30 @@ export function importSalesFile(db: Db, root: string, name: string, bytes: Uint8
   if (p.kenp) saveKenpRows(db, p.kenp.rows, file, now.toISOString());
   if (p.royalty) saveRoyaltyRows(db, p.royalty.rows, p.royalty.summary, file, now.toISOString());
   if (p.payments) savePayments(db, p.payments.payments, file, now.toISOString());
+  // an account-wide payment report: the Studio's part of it, worked out from the sales just saved
+  let paymentShare: PaymentShare | undefined;
+  let kept = p.payments;
+  if (accountPayments) {
+    const r = scopePayments(db, accountPayments, now);
+    for (const old of accountPayments.payments) if (!r.payments.some((x) => x.number === old.number)) removePayment(db, old.number); // nothing of it is the Studio's now
+    savePayments(db, r.payments, file, now.toISOString());
+    paymentShare = r.share;
+    kept = { payments: r.payments, skipped: accountPayments.skipped };
+  }
   const named = [...(p.orders?.rows ?? []), ...(p.kenp?.rows ?? []), ...ownRoyaltyBooks(p.royalty)] as OwnCandidate[];
   const newBooks = registerOwnBooks(db, named, 'report', now.toISOString());
   exportUserData(db, root);
   const all = [...(p.orders?.rows ?? []), ...(p.kenp?.rows ?? [])];
-  const paid = (p.payments?.payments ?? []).map((x) => x.paidOn).sort();
+  const paid = (kept?.payments ?? []).map((x) => x.paidOn).sort();
   const days = [...all.map((r) => r.day), ...(p.royalty?.rows ?? []).map((r) => `${r.month}-01`), ...paid].sort();
   const months = (p.royalty?.rows ?? []).map((r) => r.month).sort();
   return {
     file, rows: all.length, books: new Set(named.map((r) => r.asin)).size, from: days[0] ?? '', to: days[days.length - 1] ?? '',
-    skipped: (p.orders?.skipped ?? 0) + (p.kenp?.skipped ?? 0) + (p.royalty?.skipped ?? 0) + (p.payments?.skipped ?? 0),
-    contains: [...(p.orders ? ['orders' as const] : []), ...(p.kenp ? ['kenp' as const] : []), ...(p.royalty ? ['royalties' as const] : []), ...(p.payments ? ['payments' as const] : [])],
+    skipped: (p.orders?.skipped ?? 0) + (p.kenp?.skipped ?? 0) + (p.royalty?.skipped ?? 0) + (kept?.skipped ?? accountPayments?.skipped ?? 0),
+    contains: [...(p.orders ? ['orders' as const] : []), ...(p.kenp ? ['kenp' as const] : []), ...(p.royalty ? ['royalties' as const] : []), ...(kept?.payments.length ? ['payments' as const] : [])],
     kenpRows: p.kenp?.rows.length,
-    ...(p.payments ? { paymentCount: p.payments.payments.length, paymentFrom: paid[0], paymentTo: paid[paid.length - 1] } : {}),
+    ...(kept?.payments.length ? { paymentCount: kept.payments.length, paymentFrom: paid[0], paymentTo: paid[paid.length - 1] } : {}),
+    ...(paymentShare ? { paymentShare } : {}),
     ...(p.royalty ? { royaltyRows: p.royalty.rows.length, royaltyFrom: months[0], royaltyTo: months[months.length - 1] } : {}),
     newBooks,
     titles: new Set(named.map((b) => b.asin)).size,
@@ -274,6 +287,7 @@ export function importRankFile(db: Db, root: string, name: string, bytes: Uint8A
 /** Read every saved file again (a lost database, or after a parser fix). Oldest first so newer reports win. */
 export function reindexSales(db: Db, root: string, scope: AuthorScope = null): number {
   let n = 0;
+  const payments: { file: string; parse: PaymentParse }[] = []; // after every file's sales, since the Studio's part of a payment is worked out from them
   for (const kind of ['orders', 'ranks'] as const) {
     const d = path.join(dirOf(root), kind);
     if (!fs.existsSync(d)) continue;
@@ -281,7 +295,8 @@ export function reindexSales(db: Db, root: string, scope: AuthorScope = null): n
       try {
         const bytes = new Uint8Array(fs.readFileSync(path.join(d, f)));
         if (kind === 'orders') {
-          const { parts: p } = scopeKdpFile(parseKdpFile(f, bytes), scope, knownInScope(db, scope));
+          const { parts: p, accountPayments } = scopeKdpFile(parseKdpFile(f, bytes), scope, knownInScope(db, scope));
+          if (accountPayments) payments.push({ file: f, parse: accountPayments });
           if (p.orders) saveSalesRows(db, p.orders.rows, f, f.slice(0, 16));
           if (p.kenp) saveKenpRows(db, p.kenp.rows, f, f.slice(0, 16));
           if (p.royalty) saveRoyaltyRows(db, p.royalty.rows, p.royalty.summary, f, f.slice(0, 16));
@@ -294,6 +309,13 @@ export function reindexSales(db: Db, root: string, scope: AuthorScope = null): n
         /* a file that no longer parses is left in place, not deleted */
       }
     }
+  }
+  for (const x of payments) {
+    try {
+      const r = scopePayments(db, x.parse);
+      for (const old of x.parse.payments) if (!r.payments.some((y) => y.number === old.number)) removePayment(db, old.number);
+      savePayments(db, r.payments, x.file, x.file.slice(0, 16));
+    } catch { /* left as it was */ }
   }
   return n;
 }

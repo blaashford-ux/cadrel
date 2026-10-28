@@ -4,15 +4,27 @@ import type { ImportSummary } from './types.js';
 const api = window.cadrelFinance;
 
 export const describeImport = (s: ImportSummary) =>
-  `${s.file.replace(/^\d{8}T\d{6}Z-/, '')}: ${s.contains?.length === 1 && s.contains[0] === 'payments' ? '' : `${s.rows.toLocaleString()} rows for ${s.books} book${s.books === 1 ? '' : 's'}, ${s.from} to ${s.to}`}${s.contains ? ` (${s.contains.map((c) => (c === 'orders' ? 'paid orders' : c === 'payments' ? `${s.paymentCount} payment${s.paymentCount === 1 ? '' : 's'}${s.paymentFrom ? `, paid ${s.paymentFrom}${s.paymentTo && s.paymentTo !== s.paymentFrom ? ' to ' + s.paymentTo : ''}` : ''}` : c === 'royalties' ? `royalties${s.royaltyFrom ? ` ${s.royaltyFrom} to ${s.royaltyTo}` : ''}` : 'Kindle+ pages read')).join(' and ')})` : ''}${s.newBooks ? `; ${s.newBooks} new book${s.newBooks === 1 ? '' : 's'} added to My Books` : ''}${s.skipped ? `; ${s.skipped} unreadable rows skipped` : ''}${describeExcluded(s)}`;
+  `${s.file.replace(/^\d{8}T\d{6}Z-/, '')}: ${(s.contains?.length === 1 && s.contains[0] === 'payments') || (s.paymentShare && !s.rows) ? '' : `${s.rows.toLocaleString()} rows for ${s.books} book${s.books === 1 ? '' : 's'}, ${s.from} to ${s.to}`}${s.contains?.length ? ` (${s.contains.map((c) => (c === 'orders' ? 'paid orders' : c === 'payments' ? `${s.paymentCount} payment${s.paymentCount === 1 ? '' : 's'}${s.paymentFrom ? `, paid ${s.paymentFrom}${s.paymentTo && s.paymentTo !== s.paymentFrom ? ' to ' + s.paymentTo : ''}` : ''}` : c === 'royalties' ? `royalties${s.royaltyFrom ? ` ${s.royaltyFrom} to ${s.royaltyTo}` : ''}` : 'Kindle+ pages read')).join(' and ')})` : ''}${s.newBooks ? `; ${s.newBooks} new book${s.newBooks === 1 ? '' : 's'} added to My Books` : ''}${s.skipped ? `; ${s.skipped} unreadable rows skipped` : ''}${describeExcluded(s)}${describeShare(s)}`;
 
 /** What a Studio-limited import left out, in words: other pen names' books, or that this Studio has no pen names yet. */
+const describeShare = (s: ImportSummary) => {
+  const x = s.paymentShare;
+  if (!x) return '';
+  const pct = x.share === null ? '' : `${Math.round(x.share * 100)}%`;
+  const left = x.unmatched.length
+    ? ` ${x.unmatched.length} payment line${x.unmatched.length === 1 ? '' : 's'} (${x.unmatched.slice(0, 6).join(', ')}${x.unmatched.length > 6 ? '…' : ''}) had no sales or pages read for this Studio and were left out; if they are yours, import the KDP reports for those months first, then this payment report again.`
+    : '';
+  return x.kept
+    ? `. This payment report covers the whole KDP account; this Studio's part is ${pct} of it, worked out from the Studio's own sales for each month${x.estimated ? ` (${x.estimated} line${x.estimated === 1 ? '' : 's'} estimated, so the figures may be off by a few percent)` : ''}.${left}`
+    : `. This payment report covers the whole KDP account and none of it could be tied to this Studio's sales.${left}`;
+};
+
 const describeExcluded = (s: ImportSummary) => {
   if (s.noPenNames) return '. This Studio has no pen names yet, so nothing was brought in. Add the pen names it publishes under in Admin → People and roles, then import again';
   const x = s.excluded;
   if (!x || (!x.books && !x.accountTotalsSkipped)) return '';
   const who = x.authors.length ? ` (${x.authors.join(', ')})` : '';
-  return `${x.books ? `. Left out ${x.books} book${x.books === 1 ? '' : 's'} by other pen names${who}` : ''}${x.accountTotalsSkipped ? `${x.books ? '; ' : '. '}payments and monthly totals were skipped because they cover every pen name on the KDP account` : ''}`;
+  return `${x.books ? `. Left out ${x.books} book${x.books === 1 ? '' : 's'} by other pen names${who}` : ''}${x.accountTotalsSkipped ? `${x.books ? '; ' : '. '}monthly totals were skipped because they cover every pen name on the KDP account` : ''}`;
 };
 
 /** Pick KDP Orders and/or KENP Read reports (xlsx or csv, several at once) and import them. */

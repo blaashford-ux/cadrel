@@ -50,6 +50,13 @@ const workbook = (): Uint8Array => xlsx({
 /** The KDP payments report: whole-account lump sums, with no author in it. */
 const payments = (): Uint8Array => xlsx({ Payments: [PHEAD, ['2026-09-01', '2026-09-30', 'Amazon.com', '1.0000154418274E14', '', '2026-10-29', 'WIRE', 'USD', 90, 4, 86, '', 'Pending info from Bank', 'NZD', 'Pending info from Bank', 'Paid'], ['', '', '', '', '2026-09', '', '', 'USD', 90, 4, 86, 'Sales', '', '', '', '']] });
 
+/** An account-wide payment: September's sales (90 for the whole account), its Kindle+ (3.00), a month the Studio has no sales in, and one it has none for. */
+const accountPayment = (): Uint8Array => xlsx({ Payments: [PHEAD,
+  ['2026-09-01', '2026-10-31', 'Amazon.com', '1.0000154418274E14', '', '2026-10-29', 'WIRE', 'USD', 100, 5, 95, '', 'Pending info from Bank', 'NZD', 'Pending info from Bank', 'Paid'],
+  ['', '', '', '', '2026-09', '', '', 'USD', 90, 4, 86, 'Sales', '', '', '', ''],
+  ['', '', '', '', '2026-09', '', '', 'USD', 3, 0.15, 2.85, 'Kindle+ Royalties', '', '', '', ''],
+  ['', '', '', '', '2026-10', '', '', 'USD', 7, 0.35, 6.65, 'Sales', '', '', '', '']] });
+
 const asins = () => (lib.db.prepare('SELECT asin FROM own_book ORDER BY asin').all() as { asin: string }[]).map((r) => r.asin);
 const count = (t: string) => lib.db.scalar<number>(`SELECT COUNT(*) FROM ${t}`) ?? 0;
 
@@ -96,12 +103,46 @@ describe('a library limited to a Studio’s pen names', () => {
     expect(r.excluded!.authors.sort()).toEqual(['Ashe Wilder', 'Blake Ashford', 'Wilder, Ashe']);
   });
 
-  it('leaves a payments report out when it cannot tell whose money it is, and keeps one that comes with a file showing nothing is anyone else’s', () => {
+  it('keeps a payment report that comes with a file showing nothing is anyone else’s, and drops one with no sales behind it', () => {
     const p = importSalesFile(lib.db, root, 'Payments.xlsx', payments(), NOW, ['Ashe Wilder']);
-    expect(count('payment')).toBe(0);
-    expect(p.excluded?.accountTotalsSkipped).toBe(true);
+    expect(count('payment')).toBe(0); // the Studio has no sales yet, so nothing in it can be tied to the Studio
+    expect(p.paymentShare).toMatchObject({ lines: 1, kept: 0, share: null, unmatched: ['2026-09 sales'] });
     importSalesFile(lib.db, root, 'Payments.xlsx', payments(), NOW, null);
     expect(count('payment')).toBe(1); // an unrestricted library keeps it, as before
+  });
+
+  it('works out the Studio’s part of a whole-account payment from its own sales that month', () => {
+    importSalesFile(lib.db, root, 'KDP.xlsx', workbook(), NOW, ['Ashe Wilder']); // the Studio earned 40 + 20 of the account's 90 that month
+    const r = importSalesFile(lib.db, root, 'Payments.xlsx', accountPayment(), NOW, ['Ashe Wilder']);
+    expect(r.contains).toContain('payments');
+    expect(r.paymentShare).toMatchObject({ lines: 3, kept: 2, estimated: 2, unmatched: ['2026-10 sales'] });
+    const lines = lib.db.prepare('SELECT month, source, accrued, tax, net FROM payment_line ORDER BY month, source').all() as { month: string; source: string; accrued: number; tax: number; net: number }[];
+    expect(lines).toEqual([
+      { month: '2026-09', source: 'kenp', accrued: 2.25, tax: 0.11, net: 2.14 }, // 500 pages at the standing rate, of KDP's 3.00 for the month
+      { month: '2026-09', source: 'sales', accrued: 60, tax: 2.67, net: 57.33 }, // 60 of the account's 90
+    ]);
+    const pay = lib.db.prepare('SELECT accrued, tax, net FROM payment').get() as { accrued: number; tax: number; net: number };
+    expect(pay.accrued).toBeCloseTo(62.25, 2); // the header's 100 less the share that is not the Studio's
+    expect(pay.net).toBeCloseTo(pay.accrued - pay.tax, 2);
+    expect(r.paymentShare!.share).toBeCloseTo(0.62, 2); // 62.25 of the 100 the file pays out
+  });
+
+  it('leaves a Studio that is the only one paid that month with the whole line', () => {
+    importSalesFile(lib.db, root, 'KDP.xlsx', workbook(), NOW, ['Blake Ashford']); // 30 of royalties
+    importSalesFile(lib.db, root, 'Payments.xlsx', xlsx({ Payments: [PHEAD, ['2026-09-01', '2026-09-30', 'Amazon.com', '1.0000154418274E14', '', '2026-10-29', 'WIRE', 'USD', 30.5, 1.5, 29, '', 'Pending info from Bank', 'NZD', 'Pending info from Bank', 'Paid'], ['', '', '', '', '2026-09', '', '', 'USD', 30.5, 1.5, 29, 'Sales', '', '', '', '']] }), NOW, ['Blake Ashford']);
+    expect(lib.db.prepare('SELECT accrued, tax, net FROM payment_line').all()).toEqual([{ accrued: 30.5, tax: 1.5, net: 29 }]);
+    expect(lib.db.prepare('SELECT accrued, net FROM payment').get()).toEqual({ accrued: 30.5, net: 29 });
+  });
+
+  it('applies a payment report that was imported before the sales it depends on when the files are read again', () => {
+    importSalesFile(lib.db, root, 'Payments.xlsx', accountPayment(), new Date('2026-10-21T12:00:00Z'), ['Ashe Wilder']);
+    expect(count('payment')).toBe(0);
+    importSalesFile(lib.db, root, 'KDP.xlsx', workbook(), new Date('2026-10-22T12:00:00Z'), ['Ashe Wilder']);
+    expect(count('payment')).toBe(0); // not tied back automatically
+    lib.db.exec('DELETE FROM sales_day; DELETE FROM kenp_day; DELETE FROM royalty_month; DELETE FROM own_book;');
+    reindexSales(lib.db, root, ['Ashe Wilder']);
+    expect(count('payment')).toBe(1);
+    expect(lib.db.prepare("SELECT accrued FROM payment_line WHERE source = 'sales' AND month = '2026-09'").get()).toEqual({ accrued: 60 });
   });
 
   it('keeps a book the library already holds (flagged by hand, no author) when a later file names it without an author', () => {
