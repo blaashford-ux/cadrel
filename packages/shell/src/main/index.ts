@@ -1042,7 +1042,7 @@ function registerShellIpc(): void {
   studioOp('studio:archiveProject', (id: string, archived: boolean) => studio.archiveProject(id, archived));
   studioOp('studio:deleteProject', (id: string, cascade: boolean) => studio.deleteProject(id, cascade));
   studioOp('studio:link', (id: string, module: string, ref: string) => studio.link(id, module, ref));
-  studioOp('studio:unlink', (module: string, ref: string) => studio.unlink(module, ref));
+  studioOp('studio:unlink', (module: string, ref: string, projectId?: string) => studio.unlink(module, ref, typeof projectId === 'string' ? projectId : undefined));
   studioOp('studio:addNote', async (o: Parameters<StudioService['addNote']>[0]) => ({ id: (await studio.addNote(o)).id }));
   studioOp('studio:setNoteStatus', (id: string, status: Parameters<StudioService['setNoteStatus']>[1]) => studio.setNoteStatus(id, status));
   studioOp('studio:replyToNote', (id: string, body: string) => studio.replyToNote(id, body));

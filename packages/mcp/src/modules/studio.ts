@@ -177,14 +177,19 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     'studio_link',
     {
       description:
-        'Link a module\'s record to a project, or (with project omitted) unlink it. A record belongs to one project. Records: module "write" with the manuscript folder name from list_projects, or module "market" with a category key.',
-      inputSchema: { module: z.enum(['write', 'market']), record: z.string(), project: projectRef.optional() }
+        'Link a module\'s record to a project, or (with project omitted) unlink it. A manuscript (write) belongs to one project and linking it again moves it; a Market category can belong to several projects, so linking it adds it and keeps the others; to take it out of one project, give that project with unlink true, and with no project it leaves all of them. Records: module "write" with the manuscript folder name from list_projects, or module "market" with a category key.',
+      inputSchema: { module: z.enum(['write', 'market']), record: z.string(), project: projectRef.optional(), unlink: z.boolean().optional() }
     },
     (a) =>
       guarded(async () => {
         if (!a.project) {
           await o.studio.unlink(a.module, a.record);
           return { unlinked: a.record };
+        }
+        if (a.unlink) {
+          const from = resolve((await o.studio.read()).tree, a.project);
+          await o.studio.unlink(a.module, a.record, from);
+          return row((await o.studio.read()).tree, from);
         }
         const id = resolve((await o.studio.read()).tree, a.project);
         await o.studio.link(id, a.module, a.record);

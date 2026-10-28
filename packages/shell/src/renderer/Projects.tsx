@@ -195,9 +195,9 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
   const nameOf = (id: string) => getProject(tree, id)?.name ?? null;
 
   const takenWrite = new Set(tree.links.filter((l) => l.module === 'write').map((l) => l.ref));
-  const takenMarket = new Set(tree.links.filter((l) => l.module === 'market').map((l) => l.ref));
+  const ownMarket = new Set(mine.filter((l) => l.module === 'market').map((l) => l.ref)); // a category can be in several projects; only this project's own are not offered again
   const freeWrite = (overview?.write.projects ?? []).filter((w) => !takenWrite.has(w.name));
-  const freeMarket = (overview?.market.categories ?? []).filter((c) => !takenMarket.has(c.key));
+  const freeMarket = (overview?.market.categories ?? []).filter((c) => !ownMarket.has(c.key));
   const [pick, setPick] = useState('');
   useEffect(() => setPick(''), [p.id]);
 
@@ -291,8 +291,12 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
                 <strong>{labelOf(l.module, l.ref)}</strong>
                 {w && <span className="muted small">{w.stage ? `${w.stage} · ` : null}{w.words === null ? 'no active manuscript' : `${formatWords(w.words)} words`}</span>}
                 {gone && <span className="warn small">not found any more</span>}
+                {l.module === 'market' && (() => {
+                  const others = tree.links.filter((x) => x.module === 'market' && x.ref === l.ref && x.projectId !== p.id).map((x) => nameOf(x.projectId)).filter((n): n is string => !!n);
+                  return others.length ? <span className="muted small">also in {others.join(', ')}</span> : null;
+                })()}
                 <button type="button" className="link" onClick={() => onGo(l.module as ModuleId)}>Open {l.module === 'write' ? 'Write' : 'Market'}</button>
-                <button type="button" className="quiet" onClick={() => void act(() => api.unlink(l.module, l.ref))}>Unlink</button>
+                <button type="button" className="quiet" onClick={() => void act(() => api.unlink(l.module, l.ref, p.id))}>Unlink</button>
               </li>
             );
           })}
@@ -305,7 +309,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
           </select>
           <button type="button" disabled={!pick} onClick={link}>Link</button>
         </div>
-        <p className="muted small">A manuscript or category belongs to one project. Linking it here moves it from wherever it was.</p>
+        <p className="muted small">A manuscript belongs to one project: linking it here moves it from wherever it was. A Market category can belong to several projects (books in the same genre share one), so linking it here keeps it in the others.</p>
       </section>
 
       <section className="card" aria-labelledby="pd-notes">

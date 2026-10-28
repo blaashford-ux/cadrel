@@ -125,7 +125,8 @@ export interface StudioApi {
   /** Returns the ids that were removed. Subprojects go too only with `cascade`. */
   deleteProject(id: string, cascade: boolean): Promise<string[]>;
   link(projectId: string, module: string, ref: string): Promise<void>;
-  unlink(module: string, ref: string): Promise<void>;
+  /** From every project, or from `projectId` only (a Market category can belong to several). */
+  unlink(module: string, ref: string, projectId?: string): Promise<void>;
   addNote(o: { projectId: string | null; body: string; target?: NoteTarget | null; category?: string }): Promise<{ id: string }>;
   setNoteStatus(id: string, status: NoteStatus): Promise<void>;
   replyToNote(id: string, body: string): Promise<void>;

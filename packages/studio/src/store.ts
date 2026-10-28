@@ -8,7 +8,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, emptyTree, linkRecord, moveProject, projectFor, relinkRecord,
+  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
   replyToNote, sanitizeNotes, sanitizeTree, setArchived, setNoteStatus, unlinkRecord, updateProject,
   type NewNote, type Note, type NoteStatus, type Project, type ProjectTree
 } from '@cadrel/kernel';
@@ -127,8 +127,9 @@ export class Studio {
     return this.change((d) => ({ data: { ...d, tree: linkRecord(d.tree, projectId, module, ref) }, result: undefined }));
   }
 
-  unlink(module: string, ref: string): Promise<void> {
-    return this.change((d) => ({ data: { ...d, tree: unlinkRecord(d.tree, module, ref) }, result: undefined }));
+  /** From every project, or from `projectId` only (a record shared by several projects). */
+  unlink(module: string, ref: string, projectId?: string): Promise<void> {
+    return this.change((d) => ({ data: { ...d, tree: unlinkRecord(d.tree, module, ref, projectId) }, result: undefined }));
   }
 
   relink(module: string, from: string, to: string): Promise<void> {
@@ -140,7 +141,7 @@ export class Studio {
   /** A note on a record that is linked to a project belongs to that project unless told otherwise. */
   addNote(o: NewNote): Promise<Note> {
     return this.change((d) => {
-      const projectId = o.projectId !== undefined ? o.projectId : o.target ? projectFor(d.tree, o.target.module, o.target.id)?.id ?? null : null;
+      const projectId = o.projectId !== undefined ? o.projectId : o.target ? onlyOne(projectsFor(d.tree, o.target.module, o.target.id)) : null;
       if (projectId && !d.tree.projects.some((p) => p.id === projectId)) throw new Error(`There is no project "${projectId}".`);
       const r = createNote(d.notes, { ...o, projectId });
       return { data: { ...d, notes: r.notes }, result: r.note };
@@ -163,3 +164,6 @@ export class Studio {
     return this.change((d) => ({ data: { ...d, notes: deleteNote(d.notes, id) }, result: undefined }));
   }
 }
+
+/** A note on a record shared by several projects belongs to none of them in particular. */
+const onlyOne = (ps: { id: string }[]): string | null => (ps.length === 1 ? ps[0]!.id : null);
