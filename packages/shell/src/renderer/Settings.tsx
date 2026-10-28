@@ -94,7 +94,8 @@ function UpdateCard({ info }: { info: ShellInfo | null }) {
 
 const MCP_ROWS: { key: keyof McpAccess; label: string; hint: string }[] = [
   { key: 'createFiles', label: 'Create files', hint: 'AI tools may add new files to your projects, such as a new chapter. They can never replace a file that already exists.' },
-  { key: 'editFiles', label: 'Edit files', hint: 'AI tools may change the text of files already in your projects. Keep a backup or version history if you turn this on.' }
+  { key: 'editFiles', label: 'Edit files', hint: 'AI tools may change the text of files already in your projects. Keep a backup or version history if you turn this on.' },
+  { key: 'suggestKeywords', label: 'Suggest keywords', hint: 'AI tools may send keyword suggestions to Market’s Keywords tab, after reading your outline and the category. They appear in their own list for you to use or dismiss; nothing is searched or published for you.' }
 ];
 
 /** Lets the person decide whether AI tools connected through MCP may change their documents. Both are off until switched on here. */
@@ -114,7 +115,7 @@ function McpCard() {
   return (
     <section className="card" aria-labelledby="s-mcp">
       <h3 id="s-mcp">MCP</h3>
-      <p className="muted small">AI tools connected to Cadrel (Claude, GPT and others, set up on the Extensions page) can always read your projects and leave review notes. These switches decide whether they may also change your documents. Both are off unless you turn them on, and they take effect straight away: no need to restart the AI app.</p>
+      <p className="muted small">AI tools connected to Cadrel (Claude, GPT and others, set up on the Extensions page) can always read your projects and leave review notes. These switches decide what else they may do: change your documents, or send suggestions into the app. All are off unless you turn them on, and they take effect straight away: no need to restart the AI app.</p>
       {error && <div className="banner error" role="alert">{error}</div>}
       <dl className="kv">
         {MCP_ROWS.map(({ key, label, hint }) => (

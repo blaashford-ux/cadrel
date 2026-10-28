@@ -679,3 +679,57 @@ export async function editFile(ctx: AgentContext, project: string, file: string,
     return { file: rel, edits: edits.length, words: countWords(text), chapters: splitChapters(text, await chapterLevel(ctx, dir)).chapters.length };
   });
 }
+
+// ---- outlines --------------------------------------------------------------------------------
+// Read-only. Market's keyword suggestions are built from a book's outline, so they need to find one and read it.
+
+export interface OutlineFile {
+  project: string;
+  /** Path inside the project, as list_files gives it. */
+  file: string;
+  /** The first heading, else the file name. */
+  title: string;
+  words: number;
+  /** Why it looks like an outline: its file name, or the folder it is in. */
+  match: 'name' | 'folder';
+}
+
+const OUTLINE_NAME = /outline|beat[ _-]?sheet|synopsis|treatment|plot[ _-]?(?:plan|summary|notes)?\b|story[ _-]?(?:plan|structure)|chapter[ _-]?(?:plan|list|breakdown)/i;
+const OUTLINE_FOLDER = /^(?:outlines?|plot|plotting|planning|story)$/i;
+/** Longest outline read: a long outline is cut, and the reader is told. */
+export const OUTLINE_CHARS = 60000;
+
+/**
+ * The files in the projects that look like outlines: named for one ("Outline.md", "Beat sheet.md", "Synopsis.md") or sitting in a folder
+ * named for one ("Outline/Book 1.md"). Manuscript chapters are never matched by their folder. Best guesses first: a file named "outline" before a synopsis.
+ */
+export async function listOutlines(ctx: AgentContext, project?: string): Promise<OutlineFile[]> {
+  const out: OutlineFile[] = [];
+  for (const p of project ? [{ project }] : await listProjects(ctx)) {
+    const files = await listFiles(ctx, p.project).catch(() => []);
+    for (const f of files) {
+      const parts = f.file.split('/');
+      const base = parts[parts.length - 1].replace(/\.(md|markdown)$/i, '');
+      const byName = OUTLINE_NAME.test(base);
+      const byFolder = parts.length > 1 && parts.slice(0, -1).some((s) => OUTLINE_FOLDER.test(s));
+      if (!byName && !byFolder) continue;
+      let title = base;
+      try {
+        const head = (await ctx.fs.readText(`${await projectDir(ctx, p.project)}/${f.file}`)).match(/^\s*#{1,3}\s+(.+)$/m);
+        if (head) title = head[1].trim().slice(0, 120);
+      } catch {
+        /* the file name will do */
+      }
+      out.push({ project: p.project, file: f.file, title, words: f.words, match: byName ? 'name' : 'folder' });
+    }
+  }
+  const rank = (o: OutlineFile) => (/outline/i.test(o.file) ? 0 : o.match === 'name' ? 1 : 2);
+  return out.sort((a, b) => rank(a) - rank(b) || a.project.localeCompare(b.project) || a.file.localeCompare(b.file));
+}
+
+/** The Markdown of one outline file (cut at OUTLINE_CHARS). Any manuscript file in a project can be named, as with read_chapter. */
+export async function readOutline(ctx: AgentContext, project: string, file: string): Promise<{ project: string; file: string; text: string; truncated: boolean }> {
+  const { abs, rel } = await manuscriptPath(ctx, project, file);
+  const text = await ctx.fs.readText(abs);
+  return { project, file: rel, text: text.slice(0, OUTLINE_CHARS), truncated: text.length > OUTLINE_CHARS };
+}

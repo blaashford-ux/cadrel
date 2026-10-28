@@ -33,6 +33,7 @@ import { spawn } from 'node:child_process';
 import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
+import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
@@ -1156,7 +1157,7 @@ function registerShellIpc(): void {
   ipcMain.handle('shell:mcp:get', guard(async () => accessNow()));
   ipcMain.handle('shell:mcp:set', guard(async (change: unknown) => {
     const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
-    const next = sanitizeAccess({ ...(await accessNow()), ...(typeof c.createFiles === 'boolean' ? { createFiles: c.createFiles } : {}), ...(typeof c.editFiles === 'boolean' ? { editFiles: c.editFiles } : {}) });
+    const next = sanitizeAccess({ ...(await accessNow()), ...(typeof c.createFiles === 'boolean' ? { createFiles: c.createFiles } : {}), ...(typeof c.editFiles === 'boolean' ? { editFiles: c.editFiles } : {}), ...(typeof c.suggestKeywords === 'boolean' ? { suggestKeywords: c.suggestKeywords } : {}) });
     const tmp = `${aiAccessFile()}.${process.pid}.tmp`;
     await fsp.writeFile(tmp, JSON.stringify(next, null, 2) + '\n');
     await fsp.rename(tmp, aiAccessFile());
@@ -1335,6 +1336,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       },
       defaultLibrary: marketDefault,
       authorScope: () => peopleHost.penNameScope(),
+      outlines: projectOutlines(projectsFolder),
       mcpLaunch,
       mcpBrand: CADREL_MCP,
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'

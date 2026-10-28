@@ -17,6 +17,8 @@ import { startHttp } from '@cadrel/write/mcp/http';
 import { chooseRoot, rootCandidates } from '@cadrel/write/mcp/root';
 import { listProjects } from '@cadrel/write/src/shared/agent/tools';
 import { accessReader } from '@cadrel/write/src/shared/agent/access';
+import { listOutlines, readOutline } from '@cadrel/write/src/shared/agent/tools';
+import type { OutlineSource } from '@cadrel/market-library';
 import type { ServerOptions as WriteOptions } from '@cadrel/write/mcp/server';
 import { resolveLibraryRoot } from '@cadrel/market-mcp/src/config.js';
 import { capabilitiesOf, composeInstructions, createCadrelServer, SERVER_NAME, type McpModule } from './server.js';
@@ -38,6 +40,9 @@ function flag(name: string): string | undefined {
   const a = args[i]!;
   return a.includes('=') ? a.slice(a.indexOf('=') + 1) : args[i + 1];
 }
+
+/** What the person lets AI tools do, re-read each time it matters (see Settings → MCP in the app). */
+const aiAccess = accessReader(nodeFs, flag('ai-access') ?? process.env.CADREL_AI_ACCESS);
 
 const say = (m: string) => process.stderr.write(`${m}\n`);
 
@@ -107,7 +112,7 @@ async function findWrite(): Promise<Found<{ options: WriteOptions; root: string;
     if (source !== candidates[0]!.source) say(`No projects in the projects folder from ${candidates[0]!.source} (${candidates[0]!.root}); using ${root} (${source}) instead.`);
     const st = await nodeFs.stat(root);
     if (!st?.isDirectory) return { ok: false, reason: `the projects folder "${root}" (from ${source}) does not exist` };
-    return { ok: true, value: { options: { fs: nodeFs, root, tried, agent: flag('agent'), version: VERSION, access: accessReader(nodeFs, flag('ai-access') ?? process.env.CADREL_AI_ACCESS) }, root, source } };
+    return { ok: true, value: { options: { fs: nodeFs, root, tried, agent: flag('agent'), version: VERSION, access: aiAccess }, root, source } };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
   }
@@ -129,7 +134,17 @@ function penNameScope(): string[] | null {
  * Market: the library Cadrel Market keeps. A library that is missing or will not open just means these tools are left out.
  * With `open: false` (the handshake) nothing is opened, only the instructions are read.
  */
-async function findMarket(open: boolean): Promise<Found<{ module: McpModule; close(): void; root: string }>> {
+/** The outline documents in the projects folder, for the keyword tools. */
+function outlinesOf(w: Found<{ options: WriteOptions }>): OutlineSource | undefined {
+  if (!w.ok) return undefined;
+  const ctx = { fs: nodeFs, root: w.value.options.root, agent: 'ai', agentName: 'AI' };
+  return {
+    list: async () => (await listOutlines(ctx)).map((o) => ({ project: o.project, file: o.file, title: o.title, words: o.words })),
+    read: async (ref) => (await readOutline(ctx, ref.project, ref.file).catch(() => null))?.text ?? null
+  };
+}
+
+async function findMarket(open: boolean, write?: Found<{ options: WriteOptions }>): Promise<Found<{ module: McpModule; close(): void; root: string }>> {
   const root = resolveLibraryRoot(process.argv.slice(2), process.env);
   if (!root) return { ok: false, reason: 'no market library found (choose one in Cadrel, or pass --library <folder>)' };
   try {
@@ -138,7 +153,7 @@ async function findMarket(open: boolean): Promise<Found<{ module: McpModule; clo
     const { embedderForModel, SERVER_INSTRUCTIONS } = await import('@cadrel/market-mcp');
     if (!open) return { ok: true, value: { module: { id: 'market', title: 'Market research (the Amazon library)', instructions: SERVER_INSTRUCTIONS, register: () => undefined }, close: () => undefined, root } };
     const lib = Library.open(root);
-    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root), authorScope: penNameScope() }), close: () => lib.close(), root } };
+    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root), authorScope: penNameScope(), outlines: write && outlinesOf(write), canSuggestKeywords: async () => (await aiAccess()).suggestKeywords }), close: () => lib.close(), root } };
   } catch (e) {
     return { ok: false, reason: `the market tools could not start here (${e instanceof Error ? e.message : String(e)})` };
   }
@@ -152,7 +167,7 @@ async function main(): Promise<void> {
         '  --library <folder>  the market research library (default: the one the app last used)\n' +
         '  --studio <file>     the studio file (projects and notes; default: the one Cadrel keeps)\n' +
         '  --records <file>    the Studio\'s records file (tasks, sign-offs, decisions, books, files); with --person <id> and --studio-id <id>\n' +
-        '  --ai-access <file>  what the AI may create or edit (written by Settings → MCP; without it files can only be read and reviewed)\n' +
+        '  --ai-access <file>  what the AI may do (written by Settings → MCP; without it files can only be read and reviewed, and no keyword suggestions are taken)\n' +
         '  --agent <name>      how the AI is named in the Notes panel (default: taken from the connecting app)\n' +
         '  --http              listen on 127.0.0.1 instead of stdio: MCP at /mcp, REST at /api, API description at /openapi.json\n' +
         '  --port <n>          port for --http (default 47831)\n' +
@@ -180,7 +195,7 @@ async function main(): Promise<void> {
   if (process.argv.includes('--http')) {
     if (!write.ok) throw new Error(`--http serves the writing tools, but ${write.reason}. Pass --root <folder>.`);
     const withMarket = process.argv.includes('--with-market');
-    const market = withMarket ? await findMarket(true) : null;
+    const market = withMarket ? await findMarket(true, write) : null;
     const records = await findRecords(true);
     if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);
     if (market && !market.ok) say(`Market tools left out: ${market.reason}.`);
@@ -198,7 +213,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const market = await findMarket(true);
+  const market = await findMarket(true, write);
   const records = await findRecords(true);
   if (!write.ok) say(`Writing tools left out: ${write.reason}.`);
   if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);

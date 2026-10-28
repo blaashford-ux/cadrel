@@ -936,6 +936,33 @@ describe('keyword history and suggestions', () => {
     await s.stop();
   }, 30000);
 
+  it('builds suggestions on the outline the person chooses, and only on one the host lists', async () => {
+    const outline = '# Outline\n\nA retired dragon keeper opens a bookshop in a small town. A slow burn begins. A heist at the lighthouse.\n';
+    const outlines = { list: async () => [{ project: 'Novel', file: 'Outline.md', title: 'Outline', words: 20 }], read: async (r: { project: string; file: string }) => (r.file === 'Outline.md' ? outline : null) };
+    const s = new AppService({ userData, openExternal: () => {}, revealInFolder: () => {}, fetch: answer, keywordDelayMs: 0, outlines });
+    await s.setLibrary(libRoot);
+    const port = s.status().port;
+    expect((await post(port, s.token(), { kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: gz('bestsellers-kindle-humorous-fantasy.html.gz') })).status).toBe(200);
+    for (const a of ['B0C1R52V2J', 'B0HKTD6M9Z', 'B0GZNJHYRW']) expect((await post(port, s.token(), { kind: 'detail', url: `https://www.amazon.com/dp/${a}`, html: gz(`detail-kindle-${a}.html.gz`) })).status).toBe(200);
+    const key = s.categories()[0]!.key;
+    expect(await s.keywordOutlines(key)).toMatchObject({ available: true, chosen: null, readable: true, outlines: [{ project: 'Novel', file: 'Outline.md' }] });
+    await expect(s.setKeywordOutline(key, { project: 'Novel', file: 'Secrets.md' })).rejects.toThrow(/not one of the outline documents/);
+    expect((await s.keywordIdeas(key)).some((i) => i.outlineMentions !== undefined)).toBe(false);
+    await s.setKeywordOutline(key, { project: 'Novel', file: 'Outline.md' });
+    const ideas = await s.keywordIdeas(key);
+    expect(ideas.some((i) => (i.outlineMentions ?? 0) > 0)).toBe(true);
+    expect((await s.keywordStrings(key)).length).toBeGreaterThan(0);
+    await s.setKeywordOutline(key, null);
+    expect((await s.keywordOutlines(key)).chosen).toBeNull();
+    expect(s.injectedSuggestions(key)).toEqual([]);
+    // a host with no projects offers none
+    const bare = new AppService({ userData, openExternal: () => {}, revealInFolder: () => {}, fetch: answer, keywordDelayMs: 0 });
+    await bare.setLibrary(libRoot);
+    expect((await bare.keywordOutlines(key)).available).toBe(false);
+    await bare.stop();
+    await s.stop();
+  }, 30000);
+
   it('suggests five phrases for a captured category, and says so when the category is unknown', async () => {
     const s = new AppService({ userData, openExternal: () => {}, revealInFolder: () => {}, fetch: answer, keywordDelayMs: 0 });
     await s.setLibrary(libRoot);
@@ -943,21 +970,21 @@ describe('keyword history and suggestions', () => {
     expect((await post(port, s.token(), { kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: gz('bestsellers-kindle-humorous-fantasy.html.gz') })).status).toBe(200);
     for (const a of ['B0C1R52V2J', 'B0HKTD6M9Z', 'B0GZNJHYRW', 'B0GSCPBJLJ', 'B0GPRVQ8QJ']) expect((await post(port, s.token(), { kind: 'detail', url: `https://www.amazon.com/dp/${a}`, html: gz(`detail-kindle-${a}.html.gz`) })).status).toBe(200);
     const key = s.categories()[0]!.key;
-    const ideas = s.keywordIdeas(key);
+    const ideas = await s.keywordIdeas(key);
     expect(ideas).toHaveLength(5);
     expect(ideas.every((i) => !/\b(?:humorous|fantasy)\b/.test(i.keyword))).toBe(true);
     expect(new Set(ideas.map((i) => i.keyword)).size).toBe(5);
     // clicking a suggestion runs that search, which then appears in the history
     await s.keywordLookup(ideas[0]!.keyword);
-    expect(() => s.keywordIdeas('no such category')).toThrow(/no category matches/);
+    await expect(s.keywordIdeas('no such category')).rejects.toThrow(/no category matches/);
     // the same library gives keyword strings for the KDP boxes: at most seven, 50 characters each, no word twice
-    const strings = s.keywordStrings(key);
+    const strings = await s.keywordStrings(key);
     expect(strings.length).toBeGreaterThan(0);
     expect(strings.length).toBeLessThanOrEqual(7);
     const words = strings.flatMap((k) => k.keyword.split(' '));
     expect(new Set(words).size).toBe(words.length);
     expect(strings.every((k) => k.chars === k.keyword.length && k.chars <= 50)).toBe(true);
-    expect(() => s.keywordStrings('no such category')).toThrow(/no category matches/);
+    await expect(s.keywordStrings('no such category')).rejects.toThrow(/no category matches/);
     await s.stop();
   }, 30000);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { OwnBookRow, CategorySummary, KeywordHistoryRow, KeywordIdea, KeywordString, KeywordJob, KeywordLookupResult, KeywordRow, KeywordTable, SuggestSource } from '../../shared/api.js';
+import type { OwnBookRow, CategorySummary, KeywordHistoryRow, KeywordIdea, KeywordString, InjectedSuggestion, OutlineRef, KeywordJob, KeywordLookupResult, KeywordRow, KeywordTable, SuggestSource } from '../../shared/api.js';
 import { DataTable, type Column } from './DataTable.js';
 
 const api = window.cadrelMarket;
@@ -32,6 +32,8 @@ export function KeywordsView({ version }: { version: number }) {
   const [strings, setStrings] = useState<KeywordString[]>([]);
   const [ownBooks, setOwnBooks] = useState<OwnBookRow[]>([]);
   const [forAsin, setForAsin] = useState('');
+  const [outlines, setOutlines] = useState<{ available: boolean; outlines: OutlineRef[]; chosen: { project: string; file: string } | null; readable: boolean }>({ available: false, outlines: [], chosen: null, readable: true });
+  const [injected, setInjected] = useState<InjectedSuggestion[]>([]);
   const [history, setHistory] = useState<KeywordHistoryRow[]>([]);
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
@@ -44,7 +46,14 @@ export function KeywordsView({ version }: { version: number }) {
   const catName = (k: string) => cats.find((c) => c.key === k)?.name ?? k;
   const loadIdeas = () => (ideasCat ? api.keywordIdeas(ideasCat, forAsin || undefined).then(setIdeas, () => setIdeas([])) : Promise.resolve(setIdeas([])));
   const loadStrings = () => (ideasCat ? api.keywordStrings(ideasCat, forAsin || undefined).then(setStrings, () => setStrings([])) : Promise.resolve(setStrings([])));
-  useEffect(() => { void loadIdeas(); void loadStrings(); }, [ideasCat, forAsin, version]);
+  const loadOutlines = () => (ideasCat ? api.keywordOutlines(ideasCat).then(setOutlines, () => {}) : Promise.resolve());
+  const loadInjected = () => (ideasCat ? api.injectedSuggestions(ideasCat).then(setInjected, () => setInjected([])) : Promise.resolve(setInjected([])));
+  useEffect(() => { void loadIdeas(); void loadStrings(); void loadOutlines(); void loadInjected(); }, [ideasCat, forAsin, version]);
+  const chooseOutline = (value: string) => {
+    const ref = value ? (JSON.parse(value) as { project: string; file: string }) : null;
+    void api.setKeywordOutline(ideasCat, ref).then(() => Promise.all([loadOutlines(), loadIdeas(), loadStrings()]), (e) => setErr(String(e.message ?? e)));
+  };
+  const outlineValue = outlines.chosen ? JSON.stringify({ project: outlines.chosen.project, file: outlines.chosen.file }) : '';
   useEffect(() => { void api.ownBooks().then((b) => setOwnBooks(b.filter((x) => x.snapshots > 0)), () => setOwnBooks([])); }, [version]);
   const loadHistory = () => api.keywordHistory(cat || undefined).then(setHistory, () => {});
   useEffect(() => { void loadHistory(); }, [sub, version, cat]);
@@ -201,6 +210,15 @@ export function KeywordsView({ version }: { version: number }) {
                   </select>
                 </label>
               )}
+              {outlines.available && (
+                <label>Build on outline{' '}
+                  <select value={outlineValue} onChange={(e) => chooseOutline(e.target.value)} aria-label="Outline document to build suggestions on">
+                    <option value="">none (the category only)</option>
+                    {outlines.chosen && !outlines.outlines.some((o) => o.project === outlines.chosen!.project && o.file === outlines.chosen!.file) && <option value={outlineValue}>{outlines.chosen.project} / {outlines.chosen.file} (not found)</option>}
+                    {outlines.outlines.map((o) => <option key={`${o.project}/${o.file}`} value={JSON.stringify({ project: o.project, file: o.file })}>{o.project} / {o.file} · {o.words.toLocaleString('en-US')} words</option>)}
+                  </select>
+                </label>
+              )}
               <span className="muted">Click one to search it. Suggestions leave out words Amazon already reads from the category{forAsin ? ' and that book\'s title, subtitle and blurb' : ''}.</span>
             </div>
             <div className="row" role="list">
@@ -211,11 +229,31 @@ export function KeywordsView({ version }: { version: number }) {
               ))}
               {ideas.length === 0 && <span className="muted">Nothing to suggest for this category yet.</span>}
             </div>
+            {outlines.available && outlines.outlines.length === 0 && <div className="muted">No outline found. Cadrel looks in your projects for files named like an outline, beat sheet or synopsis, or kept in a folder called Outline.</div>}
+            {outlines.chosen && !outlines.readable && <div className="banner error" role="alert">That outline can no longer be read, so these suggestions use the category alone. Choose another, or restore the file.</div>}
+            {outlines.chosen && outlines.readable && <div className="muted">Built on your outline: what it says comes first, then what the category's books and readers add. Category phrases your outline does not mention are held back.</div>}
             {ideas.length > 0 && <div className="muted">{ideas.map((i) => `${i.keyword}: ${i.reason}${i.autocomplete === 'unknown' ? '' : ` (${AUTOCOMPLETE_NOTE[i.autocomplete](i)})`}`).join(' · ')}
               <div>✓ autocomplete lists it · ⚠ no autocomplete suggestions when last checked (use Search on Amazon for those) · no mark: not looked up yet</div></div>}
           </>
         )}
       </div>
+      {injected.length > 0 && (
+      <div className="card" aria-label="Suggestions from your AI assistant">
+        <h2 style={{ marginTop: 0 }}>From your AI assistant</h2>
+        <div className="muted">Sent by an AI app connected to Cadrel, after reading the outline and this category. Nothing is searched or changed until you click. Dismiss any you do not want.</div>
+        <ul style={{ margin: '6px 0', paddingLeft: 18 }}>
+          {injected.map((i) => (
+            <li key={i.id} title={i.reason}>
+              <code>{i.keyword}</code> <span className="muted">{i.client}{i.kind === 'string' ? ` · ${i.keyword.length}/50` : ''}{i.reason ? ` · ${i.reason}` : ''}</span>
+              {i.warnings.map((w) => <div key={w} className="muted">⚠ {w}</div>)}{' '}
+              {i.kind === 'keyword' && <button disabled={!!job} onClick={() => searchFor(i.keyword)}>Search</button>}{' '}
+              <button onClick={() => void navigator.clipboard?.writeText(i.keyword)} aria-label={`Copy ${i.keyword}`}>Copy</button>{' '}
+              <button onClick={() => void api.dismissInjectedSuggestion(i.id).then(loadInjected)} aria-label={`Dismiss ${i.keyword}`}>Dismiss</button>
+            </li>
+          ))}
+        </ul>
+      </div>
+      )}
       {cats.length > 0 && (
       <div className="card" aria-label="Keyword strings">
         <h2 style={{ marginTop: 0 }}>Seven keyword strings for KDP</h2>

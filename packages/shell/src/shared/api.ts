@@ -183,6 +183,8 @@ export interface McpAccess {
   createFiles: boolean;
   /** Change the text of existing files. */
   editFiles: boolean;
+  /** Send keyword suggestions into Market's Keywords tab, for the person to review. */
+  suggestKeywords: boolean;
 }
 
 /** Where everything lives, for the Settings page. */

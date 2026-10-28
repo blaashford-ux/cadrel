@@ -6,7 +6,7 @@ describe('AI access', () => {
   it('is off unless a permission is exactly true', () => {
     expect(sanitizeAccess(undefined)).toEqual(NO_AI_ACCESS);
     expect(sanitizeAccess({ createFiles: 'yes', editFiles: 1 })).toEqual(NO_AI_ACCESS);
-    expect(sanitizeAccess({ createFiles: true })).toEqual({ createFiles: true, editFiles: false });
+    expect(sanitizeAccess({ createFiles: true })).toEqual({ createFiles: true, editFiles: false, suggestKeywords: false });
   });
 
   it('fails closed on a missing, damaged or unnamed file, and reads changes at once', async () => {
@@ -16,9 +16,9 @@ describe('AI access', () => {
     fs.seed('/a.json', '{oops');
     expect(await accessReader(fs, '/a.json')()).toEqual(NO_AI_ACCESS);
     const read = accessReader(fs, '/a.json');
-    fs.seed('/a.json', '{"createFiles":true,"editFiles":true}');
-    expect(await read()).toEqual({ createFiles: true, editFiles: true });
+    fs.seed('/a.json', '{"createFiles":true,"editFiles":true,"suggestKeywords":false}');
+    expect(await read()).toEqual({ createFiles: true, editFiles: true, suggestKeywords: false });
     fs.seed('/a.json', '{"createFiles":true,"editFiles":false}');
-    expect(await read()).toEqual({ createFiles: true, editFiles: false });
+    expect(await read()).toEqual({ createFiles: true, editFiles: false, suggestKeywords: false });
   });
 });
