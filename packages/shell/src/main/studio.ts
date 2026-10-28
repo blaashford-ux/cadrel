@@ -38,7 +38,7 @@ export class StudioService {
   archiveProject = (id: string, archived: boolean) => this.studio.archiveProject(id, archived);
   deleteProject = (id: string, cascade: boolean) => this.studio.deleteProject(id, { cascade });
   link = (projectId: string, module: string, ref: string) => this.studio.link(projectId, module, ref);
-  unlink = (module: string, ref: string) => this.studio.unlink(module, ref);
+  unlink = (module: string, ref: string, projectId?: string) => this.studio.unlink(module, ref, projectId);
 
   /** The notes written on one record of a module (a Market category, a book), whichever project it belongs to. */
   async recordNotes(module: string, kind: string, id: string): Promise<NoteView[]> {

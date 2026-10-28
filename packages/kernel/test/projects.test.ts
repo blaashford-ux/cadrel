@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ancestorsOf, childrenOf, createProject, deleteProject, descendantsOf, emptyTree, kindLabel, linkRecord, moveProject, outline, pathOf,
-  projectFor, relinkRecord, scopePathFor, sanitizeTree, setArchived, subtreeIds, unlinkRecord, updateProject, type ProjectTree
+  projectFor, projectsFor, relinkRecord, scopePathFor, sanitizeTree, setArchived, subtreeIds, unlinkRecord, updateProject, type ProjectTree
 } from '../src/projects';
 
 function build() {
@@ -117,6 +117,35 @@ describe('project tree', () => {
     s.t = unlinkRecord(s.t, 'write', 'Dragon Rider 1');
     expect(projectFor(s.t, 'write', 'Dragon Rider 1')).toBeUndefined();
     expect(() => linkRecord(s.t, 'nope', 'write', 'x')).toThrow();
+  });
+
+  it('lets a Market category belong to several projects, and unlinks it from one at a time', () => {
+    const s = build();
+    s.t = linkRecord(s.t, s.b1, 'market', 'epic-fantasy');
+    s.t = linkRecord(s.t, s.b2, 'market', 'epic-fantasy'); // kept in book 1 as well
+    s.t = linkRecord(s.t, s.b2, 'market', 'epic-fantasy'); // not doubled
+    expect(projectsFor(s.t, 'market', 'epic-fantasy').map((p) => p.id).sort()).toEqual([s.b1, s.b2].sort());
+    expect(s.t.links).toHaveLength(2);
+    s.t = unlinkRecord(s.t, 'market', 'epic-fantasy', s.b1);
+    expect(projectsFor(s.t, 'market', 'epic-fantasy').map((p) => p.id)).toEqual([s.b2]);
+    s.t = linkRecord(s.t, s.b1, 'market', 'epic-fantasy');
+    s.t = unlinkRecord(s.t, 'market', 'epic-fantasy'); // without a project: from all of them
+    expect(projectsFor(s.t, 'market', 'epic-fantasy')).toEqual([]);
+    // a manuscript still has one project only
+    s.t = linkRecord(s.t, s.b1, 'write', 'DR1');
+    s.t = linkRecord(s.t, s.b2, 'write', 'DR1');
+    expect(projectsFor(s.t, 'write', 'DR1').map((p) => p.id)).toEqual([s.b2]);
+  });
+
+  it('keeps every project’s link to a shared category when a saved tree is read back, and one per manuscript', () => {
+    const t = sanitizeTree({
+      projects: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      links: [
+        { projectId: 'a', module: 'market', ref: 'fantasy' }, { projectId: 'b', module: 'market', ref: 'fantasy' }, { projectId: 'a', module: 'market', ref: 'fantasy' },
+        { projectId: 'a', module: 'write', ref: 'X' }, { projectId: 'b', module: 'write', ref: 'X' }
+      ]
+    });
+    expect(t.links.map((l) => `${l.projectId}:${l.module}:${l.ref}`)).toEqual(['a:market:fantasy', 'b:market:fantasy', 'a:write:X']);
   });
 
   it('gives the permission scope path of a project: studio, then each project down to it', () => {

@@ -262,22 +262,36 @@ export function linksOf(t: ProjectTree, projectId: string, module?: string): Pro
   return t.links.filter((l) => l.projectId === projectId && (!module || l.module === module));
 }
 
-/** The project a module's record belongs to, if any. */
+/** Modules whose records can belong to several projects at once: a Market category is often shared by every book in a genre. A manuscript folder is not. */
+export const SHARED_LINK_MODULES: readonly string[] = ['market'];
+export const isSharedLink = (module: string): boolean => SHARED_LINK_MODULES.includes(module);
+
+/** Every project a module's record belongs to (one, except for the modules in SHARED_LINK_MODULES). */
+export function projectsFor(t: ProjectTree, module: string, ref: string): Project[] {
+  return t.links.filter((x) => x.module === module && x.ref === ref).map((l) => getProject(t, l.projectId)).filter((p): p is Project => !!p);
+}
+
+/** The project a module's record belongs to, if any (the first, for a record in several). */
 export function projectFor(t: ProjectTree, module: string, ref: string): Project | undefined {
   const l = t.links.find((x) => x.module === module && x.ref === ref);
   return l && getProject(t, l.projectId);
 }
 
-/** A record belongs to one project: linking it again moves it. */
+/**
+ * A record belongs to one project: linking it again moves it. The exception is a record of a shared module (a Market category), which is
+ * added to the project and stays in the others.
+ */
 export function linkRecord(t: ProjectTree, projectId: string, module: string, ref: string): ProjectTree {
   need(t, projectId);
   const m = module.trim(), r = ref.trim();
   if (!m || !r) fail('A link needs a module and a record.');
-  return { ...t, links: [...t.links.filter((l) => !(l.module === m && l.ref === r)), { projectId, module: m, ref: r }] };
+  const keep = isSharedLink(m) ? (l: ProjectLink) => !(l.module === m && l.ref === r && l.projectId === projectId) : (l: ProjectLink) => !(l.module === m && l.ref === r);
+  return { ...t, links: [...t.links.filter(keep), { projectId, module: m, ref: r }] };
 }
 
-export function unlinkRecord(t: ProjectTree, module: string, ref: string): ProjectTree {
-  return { ...t, links: t.links.filter((l) => !(l.module === module && l.ref === ref)) };
+/** Unlinks a record from every project, or (with `projectId`) from that project only, which is how a shared record leaves one of several. */
+export function unlinkRecord(t: ProjectTree, module: string, ref: string, projectId?: string): ProjectTree {
+  return { ...t, links: t.links.filter((l) => !(l.module === module && l.ref === ref && (projectId === undefined || l.projectId === projectId))) };
 }
 
 /** A module record was renamed (Write renames a folder, for instance): keep it linked. */
@@ -334,7 +348,7 @@ export function sanitizeTree(raw: unknown): ProjectTree {
   for (const x of Array.isArray(r.links) ? r.links : []) {
     const l = x as Partial<ProjectLink> | null;
     if (!l || !isStr(l.projectId) || !isStr(l.module) || !isStr(l.ref) || !byId.has(l.projectId)) continue;
-    const key = `${l.module}\u0000${l.ref}`;
+    const key = isSharedLink(l.module) ? `${l.module}\u0000${l.ref}\u0000${l.projectId}` : `${l.module}\u0000${l.ref}`;
     if (claimed.has(key)) continue;
     claimed.add(key);
     links.push({ projectId: l.projectId, module: l.module, ref: l.ref });

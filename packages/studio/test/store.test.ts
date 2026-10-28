@@ -43,6 +43,20 @@ describe('Studio store', () => {
     await expect(s.addNote({ body: 'x', author: 'y', projectId: 'p_missing' })).rejects.toThrow(/no project/);
   });
 
+  it('a note on a category shared by several projects belongs to none of them, and the category can leave one at a time', async () => {
+    const a = await s.createProject({ name: 'Book 1' });
+    const b = await s.createProject({ name: 'Book 2' });
+    await s.link(a.id, 'market', 'epic-fantasy');
+    await s.link(b.id, 'market', 'epic-fantasy');
+    expect((await s.read()).tree.links).toHaveLength(2);
+    const n = await s.addNote({ body: 'Shared genre note.', author: 'Blake', target: { module: 'market', kind: 'category', id: 'epic-fantasy' } });
+    expect(n.projectId).toBeNull();
+    await s.unlink('market', 'epic-fantasy', a.id);
+    expect((await s.read()).tree.links.map((l) => l.projectId)).toEqual([b.id]);
+    const later = await s.addNote({ body: 'Now only Book 2.', author: 'Blake', target: { module: 'market', kind: 'category', id: 'epic-fantasy' } });
+    expect(later.projectId).toBe(b.id);
+  });
+
   it('queries a project’s notes including its subprojects', async () => {
     const series = await s.createProject({ name: 'S' });
     const b1 = await s.createProject({ name: 'B1', parentId: series.id });

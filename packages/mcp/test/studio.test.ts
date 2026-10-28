@@ -112,6 +112,12 @@ describe('studio tools', () => {
     expect(tree[1].links).toEqual([{ module: 'write', record: 'DR1' }]);
     // one branch
     expect((await call('studio_projects', { project: 'Book 1' })).json().projects).toHaveLength(1);
+    // a category can be in several projects; unlink with a project takes it out of that one only
+    await call('studio_link', { module: 'market', record: 'epic-fantasy', project: 'Dragon Rider / Book 1' });
+    const shared = (await call('studio_projects')).json().projects;
+    expect(shared.map((p: { links: unknown[] }) => p.links.length)).toEqual([1, 2]);
+    await call('studio_link', { module: 'market', record: 'epic-fantasy', project: 'Dragon Rider / Book 1', unlink: true });
+    expect((await call('studio_projects')).json().projects.map((p: { links: unknown[] }) => p.links.length)).toEqual([1, 1]);
   });
 
   it('renames, moves, archives; refuses mistakes with a message instead of crashing', async () => {
