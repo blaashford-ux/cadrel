@@ -85,9 +85,12 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
 
 Notes on the defaults:
+- **Tasks, sign-offs and decisions** use the Tasks and deadlines row: Read sees them; Write (`task.edit`) makes and changes tasks assigned to you, asks for sign-offs and records decisions; Manage-level roles can also hand work to others (`task.assign`), reach anyone's task and withdraw anyone's request (`task.manage`). Answering a sign-off is not a capability: only the people it names can, whatever they hold. Decisions can be added by anyone who may write them and never changed or removed by anyone.
+- **Moving a project between stages** (`project.stage`) is part of the Tasks and deadlines row, and a move can also name roles in its gate; the workflow, not this table, says which.
 - **Owner** holds every capability, including ones modules add later, and cannot be restricted. There must always be at least one Owner.
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.
+- **Finance and My Books.** The *Royalties, payments, payouts* row governs the Finance module and the Finance sections of a book's page in My Books. Until agreements exist (M7) an Author's own-books-only access cannot be enforced, so an Author is shown no Finance figures.
 - **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant). Beta readers with no account do not get a role at all: they read and comment through a Google Drive review package (see [FILES.md](FILES.md)). Guest: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
 
@@ -129,7 +132,7 @@ Notes on the defaults:
 
 ## 7. Data model (D1 and the desktop cache)
 
-`person`, `team`, `team_member`, `role(id, studio_id, name, description, template_key, is_default, locked)`, `role_capability(role_id, capability)`, `assignment(id, subject_kind person | team, subject_id, role_id, scope_kind, scope_id, expires_at, granted_by, granted_at)`, `node.confidential`, `invite`, `device_session`, `policy(key, value)`, `audit(at, actor, action, target, detail)`, and `workflow_transition_role(transition_id, role_id)` so each transition says which roles may perform it.
+`person` (with its membership `kind`: employee, contractor or guest, folded in since one database is one studio), `pen_name` and `pen_name_person`, `team`, `team_member`, `role(id, studio_id, name, description, template_key, all_caps)`, `role_capability(role_id, capability)`, `capability_seen(capability)` (what the capability review has shown), `assignment(id, subject_kind person | team, subject_id, role_id, scope_kind, scope_id, expires_at, granted_by, granted_at)` (built: migration `0004_people_roles.sql`), `node.confidential`, `invite`, `device_session`, `policy(key, value)`, `audit(at, actor, action, target, detail)`, and `workflow_transition_role(transition_id, role_id)` so each transition says which roles may perform it.
 
 ## 8. Tests
 

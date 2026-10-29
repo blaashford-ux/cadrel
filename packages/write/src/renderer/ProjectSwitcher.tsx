@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { byRecentlyOpened, STATUS_LABELS, type ProjectSummary } from '../shared/projects';
+import { StageChip } from './StageChip';
+import { byRecentlyOpened, type ProjectSummary } from '../shared/projects';
 import { Icon } from './Icon';
 
 interface Props {
@@ -65,7 +66,7 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, opened
           {recent.map((p) => (
             <button key={p.path} type="button" role="menuitem" onClick={() => (setOpen(false), onOpen(p.path))}>
               <span className="grow-text">{p.name}</span>
-              <span className={`status-chip s-${p.meta.status}`}>{STATUS_LABELS[p.meta.status]}</span>
+              {p.meta.stage && <StageChip stage={p.meta.stage} />}
             </button>
           ))}
           <button type="button" role="menuitem" onClick={() => (setOpen(false), onHome())}>

@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { kindLabel, outline } from '@cadrel/kernel';
 import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
-import { ago, formatWords, percent, STATUS_LABEL } from './format';
+import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
+import { Glance, StageTag, usePulse, useStages } from './Glance';
 
 const api = window.cadrel;
 
@@ -33,7 +34,7 @@ function ProjectsTable({ rows, now }: { rows: WriteProjectRow[]; now: number }) 
           return (
             <tr key={p.name}>
               <th scope="row">{p.name}</th>
-              <td>{STATUS_LABEL[p.status] ?? p.status}</td>
+              <td>{p.stage ?? <span className="muted">none</span>}</td>
               <td className="num">{p.words === null ? <span className="muted">none active</span> : formatWords(p.words)}</td>
               <td>
                 {pct === null ? (
@@ -83,6 +84,8 @@ function CategoriesTable({ rows }: { rows: MarketCategoryRow[] }) {
 
 export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Props) {
   const now = Date.now();
+  const pulse = usePulse(studio);
+  const stageOf = useStages(studio);
   const [marketBusy, setMarketBusy] = useState<'reconnect' | 'disconnect' | 'free' | null>(null);
   const reconnect = () => {
     setMarketBusy('reconnect');
@@ -114,6 +117,8 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
 
   return (
     <div className="dashboard">
+      <Glance pulse={pulse} onGo={onGo} onProject={onProject} />
+
       <section className="card wide" aria-labelledby="d-projects">
         <div className="card-head">
           <h3 id="d-projects">Projects</h3>
@@ -126,6 +131,7 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
             <thead>
               <tr>
                 <th scope="col">Project</th>
+                <th scope="col">Stage</th>
                 <th scope="col" className="num">Words</th>
                 <th scope="col">Goal</th>
                 <th scope="col" className="num">Open notes</th>
@@ -141,6 +147,7 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
                     <th scope="row" style={{ paddingLeft: 10 + depth * 20 }}>
                       <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button> <span className="chip">{kindLabel(studio.tree, p)}</span>
                     </th>
+                    <td><StageTag view={stageOf[p.id]} /></td>
                     <td className="num">{formatWords(f.words)}</td>
                     <td>{pct === null ? <span className="muted">no goal</span> : `${pct}%`}</td>
                     <td className="num">{studio.openByProject[p.id] ?? 0}</td>

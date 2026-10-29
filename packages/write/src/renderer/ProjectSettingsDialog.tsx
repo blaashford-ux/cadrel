@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AppDefaults } from '../shared/appDefaults';
 import { localDate, sanitizeGoal } from '../shared/progress';
-import { goalFor, STATUS_LABELS, STATUSES, withGoal, type ProjectMeta, type ProjectStatus, type ProjectsConfig } from '../shared/projects';
+import { goalFor, withGoal, type ProjectMeta, type ProjectsConfig } from '../shared/projects';
 import { ProjectDefaultsEditor } from './ProjectDefaultsEditor';
 import { Field, NumberField, TextArea, Toggle } from './formParts';
 import { useEscape } from './useEscape';
@@ -86,7 +86,6 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
     setError(null);
     try {
       const saved = await window.cadrelWrite.updateProject(path, {
-        status: meta.status,
         notes: meta.notes,
         archived: meta.archived,
         ...(({ goal: g, manuscriptGoals }) => ({ goal: g, manuscriptGoals }))(withGoal(meta, finalGoal)),
@@ -143,16 +142,11 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
 
           {tab === 'general' && (
             <section>
-              <label className="field" style={{ maxWidth: 240 }}>
-                <span className="field-label">Status</span>
-                <select value={meta.status} onChange={(e) => patch({ status: e.target.value as ProjectStatus })} aria-label="Status">
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {meta.stage && (
+                <p className="muted small">
+                  Stage: <strong>{meta.stage.name}</strong>. Cadrel sets this from the project’s workflow, on the Projects page.
+                </p>
+              )}
               <TextArea label="Notes" value={meta.notes} onChange={(v) => patch({ notes: v })} rows={4} placeholder="Anything worth remembering about this project" />
               <Toggle label="Archived" checked={meta.archived} onChange={(v) => patch({ archived: v })} hint="Archived projects are tucked away on the Projects home." />
               <p className="muted small">

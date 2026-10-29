@@ -13,7 +13,7 @@ describe('layout', () => {
 
 describe('pages', () => {
   it('knows which pages are modules', () => {
-    expect(PAGES.filter(isModule)).toEqual(['write', 'market']);
+    expect(PAGES.filter(isModule)).toEqual(['write', 'market', 'finance']);
   });
   it('rejects anything that is not a page', () => {
     expect(isPage('home')).toBe(true);

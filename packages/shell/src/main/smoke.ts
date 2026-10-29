@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { runSmokeTest } from '@cadrel/write/electron/smokeTest';
@@ -16,6 +17,17 @@ import { samplePdf } from './pdf';
  * and Market's native pieces (database, vector extension, image library, PDF reader) load from the installed layout.
  * `here` is the folder holding main.mjs. Returns the process exit code.
  */
+/** A port the OS will let this process listen on: asking for port 0 never lands in a range Windows has reserved (a fixed guess did, and failed with EACCES). */
+const freePort = (): Promise<number> =>
+  new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.once('error', reject);
+    srv.listen(0, '127.0.0.1', () => {
+      const { port } = srv.address() as net.AddressInfo;
+      srv.close(() => resolve(port));
+    });
+  });
+
 export async function runShellSmoke(outFile: string, here: string): Promise<number> {
   const checks: { name: string; ok: boolean; detail?: string }[] = [];
   const check = (name: string, ok: boolean, detail?: string) => checks.push({ name, ok, detail });
@@ -39,7 +51,7 @@ export async function runShellSmoke(outFile: string, here: string): Promise<numb
     const dataDir = path.join(tmp, 'market-data');
     await fs.mkdir(dataDir, { recursive: true });
     await fs.mkdir(library);
-    await fs.writeFile(path.join(dataDir, 'config.json'), JSON.stringify({ libraryRoot: null, port: 49000 + Math.floor(Math.random() * 900) }));
+    await fs.writeFile(path.join(dataDir, 'config.json'), JSON.stringify({ libraryRoot: null, port: await freePort() }));
     const market = createMarketModule({
       getWindow: () => null,
       getContents: () => null,

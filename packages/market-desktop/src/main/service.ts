@@ -8,7 +8,7 @@ import { zipSync, strToU8 } from 'fflate';
 import {
   ArcticShift, addCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
-  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
+  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, getOutlineChoice, setOutlineChoice, listInjectedSuggestions, dismissInjectedSuggestion, type OutlineRef, type OutlineSource, type InjectedSuggestion, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, purgeBook, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
   Library, amazonUrl, getBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
   type BookDetail, type QueueItem, type RemovedBook,
@@ -106,12 +106,19 @@ export interface ServiceOptions {
   fetch?: typeof fetch;
   /** The app icon, shown in Claude Desktop's extension list. */
   iconFile?: () => string | null;
+  /**
+   * The pen names the library is for: null means no restriction, a list (even an empty one) limits imports and My Books to those pen names, so another
+   * pen name's books on the same KDP account never come in. Asked every time it is needed, so a pen name added later takes effect at once.
+   */
+  authorScope?: () => readonly string[] | null;
   /** Test hook: what the MCP server answers to `initialize`; by default it is read from the server (`--print-handshake`). */
   mcpHandshake?: () => Promise<Handshake | null>;
   /** The MCP server's name and the extension's wording. Default: Cadrel Market's. */
   mcpBrand?: McpBrand;
   /** Pause between autocomplete requests, in ms; tests set 0. */
   keywordDelayMs?: number;
+  /** Where the person's outline documents are, for keyword suggestions. Absent where the host has no projects to look in. */
+  outlines?: OutlineSource;
 }
 
 export interface AppInfo {
@@ -357,7 +364,7 @@ export class AppService {
   async start(): Promise<void> {
     await this.stop();
     if (!this.config.libraryRoot) return;
-    this.lib = Library.open(this.config.libraryRoot);
+    this.lib = Library.open(this.config.libraryRoot, this.scope());
     await this.startServer();
   }
 
@@ -457,7 +464,7 @@ export class AppService {
     this.server = null;
     if (!this.lib) {
       if (!this.config.libraryRoot) return this.status();
-      this.lib = Library.open(this.config.libraryRoot);
+      this.lib = Library.open(this.config.libraryRoot, this.scope());
     }
     await this.startServer();
     return this.status();
@@ -661,20 +668,62 @@ export class AppService {
 
   clearKeywordHistory(): void { clearKeywordHistory(this.need().db); }
 
-  /** Five phrases worth searching for a captured category, from what the library already holds (no request is made). With a book's ASIN, words already in its title, subtitle and blurb are left out too. */
-  keywordIdeas(categoryKey: string, asin?: string): KeywordIdea[] {
+  /** The outline chosen for a category's suggestions, read now; undefined when none is chosen or it can no longer be read. */
+  private async outlineText(categoryKey: string): Promise<string | undefined> {
+    const choice = getOutlineChoice(this.need().db, categoryKey);
+    if (!choice || !this.opts.outlines) return undefined;
+    return (await this.opts.outlines.read(choice).catch(() => null)) ?? undefined;
+  }
+
+  /** Five phrases worth searching for a captured category, from what the library already holds (no request is made). With a book's ASIN, words already in its title, subtitle and blurb are left out too. With an outline chosen for the category, suggestions are built on it. */
+  async keywordIdeas(categoryKey: string, asin?: string): Promise<KeywordIdea[]> {
     const lib = this.need();
     const r = resolveCategory(lib.db, String(categoryKey));
     if ('error' in r) throw new Error(r.error);
-    return suggestKeywords(lib.db, r.category.key, 5, { asin: asin ? String(asin) : undefined });
+    return suggestKeywords(lib.db, r.category.key, 5, { asin: asin ? String(asin) : undefined, outline: await this.outlineText(r.category.key) });
   }
 
   /** Seven keyword strings (one per KDP keyword box, 50 characters each) for a captured category, from what the library already holds (no request is made). */
-  keywordStrings(categoryKey: string, asin?: string): KeywordString[] {
+  async keywordStrings(categoryKey: string, asin?: string): Promise<KeywordString[]> {
     const lib = this.need();
     const r = resolveCategory(lib.db, String(categoryKey));
     if ('error' in r) throw new Error(r.error);
-    return suggestKeywordStrings(lib.db, r.category.key, { asin: asin ? String(asin) : undefined });
+    return suggestKeywordStrings(lib.db, r.category.key, { asin: asin ? String(asin) : undefined, outline: await this.outlineText(r.category.key) });
+  }
+
+  /** The outline documents found in the person's projects, and the one chosen for this category. */
+  async keywordOutlines(categoryKey: string): Promise<{ available: boolean; outlines: OutlineRef[]; chosen: { project: string; file: string } | null; readable: boolean }> {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    const chosen = getOutlineChoice(lib.db, r.category.key);
+    if (!this.opts.outlines) return { available: false, outlines: [], chosen, readable: false };
+    const outlines = await this.opts.outlines.list().catch(() => []);
+    return { available: true, outlines, chosen, readable: !chosen || (await this.outlineText(r.category.key)) !== undefined };
+  }
+
+  /** Chooses (or with null, clears) the outline a category's suggestions are built on. Only an outline the host lists can be chosen. */
+  async setKeywordOutline(categoryKey: string, ref: { project: string; file: string } | null): Promise<void> {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    if (ref) {
+      const found = (await this.opts.outlines?.list().catch(() => []))?.some((o) => o.project === ref.project && o.file === ref.file);
+      if (!found) throw new Error('that is not one of the outline documents found in your projects');
+    }
+    setOutlineChoice(lib.db, r.category.key, ref);
+  }
+
+  /** Suggestions an AI tool sent in for a category (not dismissed). */
+  injectedSuggestions(categoryKey: string): InjectedSuggestion[] {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    return listInjectedSuggestions(lib.db, r.category.key);
+  }
+
+  dismissInjectedSuggestion(id: number): void {
+    dismissInjectedSuggestion(this.need().db, Number(id));
   }
 
   /** Import the CSV that Google Trends' Download button saves (the renderer reads the file and passes its text). */
@@ -719,12 +768,27 @@ export class AppService {
 
   // ---- My Books: the user's own titles, created from imported KDP reports or flagged by hand ------------------------------
 
-  ownBooks(): OwnBookRow[] { return listOwnBooks(this.need().db); }
+  /** The pen names this library is limited to (null: all). */
+  scope(): AuthorScope {
+    return this.opts.authorScope?.() ?? null;
+  }
+
+  ownBooks(): OwnBookRow[] { return listOwnBooks(this.need().db, this.scope()); }
+
+  /** Books already in the library under pen names the Studio does not have (from before the Studio had pen names, or from a shared library). */
+  booksOutsideScope(): OwnBookRow[] { return booksOutsideScope(this.need().db, this.scope()); }
+
+  /** Removes those books and their sales, pages read and royalties (and KDP's account-wide payments and summaries, which cannot be told apart). Page captures stay. */
+  removeBooksOutsideScope(): number {
+    const lib = this.need();
+    return removeBooksOutsideScope(lib.db, lib.root, this.scope());
+  }
 
   /** The book if it is in My Books (captured or not), else null. */
   ownBook(asin: string): OwnBookRow | null {
     assertAsin(asin);
-    return getOwnBook(this.need().db, asin);
+    const b = getOwnBook(this.need().db, asin);
+    return b && inScope(b, this.scope()) ? b : null;
   }
 
   setOwnBook(asin: string, own: boolean): void {
@@ -738,7 +802,12 @@ export class AppService {
   // ---- Money: analysis, month view, royalty splits and author statements -----------------------------------------------------
 
   moneyMonths(): string[] { return reportMonths(this.need().db); }
-  moneyAnalysis(from: string, to: string): AnalysisReport { assertMonths(from, to); return analysisReport(this.need().db, { from, to }); }
+  /** With `asin`, the report for that one book alone. */
+  moneyAnalysis(from: string, to: string, asin?: string): AnalysisReport {
+    assertMonths(from, to);
+    if (asin !== undefined) assertAsin(asin);
+    return analysisReport(this.need().db, { from, to, asin });
+  }
   moneyMonth(month: string): MonthReport { assertMonths(month, month); return monthReport(this.need().db, month); }
   people(): Person[] { return listPeople(this.need().db); }
   savePerson(p: { id?: number; name: string; penNames?: string[] }): Person { const lib = this.need(); return savePerson(lib.db, lib.root, p); }
@@ -758,25 +827,59 @@ export class AppService {
     const lib = this.need();
     setSplit(lib.db, lib.root, asin, shares, fromMonth);
   }
-  statement(from: string, to: string, basis: StatementBasis = 'paid'): Statement { assertMonths(from, to); assertBasis(basis); return royaltyStatement(this.need().db, { from, to }, new Date(), basis); }
+  /** With `asin`, each author's share of that one book only. */
+  statement(from: string, to: string, basis: StatementBasis = 'paid', asin?: string): Statement {
+    assertMonths(from, to); assertBasis(basis);
+    if (asin !== undefined) assertAsin(asin);
+    return royaltyStatement(this.need().db, { from, to }, new Date(), basis, undefined, asin);
+  }
   /** Payments imported from KDP payment reports, what does not reconcile, and what is unpaid. */
   payments(): PaymentsReport { return paymentsReport(this.need().db); }
   removePayment(number: string): void { if (typeof number !== 'string' || !/^\d{3,30}$/.test(number)) throw new Error('bad payment number'); const lib = this.need(); removePayment(lib.db, number); }
   /** The statement's file contents: CSV for one author or all, or the printable page of one author. */
-  statementFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, basis: StatementBasis = 'paid'): { filename: string; content: string } {
-    const s = this.statement(from, to, basis);
-    const span = `${basis === 'paid' ? 'paid-' : 'earned-'}${from === to ? from : `${from}_to_${to}`}`;
+  statementFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, basis: StatementBasis = 'paid', asin?: string): { filename: string; content: string } {
+    const s = this.statement(from, to, basis, asin);
+    const span = `${asin ? asin + '-' : ''}${basis === 'paid' ? 'paid-' : 'earned-'}${from === to ? from : `${from}_to_${to}`}`;
     if (kind === 'csv') return { filename: `royalty-statement-${payee ? payee.replace(/[^A-Za-z0-9]+/g, '-') + '-' : ''}${span}.csv`, content: statementCsv(s, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
     return { filename: `royalty-statement-${payee.replace(/[^A-Za-z0-9]+/g, '-')}-${span}.pdf`, content: statementHtml(s, payee) };
   }
+  /**
+   * One book's earnings by month as a spreadsheet: the last `months` months that have any sales, oldest first, with what KDP's figure for each month rests on.
+   * The single place this file is made, for Finance's book page and for My Books.
+   */
+  bookEarningsFile(asin: string, months = 24): { filename: string; content: string } {
+    assertAsin(asin);
+    const all = this.moneyMonths();
+    const title = this.ownBook(asin)?.title ?? asin;
+    const cell = (v: string | number) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+    const rows: (string | number)[][] = [['Month', 'Royalties (USD)', 'eBook', 'Print', 'Kindle+', 'Units', 'KENP pages', 'Basis']];
+    if (all.length) {
+      const r = analysisReport(this.need().db, { from: all[all.length - 1]!, to: all[0]!, asin });
+      const used = r.months.filter((m) => m.usd || m.units || m.pages).slice(-Math.max(1, months));
+      for (const m of used) rows.push([m.month, m.usd.toFixed(2), m.ebook.toFixed(2), m.print.toFixed(2), m.kenp.toFixed(2), m.units, m.pages, m.state === 'final' ? 'reported by KDP' : m.state === 'estimated' ? 'estimated KENP rate' : 'not reported yet']);
+    }
+    return { filename: `${title.replace(/[<>:"/\\|?*\x00-\x1f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) || asin} earnings.csv`, content: rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n' };
+  }
   /** The calculator for one payment: what each author is owed from it, after tax, and whether it has been allocated. */
-  paymentOwed(number: string): PaymentOwed { assertPaymentNumber(number); return paymentOwed(this.need().db, number); }
+  /** With `asin`, the calculator limited to that book: its part of the payment for each author. The payment itself is shown whole. */
+  paymentOwed(number: string, asin?: string): PaymentOwed {
+    assertPaymentNumber(number);
+    if (asin !== undefined) assertAsin(asin);
+    return paymentOwed(this.need().db, number, new Date(), asin);
+  }
+  /** Every payment one book is in, with its part of each, and what it has earned that no payment covers yet. */
+  bookPayments(asin: string): BookPayments { assertAsin(asin); return bookPayments(this.need().db, asin); }
   /** Freeze what each author is owed from a payment (allocating again replaces it). */
   allocatePayment(number: string): PaymentOwed { assertPaymentNumber(number); const lib = this.need(); return allocatePayment(lib.db, lib.root, number); }
   unallocatePayment(number: string): void { assertPaymentNumber(number); const lib = this.need(); unallocatePayment(lib.db, lib.root, number); }
   /** What to pay each author for a period, from the payments dated in it, plus what is still unpaid from before, less what has been paid out. */
-  payoutRollup(from: string, to: string): Rollup { assertMonths(from, to); return payoutRollup(this.need().db, { from, to }); }
+  /** With `asin`, the roll-up limited to one book (what its payments owe each author; no due or paid-out: see `Rollup.book`). */
+  payoutRollup(from: string, to: string, asin?: string): Rollup {
+    assertMonths(from, to);
+    if (asin !== undefined) assertAsin(asin);
+    return payoutRollup(this.need().db, { from, to }, new Date(), asin);
+  }
   /** Allocate every unallocated payment dated in the period; returns their numbers. */
   allocateRollup(from: string, to: string): string[] { assertMonths(from, to); const lib = this.need(); return allocateRollup(lib.db, lib.root, { from, to }); }
   payouts(): Payout[] { return listPayouts(this.need().db); }
@@ -787,20 +890,22 @@ export class AppService {
   }
   deletePayout(id: number): void { if (!Number.isInteger(id)) throw new Error('bad payout'); const lib = this.need(); deletePayout(lib.db, lib.root, id); }
   /** One payment's calculator as a file: CSV (one author or all) or the printable page of one author. */
-  paymentFile(number: string, kind: 'csv' | 'html', payee: string | null): { filename: string; content: string } {
+  paymentFile(number: string, kind: 'csv' | 'html', payee: string | null, asin?: string): { filename: string; content: string } {
     assertPaymentNumber(number);
+    if (asin !== undefined) assertAsin(asin);
     const db = this.need().db;
     const o = paymentOwed(db, number);
     const m = o.payment.paidOn.slice(0, 7);
-    const st = royaltyStatement(db, { from: m, to: m }, new Date(), 'paid', number);
-    if (kind === 'csv') return { filename: `payment-${number}${payee ? '-' + payee.replace(/[^A-Za-z0-9]+/g, '-') : ''}.csv`, content: statementCsv(st, payee ?? undefined) };
+    const st = royaltyStatement(db, { from: m, to: m }, new Date(), 'paid', number, asin);
+    const tag = `${number}${asin ? '-' + asin : ''}`;
+    if (kind === 'csv') return { filename: `payment-${tag}${payee ? '-' + payee.replace(/[^A-Za-z0-9]+/g, '-') : ''}.csv`, content: statementCsv(st, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
-    return { filename: `payment-${number}-${payee.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: statementHtml(st, payee) };
+    return { filename: `payment-${tag}-${payee.replace(/[^A-Za-z0-9]+/g, '-')}.pdf`, content: statementHtml(st, payee) };
   }
   /** The roll-up as a file: CSV (one author or all) or one author's printable payout statement. */
-  rollupFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null): { filename: string; content: string } {
-    const r = this.payoutRollup(from, to);
-    const span = from === to ? from : `${from}_to_${to}`;
+  rollupFile(from: string, to: string, kind: 'csv' | 'html', payee: string | null, asin?: string): { filename: string; content: string } {
+    const r = this.payoutRollup(from, to, asin);
+    const span = `${asin ? asin + '-' : ''}${from === to ? from : `${from}_to_${to}`}`;
     if (kind === 'csv') return { filename: `payouts-${payee ? payee.replace(/[^A-Za-z0-9]+/g, '-') + '-' : ''}${span}.csv`, content: rollupCsv(r, payee ?? undefined) };
     if (!payee) throw new Error('choose an author');
     return { filename: `payout-${payee.replace(/[^A-Za-z0-9]+/g, '-')}-${span}.pdf`, content: rollupHtml(r, payee) };
@@ -816,7 +921,7 @@ export class AppService {
   importSales(name: string, bytes: Uint8Array): ImportSummary {
     this.checkUpload(name, bytes);
     const lib = this.need();
-    return importSalesFile(lib.db, lib.root, name, bytes);
+    return importSalesFile(lib.db, lib.root, name, bytes, undefined, this.scope());
   }
 
   /** A rank-history file (date, rank, optionally ASIN). `asin` says which book it is for when the file has no ASIN column. */
@@ -1105,6 +1210,15 @@ export class AppService {
     const r = this.need().removeBook(asin, { alsoExclude: !!alsoExclude });
     this.dataChanged();
     return r;
+  }
+
+  /** Removes everything held under each ASIN (a book deleted from the catalogue): pages, sales, pages read, royalties, splits. */
+  purgeBooks(asins: string[]): number {
+    const lib = this.need();
+    let n = 0;
+    for (const a of asins) { assertAsin(a); lib.purge(a); n++; }
+    if (n) this.dataChanged();
+    return n;
   }
 
   revealBook(asin: string): void {

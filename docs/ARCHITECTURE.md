@@ -75,6 +75,7 @@ A PDM workflow is **states, transitions, conditions and actions**. Cadrel's book
 - A **transition** has who may perform it, conditions (the brief exists, the edit pass is approved), and actions (notify the next role, unlock the next stage, create tasks from a template).
 - Workflows are **data**, editable by the studio, not code, so each project type can have its own.
 - Each file or record sits in exactly one state of its workflow; the state decides what is read-only and who sees it.
+- **Projects and subprojects hold the stage.** Several workflows can exist; each level (project, subproject) has its own default, so a series can use a different workflow from its books. The workflow is chosen when a project is created and **never changed afterwards**; the stage moves only through a gate-checked move. Gate conditions read the project (a manuscript is linked, no open notes under it, it has subprojects, its subprojects are all done). Write has no statuses of its own: Cadrel hands it the project's stage, read-only, and a stage of kind "review" turns on Write's editing pass.
 
 ### Metadata and references
 
@@ -134,19 +135,22 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `studio`, `person`, `membership(person, studio, kind: employee | contractor | guest)`, `role`, `role_assignment(person, role, scope)`.
 - `pen_name(person(s), display name)`: a credited identity, separate from the person.
 
-**IP and catalogue**
+**IP and catalogue** (built: `kernel/src/catalogue.ts`, migration `0003_catalogue.sql`)
 - `ip`: a property the studio develops (a world / concept). Has many series.
-- `series`, `work` (a title across formats), `book` (a work's place in a series), `edition(book, format, asin, isbn, price, dates)`.
+- `series`, `book` (a title: standalone, or at a position in a series; `work` is folded into it, since its formats are its editions), `edition(book, format, asin, isbn, price, dates)`. Archived, never deleted, in M1.
 - BookScout already has `work`, `book(asin)`, `own_book(asin)`: `edition.asin` is the join to market and sales data. This is the "connected book record".
 
 **Vault**
 - `vault_file(path, workflow, state, current_version)`, `file_version(hash, size, author, comment, n)`, `checkout(file, person, machine, since, base_version)`, `reference(parent, child, version | latest)`, `datacard_value(file | record, field, value)`.
 - `workflow`, `state`, `transition(from, to, who, conditions, actions)`.
 
+**Workflows** (built: `kernel/src/workflow.ts`, migration `0005_workflow.sql`)
+- `workflow(name, is_default, template_key)`, `workflow_stage(key, name, position, category, color)`, `workflow_transition(from_key, to_key, conditions)` and `workflow_transition_role(transition_id, role_id)`. One default per studio; `book.workflow_id` and `book.stage` (a stage key). The shipped default is MDEdit's stages. Gate conditions are checked from the catalogue; approval, progress and task conditions arrive with those records.
+
 **Production**
-- `deliverable(owner, due)`, `task`, `dependency`.
+- `task(project_id, kind task|deadline, title, assignee, due, state)` and `task_dependency` (migration 0007; a deadline is a task with a date).
 - `brief(kind, project, body, version)`: manuscript, edit, cover, blurb, campaign.
-- `approval(subject, version, decider, outcome, conditions)` and `decision(context, subject, outcome, follow-ups)` (the ledger).
+- `approval(project_id, label, required, state)` with `approval_approver(person, response, reason)`, and `decision(project_id, title, context, outcome, supersedes_id)` (the append-only ledger). Approvals are of a project under a label for now; approvals of a specific file version come with the vault. A workflow gate's `approved` condition reads the labels a project currently stands approved under.
 - manuscripts and art are vault files with versions (above); `asset` adds purpose, channel, licence and approval on top of a vault file.
 - `comment` anchored to a document passage or an asset region, with `resolution`.
 
@@ -160,7 +164,7 @@ Everything has a `studio_id` from day one (organisational boundary), a UUIDv7 id
 - `rights` (who owns or licenses what, restrictions)
 - `revenue_share` (percentages, advances, bonuses)
 
-This separation is a standing requirement: credit is not ownership, contribution is not share. The schema exists from M1 even though the screens arrive in M7.
+This separation is a standing requirement: credit is not ownership, contribution is not share. The schema exists from M1 (migration 0010; kernel `business.ts`, service `business`) even though the screens arrive in M7. Each record is about a subject (an IP, series, book or edition) and no table or function joins the four; shares are basis points and money is cents; the live shares on a subject never exceed 100% on any day; records are archived, never deleted; reads need `business.read` and are logged.
 
 **Market and sales:** the BookScout library schema (captures, snapshots, ranks, lists, keywords, KDP reports, royalty months, payments, `person`, `book_split`) moves into the `market` and `sales` packages. Its `person` and `book_split` tables are replaced by kernel `person` and `revenue_share` in M7, with a migration.
 
@@ -195,8 +199,8 @@ interface ModuleManifest {
 | Package | Contents | From |
 |---|---|---|
 | `kernel` | records, lifecycle and gate rules, permissions, audit | new |
-| `store` | async SQL interface, `node:sqlite` and D1 implementations, migrations, change log | new, BookScout's migration approach |
-| `service` | `StudioService`, actor context, transports | new |
+| `store` | async SQL interface, `node:sqlite` and D1 implementations, migrations, change log. Built: the file-backed implementation over the Worker's own migrations; D1's is the Worker's | new, BookScout's migration approach |
+| `service` | `StudioService`, actor context, transports. Built: the catalogue behind `can`, in-process; the Worker transport is M2 | new |
 | `vault` | working-folder manager, check-out / check-in, file status, sync with the Worker | new (M1 local, M2 cloud) |
 | `worker` | Cloudflare Worker, D1 and R2 bindings, migrations, update feed | new (M2) |
 | `ui` | design tokens, title/menu bar, dialogs, tree, tabs, charts, dark mode | MDEdit chrome + BookScout charts |
@@ -207,7 +211,7 @@ interface ModuleManifest {
 | `market` | parsers, analysis, keywords, community, search/chunks | BookScout `core`, `library` |
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |
-| `sales` | KDP import, royalties, payments, payouts | BookScout `library/sales` |
+| `sales` (module: **Finance**) | KDP import, royalties, splits, payments, payouts; moves out of Market in M1 | BookScout `library/sales` |
 | `studio` | the project tree and notes store (one file, shared by the app and the AI server), Write notes reader | new |
 | `mcp` | one server, actor-scoped, tools registered by modules | BookScout `mcp` |
 | `mod-*` | one UI package per further module | new |

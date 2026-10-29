@@ -1,3 +1,4 @@
+import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -8,11 +9,11 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kern
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'dashboard', 'projects', 'notes', 'write', 'market', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
-export type ModuleId = 'write' | 'market';
+export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
-export const isModule = (p: Page): p is ModuleId => p === 'write' || p === 'market';
+export const isModule = (p: Page): p is ModuleId => p === 'write' || p === 'market' || p === 'finance';
 
 export interface WindowInfo {
   platform: string;
@@ -23,7 +24,9 @@ export interface WindowInfo {
 
 export interface WriteProjectRow {
   name: string;
-  status: string;
+  /** The name of the stage of the project this manuscript belongs to (from its workflow); null when it has none. */
+  stage: string | null;
+  stageColor: string | null;
   /** Words in the project's active manuscript, or null when none has been chosen (nothing is counted then). */
   words: number | null;
   /** Words the project aims for, or null if no goal is set. */
@@ -61,12 +64,8 @@ export interface Overview {
   };
 }
 
-/** The statuses a manuscript project can be in (Write's own list). */
-export const MANUSCRIPT_STATUSES = ['planning', 'drafting', 'revising', 'editing', 'published', 'paused'] as const;
-
 /** What a project's manuscript folder says about itself. */
 export interface ManuscriptMeta {
-  status: string;
   notes: string;
   archived: boolean;
   templateName: string;
@@ -87,7 +86,8 @@ export interface ManuscriptTemplate {
 export interface ManageApi {
   templates(): Promise<ManuscriptTemplate[]>;
   /** A project, and with `template` its manuscript folder too. */
-  create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null }): Promise<{ id: string; folder: string | null }>;
+  /** `workflowId` is chosen here, once: the project keeps it. Without one, the default for a project (or for a subproject, when it has a parent) is used. */
+  create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }>;
   addManuscript(projectId: string, template: string): Promise<string>;
   rename(projectId: string, name: string): Promise<void>;
   archive(projectId: string, archived: boolean): Promise<void>;
@@ -95,7 +95,7 @@ export interface ManageApi {
   remove(projectId: string): Promise<string[]>;
   duplicate(projectId: string): Promise<string>;
   manuscript(projectId: string): Promise<{ folder: string; meta: ManuscriptMeta & { templateId: string } } | null>;
-  setManuscript(projectId: string, patch: { status?: string; notes?: string }): Promise<void>;
+  setManuscript(projectId: string, patch: { notes?: string }): Promise<void>;
   addMissingParts(projectId: string): Promise<string[]>;
   /** Opens the project's manuscript folder in Write. */
   open(projectId: string): Promise<void>;
@@ -125,7 +125,8 @@ export interface StudioApi {
   /** Returns the ids that were removed. Subprojects go too only with `cascade`. */
   deleteProject(id: string, cascade: boolean): Promise<string[]>;
   link(projectId: string, module: string, ref: string): Promise<void>;
-  unlink(module: string, ref: string): Promise<void>;
+  /** From every project, or from `projectId` only (a Market category can belong to several). */
+  unlink(module: string, ref: string, projectId?: string): Promise<void>;
   addNote(o: { projectId: string | null; body: string; target?: NoteTarget | null; category?: string }): Promise<{ id: string }>;
   setNoteStatus(id: string, status: NoteStatus): Promise<void>;
   replyToNote(id: string, body: string): Promise<void>;
@@ -175,6 +176,16 @@ export interface UserApi {
 }
 
 export type { Attachment };
+
+/** Settings → MCP: the things an AI tool may do to a person's documents. */
+export interface McpAccess {
+  /** Make new files in projects (never replacing one). */
+  createFiles: boolean;
+  /** Change the text of existing files. */
+  editFiles: boolean;
+  /** Send keyword suggestions into Market's Keywords tab, for the person to review. */
+  suggestKeywords: boolean;
+}
 
 /** Where everything lives, for the Settings page. */
 export interface AppFolders {
@@ -356,11 +367,437 @@ export interface StudiosApi {
   removeMember(id: string, memberId: string): Promise<StudioPeople>;
   /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */
   join(link: string, details: { yourName: string; studioName?: string }): Promise<StudiosView>;
-  backup(id: string): Promise<string>;
+}
+
+/** What a backup holds, read (and checked) before anything is restored. */
+export interface BackupSummary {
+  file: string;
+  studioName: string;
+  created: string;
+  app: string;
+  /** Project folder names in the backup. */
+  projects: string[];
+  files: number;
+}
+
+/** A project found in an MDEdit folder, with what importing it would do. */
+export interface MdeditCandidate {
+  source: string;
+  name: string;
+  asName: string;
+  files: number;
+  bytes: number;
+  chapterFiles: number;
+  hasGoal: boolean;
+  reviewFiles: number;
+  editedMarks: number;
+  alreadyImportedAs: string | null;
+  notCarried: string[];
+}
+
+/** Backing up the Studio, restoring from a backup, and bringing projects over from MDEdit. Every picker is a dialog the page cannot fill in itself. */
+export interface BackupApi {
+  /** Asks where to save, then backs up this Studio's data and project folders (all projects, or just the ones named). Null if cancelled. */
+  make(o?: { projects?: string[] }): Promise<{ file: string; files: number; bytes: number } | null>;
+  /** Asks for a backup file and checks it. Null if cancelled. */
+  inspect(): Promise<BackupSummary | null>;
+  /** Puts one project of a checked backup into this Studio's Projects folder, under a free name, and in the project tree. */
+  restoreProject(file: string, project: string, parentId?: string | null): Promise<{ id: string; name: string }>;
+  /** Restores a whole backup as a new Studio on this computer (nothing here is overwritten); switch to it from the Studio menu. */
+  restoreAsStudio(file: string, name: string): Promise<StudiosView>;
+  /** Asks for an MDEdit project folder, or a Root Folder holding several, and previews each project in it. Null if cancelled. */
+  findMdedit(): Promise<MdeditCandidate[] | null>;
+  /** Copies one previewed project into this Studio as a Cadrel project. The MDEdit original is not touched. */
+  importMdedit(source: string, o?: { asNewCopy?: boolean; parentId?: string | null }): Promise<{ id: string; name: string }>;
+}
+
+/** One published book in the My Books list. `money` is null when the person's role may not see Finance's figures (not zero: absent). */
+export interface MyBookRow {
+  asin: string;
+  title: string;
+  penNames: string[];
+  authors: string[];
+  captured: boolean;
+  overallRank: number | null;
+  listRank: number | null;
+  kindlePrice: number | null;
+  ratingValue: number | null;
+  ratingCount: number | null;
+  money: null | { paidUnits: number; kenpPages: number; lastSaleDay: string | null; lastMonth: string | null; lastMonthUsd: number | null; lastMonthState: 'final' | 'estimated' | 'pending' | null };
+}
+
+export interface MyBooksList {
+  /** False until Market has a library: there is nothing to list. */
+  available: boolean;
+  books: MyBookRow[];
+  /** Whether Finance's figures are shown at all to this person. */
+  financeVisible: boolean;
+}
+
+/** One format of a book in the catalogue. The ASIN is the join to Market and Finance. */
+export interface CatalogueEdition { id: string; format: string; asin: string | null; isbn: string | null; price: number | null; currency: string; publishedOn: string | null }
+/** A book in the catalogue, with its project's stage and progress and (when it has an ASIN Market knows) its listing and money. */
+export interface CatalogueBookRow {
+  bookId: string;
+  title: string;
+  subtitle: string;
+  penName: string;
+  seriesId: string | null;
+  seriesName: string | null;
+  position: number | null;
+  editions: CatalogueEdition[];
+  /** The ASIN that stands for the book in Market and Finance; null until an edition has one. */
+  asin: string | null;
+  market: MyBookRow | null;
+  projectId: string | null;
+  projectName: string | null;
+  stage: string | null;
+  stageColor: string | null;
+  /** The kind of the stage (start, active, review, done, hold), so a gate or a count can tell a finished book from one in production. */
+  stageCategory: string | null;
+  words: number | null;
+  goalWords: number | null;
+}
+export interface CatalogueList {
+  /** False where this computer holds no records for the Studio: the page falls back to Market's list. */
+  available: boolean;
+  reason?: string;
+  marketAvailable: boolean;
+  financeVisible: boolean;
+  may: { create: boolean; edit: boolean; archive: boolean };
+  series: { id: string; name: string }[];
+  books: CatalogueBookRow[];
+  /** Books Market knows as yours that the catalogue does not have yet. */
+  unlisted: { asin: string; title: string; penNames: string[] }[];
+  /** Projects a book could be linked to (live and not linked to a book yet). */
+  projects: { id: string; name: string }[];
+}
+export interface CatalogueDetail {
+  book: CatalogueBookRow;
+  series: { id: string; name: string }[];
+  projects: { id: string; name: string }[];
+  may: CatalogueList['may'];
+}
+
+/** Everything about one published book, assembled from Market and (for roles that may see it) Finance. Nothing is stored here. */
+export interface BookPage {
+  asin: string;
+  title: string;
+  penNames: string[];
+  authors: string[];
+  cover: string | null;
+  source: 'report' | 'manual';
+  addedAt: string;
+  market: {
+    captured: boolean;
+    lastCaptured: string | null;
+    overallRank: number | null;
+    listRank: number | null;
+    listCategory: string | null;
+    kindlePrice: number | null;
+    ratingValue: number | null;
+    ratingCount: number | null;
+    text: 'manuscript' | 'sample' | null;
+    history: { capturedAt: string; price: number | null; rank: number | null; ratings: number | null }[];
+    categories: { key: string; name: string }[];
+  };
+  /** Null when the person's role does not include royalties: the sections are left out, not shown empty. */
+  finance: null | {
+    hasData: boolean;
+    paidUnits: number;
+    kenpPages: number;
+    firstSaleDay: string | null;
+    lastSaleDay: string | null;
+    /** Newest first. `state` says whether KDP has reported the month (final), it rests on an estimated KENP rate, or it is not in yet. */
+    months: { month: string; usd: number; units: number; pages: number; state: 'final' | 'estimated' | 'pending' }[];
+    totalUsd: number;
+    /** The part of `totalUsd` that rests on estimates. */
+    estimatedUsd: number;
+    split: { fromMonth: string; shares: { name: string; pct: number }[] } | null;
+    payees: string[];
+    /** The KDP payments this book is in, newest first, with the book's part of each. `reconciled` is false until a payment report is imported. */
+    payments: {
+      reconciled: boolean;
+      items: { number: string; paidOn: string; scheduled: boolean; allocated: boolean; changed: boolean; paymentNet: number; net: number }[];
+      totalNet: number;
+      awaitingUsd: number;
+    };
+  };
+}
+
+export interface BookSaveResult {
+  /** The folder the files went into. */
+  folder: string;
+  files: string[];
+}
+
+/** My Books: the portal for a published book. It reads Market and Finance and saves through their own generators; it keeps no data. */
+export interface MyBooksApi {
+  /** The catalogue's books with Market and Finance joined by ASIN. Where this computer has no records, `available` is false and `list()` is the fallback. */
+  catalogue(): Promise<CatalogueList>;
+  catalogueBook(bookId: string): Promise<CatalogueDetail | null>;
+  createBook(i: { title: string; subtitle?: string; penName?: string; seriesId?: string | null; position?: number | null }): Promise<{ id: string }>;
+  createSeries(i: { name: string; description?: string }): Promise<{ id: string; name: string }>;
+  updateBook(id: string, patch: { title?: string; subtitle?: string; penName?: string }): Promise<unknown>;
+  moveBook(id: string, seriesId: string | null, position?: number | null): Promise<unknown>;
+  addEdition(bookId: string, i: { format: string; asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
+  updateEdition(id: string, patch: { asin?: string | null; isbn?: string | null; price?: number | null; currency?: string; publishedOn?: string | null }): Promise<unknown>;
+  archiveBook(id: string): Promise<void>;
+  /** Deletes a book added by mistake from the catalogue and from Market and Finance, leaving no trace of it (the project it was made in stays). */
+  deleteBook(id: string): Promise<{ asins: string[] }>;
+  /** Links the book to the project it is made in (or unlinks with null). */
+  linkProject(bookId: string, projectId: string | null): Promise<void>;
+  /** Adds books Market knows as yours to the catalogue. */
+  addFromMarket(asins: string[]): Promise<{ added: string[]; skipped: { asin: string; reason: string }[] }>;
+  list(): Promise<MyBooksList>;
+  book(asin: string): Promise<BookPage | null>;
+  /** Asks for a folder, then saves the Market exports for the categories this book is listed in. Null if cancelled. */
+  saveMarket(asin: string): Promise<BookSaveResult | null>;
+  /** Asks for a folder, then saves this book's earnings and the statements of the authors on it (CSV and PDF). Null if cancelled, or refused when the role may not see Finance. */
+  saveFinance(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
+  /** Everything the two above save, in one folder for this book. */
+  saveAll(asin: string, o?: { months?: number }): Promise<BookSaveResult | null>;
+  /** Opens the book's page on Amazon in the browser, where it can be captured with the extension. */
+  openOnAmazon(asin: string): Promise<void>;
+  /** Shows the book in Market's Library, or on its own page in Finance (only for roles that may see Finance). */
+  openIn(module: 'market' | 'finance', asin: string): Promise<void>;
+}
+
+/** The studio's people, teams, roles and who holds what, as the Admin page shows them. `may` is what the person using the app may change. */
+export type PeopleState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      /** The person using this computer. */
+      me: string;
+      /** The Studio's id: the scope of a studio-wide role. */
+      studioId: string;
+      people: Person[];
+      deactivated: Person[];
+      teams: Team[];
+      penNames: PenName[];
+      roles: RoleRecord[];
+      assignments: AssignmentRecord[];
+      /** Capabilities a newer version added that no administrator has placed or acknowledged yet. */
+      review: string[];
+      may: { people: boolean; teams: boolean; roles: boolean };
+    };
+
+/** Every change goes through the permission-checked service as the person using the app; a refusal comes back as its reason in words. */
+export interface PeopleApi {
+  state(): Promise<PeopleState>;
+  createPerson(i: { name: string; email?: string | null; kind?: string }): Promise<Person>;
+  updatePerson(id: string, patch: { name?: string; email?: string | null; kind?: string }): Promise<Person>;
+  setPersonActive(id: string, active: boolean): Promise<Person>;
+  createPenName(i: { displayName: string; personIds?: string[] }): Promise<PenName>;
+  setPenNamePeople(id: string, personIds: string[]): Promise<PenName>;
+  createTeam(name: string): Promise<Team>;
+  renameTeam(id: string, name: string): Promise<Team>;
+  setTeamMember(teamId: string, personId: string, member: boolean): Promise<Team>;
+  deleteTeam(id: string): Promise<void>;
+  createRole(i: { name: string; description?: string; capabilities?: string[]; copyFrom?: string }): Promise<RoleRecord>;
+  updateRole(id: string, patch: { name?: string; description?: string; capabilities?: string[] }): Promise<RoleRecord>;
+  resetRole(id: string): Promise<RoleRecord>;
+  /** A role that is still assigned needs `replacementId`: its people are moved to that role. */
+  deleteRole(id: string, replacementId?: string): Promise<void>;
+  acknowledgeCapabilities(caps: string[]): Promise<void>;
+  grant(i: { subject: { kind: 'person' | 'team'; id: string }; roleId: string; scope: { kind: 'studio' | 'project' | 'file'; id: string }; expiresAt?: string | null }): Promise<AssignmentRecord>;
+  revoke(id: string): Promise<void>;
+  setExpiry(id: string, expiresAt: string | null): Promise<AssignmentRecord>;
+  /** Why this person can or cannot do something at the studio, or on one project. */
+  explainAccess(personId: string, capability: string, projectId?: string | null): Promise<{ allowed: boolean; reason: string }>;
+  /** Every capability the person holds at the studio, or on one project when `projectId` is given (`*` means all). */
+  effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
+}
+
+/** The workflows an administrator builds: the stages a book moves through and the gates between them. */
+export type WorkflowState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      workflows: WorkflowRecord[];
+      /** How many projects use each workflow, and how many are in each of its stages. */
+      usage: Record<string, WorkflowUsage>;
+      /** The roles a gate can name. */
+      roles: { id: string; name: string }[];
+      /** May the person using the app build workflows? Everyone may read them. */
+      may: boolean;
+    };
+
+export interface WorkflowApi {
+  state(): Promise<WorkflowState>;
+  /** A blank workflow, or a copy of `copyFrom`. It is not the default until `setDefault`. */
+  create(i: { name: string; description?: string; copyFrom?: string }): Promise<WorkflowRecord>;
+  /** Saves the whole definition (stages, moves, gates). Dropping a stage that has projects in it needs `moveProjects` to say where they go. */
+  save(id: string, draft: WorkflowDraft): Promise<WorkflowRecord>;
+  /** Makes it the default for new projects, new subprojects, or both (the default when `levels` is left out). */
+  setDefault(id: string, levels?: ('project' | 'subproject')[]): Promise<WorkflowRecord>;
+  delete(id: string): Promise<void>;
+}
+
+/** Tasks, deadlines, approvals and decisions on a project and its subprojects, each labelled with the project it is on. */
+export type OnProject<T> = T & { projectName: string };
+export type WorkState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      people: { id: string; name: string }[];
+      /** What the person using the app may do with work: task.edit (their own), task.assign (hand work over), task.manage (anyone's). */
+      may: { edit: boolean; assign: boolean; manage: boolean };
+      tasks: OnProject<TaskRecord>[];
+      approvals: OnProject<ApprovalRecord>[];
+      decisions: OnProject<Omit<DecisionRecord, 'projectId'> & { projectId: string | null }>[];
+      /** The sign-off labels the project stands approved under now. */
+      approved: string[];
+    };
+/** What waits on the person using the app, across projects. */
+export interface MineState {
+  available: boolean;
+  tasks: OnProject<TaskRecord>[];
+  approvals: OnProject<ApprovalRecord>[];
+}
+/** The files of the Studio: the working folder, and every file's state for this person on this computer. */
+export type VaultState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      dir: string;
+      machine: string;
+      me: string;
+      people: { id: string; name: string }[];
+      may: { force: boolean };
+      entries: {
+        path: string;
+        kind: 'manuscript' | 'asset';
+        fileId: string | null;
+        status: 'untracked' | 'not-local' | 'latest' | 'out-of-date' | 'checked-out-by-me' | 'checked-out-by-other' | 'modified-unprotected' | 'missing';
+        version: number | null;
+        localVersion: number | null;
+        modified: boolean;
+        lock: { personId: string; machine: string; since: string } | null;
+        size: number | null;
+        state: string | null;
+      }[];
+      /** Lock removals found on this computer just now: the unsaved copy was kept aside (`savedAs`, null if there was nothing unsaved). */
+      kept: { path: string; savedAs: string | null; removedBy: string; reason: string }[];
+      /** Every copy kept aside on this computer. */
+      orphans: { path: string; savedAs: string; removedBy: string; removedAt: string; reason: string; version: number }[];
+    };
+export interface VaultApi {
+  state(): Promise<VaultState>;
+  /** Puts a file from the working folder into the vault as its first version. */
+  add(path: string, comment?: string): Promise<void>;
+  checkOut(path: string): Promise<void>;
+  /** Saves the file as a new version and releases it; nothing changed means it is released with no new version. */
+  checkIn(path: string, comment?: string): Promise<{ unchanged: boolean }>;
+  undoCheckOut(path: string): Promise<void>;
+  discardLocalChanges(path: string): Promise<void>;
+  /** Updates read-only copies to the newest versions (files you have checked out are never touched). */
+  getLatest(paths?: string[], o?: { fetchMissing?: boolean }): Promise<{ updated: string[]; skipped: { path: string; why: string }[] }>;
+  /** An administrator releases someone else's check-out; their unsaved work is kept aside on their computer. Needs a reason. */
+  forceRelease(path: string, reason: string): Promise<void>;
+  history(path: string): Promise<FileVersion[]>;
+  /** A file's versions, what it uses, where it is used (and whether each user names an older version) and its data card. */
+  detail(path: string): Promise<{ versions: FileVersion[]; uses: FileRef[]; usedBy: FileRef[]; card: DataCard }>;
+  /** `path` uses `to`, at a version or the latest. A reference never updates itself: `setReferenceVersion` is a person's choice. */
+  addReference(path: string, to: string, version?: number | null, note?: string): Promise<void>;
+  setReferenceVersion(path: string, to: string, version: number | null): Promise<void>;
+  removeReference(path: string, to: string): Promise<void>;
+  /** Replaces the data card; an empty value removes a field. */
+  setCard(path: string, fields: Record<string, string>, projectId?: string | null): Promise<DataCard>;
+  saveVersionAs(path: string, version: number, as: string): Promise<string>;
+  /** Opens the working folder in the file manager. */
+  openFolder(): Promise<void>;
+}
+
+/** One live project in the pipeline: where it is in its workflow and what is due on it. */
+export interface PlanProject {
+  id: string;
+  name: string;
+  /** The names of the projects above it, outermost first. */
+  path: string[];
+  kind: string;
+  workflowId: string | null;
+  stage: string | null;
+  openTasks: number;
+  late: number;
+  /** The earliest date of an open task or deadline on the project itself, or null. */
+  nextDue: string | null;
+}
+/** The pipeline and the calendar: every live project by workflow and stage, and every task and deadline that is not cancelled. */
+export type PlanState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      today: string;
+      people: { id: string; name: string }[];
+      /** The workflows in use, with their stages in order. */
+      workflows: { id: string; name: string; stages: { key: string; name: string; color: string; category: string }[] }[];
+      projects: PlanProject[];
+      tasks: OnProject<TaskRecord>[];
+    };
+/** The studio at a glance, for Home and the Dashboard. */
+export type Pulse =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      today: string;
+      work: { open: number; late: number; dueSoon: number; approvalsPending: number; doneThisWeek: number };
+      late: PulseTask[];
+      upcoming: PulseTask[];
+      approvals: { id: string; label: string; projectId: string; projectName: string; waiting: string[] }[];
+      decisions: { id: string; title: string; outcome: string; projectName: string | null; decidedAt: string }[];
+      pipeline: { id: string; name: string; total: number; stages: { key: string; name: string; color: string; category: string; count: number }[] }[];
+      books: { total: number; published: number; unpublished: number; series: number; inProduction: number; unlisted: number; money: null | { month: string; usd: number; estimated: boolean } };
+      people: { id: string; name: string }[];
+    };
+export interface PulseTask { id: string; title: string; kind: string; due: string | null; projectId: string; projectName: string; assigneeId: string | null }
+export interface WorkApi {
+  pulse(): Promise<Pulse>;
+  plan(): Promise<PlanState>;
+  state(projectId: string): Promise<WorkState>;
+  mine(): Promise<MineState>;
+  createTask(i: NewTask): Promise<TaskRecord>;
+  updateTask(id: string, patch: TaskPatch): Promise<TaskRecord>;
+  setState(id: string, state: TaskState): Promise<TaskRecord>;
+  addDependency(id: string, dependsOnId: string): Promise<TaskRecord>;
+  removeDependency(id: string, dependsOnId: string): Promise<TaskRecord>;
+  requestApproval(i: NewApproval): Promise<ApprovalRecord>;
+  /** Only a person the approval names can answer it; rejecting needs a reason. */
+  respond(id: string, response: 'approved' | 'rejected', reason?: string): Promise<ApprovalRecord>;
+  withdraw(id: string): Promise<ApprovalRecord>;
+  /** Adds to the ledger. Entries are never changed; `supersedes` replaces an earlier one. */
+  recordDecision(i: { projectId?: string | null; title: string; context?: string; outcome: string; supersedes?: string | null }): Promise<DecisionRecord>;
+}
+
+/** A project's workflow and where it is in it, as the pages show them. */
+export interface ProjectStageView {
+  workflowId: string;
+  workflowName: string;
+  stage: { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold' } | null;
+}
+export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
+
+/** Where projects are in their workflows, and the moves between stages. A move is checked against the workflow's gates and the person's roles. */
+export interface StagesApi {
+  /** Every project's stage (by project id), for the tree and the lists. */
+  views(): Promise<Record<string, ProjectStageView>>;
+  /** Where one project can go, and for each move whether it is open now and what is in the way. Null for a project with no workflow. */
+  options(projectId: string): Promise<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null>;
+  move(projectId: string, to: string): Promise<void>;
 }
 
 export interface CadrelApi {
   studios: StudiosApi;
+  stages: StagesApi;
+  workflow: WorkflowApi;
+  work: WorkApi;
+  vault: VaultApi;
+  people: PeopleApi;
+  myBooks: MyBooksApi;
+  backup: BackupApi;
   studio: StudioApi;
   manage: ManageApi;
   theme: {
@@ -369,6 +806,11 @@ export interface CadrelApi {
     onChange(cb: (t: ThemeState) => void): () => void;
   };
   user: UserApi;
+  /** What AI tools (the MCP server) may do to documents. Everything that changes a file is off until the person turns it on. */
+  mcp: {
+    get(): Promise<McpAccess>;
+    set(change: Partial<McpAccess>): Promise<McpAccess>;
+  };
   prefs: {
     folders(): Promise<AppFolders>;
     /** Opens a folder picker and moves the Cadrel folder there; null if cancelled. Write and Market follow it unless they were given folders of their own. */

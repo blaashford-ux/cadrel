@@ -1,0 +1,21 @@
+{
+  "name": "@cadrel/finance-desktop",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Cadrel Finance: KDP sales, royalties, splits, payments and payouts. Hosted by the Cadrel shell.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@cadrel/market-desktop": "*",
+    "@cadrel/ui": "*",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vitest": "^2.1.0"
+  }
+}

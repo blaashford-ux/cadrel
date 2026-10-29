@@ -22,7 +22,7 @@ import { QuickSwitcher } from './QuickSwitcher';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, writtenOn } from '../shared/progress';
 import { goalFor, relativeTo, withOpened } from '../shared/projects';
-import { projectNameError, uniqueName, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
+import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
 import { EditBar } from './EditBar';
@@ -266,7 +266,7 @@ export function App() {
   const rows = useMemo(
     () =>
       s.root
-        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.status === 'editing' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null)
+        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.stage?.category === 'review' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null)
         : [],
     [s.root, s.expanded, s.docs, filter, s.project]
   );
@@ -701,7 +701,6 @@ export function App() {
         }
       }) : undefined,
     onArchive: manage ? (p: ProjectSummary, archived: boolean) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { archived })) : undefined,
-    onStatus: manage ? (p: ProjectSummary, status: ProjectStatus) => void projectCall(() => window.cadrelWrite.updateProject(p.path, { status })) : undefined,
     onProperties: manage ? (p: ProjectSummary) => setProjectSettings(p.path) : undefined,
     onReveal: caps.folderPicker ? (p: string) => ws.reveal(p) : undefined
   };

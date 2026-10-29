@@ -1076,7 +1076,7 @@ describe('a core-only API (the phone)', () => {
 describe('edited chapters (Editing stage)', () => {
   const PROJ = ROOT;
   const edited = () => state().project!.meta.editedChapters;
-  const openEditing = async (patch: Record<string, unknown> = { status: 'editing' }) => {
+  const openEditing = async (patch: Record<string, unknown> = { stage: { key: 'editing', name: 'Editing', color: '#888', category: 'review' } }) => {
     api.addProject(PROJ, patch as never);
     await ws.openPath(PROJ);
   };
@@ -1117,7 +1117,7 @@ describe('edited chapters (Editing stage)', () => {
     expect(api.markEditedAsked).toEqual(['One']);
     await ws.closeProject();
     api.markEditedAsked.length = 0;
-    await openEditing({ status: 'drafting' });
+    await openEditing({ stage: { key: 'drafting', name: 'Drafting', color: '#888', category: 'active' } });
     await ws.openChapter(A, 0);
     await saveChapter(A, '# One\nz');
     await ws.openChapter(A, 1);
@@ -1165,7 +1165,7 @@ describe('edited chapters (Editing stage)', () => {
     expect(edited()).toEqual({ 'a.md': ['Two'] });
   });
 
-  it('marks stay with a chapter that moves, is retitled, or whose file is renamed, and survive a status change', async () => {
+  it('marks stay with a chapter that moves, is retitled, or whose file is renamed, and survive a stage change', async () => {
     await openEditing();
     await ws.openChapter(A, 1);
     await ws.setChapterEdited(A, 1, true); // "Two"
@@ -1176,7 +1176,7 @@ describe('edited chapters (Editing stage)', () => {
     expect(edited()).toEqual({ 'a.md': ['Second'] });
     await ws.renameNode(A, 'renamed.md');
     expect(edited()).toEqual({ 'renamed.md': ['Second'] });
-    await ws.updateProjectMeta({ ...state().project!.meta, status: 'drafting' });
+    await ws.updateProjectMeta({ ...state().project!.meta, stage: { key: 'drafting', name: 'Drafting', color: '#888', category: 'active' } });
     expect(edited()).toEqual({ 'renamed.md': ['Second'] });
   });
 
@@ -1213,7 +1213,7 @@ describe('edited chapters (Editing stage)', () => {
 
 describe('refresh picks up changes to the project made elsewhere', () => {
   it('shows edited marks that arrived from another device (a sync) and keeps open work', async () => {
-    api.addProject(ROOT, { status: 'editing' });
+    api.addProject(ROOT, { stage: { key: 'editing', name: 'Editing', color: '#888', category: 'review' } });
     await ws.openPath(ROOT);
     await ws.openChapter(A, 0);
     ws.setDraft(tabOf(A).id, '# One\nunsaved');

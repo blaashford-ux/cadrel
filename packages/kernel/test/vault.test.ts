@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { checkIn, checkOut, forceRelease, getLock, pendingOrphans, undoCheckOut, type Db } from '../src';
+import { acknowledgeOrphans, addVaultFile, checkIn, checkOut, cleanVaultPath, fileKind, fileVersions, forceRelease, getLock, listVaultFiles, pendingOrphans, undoCheckOut, type Db } from '../src';
 import { memoryDb } from './sqlite';
 
 let db: Db;
@@ -105,5 +105,38 @@ describe('force release', () => {
 
   it('nothing to release when the file is not locked', async () => {
     expect(await forceRelease(db, { fileId: 'f1', adminId: 'root', reason: 'x', now: T(1) })).toEqual({ ok: false, reason: 'not-locked' });
+  });
+});
+
+describe('paths and kinds', () => {
+  it('cleans a path and refuses what Windows or the vault would not keep', () => {
+    expect(cleanVaultPath('.\\Series\\Book 1//ch1.md')).toEqual({ ok: true, path: 'Series/Book 1/ch1.md' });
+    for (const bad of ['', '../x', 'a/../b', 'a/./b', 'a/b?.md', 'CON.md', 'a/NUL', 'dir./f', 'f ', '.cadrel-vault/state.json', 5 as never]) expect(cleanVaultPath(bad).ok, String(bad)).toBe(false);
+  });
+  it('tells manuscripts from assets', () => {
+    expect(['ch1.md', 'plan.DOCX', 'Notes', 'a/b.txt'].map(fileKind)).toEqual(['manuscript', 'manuscript', 'manuscript', 'manuscript']);
+    expect(['cover.psd', 'art/c.PNG', 'font.otf', 'thing.xyz'].map(fileKind)).toEqual(['asset', 'asset', 'asset', 'asset']);
+  });
+});
+
+describe('adding, listing, history', () => {
+  it('adds a file once per path, ignoring case, and lists it with its lock and current version', async () => {
+    expect(await addVaultFile(db, { studioId: 's1', path: 'Books/a.md', personId: 'alice', now: T(1), id: 'f2' })).toEqual({ ok: true, id: 'f2' });
+    expect(await addVaultFile(db, { studioId: 's1', path: 'books/A.md', personId: 'alice', now: T(1), id: 'f3' })).toEqual({ ok: false, reason: 'exists' });
+    await checkOut(db, { fileId: 'f2', personId: 'alice', machine: 'pc-a', now: T(2) });
+    await checkIn(db, { fileId: 'f2', personId: 'alice', machine: 'pc-a', hash: 'h1', size: 5, comment: 'one', now: T(3) });
+    await checkOut(db, { fileId: 'f2', personId: 'bob', machine: 'pc-b', now: T(4) });
+    const f = (await listVaultFiles(db, 's1')).find((x) => x.id === 'f2')!;
+    expect(f).toMatchObject({ path: 'Books/a.md', currentVersion: 1, hash: 'h1', size: 5, lock: { personId: 'bob', machine: 'pc-b' } });
+    expect((await fileVersions(db, 'f2')).map((v) => [v.n, v.comment, v.author])).toEqual([[1, 'one', 'alice']]);
+    expect(await listVaultFiles(db, 's2')).toEqual([]);
+  });
+  it('marks an orphan as seen', async () => {
+    await checkOut(db, { fileId: 'f1', personId: 'alice', machine: 'pc-a', now: T(1) });
+    await forceRelease(db, { fileId: 'f1', adminId: 'root', reason: 'leave', now: T(2) });
+    await acknowledgeOrphans(db, { personId: 'alice', machine: 'pc-b', fileId: 'f1', now: T(3) }); // another machine: not this one's
+    expect(await pendingOrphans(db, 'alice')).toHaveLength(1);
+    await acknowledgeOrphans(db, { personId: 'alice', machine: 'pc-a', fileId: 'f1', now: T(3) });
+    expect(await pendingOrphans(db, 'alice')).toEqual([]);
   });
 });

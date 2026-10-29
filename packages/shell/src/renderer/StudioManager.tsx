@@ -53,7 +53,7 @@ export function StudioManager() {
         <h3 id="sm-title">Studio Manager</h3>
         <button type="button" className="link" onClick={() => void act(() => api.enableManager(false))}>Turn off</button>
       </div>
-      <div className="banner info" role="note">Backup is not connected yet. Everything else here is.</div>
+      <div className="banner info" role="note">Back up this Studio, or restore from a backup, under Settings → Backup and import.</div>
 
       <h4>Your Studios</h4>
       <ul className="studio-list">

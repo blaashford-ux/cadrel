@@ -16,6 +16,9 @@ import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import { startHttp } from '@cadrel/write/mcp/http';
 import { chooseRoot, rootCandidates } from '@cadrel/write/mcp/root';
 import { listProjects } from '@cadrel/write/src/shared/agent/tools';
+import { accessReader } from '@cadrel/write/src/shared/agent/access';
+import { listOutlines, readOutline } from '@cadrel/write/src/shared/agent/tools';
+import type { OutlineSource } from '@cadrel/market-library';
 import type { ServerOptions as WriteOptions } from '@cadrel/write/mcp/server';
 import { resolveLibraryRoot } from '@cadrel/market-mcp/src/config.js';
 import { capabilitiesOf, composeInstructions, createCadrelServer, SERVER_NAME, type McpModule } from './server.js';
@@ -23,6 +26,10 @@ import { writeModule } from './modules/write.js';
 import { studioModule } from './modules/studio.js';
 import path from 'node:path';
 import { Studio, studioFile, UserStore } from '@cadrel/studio';
+import { StudioService, dbAccess } from '@cadrel/service';
+import { openStudioDb, type StudioDb } from '@cadrel/store';
+import { RECORDS_INSTRUCTIONS } from './modules/records.js';
+import { watchLifecycle } from './lifecycle.js';
 
 const VERSION = process.env.CADREL_VERSION || '0.0.0';
 
@@ -34,7 +41,30 @@ function flag(name: string): string | undefined {
   return a.includes('=') ? a.slice(a.indexOf('=') + 1) : args[i + 1];
 }
 
+/** What the person lets AI tools do, re-read each time it matters (see Settings → MCP in the app). */
+const aiAccess = accessReader(nodeFs, flag('ai-access') ?? process.env.CADREL_AI_ACCESS);
+
 const say = (m: string) => process.stderr.write(`${m}\n`);
+
+/**
+ * Stops cleanly, once: closes what is open, then leaves. A server that lingers holds the installed program's files open, which stops an update
+ * from replacing them, so it also leaves by force if closing takes more than three seconds.
+ */
+let stopping = false;
+function stopNow(why: string, close: () => void): never | void {
+  if (stopping) return;
+  stopping = true;
+  say(`Cadrel MCP server stopping: ${why}.`);
+  setTimeout(() => process.exit(0), 3000).unref();
+  try {
+    close();
+  } catch {
+    /* leaving anyway */
+  }
+  process.exit(0);
+}
+/** The marker Cadrel or its installer writes next to the program when an update starts (see lifecycle.ts). */
+const retireFile = () => flag('retire-file') ?? path.join(path.dirname(process.execPath), '.cadrel-retire');
 
 type Found<T> = { ok: true; value: T } | { ok: false; reason: string };
 
@@ -44,6 +74,33 @@ const studio = new Studio(studioPath);
 /** The profile sits beside the studio file, in a folder of its own. */
 const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
 const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, user, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+
+/**
+ * The Studio's shared records (tasks, sign-offs, decisions, books, files), when the app says where they are and who the assistant acts for
+ * (--records <file> --person <id> --studio-id <id>). Without all three these tools are left out. With `open: false` (the handshake) nothing is opened.
+ * The assistant acts as that person under their role's permissions and needs `assistant.use`; it never migrates the file (the app does).
+ */
+async function findRecords(open: boolean): Promise<Found<{ module: McpModule; close(): void }>> {
+  const file = flag('records');
+  const person = flag('person');
+  const studioId = flag('studio-id');
+  if (!file || !person || !studioId) return { ok: false, reason: 'no records file given (Cadrel passes --records, --person and --studio-id)' };
+  const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: RECORDS_INSTRUCTIONS, register: () => undefined };
+  if (!open) return { ok: true, value: { module: stub, close: () => undefined } };
+  let db: StudioDb | undefined;
+  try {
+    const { recordsModule } = await import('./modules/records.js');
+    const { access } = await import('node:fs/promises');
+    await access(file);
+    db = await openStudioDb(file);
+    const service = new StudioService({ db, studioId, access: dbAccess(db, studioId) });
+    const d = db;
+    return { ok: true, value: { module: recordsModule({ service, personId: person, studio, studioId, db }), close: () => d.close() } };
+  } catch (e) {
+    db?.close();
+    return { ok: false, reason: `the records could not be opened (${e instanceof Error ? e.message : String(e)})` };
+  }
+}
 
 /** Write: the folder that holds the projects, by Cadrel Write's own rules (--root, CADREL_WRITE_ROOT, Cadrel Write's settings, the default). */
 async function findWrite(): Promise<Found<{ options: WriteOptions; root: string; source: string }>> {
@@ -55,9 +112,21 @@ async function findWrite(): Promise<Found<{ options: WriteOptions; root: string;
     if (source !== candidates[0]!.source) say(`No projects in the projects folder from ${candidates[0]!.source} (${candidates[0]!.root}); using ${root} (${source}) instead.`);
     const st = await nodeFs.stat(root);
     if (!st?.isDirectory) return { ok: false, reason: `the projects folder "${root}" (from ${source}) does not exist` };
-    return { ok: true, value: { options: { fs: nodeFs, root, tried, agent: flag('agent'), version: VERSION }, root, source } };
+    return { ok: true, value: { options: { fs: nodeFs, root, tried, agent: flag('agent'), version: VERSION, access: aiAccess }, root, source } };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** The pen names the app limits the library to (--pen-names <JSON array>); absent or unreadable means no limit. */
+function penNameScope(): string[] | null {
+  const raw = flag('pen-names');
+  if (raw === undefined) return null;
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : [];
+  } catch {
+    return []; // an unreadable limit is the safe one: show nothing rather than everything
   }
 }
 
@@ -65,7 +134,17 @@ async function findWrite(): Promise<Found<{ options: WriteOptions; root: string;
  * Market: the library Cadrel Market keeps. A library that is missing or will not open just means these tools are left out.
  * With `open: false` (the handshake) nothing is opened, only the instructions are read.
  */
-async function findMarket(open: boolean): Promise<Found<{ module: McpModule; close(): void; root: string }>> {
+/** The outline documents in the projects folder, for the keyword tools. */
+function outlinesOf(w: Found<{ options: WriteOptions }>): OutlineSource | undefined {
+  if (!w.ok) return undefined;
+  const ctx = { fs: nodeFs, root: w.value.options.root, agent: 'ai', agentName: 'AI' };
+  return {
+    list: async () => (await listOutlines(ctx)).map((o) => ({ project: o.project, file: o.file, title: o.title, words: o.words })),
+    read: async (ref) => (await readOutline(ctx, ref.project, ref.file).catch(() => null))?.text ?? null
+  };
+}
+
+async function findMarket(open: boolean, write?: Found<{ options: WriteOptions }>): Promise<Found<{ module: McpModule; close(): void; root: string }>> {
   const root = resolveLibraryRoot(process.argv.slice(2), process.env);
   if (!root) return { ok: false, reason: 'no market library found (choose one in Cadrel, or pass --library <folder>)' };
   try {
@@ -74,7 +153,7 @@ async function findMarket(open: boolean): Promise<Found<{ module: McpModule; clo
     const { embedderForModel, SERVER_INSTRUCTIONS } = await import('@cadrel/market-mcp');
     if (!open) return { ok: true, value: { module: { id: 'market', title: 'Market research (the Amazon library)', instructions: SERVER_INSTRUCTIONS, register: () => undefined }, close: () => undefined, root } };
     const lib = Library.open(root);
-    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root) }), close: () => lib.close(), root } };
+    return { ok: true, value: { module: marketModule({ lib, embedderFor: (m) => embedderForModel(m, root), authorScope: penNameScope(), outlines: write && outlinesOf(write), canSuggestKeywords: async () => (await aiAccess()).suggestKeywords }), close: () => lib.close(), root } };
   } catch (e) {
     return { ok: false, reason: `the market tools could not start here (${e instanceof Error ? e.message : String(e)})` };
   }
@@ -87,6 +166,8 @@ async function main(): Promise<void> {
         '  --root <folder>     the folder that holds your writing projects (default: the Root Folder set in Cadrel/Cadrel Write)\n' +
         '  --library <folder>  the market research library (default: the one the app last used)\n' +
         '  --studio <file>     the studio file (projects and notes; default: the one Cadrel keeps)\n' +
+        '  --records <file>    the Studio\'s records file (tasks, sign-offs, decisions, books, files); with --person <id> and --studio-id <id>\n' +
+        '  --ai-access <file>  what the AI may do (written by Settings → MCP; without it files can only be read and reviewed, and no keyword suggestions are taken)\n' +
         '  --agent <name>      how the AI is named in the Notes panel (default: taken from the connecting app)\n' +
         '  --http              listen on 127.0.0.1 instead of stdio: MCP at /mcp, REST at /api, API description at /openapi.json\n' +
         '  --port <n>          port for --http (default 47831)\n' +
@@ -103,7 +184,8 @@ async function main(): Promise<void> {
   // extension's launcher so Claude gets its answer at once while this process is still starting.
   if (process.argv.includes('--print-handshake')) {
     const market = await findMarket(false);
-    const modules = [studioFor(write), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])];
+    const records = await findRecords(false);
+    const modules = [studioFor(write), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])];
     process.stdout.write(
       JSON.stringify({ serverInfo: { name: SERVER_NAME, version: VERSION }, capabilities: capabilitiesOf(modules), instructions: composeInstructions(modules), protocolVersions: SUPPORTED_PROTOCOL_VERSIONS })
     );
@@ -113,31 +195,41 @@ async function main(): Promise<void> {
   if (process.argv.includes('--http')) {
     if (!write.ok) throw new Error(`--http serves the writing tools, but ${write.reason}. Pass --root <folder>.`);
     const withMarket = process.argv.includes('--with-market');
-    const market = withMarket ? await findMarket(true) : null;
+    const market = withMarket ? await findMarket(true, write) : null;
+    const records = await findRecords(true);
+    if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);
     if (market && !market.ok) say(`Market tools left out: ${market.reason}.`);
     const token = flag('token') ?? process.env.CADREL_TOKEN ?? randomBytes(24).toString('base64url');
     const http = await startHttp({
       ...write.value.options,
       token,
       port: Number(flag('port') ?? 47831),
-      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write), writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
+      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
     });
+    watchLifecycle({ retireFile: retireFile(), onStop: (why) => stopNow(why, () => { records.ok && records.value.close(); market?.ok && market.value.close(); }) });
     say(`Cadrel AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)`);
     say(`Projects folder: ${write.value.root} (${write.value.source})${market?.ok ? `; market library: ${market.value.root}` : ''}`);
     say(`Access token: ${token}`);
     return;
   }
 
-  const market = await findMarket(true);
+  const market = await findMarket(true, write);
+  const records = await findRecords(true);
   if (!write.ok) say(`Writing tools left out: ${write.reason}.`);
+  if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);
   if (!market.ok) say(`Market tools left out: ${market.reason}.`);
-  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
+  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
   await server.connect(new StdioServerTransport());
-  say(`Cadrel MCP server ready.${write.ok ? ` Projects folder: ${write.value.root} (${write.value.source}).` : ''}${market.ok ? ` Market library: ${market.value.root}.` : ''}`);
-  process.on('SIGINT', () => {
+  const closeAll = () => {
     if (market.ok) market.value.close();
-    process.exit(0);
-  });
+    if (records.ok) records.value.close();
+  };
+  // Over stdio the server lives exactly as long as the AI app's connection: when that ends, or the program that started it is gone, or an update
+  // starts, it closes and leaves, so it is never left running (and never holds the app's files open).
+  watchLifecycle({ stdin: process.stdin, parentPid: process.ppid, retireFile: retireFile(), onStop: (why) => stopNow(why, closeAll) });
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] as const) process.on(sig, () => stopNow(`received ${sig}`, closeAll));
+  say(`Cadrel MCP server ready.${write.ok ? ` Projects folder: ${write.value.root} (${write.value.source}).` : ''}${market.ok ? ` Market library: ${market.value.root}.` : ''}`);
+
 }
 
 main().catch((e) => {

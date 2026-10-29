@@ -16,6 +16,8 @@ const TABS: [Tab, string][] = [['queue', 'Queue'], ['library', 'Library'], ['ana
 export function App() {
   const [status, setStatus] = useState<Status | null>(null);
   const [tab, setTab] = useState<Tab>('queue');
+  /** A book another page asked to be shown (My Books in the shell): the Library opens it. */
+  const [show, setShow] = useState<{ asin: string } | null>(null);
   /** Bumped whenever a capture arrives so views reload. */
   const [version, setVersion] = useState(0);
 
@@ -23,7 +25,7 @@ export function App() {
   useEffect(() => {
     void refresh();
     const offCapture = api.onCapture(() => setVersion((v) => v + 1));
-    const offNavigate = api.onNavigate((page) => { if (page === 'about') setTab('about'); });
+    const offNavigate = api.onNavigate((page) => { if (page === 'about') setTab('about'); const m = /^book:([A-Z0-9]{10})$/.exec(page); if (m) { setTab('library'); setShow({ asin: m[1]! }); } });
     return () => { offCapture(); offNavigate(); };
   }, [refresh]);
 
@@ -57,7 +59,7 @@ export function App() {
       </header>
       <main>
         {tab === 'queue' && <QueueView version={version} />}
-        {tab === 'library' && <LibraryView version={version} />}
+        {tab === 'library' && <LibraryView version={version} show={show} />}
         {tab === 'analysis' && <AnalysisView version={version} />}
         {tab === 'keywords' && <KeywordsView version={version} />}
         {tab === 'issues' && <IssuesView version={version} />}

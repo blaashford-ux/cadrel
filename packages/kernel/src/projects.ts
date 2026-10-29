@@ -29,6 +29,13 @@ export interface Project {
   status: ProjectStatus;
   /** Position among its siblings. */
   order: number;
+  /**
+   * The workflow this project's stages come from: chosen when the project is made and never changed (a project made before workflows
+   * existed gets one once, when it is first opened by a version that has them). Null only until then.
+   */
+  workflowId: string | null;
+  /** The key of the stage it is in, in `workflowId`'s workflow. Changed only by `setProjectStage`, which the app gates. */
+  stage: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -152,6 +159,9 @@ export interface NewProject {
   kind?: string;
   id?: string;
   now?: string;
+  /** The workflow it lives by, and the stage it starts in. Set here, once: nothing changes the workflow afterwards. */
+  workflowId?: string | null;
+  stage?: string | null;
 }
 
 export function createProject(t: ProjectTree, o: NewProject): { tree: ProjectTree; project: Project } {
@@ -161,9 +171,14 @@ export function createProject(t: ProjectTree, o: NewProject): { tree: ProjectTre
   if (siblingNameTaken(t, parentId, name)) fail(`"${name}" already exists here.`);
   const now = o.now ?? new Date().toISOString();
   const order = childrenOf(t, parentId).reduce((m, p) => Math.max(m, p.order + 1), 0);
-  const project: Project = { id: o.id ?? newId(), parentId, name, kind: cleanKind(o.kind), status: 'active', order, createdAt: now, updatedAt: now };
+  const workflowId = o.workflowId ?? null;
+  const stage = workflowId ? cleanStageKey(o.stage) : null;
+  if (workflowId && !stage) fail('A project made with a workflow starts in one of its stages.');
+  const project: Project = { id: o.id ?? newId(), parentId, name, kind: cleanKind(o.kind), status: 'active', order, workflowId, stage, createdAt: now, updatedAt: now };
   return { tree: { ...t, projects: [...t.projects, project] }, project };
 }
+
+const cleanStageKey = (v: unknown): string | null => (typeof v === 'string' && /^[a-z0-9][a-z0-9-]{0,39}$/.test(v) ? v : null);
 
 const touch = (p: Project, change: Partial<Project>, now = new Date().toISOString()): Project => ({ ...p, ...change, updatedAt: now });
 
@@ -176,6 +191,30 @@ export function updateProject(t: ProjectTree, id: string, change: { name?: strin
   }
   if (change.kind !== undefined) next.kind = cleanKind(change.kind);
   return { ...t, projects: t.projects.map((x) => (x.id === id ? touch(x, next) : x)) };
+}
+
+/**
+ * Puts a project in another stage of its own workflow. The tree does not know the workflow, so the caller has already checked that the
+ * stage exists and that the move is allowed (the gates); this only refuses a project that has no workflow.
+ */
+export function setProjectStage(t: ProjectTree, id: string, stage: string, now?: string): ProjectTree {
+  const p = need(t, id);
+  if (!p.workflowId) fail(`"${p.name}" has no workflow yet.`);
+  const key = cleanStageKey(stage);
+  if (!key) fail('That is not a stage.');
+  return { ...t, projects: t.projects.map((x) => (x.id === id ? touch(x, { stage: key }, now) : x)) };
+}
+
+/**
+ * The one time a project that has no workflow (made before workflows existed) is given one. A project that already has one cannot be
+ * given another: the workflow is chosen at creation and stays.
+ */
+export function adoptWorkflow(t: ProjectTree, id: string, workflowId: string, stage: string, now?: string): ProjectTree {
+  const p = need(t, id);
+  if (p.workflowId) fail(`"${p.name}" already has a workflow, and it cannot be changed.`);
+  const key = cleanStageKey(stage);
+  if (!workflowId || !key) fail('A workflow and one of its stages are needed.');
+  return { ...t, projects: t.projects.map((x) => (x.id === id ? touch(x, { workflowId, stage: key }, now) : x)) };
 }
 
 /**
@@ -223,22 +262,36 @@ export function linksOf(t: ProjectTree, projectId: string, module?: string): Pro
   return t.links.filter((l) => l.projectId === projectId && (!module || l.module === module));
 }
 
-/** The project a module's record belongs to, if any. */
+/** Modules whose records can belong to several projects at once: a Market category is often shared by every book in a genre. A manuscript folder is not. */
+export const SHARED_LINK_MODULES: readonly string[] = ['market'];
+export const isSharedLink = (module: string): boolean => SHARED_LINK_MODULES.includes(module);
+
+/** Every project a module's record belongs to (one, except for the modules in SHARED_LINK_MODULES). */
+export function projectsFor(t: ProjectTree, module: string, ref: string): Project[] {
+  return t.links.filter((x) => x.module === module && x.ref === ref).map((l) => getProject(t, l.projectId)).filter((p): p is Project => !!p);
+}
+
+/** The project a module's record belongs to, if any (the first, for a record in several). */
 export function projectFor(t: ProjectTree, module: string, ref: string): Project | undefined {
   const l = t.links.find((x) => x.module === module && x.ref === ref);
   return l && getProject(t, l.projectId);
 }
 
-/** A record belongs to one project: linking it again moves it. */
+/**
+ * A record belongs to one project: linking it again moves it. The exception is a record of a shared module (a Market category), which is
+ * added to the project and stays in the others.
+ */
 export function linkRecord(t: ProjectTree, projectId: string, module: string, ref: string): ProjectTree {
   need(t, projectId);
   const m = module.trim(), r = ref.trim();
   if (!m || !r) fail('A link needs a module and a record.');
-  return { ...t, links: [...t.links.filter((l) => !(l.module === m && l.ref === r)), { projectId, module: m, ref: r }] };
+  const keep = isSharedLink(m) ? (l: ProjectLink) => !(l.module === m && l.ref === r && l.projectId === projectId) : (l: ProjectLink) => !(l.module === m && l.ref === r);
+  return { ...t, links: [...t.links.filter(keep), { projectId, module: m, ref: r }] };
 }
 
-export function unlinkRecord(t: ProjectTree, module: string, ref: string): ProjectTree {
-  return { ...t, links: t.links.filter((l) => !(l.module === module && l.ref === ref)) };
+/** Unlinks a record from every project, or (with `projectId`) from that project only, which is how a shared record leaves one of several. */
+export function unlinkRecord(t: ProjectTree, module: string, ref: string, projectId?: string): ProjectTree {
+  return { ...t, links: t.links.filter((l) => !(l.module === module && l.ref === ref && (projectId === undefined || l.projectId === projectId))) };
 }
 
 /** A module record was renamed (Write renames a folder, for instance): keep it linked. */
@@ -270,6 +323,8 @@ export function sanitizeTree(raw: unknown): ProjectTree {
       kind: cleanKind(p.kind),
       status: p.status === 'archived' ? 'archived' : 'active',
       order: Number.isFinite(p.order) ? (p.order as number) : 0,
+      workflowId: isStr(p.workflowId) ? p.workflowId : null,
+      stage: isStr(p.workflowId) && cleanStageKey(p.stage) ? (p.stage as string) : null,
       createdAt: isStr(p.createdAt) ? p.createdAt : now,
       updatedAt: isStr(p.updatedAt) ? p.updatedAt : isStr(p.createdAt) ? p.createdAt : now
     });
@@ -293,7 +348,7 @@ export function sanitizeTree(raw: unknown): ProjectTree {
   for (const x of Array.isArray(r.links) ? r.links : []) {
     const l = x as Partial<ProjectLink> | null;
     if (!l || !isStr(l.projectId) || !isStr(l.module) || !isStr(l.ref) || !byId.has(l.projectId)) continue;
-    const key = `${l.module}\u0000${l.ref}`;
+    const key = isSharedLink(l.module) ? `${l.module}\u0000${l.ref}\u0000${l.projectId}` : `${l.module}\u0000${l.ref}`;
     if (claimed.has(key)) continue;
     claimed.add(key);
     links.push({ projectId: l.projectId, module: l.module, ref: l.ref });

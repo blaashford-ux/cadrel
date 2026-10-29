@@ -1,0 +1,18 @@
+{
+  "name": "@cadrel/service",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cadrel/kernel": "*"
+  },
+  "devDependencies": {
+    "@cadrel/store": "*",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.1.0"
+  }
+}

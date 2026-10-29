@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
-import type { Rollup } from '../../shared/api.js';
+import type { Rollup } from './types.js';
 import { PeriodPicker } from './Royalties.js';
 import { int, monthName, periodRange, periodShortcuts, usd, type PeriodKind } from './moneyUtil.js';
 
-const api = window.cadrelMarket;
+const api = window.cadrelFinance;
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** What to pay each author for a period (usually the last quarter): what Amazon paid in it, split, plus anything unpaid from before, less what you have already paid out. */

@@ -8,7 +8,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  NOTES_VERSION, PROJECT_TREE_VERSION, createNote, createProject, deleteNote, deleteProject, editNote, emptyTree, linkRecord, moveProject, projectFor, relinkRecord,
+  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
   replyToNote, sanitizeNotes, sanitizeTree, setArchived, setNoteStatus, unlinkRecord, updateProject,
   type NewNote, type Note, type NoteStatus, type Project, type ProjectTree
 } from '@cadrel/kernel';
@@ -71,7 +71,7 @@ export class Studio {
 
   // ---- projects -------------------------------------------------------------------------------
 
-  createProject(o: { name: string; parentId?: string | null; kind?: string }): Promise<Project> {
+  createProject(o: { name: string; parentId?: string | null; kind?: string; workflowId?: string | null; stage?: string | null }): Promise<Project> {
     return this.change((d) => {
       const r = createProject(d.tree, o);
       return { data: { ...d, tree: r.tree }, result: r.project };
@@ -80,6 +80,30 @@ export class Studio {
 
   updateProject(id: string, change: { name?: string; kind?: string }): Promise<void> {
     return this.change((d) => ({ data: { ...d, tree: updateProject(d.tree, id, change) }, result: undefined }));
+  }
+
+  /** Puts a project in another stage of its own workflow. The caller has already checked the move against the workflow's gates. */
+  setStage(id: string, stage: string): Promise<void> {
+    return this.change((d) => ({ data: { ...d, tree: setProjectStage(d.tree, id, stage) }, result: undefined }));
+  }
+
+  /** Gives a project made before workflows existed its workflow, once. A project that has one cannot be given another. */
+  adoptWorkflow(id: string, workflowId: string, stage: string): Promise<void> {
+    return this.change((d) => ({ data: { ...d, tree: adoptWorkflow(d.tree, id, workflowId, stage) }, result: undefined }));
+  }
+
+  /** A stage was removed from a workflow: the projects in it go to the stage chosen for them. Returns how many moved. */
+  moveStages(workflowId: string, moves: Record<string, string>): Promise<number> {
+    return this.change((d) => {
+      let n = 0;
+      const projects = d.tree.projects.map((p) => {
+        const to = p.workflowId === workflowId && p.stage && Object.hasOwn(moves, p.stage) ? moves[p.stage] : undefined;
+        if (!to) return p;
+        n++;
+        return { ...p, stage: to, updatedAt: new Date().toISOString() };
+      });
+      return { data: { ...d, tree: { ...d.tree, projects } }, result: n };
+    });
   }
 
   moveProject(id: string, parentId: string | null, index?: number): Promise<void> {
@@ -103,8 +127,9 @@ export class Studio {
     return this.change((d) => ({ data: { ...d, tree: linkRecord(d.tree, projectId, module, ref) }, result: undefined }));
   }
 
-  unlink(module: string, ref: string): Promise<void> {
-    return this.change((d) => ({ data: { ...d, tree: unlinkRecord(d.tree, module, ref) }, result: undefined }));
+  /** From every project, or from `projectId` only (a record shared by several projects). */
+  unlink(module: string, ref: string, projectId?: string): Promise<void> {
+    return this.change((d) => ({ data: { ...d, tree: unlinkRecord(d.tree, module, ref, projectId) }, result: undefined }));
   }
 
   relink(module: string, from: string, to: string): Promise<void> {
@@ -116,7 +141,7 @@ export class Studio {
   /** A note on a record that is linked to a project belongs to that project unless told otherwise. */
   addNote(o: NewNote): Promise<Note> {
     return this.change((d) => {
-      const projectId = o.projectId !== undefined ? o.projectId : o.target ? projectFor(d.tree, o.target.module, o.target.id)?.id ?? null : null;
+      const projectId = o.projectId !== undefined ? o.projectId : o.target ? onlyOne(projectsFor(d.tree, o.target.module, o.target.id)) : null;
       if (projectId && !d.tree.projects.some((p) => p.id === projectId)) throw new Error(`There is no project "${projectId}".`);
       const r = createNote(d.notes, { ...o, projectId });
       return { data: { ...d, notes: r.notes }, result: r.note };
@@ -139,3 +164,6 @@ export class Studio {
     return this.change((d) => ({ data: { ...d, notes: deleteNote(d.notes, id) }, result: undefined }));
   }
 }
+
+/** A note on a record shared by several projects belongs to none of them in particular. */
+const onlyOne = (ps: { id: string }[]): string | null => (ps.length === 1 ? ps[0]!.id : null);

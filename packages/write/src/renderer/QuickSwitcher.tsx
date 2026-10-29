@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { byRecentlyOpened, STATUS_LABELS, type ProjectSummary } from '../shared/projects';
+import { byRecentlyOpened, type ProjectSummary } from '../shared/projects';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -36,7 +36,7 @@ export function QuickSwitcher({ projects, currentPath, openedOrder, onOpen, onHo
     const list: Entry[] = matching.map((p) => ({
       key: p.path,
       label: p.name,
-      detail: `${STATUS_LABELS[p.meta.status]} · ${p.words === null ? '-' : p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
+      detail: `${p.meta.stage ? `${p.meta.stage.name} · ` : ''}${p.words === null ? '-' : p.words.toLocaleString()} words${p.path === currentPath ? ' · open' : ''}`,
       run: () => onOpen(p.path)
     }));
     if ('projects home all projects'.includes(q) || q === '') list.push({ key: '#home', label: 'All projects…', run: onHome });

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { Db } from '../src/vault';
 
@@ -8,7 +8,10 @@ const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as typeof
 
 export function memoryDb(): Db {
   const sqlite = new DatabaseSync(':memory:');
-  sqlite.exec(readFileSync(new URL('../../worker/migrations/0001_vault.sql', import.meta.url), 'utf8'));
+  sqlite.exec('PRAGMA foreign_keys = ON');
+  // every migration the Studio's database has, in order: the same SQL D1 gets
+  const dir = new URL('../../worker/migrations/', import.meta.url);
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.sql')).sort()) sqlite.exec(readFileSync(new URL(f, dir), 'utf8'));
   const bind = (p?: unknown[]) => (p ?? []) as (string | number | null)[];
   return {
     async run(sql, params) {

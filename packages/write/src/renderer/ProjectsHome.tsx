@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { goalFor, STATUS_LABELS, STATUSES, type ProjectStatus, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
+import { StageChip } from './StageChip';
+import { goalFor, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
 import type { SharedProject } from '../shared/review/share';
@@ -20,7 +21,6 @@ interface Props {
   onDuplicate?(p: ProjectSummary): void;
   onDelete?(p: ProjectSummary): void;
   onArchive?(p: ProjectSummary, archived: boolean): void;
-  onStatus?(p: ProjectSummary, status: ProjectStatus): void;
   onProperties?(p: ProjectSummary): void;
   onReveal?(path: string): void;
   /** Projects other people shared with this person (only where sharing is available). */
@@ -52,14 +52,19 @@ export function ProjectsHome(p: Props) {
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<Sort>('recent');
   const [showArchived, setShowArchived] = useState(false);
-  const [status, setStatus] = useState<ProjectStatus | 'all'>('all');
+  const [status, setStatus] = useState<string>('all');
   const [menu, setMenu] = useState<{ x: number; y: number; project: ProjectSummary } | null>(null);
 
   const all = p.listing?.projects ?? [];
+  const stages = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const x of all) if (x.meta.stage) seen.set(x.meta.stage.key, x.meta.stage.name);
+    return [...seen].map(([key, name]) => ({ key, name }));
+  }, [all]);
   const archivedCount = all.filter((x) => x.meta.archived).length;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.status === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
+    const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.stage?.key === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     return list.sort((a, b) =>
       sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
@@ -70,7 +75,6 @@ export function ProjectsHome(p: Props) {
     ...(p.onProperties ? [{ label: 'Project settings…', onClick: () => p.onProperties!(x) }] : []),
     ...(p.onRename ? [{ label: 'Rename…', onClick: () => p.onRename!(x) }] : []),
     ...(p.onDuplicate ? [{ label: 'Duplicate…', onClick: () => p.onDuplicate!(x) }] : []),
-    ...(p.onStatus ? STATUSES.filter((s) => s !== x.meta.status).map((s) => ({ label: `Mark as ${STATUS_LABELS[s]}`, onClick: () => p.onStatus!(x, s) })) : []),
     ...(p.onArchive ? [{ label: x.meta.archived ? 'Unarchive' : 'Archive', onClick: () => p.onArchive!(x, !x.meta.archived) }] : []),
     ...(p.onReveal ? [{ label: 'Show in File Explorer', onClick: () => p.onReveal!(x.path) }] : []),
     ...(p.onDelete ? [{ label: 'Delete…', danger: true, onClick: () => p.onDelete!(x) }] : [])
@@ -135,11 +139,11 @@ export function ProjectsHome(p: Props) {
               <option value="name">Name</option>
               <option value="words">Most words</option>
             </select>
-            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus | 'all')} aria-label="Filter by status">
-              <option value="all">All statuses</option>
-              {STATUSES.map((st) => (
-                <option key={st} value={st}>
-                  {STATUS_LABELS[st]}
+            <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Filter by stage">
+              <option value="all">All stages</option>
+              {stages.map((st) => (
+                <option key={st.key} value={st.key}>
+                  {st.name}
                 </option>
               ))}
             </select>
@@ -209,7 +213,7 @@ export function ProjectsHome(p: Props) {
                   </button>
                 </div>
                 <div className="card-meta">
-                  <span className={`status-chip s-${x.meta.status}`}>{STATUS_LABELS[x.meta.status]}</span>
+                  {x.meta.stage && <StageChip stage={x.meta.stage} />}
                   <span className="muted small">{x.meta.templateName}</span>
                 </div>
                 {x.meta.activeManuscript && (
@@ -230,7 +234,7 @@ export function ProjectsHome(p: Props) {
             );
           })}
         </div>
-        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : status !== 'all' ? `No ${STATUS_LABELS[status].toLowerCase()} projects.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
+        {all.length > 0 && shown.length === 0 && <p className="muted">{query ? `No projects match “${query}”.` : status !== 'all' ? `No projects in ${stages.find((st) => st.key === status)?.name ?? 'that stage'}.` : showArchived ? 'No archived projects.' : 'No active projects.'}</p>}
 
         {(p.listing?.folders.length ?? 0) > 0 && (
           <section className="other-folders">

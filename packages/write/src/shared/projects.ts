@@ -14,16 +14,17 @@ export const PROJECT_DIR = '.cadrel';
 export const PROJECT_FILE = 'project.json';
 export const PROGRESS_FILE = 'progress.json';
 
-export const STATUSES = ['planning', 'drafting', 'revising', 'editing', 'published', 'paused'] as const;
-export type ProjectStatus = (typeof STATUSES)[number];
-export const STATUS_LABELS: Record<ProjectStatus, string> = {
-  planning: 'Planning',
-  drafting: 'Drafting',
-  revising: 'Revising',
-  editing: 'Editing',
-  published: 'Published',
-  paused: 'On hold'
-};
+/**
+ * Where a project is in its Cadrel workflow. Write has no statuses of its own: the host (Cadrel) supplies this read-only,
+ * it's never saved in `project.json`, and it's absent when Write runs without a host.
+ */
+export interface ProjectStage {
+  key: string;
+  name: string;
+  color: string;
+  /** 'review' stages turn on Write's editing-pass behaviour (marking chapters as edited). */
+  category: 'start' | 'active' | 'review' | 'done' | 'hold';
+}
 
 // ---- templates -----------------------------------------------------------------------------
 
@@ -203,7 +204,8 @@ export interface ProjectMeta {
   templateId: string;
   templateName: string;
   createdAt: string;
-  status: ProjectStatus;
+  /** Host-supplied, never persisted (see ProjectStage). */
+  stage?: ProjectStage | null;
   notes: string;
   archived: boolean;
   /** The project-wide goal, used when no manuscript is active. */
@@ -214,7 +216,7 @@ export interface ProjectMeta {
   manuscriptGoals: Record<string, Goal>;
   /** Folders (relative, "/" separated) whose words do not count toward the goal. */
   excludedFolders: string[];
-  /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's status. */
+  /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's stage. */
   editedChapters: Record<string, string[]>;
   overrides: ProjectOverrides;
 }
@@ -237,7 +239,6 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     templateId: t.id,
     templateName: t.name,
     createdAt: opts.now.toISOString(),
-    status: 'planning',
     notes: '',
     archived: false,
     goal: null,
@@ -260,7 +261,6 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
     templateId: text(r.templateId, 'blank', 60),
     templateName: text(r.templateName, 'Blank', 80),
     createdAt: typeof r.createdAt === 'string' && !Number.isNaN(Date.parse(r.createdAt)) ? r.createdAt : new Date(0).toISOString(),
-    status: (STATUSES as readonly string[]).includes(r.status as string) ? (r.status as ProjectStatus) : 'planning',
     notes: longText(r.notes, 5000),
     archived: r.archived === true,
     goal: sanitizeGoal(r.goal, today),

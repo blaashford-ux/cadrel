@@ -1,6 +1,7 @@
 import type { Db } from '../schema.js';
 import { exportUserData } from '../userdata.js';
 import { authorNamesOf, splitPenNames } from '../authors.js';
+import { scopeMatcher, type AuthorScope } from './scope.js';
 
 /**
  * The user's own books. They come from imported KDP reports (which name every title and ASIN the user sells) or are flagged by
@@ -101,8 +102,41 @@ const SELECT = `
   FROM own_book o`;
 
 /** My Books: captured ones first (best rank first), then the ones still to capture, by sales. */
-export function listOwnBooks(db: Db): OwnBookRow[] {
-  return db.prepare(`${SELECT} ORDER BY (snapshots = 0), (overallRank IS NULL), overallRank, paidUnits DESC, title`).all().map(shape);
+export function listOwnBooks(db: Db, scope: AuthorScope = null): OwnBookRow[] {
+  const rows = db.prepare(`${SELECT} ORDER BY (snapshots = 0), (overallRank IS NULL), overallRank, paidUnits DESC, title`).all().map(shape);
+  return scope === null ? rows : rows.filter((b) => inScope(b, scope));
+}
+
+/** Whether a book is under one of the pen names in `scope`: by the author the report gave, else the authors of its captured page. A book with no author known (flagged by hand) is the user's own. */
+export function inScope(b: Pick<OwnBookRow, 'penNames' | 'authorNames'>, scope: AuthorScope): boolean {
+  if (scope === null) return true;
+  const m = scopeMatcher(scope);
+  const names = b.penNames.length ? b.penNames : b.authorNames;
+  if (!names.length) return true;
+  return names.some((n) => m.inScope(n) === true);
+}
+
+/** The books in the library that belong to pen names outside `scope`: what a library filled before the Studio had a scope may hold. */
+export function booksOutsideScope(db: Db, scope: AuthorScope): OwnBookRow[] {
+  return scope === null ? [] : listOwnBooks(db).filter((b) => !inScope(b, scope));
+}
+
+/**
+ * Removes the books of other pen names from the library: their My Books entries, orders, pages read and royalties. Payment reports and KDP's monthly
+ * summaries cover the whole account and cannot be told apart, so they are removed too when anything was. Page captures (market research) stay.
+ * Returns how many books went.
+ */
+export function removeBooksOutsideScope(db: Db, root: string, scope: AuthorScope): number {
+  const out = booksOutsideScope(db, scope).map((b) => b.asin);
+  if (!out.length) return 0;
+  db.transaction(() => {
+    for (const asin of out) {
+      for (const t of ['own_book', 'sales_day', 'kenp_day', 'royalty_month']) db.prepare(`DELETE FROM ${t} WHERE asin = ?`).run(asin);
+    }
+    db.exec('DELETE FROM kdp_summary; DELETE FROM payment_line; DELETE FROM payment;');
+  })();
+  exportUserData(db, root);
+  return out.length;
 }
 
 function shape(r: any): OwnBookRow {

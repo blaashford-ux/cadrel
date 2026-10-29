@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/shell",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Cadrel: the studio suite",
   "main": "dist/main.mjs",
@@ -22,7 +22,10 @@
     "tesseract.js": "^6.0.0"
   },
   "devDependencies": {
+    "@cadrel/finance-desktop": "*",
     "@cadrel/kernel": "*",
+    "@cadrel/service": "*",
+    "@cadrel/store": "*",
     "@cadrel/market-desktop": "*",
     "@cadrel/market-library": "*",
     "@cadrel/market-mcp": "*",
