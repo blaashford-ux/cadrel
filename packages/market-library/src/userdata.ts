@@ -45,6 +45,20 @@ export function removeAnnotation(db: Db, a: { asin: string; kind: 'tag' | 'note'
   return Number(r.changes) > 0;
 }
 
+/** Rename a tag on every book that has it; a name already in use merges the two, and an empty `to` removes the tag everywhere. Returns how many books had it. */
+export function renameTag(db: Db, from: string, to: string): number {
+  const a = from.trim().toLowerCase();
+  const b = to.trim().slice(0, 60).toLowerCase();
+  if (!a) throw new Error('say which tag to rename');
+  if (a === b) return db.scalar<number>("SELECT count(*) FROM annotation WHERE kind = 'tag' AND value = ?", a) ?? 0;
+  return db.transaction(() => {
+    const n = db.scalar<number>("SELECT count(*) FROM annotation WHERE kind = 'tag' AND value = ?", a) ?? 0;
+    if (b) db.prepare("UPDATE OR IGNORE annotation SET value = ? WHERE kind = 'tag' AND value = ?").run(b, a); // a book that already has the new tag keeps its own
+    db.prepare("DELETE FROM annotation WHERE kind = 'tag' AND value = ?").run(a);
+    return n;
+  })();
+}
+
 export function listAnnotations(db: Db, f: { asin?: string; kind?: 'tag' | 'note'; value?: string } = {}): Annotation[] {
   const where: string[] = [];
   const args: string[] = [];

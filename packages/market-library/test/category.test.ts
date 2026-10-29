@@ -91,3 +91,25 @@ describe('renaming a category', () => {
     expect(shown()).toBe('Cozy Fantasy');
   });
 });
+
+describe('renaming a tag', () => {
+  const tagsOf = (asin: string) => lib.db.prepare("SELECT value FROM annotation WHERE asin = ? AND kind = 'tag' ORDER BY value").all(asin).map((r: any) => r.value);
+  it('renames it on every book, merges into an existing tag, and removes it with an empty name', () => {
+    lib.annotate('B0C1R52V2J', 'tag', 'comp-titel');
+    lib.annotate('B0HKTD6M9Z', 'tag', 'comp-titel');
+    lib.annotate('B0HKTD6M9Z', 'tag', 'comp-title');
+    expect(lib.renameTag('Comp-Titel', 'Comp-Title')).toBe(2);
+    expect(tagsOf('B0C1R52V2J')).toEqual(['comp-title']);
+    expect(tagsOf('B0HKTD6M9Z')).toEqual(['comp-title']); // already had it: merged, not duplicated
+    expect(lib.renameTag('comp-title', '')).toBe(2);
+    expect(tagsOf('B0C1R52V2J')).toEqual([]);
+    expect(lib.renameTag('nothing', 'x')).toBe(0);
+    expect(() => lib.renameTag(' ', 'x')).toThrow();
+  });
+  it('is mirrored to the user-data file', () => {
+    lib.annotate('B0C1R52V2J', 'tag', 'a');
+    lib.renameTag('a', 'b');
+    const f = JSON.parse(fs.readFileSync(path.join(root, 'user', 'user-data.json'), 'utf8'));
+    expect(f.annotations.map((x: any) => x.value)).toEqual(['b']);
+  });
+});

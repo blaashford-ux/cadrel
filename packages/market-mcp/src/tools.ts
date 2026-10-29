@@ -650,6 +650,23 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: 'remove_tag',
+    description: 'Take a tag off a book (undo add_tag, e.g. to fix a typo). Changes the library; only call when the user asks.',
+    shape: { asin: asinSchema, tag: z.string().min(1).max(60) },
+    readOnly: false,
+    run: ({ lib }, a) => ({ data: { removed: lib.unannotate(a.asin, 'tag', a.tag) } }),
+  },
+  {
+    name: 'rename_tag',
+    description:
+      'Rename a tag on every book that has it (e.g. fix "comp-titel" to "comp-title"). If the new name is already a tag, the two are merged; an empty new_tag removes the tag from all books. Tags are lower-cased. Changes the library; only call when the user asks.',
+    shape: { tag: z.string().min(1).max(60), new_tag: z.string().max(60).describe('The new name; empty to remove the tag everywhere') },
+    readOnly: false,
+    run: ({ lib }, a) => {
+      try { return { data: { books: lib.renameTag(a.tag, a.new_tag), tag: a.tag.trim().toLowerCase(), now: a.new_tag.trim().toLowerCase() || null } }; } catch (e) { return { error: (e as Error).message }; }
+    },
+  },
+  {
     name: 'add_note',
     description: 'Attach a free-text note to a captured book. Changes the library; only call when the user asks.',
     shape: { asin: asinSchema, note: z.string().min(1).max(4000) },
@@ -657,6 +674,13 @@ export const TOOLS: ToolSpec[] = [
     run: ({ lib }, a) => {
       try { return { data: { added: lib.annotate(a.asin, 'note', a.note) } }; } catch (e) { return { error: (e as Error).message }; }
     },
+  },
+  {
+    name: 'remove_note',
+    description: 'Delete a note from a book. Give the note\'s exact text as get_book shows it. Cannot be undone. Changes the library; only call when the user asks.',
+    shape: { asin: asinSchema, note: z.string().min(1).max(4000) },
+    readOnly: false,
+    run: ({ lib }, a) => ({ data: { removed: lib.unannotate(a.asin, 'note', a.note) } }),
   },
   {
     name: 'exclude_from_category',

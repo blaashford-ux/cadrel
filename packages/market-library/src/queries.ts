@@ -6,7 +6,10 @@ export const categoryNameSql = (alias: string) => `COALESCE((SELECT r.name FROM 
 
 export interface CategorySummary {
   key: string;
+  /** The name shown: the user's own if they renamed it, else Amazon's. */
   name: string | null;
+  /** True when `name` is the user's own (see renameCategory). */
+  renamed: boolean;
   store: string;
   nodeId: string;
   listCaptures: number;
@@ -84,7 +87,7 @@ const LATEST_LISTS = `
 export function listCategories(db: Db): CategorySummary[] {
   return db
     .prepare(
-      `SELECT c.key, ${categoryNameSql('c')} AS name, c.store, c.node_id AS nodeId,
+      `SELECT c.key, ${categoryNameSql('c')} AS name, EXISTS (SELECT 1 FROM category_rename r WHERE r.category_key = c.key) AS renamed, c.store, c.node_id AS nodeId,
          (SELECT count(*) FROM list_capture WHERE category_key = c.key) AS listCaptures,
          (SELECT max(captured_at) FROM list_capture WHERE category_key = c.key) AS lastListCapture,
          (SELECT count(DISTINCT e.asin) FROM list_entry e JOIN (${LATEST_LISTS}) l ON l.id = e.list_capture_id
@@ -95,7 +98,8 @@ export function listCategories(db: Db): CategorySummary[] {
        WHERE EXISTS (SELECT 1 FROM list_capture WHERE category_key = c.key)
        ORDER BY name`,
     )
-    .all() as unknown as CategorySummary[];
+    .all()
+    .map((r: any) => ({ ...r, renamed: !!r.renamed })) as unknown as CategorySummary[];
 }
 
 export function listBooks(db: Db, opts: { categoryKey?: string; search?: string } = {}): BookRow[] {

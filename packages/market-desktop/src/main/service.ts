@@ -1194,6 +1194,11 @@ export class AppService {
     this.dataChanged();
   }
 
+  renameCategory(categoryKey: string, name: string): void {
+    this.need().renameCategory(String(categoryKey), typeof name === 'string' ? name : '');
+    this.dataChanged();
+  }
+
   restoreToCategory(asin: string, categoryKey: string): void {
     assertAsin(asin);
     this.need().restoreToCategory(asin, String(categoryKey));

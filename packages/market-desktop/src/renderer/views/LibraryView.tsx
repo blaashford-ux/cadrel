@@ -18,6 +18,11 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [sub, setSub] = useState<'all' | 'mine'>('all');
+  const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
+  const [err, setErr] = useState('');
+  const rename = async (key: string, name: string) => {
+    try { await api.renameCategory(key, name); setEditing(null); setErr(''); setCats(await api.categories()); } catch (e) { setErr((e as Error).message); }
+  };
   useEffect(() => { if (show) setOpen(show.asin); }, [show]);
 
   useEffect(() => { void api.categories().then(setCats); }, [version]);
@@ -52,7 +57,19 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
       <div className="grid3">
         {cats.map((c) => (
           <div className="card" key={c.key}>
-            <button className="link" onClick={() => void api.openShelf(c.key).catch(() => {})} title={`Open ${c.name ?? c.key} Best Sellers on Amazon to capture it again`}><strong>{c.name ?? c.key}</strong></button>
+            {editing?.key === c.key ? (
+              <form className="row" onSubmit={(e) => { e.preventDefault(); void rename(c.key, editing.name); }}>
+                <input autoFocus aria-label={`New name for ${c.name ?? c.key}`} placeholder="Leave empty to use Amazon's name" maxLength={120} value={editing.name} onChange={(e) => setEditing({ key: c.key, name: e.target.value })} onKeyDown={(e) => { if (e.key === 'Escape') setEditing(null); }} />
+                <button type="submit">Save</button>
+                <button type="button" className="link" onClick={() => setEditing(null)}>Cancel</button>
+              </form>
+            ) : (
+              <>
+                <button className="link" onClick={() => void api.openShelf(c.key).catch(() => {})} title={`Open ${c.name ?? c.key} Best Sellers on Amazon to capture it again`}><strong>{c.name ?? c.key}</strong></button>
+                {' '}<button className="link" aria-label={`Rename ${c.name ?? c.key}`} title={c.renamed ? 'Rename it, or leave the name empty to go back to the name Amazon gives it' : 'Give this category your own name (the name Amazon gives it is kept)'} onClick={() => setEditing({ key: c.key, name: c.renamed ? (c.name ?? '') : '' })}>Rename</button>
+                {c.renamed && <> <span className="muted">(your name)</span> <button className="link" onClick={() => void rename(c.key, '')}>Reset</button></>}
+              </>
+            )}
             <div className="muted">{c.store} · {c.listCaptures} list capture{c.listCaptures === 1 ? '' : 's'}</div>
             <div className="muted">{c.lastListCapture ? `Last captured ${c.lastListCapture.slice(0, 10)} · ${daysSince(c.lastListCapture)} day${daysSince(c.lastListCapture) === 1 ? '' : 's'} ago` : 'Never captured'}</div>
             <div>{c.capturedBooks} of {c.listedBooks} listed books captured</div>
@@ -60,6 +77,7 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
         ))}
         {cats.length === 0 && <p className="muted">No lists captured yet.</p>}
       </div>
+      {err && <p role="alert" className="err">{err}</p>}
       <h2>Books</h2>
       <div className="row">
         <select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category">

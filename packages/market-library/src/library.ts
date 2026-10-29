@@ -16,7 +16,7 @@ import {
 import { openDb, type Db } from './schema.js';
 import { rechunkBook, saveTextBlocks } from './chunks.js';
 import { resetVectors } from './embeddings.js';
-import { addAnnotation, exportUserData, importUserData, removeAnnotation } from './userdata.js';
+import { addAnnotation, exportUserData, importUserData, removeAnnotation, renameTag } from './userdata.js';
 import { setQueueState } from './queries.js';
 import { renameCategory } from './category.js';
 import { reindexCommunity } from './community.js';
@@ -94,6 +94,13 @@ export class Library {
     const added = addAnnotation(this.db, { asin, kind, value });
     exportUserData(this.db, this.root);
     return added;
+  }
+
+  /** Rename a tag on every book (merging into an existing tag of that name; an empty name removes it). Returns how many books had it. */
+  renameTag(from: string, to: string): number {
+    const n = renameTag(this.db, from, to);
+    exportUserData(this.db, this.root);
+    return n;
   }
 
   unannotate(asin: string, kind: 'tag' | 'note', value: string): boolean {

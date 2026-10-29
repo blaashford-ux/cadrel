@@ -150,6 +150,22 @@ export function editNote(notes: Note[], id: string, patch: { body?: string; cate
   });
 }
 
+/** Change a topic on every note that has it, or (with `to` empty) take it off them; `to` being a topic already in use merges the two. Deleted notes are renamed too, so a merge of stores agrees. */
+export function renameTopic(notes: Note[], from: string, to: string | null): { notes: Note[]; changed: number } {
+  const a = normalizeCategory(from);
+  if (!a) fail('Say which topic to rename.');
+  const b = normalizeCategory(to);
+  const now = new Date().toISOString();
+  let changed = 0;
+  const next = notes.map((n) => {
+    if (n.category !== a || a === b) return n;
+    changed++;
+    const { category: _, ...rest } = n;
+    return { ...rest, ...(b ? { category: b } : {}), updatedAt: now };
+  });
+  return { notes: next, changed };
+}
+
 export function replyToNote(notes: Note[], id: string, reply: { author: string; body: string; now?: string }): Note[] {
   return change(notes, id, (n) => ({
     ...n,
