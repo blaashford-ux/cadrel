@@ -1,6 +1,6 @@
 import type { Db } from './schema.js';
 import type { CategorySummary } from './queries.js';
-import { listCategories } from './queries.js';
+import { categoryNameSql, listCategories } from './queries.js';
 import { authorNamesOf } from './authors.js';
 
 export interface CategoryBook {
@@ -33,6 +33,21 @@ export function resolveCategory(db: Db, ref: string): { category: CategorySummar
   if (loose.length === 1) return { category: loose[0]! };
   const names = all.map((c) => `${c.name ?? '?'} (${c.key})`).join('; ');
   return { error: loose.length > 1 ? `ambiguous category "${ref}": ${loose.map((c) => c.key).join(', ')}` : `no category matches "${ref}". Known: ${names || 'none captured yet'}` };
+}
+
+export const CATEGORY_NAME_MAX = 120;
+
+/**
+ * Give a category your own name, or (with `name` null or empty) go back to the name Amazon gives it. The name is kept apart from the
+ * captured one, so it survives re-captures and rebuilds. Returns the name now shown and the one it replaced.
+ */
+export function renameCategory(db: Db, categoryKey: string, name: string | null, now = new Date().toISOString()): { name: string | null; previous: string | null } {
+  if (!db.scalar('SELECT 1 FROM category WHERE key = ?', categoryKey)) throw new Error(`no category ${categoryKey}`);
+  const previous = db.scalar<string>(`SELECT ${categoryNameSql('c')} FROM category c WHERE c.key = ?`, categoryKey) ?? null;
+  const clean = (name ?? '').replace(/\s+/g, ' ').trim().slice(0, CATEGORY_NAME_MAX);
+  if (!clean) db.prepare('DELETE FROM category_rename WHERE category_key = ?').run(categoryKey);
+  else db.prepare('INSERT INTO category_rename (category_key, name, renamed_at) VALUES (?,?,?) ON CONFLICT(category_key) DO UPDATE SET name = excluded.name, renamed_at = excluded.renamed_at').run(categoryKey, clean, now);
+  return { name: db.scalar<string>(`SELECT ${categoryNameSql('c')} FROM category c WHERE c.key = ?`, categoryKey) ?? null, previous };
 }
 
 /** Everything known about the books on a category's newest list captures, best rank first. */

@@ -1,6 +1,9 @@
 import type { Db } from './schema.js';
 import { authorNamesOf } from './authors.js';
 
+/** SQL for a category's name as the user sees it: their own name for it if they gave one, else Amazon's. `alias` is the category table's alias. */
+export const categoryNameSql = (alias: string) => `COALESCE((SELECT r.name FROM category_rename r WHERE r.category_key = ${alias}.key), ${alias}.name)`;
+
 export interface CategorySummary {
   key: string;
   name: string | null;
@@ -81,7 +84,7 @@ const LATEST_LISTS = `
 export function listCategories(db: Db): CategorySummary[] {
   return db
     .prepare(
-      `SELECT c.key, c.name, c.store, c.node_id AS nodeId,
+      `SELECT c.key, ${categoryNameSql('c')} AS name, c.store, c.node_id AS nodeId,
          (SELECT count(*) FROM list_capture WHERE category_key = c.key) AS listCaptures,
          (SELECT max(captured_at) FROM list_capture WHERE category_key = c.key) AS lastListCapture,
          (SELECT count(DISTINCT e.asin) FROM list_entry e JOIN (${LATEST_LISTS}) l ON l.id = e.list_capture_id
@@ -90,7 +93,7 @@ export function listCategories(db: Db): CategorySummary[] {
             WHERE l.category_key = c.key AND e.asin IN (SELECT asin FROM snapshot)) AS capturedBooks
        FROM category c
        WHERE EXISTS (SELECT 1 FROM list_capture WHERE category_key = c.key)
-       ORDER BY c.name`,
+       ORDER BY name`,
     )
     .all() as unknown as CategorySummary[];
 }
@@ -110,7 +113,7 @@ export function listBooks(db: Db, opts: { categoryKey?: string; search?: string 
          (SELECT r.rank FROM rank_entry r WHERE r.snapshot_id = s.id AND r.scope = 'overall' AND r.store = 'kindle') AS overallRank,
          (SELECT e.rank FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id
             WHERE e.asin = b.asin AND (?1 IS NULL OR l.category_key = ?1) ORDER BY l.captured_at DESC, e.rank LIMIT 1) AS listRank,
-         (SELECT c.name FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id JOIN category c ON c.key = l.category_key
+         (SELECT ${categoryNameSql('c')} FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id JOIN category c ON c.key = l.category_key
             WHERE e.asin = b.asin AND (?1 IS NULL OR l.category_key = ?1) ORDER BY l.captured_at DESC, e.rank LIMIT 1) AS listCategory,
          (SELECT CASE WHEN count(CASE source WHEN 'upload' THEN 1 END) > 0 THEN 'manuscript' WHEN count(*) > 0 THEN 'sample' END FROM manuscript WHERE asin = b.asin) AS text,
          EXISTS (SELECT 1 FROM own_book WHERE asin = b.asin) AS own
@@ -187,7 +190,7 @@ export function listIssues(db: Db): { source: string; ref: string; field: string
 export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boolean } = {}): QueueItem[] {
   const fromLists = opts.categoryKey === UNCATEGORISED ? [] : (db
     .prepare(
-      `SELECT e.asin, min(e.rank) AS rank, l.category_key AS categoryKey, c.name AS categoryName,
+      `SELECT e.asin, min(e.rank) AS rank, l.category_key AS categoryKey, ${categoryNameSql('c')} AS categoryName,
          max(e.title) AS title, max(e.author) AS author, max(e.price) AS price, q.state AS qstate
        FROM list_entry e
        JOIN (${LATEST_LISTS}) l ON l.id = e.list_capture_id

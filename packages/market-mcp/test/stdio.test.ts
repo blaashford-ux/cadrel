@@ -188,6 +188,15 @@ describe('MCP server over stdio', () => {
     expect((await call('exclude_from_category', { asin: 'nope', category: CAT })).isError).toBe(true);
   });
 
+  it('renames a category, then finds it by the new name, and restores Amazon\'s', async () => {
+    const was = (await call('list_categories')).json.categories?.[0]?.name ?? (await call('list_categories')).json[0]?.name;
+    const r = await call('rename_category', { category: CAT, name: 'Cozy Fantasy' });
+    expect(r.json).toMatchObject({ category: CAT, name: 'Cozy Fantasy', previous: was });
+    expect((await call('category_overview', { category: 'cozy fantasy' })).isError).toBeFalsy();
+    expect((await call('rename_category', { category: CAT, name: '' })).json).toMatchObject({ name: was });
+    expect((await call('rename_category', { category: 'nope', name: 'x' })).isError).toBe(true);
+  });
+
   it('rejects bad input without crashing', async () => {
     expect((await call('get_book', { asin: 'nope' })).isError).toBe(true);
     expect((await call('top_books', { category: CAT, limit: 9999 })).isError).toBe(true);

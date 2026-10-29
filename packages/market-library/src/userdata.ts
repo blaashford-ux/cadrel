@@ -26,6 +26,7 @@ interface UserFile {
     paid: { payee: string; personId: number | null; paidOn: string; usd: number; period: string; note: string | null; createdAt: string }[];
   };
   excluded?: { categoryKey: string; asin: string; title: string | null; excludedAt: string }[];
+  renamed?: { categoryKey: string; name: string; renamedAt: string }[];
 }
 
 const file = (root: string) => path.join(root, 'user', 'user-data.json');
@@ -63,6 +64,7 @@ export function exportUserData(db: Db, root: string): void {
     annotations: listAnnotations(db),
     ownBooks: db.prepare('SELECT asin, title, author, source, added_at AS addedAt FROM own_book ORDER BY asin').all() as unknown as NonNullable<UserFile['ownBooks']>,
     excluded: db.prepare('SELECT category_key AS categoryKey, asin, title, excluded_at AS excludedAt FROM category_exclusion ORDER BY category_key, asin').all() as unknown as NonNullable<UserFile['excluded']>,
+    renamed: db.prepare('SELECT category_key AS categoryKey, name, renamed_at AS renamedAt FROM category_rename ORDER BY category_key').all() as unknown as NonNullable<UserFile['renamed']>,
     money: {
       people: (db.prepare('SELECT id, name, pen_names AS pen FROM person ORDER BY id').all() as unknown as { id: number; name: string; pen: string }[]).map((r) => ({ id: r.id, name: r.name, penNames: JSON.parse(r.pen) as string[] })),
       splits: db.prepare('SELECT asin, from_month AS fromMonth, person_id AS personId, pct FROM book_split ORDER BY asin, from_month, person_id').all() as unknown as NonNullable<UserFile['money']>['splits'],
@@ -87,9 +89,10 @@ export function importUserData(db: Db, root: string): boolean {
   const hasOther = !!(db.scalar<number>('SELECT count(*) FROM queue_item') || db.scalar<number>('SELECT count(*) FROM annotation'));
   const hasOwn = !!db.scalar<number>('SELECT count(*) FROM own_book');
   const hasExcluded = !!db.scalar<number>('SELECT count(*) FROM category_exclusion');
+  const hasRenamed = !!db.scalar<number>('SELECT count(*) FROM category_rename');
   const hasMoney = !!(db.scalar<number>('SELECT count(*) FROM person') || db.scalar<number>('SELECT count(*) FROM fx_rate') || db.scalar<number>('SELECT count(*) FROM kenp_rate'));
   const hasPayouts = !!(db.scalar<number>('SELECT count(*) FROM payment_allocated') || db.scalar<number>('SELECT count(*) FROM payout'));
-  if (hasOther && hasOwn && hasExcluded && hasMoney && hasPayouts) return false;
+  if (hasOther && hasOwn && hasExcluded && hasRenamed && hasMoney && hasPayouts) return false;
   let data: UserFile;
   try {
     data = JSON.parse(fs.readFileSync(file(root), 'utf8')) as UserFile;
@@ -116,6 +119,11 @@ export function importUserData(db: Db, root: string): boolean {
     if (!hasExcluded) {
       for (const x of data.excluded ?? []) {
         if (/^[A-Z0-9]{10}$/.test(x.asin) && typeof x.categoryKey === 'string') db.prepare('INSERT OR IGNORE INTO category_exclusion (category_key, asin, title, excluded_at) VALUES (?,?,?,?)').run(x.categoryKey, x.asin, x.title ?? null, x.excludedAt);
+      }
+    }
+    if (!hasRenamed) {
+      for (const x of data.renamed ?? []) {
+        if (typeof x.categoryKey === 'string' && typeof x.name === 'string' && x.name.trim()) db.prepare('INSERT OR IGNORE INTO category_rename (category_key, name, renamed_at) VALUES (?,?,?)').run(x.categoryKey, x.name.trim(), x.renamedAt);
       }
     }
     if (hasOther) return;

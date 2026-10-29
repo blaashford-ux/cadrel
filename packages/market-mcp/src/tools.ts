@@ -675,6 +675,18 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: 'rename_category',
+    description:
+      'Give a category your own name (e.g. "Cozy Fantasy" for Amazon\'s "Humorous Fantasy"), or pass an empty name to go back to the name Amazon gives it. The new name shows everywhere the category is listed and can be used to refer to it afterwards; its key does not change, and it survives re-capturing the list. Changes the library; only call when the user asks.',
+    shape: { category: categoryArg, name: z.string().max(120).describe('The new name; empty to restore Amazon\'s name') },
+    readOnly: false,
+    run: (ctx, a) => {
+      const r = resolve(ctx, a.category);
+      if ('error' in r) return r;
+      try { return { data: { category: r.category.key, ...ctx.lib.renameCategory(r.category.key, a.name) } }; } catch (e) { return { error: (e as Error).message }; }
+    },
+  },
+  {
     name: 'remove_book',
     description:
       'DELETE a book that was captured by mistake: its captured pages, covers, attached text, tags and notes are removed from the library and from disk and cannot be recovered (the user can capture it again). Without also_exclude_from_categories it stays on bestseller lists as a book that is not captured yet. For a book that is merely the wrong genre in one category, use exclude_from_category instead. Only call when the user explicitly asks to delete this book.',

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Library, categoryBooks, cohortStats, resolveCategory, summarize } from '../src/index.js';
+import { Library, categoryBooks, cohortStats, listCategories, resolveCategory, summarize } from '../src/index.js';
 
 const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const read = (n: string) => zlib.gunzipSync(fs.readFileSync(path.join(FIX, n))).toString('utf8');
@@ -55,5 +55,39 @@ describe('categoryBooks and cohortStats', () => {
     expect(s.top.metrics.price!.known).toBe(5);
     expect(s.top.metrics.pages!.known).toBe(2); // only the captured ones have page counts
     expect(s.rest.books).toBeGreaterThan(20);
+  });
+});
+
+describe('renaming a category', () => {
+  const shown = () => listCategories(lib.db).find((c) => c.key === KEY)?.name;
+  const relist = () => lib.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: read('bestsellers-kindle-humorous-fantasy.html.gz'), capturedAt: '2026-10-19T12:00:00Z' });
+
+  it('shows the new name, finds the category by it, and keeps it through a re-capture and a rebuild', () => {
+    const amazon = shown();
+    const r = lib.renameCategory(KEY, '  Cozy   Fantasy ');
+    expect(r).toEqual({ name: 'Cozy Fantasy', previous: amazon });
+    expect(shown()).toBe('Cozy Fantasy');
+    expect(resolveCategory(lib.db, 'cozy fantasy')).toMatchObject({ category: { key: KEY } });
+    relist();
+    expect(shown()).toBe('Cozy Fantasy');
+    lib.rebuild();
+    expect(shown()).toBe('Cozy Fantasy');
+  });
+
+  it('goes back to Amazon\'s name with an empty name, and refuses an unknown category', () => {
+    const amazon = shown();
+    lib.renameCategory(KEY, 'Mine');
+    expect(lib.renameCategory(KEY, '  ').name).toBe(amazon);
+    expect(shown()).toBe(amazon);
+    expect(() => lib.renameCategory('amazon.com:kindle:0', 'x')).toThrow(/no category/);
+  });
+
+  it('is restored from the user-data file when the database is lost', () => {
+    lib.renameCategory(KEY, 'Cozy Fantasy');
+    lib.close();
+    for (const f of fs.readdirSync(root)) if (/\.db(-wal|-shm)?$/.test(f)) fs.rmSync(path.join(root, f));
+    lib = Library.open(root);
+    lib.rebuild();
+    expect(shown()).toBe('Cozy Fantasy');
   });
 });

@@ -142,11 +142,11 @@ describe('schema', () => {
     // make the database look like the one 0.2.3 wrote: none of the 0.3.0 tables, version 7
     lib.db.exec(`DROP TABLE keyword_lookup; DROP TABLE keyword_signal; DROP TABLE keyword_trend; DROP TABLE search_entry; DROP TABLE search_capture;
       DROP TABLE sales_day; DROP TABLE rank_point; DROP TABLE kenp_day; DROP TABLE book_kenpc; DROP TABLE own_book; DROP TABLE keyword_history; DROP TABLE category_exclusion; DROP TABLE keyword_category;
-      DROP TABLE royalty_month; DROP TABLE kdp_summary; DROP TABLE fx_rate; DROP TABLE kenp_rate; DROP TABLE book_split; DROP TABLE person; DROP TABLE payment_line; DROP TABLE payment; DROP TABLE payment_allocation; DROP TABLE payment_allocated; DROP TABLE payout; PRAGMA user_version = 7;`);
+      DROP TABLE royalty_month; DROP TABLE kdp_summary; DROP TABLE fx_rate; DROP TABLE kenp_rate; DROP TABLE book_split; DROP TABLE person; DROP TABLE payment_line; DROP TABLE payment; DROP TABLE payment_allocation; DROP TABLE payment_allocated; DROP TABLE payout; DROP TABLE category_rename; PRAGMA user_version = 7;`);
     lib.close();
     lib = Library.open(root);
     expect(lib.db.scalar('PRAGMA user_version')).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(17);
+    expect(SCHEMA_VERSION).toBe(18);
     for (const t of ['keyword_lookup', 'search_capture', 'sales_day', 'kenp_day', 'own_book', 'keyword_history', 'keyword_category', 'royalty_month', 'person', 'book_split', 'payment', 'payment_line', 'payment_allocation', 'payout']) expect(lib.db.scalar('SELECT count(*) FROM ' + t)).toBe(0);
     expect(lib.db.scalar('SELECT count(*) FROM snapshot')).toBe(1);
     expect(lib.db.scalar('SELECT count(*) FROM community_source')).toBe(0); // schema 7 tables are untouched

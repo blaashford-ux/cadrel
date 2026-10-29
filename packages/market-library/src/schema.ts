@@ -567,6 +567,15 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // The user's own name for a category. The name Amazon gives it is rewritten by every list capture, so a rename is kept apart from it
+  // (and from the category row, which a rebuild recreates). User-authored: mirrored to user/user-data.json.
+  `
+  CREATE TABLE category_rename (
+    category_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    renamed_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDb(file: string): Db {

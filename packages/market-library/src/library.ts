@@ -18,6 +18,7 @@ import { rechunkBook, saveTextBlocks } from './chunks.js';
 import { resetVectors } from './embeddings.js';
 import { addAnnotation, exportUserData, importUserData, removeAnnotation } from './userdata.js';
 import { setQueueState } from './queries.js';
+import { renameCategory } from './category.js';
 import { reindexCommunity } from './community.js';
 import { excludeFromCategory, excludedAsins, insertListEntry, refreshDerived, removeBook, purgeBook, restoreToCategory, type RemovedBook } from './removal.js';
 import { reindexSales } from './sales/import.js';
@@ -124,6 +125,13 @@ export class Library {
 
   restoreToCategory(asin: string, categoryKey: string): { entries: number } {
     const r = restoreToCategory(this.db, this.root, asin, categoryKey);
+    exportUserData(this.db, this.root);
+    return r;
+  }
+
+  /** Give a category your own name (null to go back to Amazon's); it survives re-captures and rebuilds. */
+  renameCategory(categoryKey: string, name: string | null): { name: string | null; previous: string | null } {
+    const r = renameCategory(this.db, categoryKey, name);
     exportUserData(this.db, this.root);
     return r;
   }
