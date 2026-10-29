@@ -269,16 +269,31 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
   server.registerTool(
     'studio_update_note',
     {
-      description: 'Reply to a studio note, or mark it resolved (or open again). Only notes from studio_notes whose id starts with "n_" can be changed here; manuscript notes use reply_to_note.',
-      inputSchema: { id: z.string(), reply: z.string().optional(), status: z.enum(['open', 'resolved']).optional() }
+      description: 'Reply to a studio note, mark it resolved (or open again), or change its topic. Only notes from studio_notes whose id starts with "n_" can be changed here; manuscript notes use reply_to_note.',
+      inputSchema: { id: z.string(), reply: z.string().optional(), status: z.enum(['open', 'resolved']).optional(), topic: z.string().optional().describe('Change the note\'s topic; empty to remove it.') }
     },
     (a) =>
       guarded(async () => {
         if (!a.id.startsWith('n_')) throw new NoteError('That is a manuscript note; use reply_to_note for it.');
         if (a.reply !== undefined) await o.studio.replyToNote(a.id, { author: who(), body: a.reply });
         if (a.status) await o.studio.setNoteStatus(a.id, a.status);
+        if (a.topic !== undefined) await o.studio.editNote(a.id, { category: a.topic });
         const d = await o.studio.read();
         return view(d.tree, d.notes.find((n) => n.id === a.id)!);
+      })
+  );
+
+  server.registerTool(
+    'studio_rename_topic',
+    {
+      description:
+        'Rename a note topic on every studio note that has it, e.g. to fix a spelling or merge "pacing " into "pacing"; an empty new_topic removes the topic from them. Topics are lower-cased and trimmed. Manuscript review notes keep their own topics and are not changed. Changes the studio; only call when the user asks.',
+      inputSchema: { topic: z.string().describe('The topic as shown by studio_notes'), new_topic: z.string().describe('The new topic; empty to remove') }
+    },
+    (a) =>
+      guarded(async () => {
+        const changed = await o.studio.renameNoteTopic(a.topic, a.new_topic);
+        return { changed, topic: a.topic.trim().toLowerCase(), now: a.new_topic.trim().toLowerCase() || null };
       })
   );
 }

@@ -9,7 +9,7 @@ import { Studio, UserStore } from '@cadrel/studio';
 import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { createCadrelServer, studioModule, writeModule } from '../src/index.js';
 
-const NAMES = ['studio_user', 'studio_user_file', 'studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project'];
+const NAMES = ['studio_user', 'studio_user_file', 'studio_add_note', 'studio_create_project', 'studio_link', 'studio_notes', 'studio_projects', 'studio_update_note', 'studio_update_project', 'studio_rename_topic'];
 
 let studio: Studio;
 let user: UserStore;
@@ -180,5 +180,25 @@ describe('studio tools', () => {
     expect((await call('studio_notes', { status: 'resolved' })).json().notes[0].replies).toEqual([{ by: 'Claude', body: 'Done in chapter 3.' }]);
     expect((await call('studio_notes')).json().total).toBe(0);
     expect((await call('studio_update_note', { id: 'write:DR1:x', status: 'resolved' })).text).toMatch(/reply_to_note/);
+  });
+
+  it('renames, merges and clears a topic across notes, and changes one note\'s topic', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Book' });
+    const add = async (topic: string) => (await call('studio_add_note', { body: `on ${topic}`, project: 'Book', topic })).json();
+    const a = await add('Pacing');
+    await add('pacing ');
+    await add('plot');
+    const topics = async () => ((await call('studio_notes', { status: 'any' })).json().notes as { topic?: string }[]).map((n) => n.topic).sort();
+    expect(await topics()).toEqual(['pacing', 'pacing', 'plot']);
+    expect((await call('studio_rename_topic', { topic: 'Pacing', new_topic: 'Rhythm' })).json()).toMatchObject({ changed: 2, now: 'rhythm' });
+    expect(await topics()).toEqual(['plot', 'rhythm', 'rhythm']);
+    expect((await call('studio_rename_topic', { topic: 'plot', new_topic: 'rhythm' })).json().changed).toBe(1); // merge
+    expect((await call('studio_rename_topic', { topic: 'nothing', new_topic: 'x' })).json().changed).toBe(0);
+    expect((await call('studio_rename_topic', { topic: ' ', new_topic: 'x' })).isError).toBe(true);
+    await call('studio_update_note', { id: a.id, topic: 'voice' });
+    expect(await topics()).toEqual(['rhythm', 'rhythm', 'voice']);
+    expect((await call('studio_rename_topic', { topic: 'rhythm', new_topic: '' })).json()).toMatchObject({ changed: 2, now: null });
+    expect(await topics()).toEqual(['voice', undefined, undefined]);
   });
 });

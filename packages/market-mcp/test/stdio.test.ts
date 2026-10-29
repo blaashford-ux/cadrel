@@ -188,6 +188,29 @@ describe('MCP server over stdio', () => {
     expect((await call('exclude_from_category', { asin: 'nope', category: CAT })).isError).toBe(true);
   });
 
+  it('renames a category, then finds it by the new name, and restores Amazon\'s', async () => {
+    const was = (await call('list_categories')).json.categories?.[0]?.name ?? (await call('list_categories')).json[0]?.name;
+    const r = await call('rename_category', { category: CAT, name: 'Cozy Fantasy' });
+    expect(r.json).toMatchObject({ category: CAT, name: 'Cozy Fantasy', previous: was });
+    expect((await call('category_overview', { category: 'cozy fantasy' })).isError).toBeFalsy();
+    expect((await call('rename_category', { category: CAT, name: '' })).json).toMatchObject({ name: was });
+    expect((await call('rename_category', { category: 'nope', name: 'x' })).isError).toBe(true);
+  });
+
+  it('removes and renames tags, and removes a note', async () => {
+    const a = 'B0C1R52V2J', b = 'B0HKTD6M9Z';
+    await call('add_tag', { asin: a, tag: 'comp-titel' });
+    await call('add_tag', { asin: b, tag: 'comp-titel' });
+    await call('add_note', { asin: a, note: 'oops' });
+    expect((await call('rename_tag', { tag: 'comp-titel', new_tag: 'comp-title' })).json).toMatchObject({ books: 2, now: 'comp-title' });
+    expect((await call('list_books_by_tag', { tag: 'comp-title' })).json).toHaveLength(2);
+    expect((await call('remove_tag', { asin: a, tag: 'comp-title' })).json).toEqual({ removed: true });
+    expect((await call('remove_tag', { asin: a, tag: 'comp-title' })).json).toEqual({ removed: false });
+    expect((await call('list_books_by_tag', { tag: 'comp-title' })).json).toHaveLength(1);
+    expect((await call('remove_note', { asin: a, note: 'oops' })).json).toEqual({ removed: true });
+    expect((await call('get_book', { asin: a })).json.notes).not.toContainEqual(expect.objectContaining({ note: 'oops' }));
+  });
+
   it('rejects bad input without crashing', async () => {
     expect((await call('get_book', { asin: 'nope' })).isError).toBe(true);
     expect((await call('top_books', { category: CAT, limit: 9999 })).isError).toBe(true);

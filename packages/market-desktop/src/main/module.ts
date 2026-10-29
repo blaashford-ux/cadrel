@@ -200,6 +200,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     setQueueState: (a: string, s) => service.setQueueState(a, s),
     excludeFromCategory: (a: string, c: string) => service.excludeFromCategory(a, c),
     restoreToCategory: (a: string, c: string) => service.restoreToCategory(a, c),
+    renameCategory: (c: string, n: string) => service.renameCategory(c, n),
     categoryExclusions: (c?: string) => service.categoryExclusions(c),
     bookLists: (a: string) => service.bookLists(a),
     removeBook: (a: string, x?: boolean) => service.removeBook(a, x),

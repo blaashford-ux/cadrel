@@ -415,6 +415,23 @@ describe('AppService', () => {
       expect(() => svc.removeText(ASIN, 'evil' as 'upload')).toThrow(/bad source/);
     });
 
+    it('renames a category, tells the window to reload, and goes back to Amazon\'s name', async () => {
+      await prep(48146);
+      const key = 'amazon.com:kindle:11650864011';
+      expect((await post(48146, svc.token(), { kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: gz('bestsellers-kindle-humorous-fantasy.html.gz') })).status).toBe(200);
+      const amazon = svc.categories()[0]!;
+      expect(amazon.renamed).toBe(false);
+      let reloads = 0;
+      svc.onCapture(() => { reloads++; });
+      svc.renameCategory(key, 'Cozy Fantasy');
+      expect(svc.categories()[0]).toMatchObject({ key, name: 'Cozy Fantasy', renamed: true });
+      svc.renameCategory(key, '');
+      expect(svc.categories()[0]).toMatchObject({ name: amazon.name, renamed: false });
+      expect(() => svc.renameCategory('amazon.com:kindle:0', 'x')).toThrow(/no category/);
+      expect(reloads).toBe(2);
+      await svc.stop();
+    });
+
     it('takes a book out of a category or the library, tells the window to reload, and can restore', async () => {
       await prep(48145);
       const key = 'amazon.com:kindle:11650864011';
