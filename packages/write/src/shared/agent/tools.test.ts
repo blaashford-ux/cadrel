@@ -285,3 +285,21 @@ describe('projects shared for editing', () => {
     expect(files.map((f) => f.id)).toEqual(['ai-claude']);
   });
 });
+
+describe('finding outlines', () => {
+  it('lists files named or kept like an outline, best guess first, and reads one', async () => {
+    const { listOutlines, readOutline } = await import('./tools');
+    const { MemoryFs } = await import('../memoryFs');
+    const fs = new MemoryFs();
+    fs.seed('/books/Novel/.cadrel/project.json', '{}');
+    fs.seed('/books/Novel/Manuscript/Chapter 1.md', '# One\n\nText.\n');
+    fs.seed('/books/Novel/Synopsis.md', 'A short synopsis.\n');
+    fs.seed('/books/Novel/Outline.md', '# The plan\n\nBeat one.\n');
+    fs.seed('/books/Novel/Plot/Act two.md', 'Act two beats.\n');
+    fs.seed('/books/Novel/Characters/Mira.md', 'Mira.\n');
+    const ctx = { fs, root: '/books', agent: 'ai', agentName: 'AI' };
+    expect((await listOutlines(ctx)).map((o) => [o.file, o.title, o.match])).toEqual([['Outline.md', 'The plan', 'name'], ['Synopsis.md', 'Synopsis', 'name'], ['Plot/Act two.md', 'Act two', 'folder']]);
+    expect(await readOutline(ctx, 'Novel', 'Outline.md')).toMatchObject({ text: '# The plan\n\nBeat one.\n', truncated: false });
+    await expect(readOutline(ctx, 'Novel', '../x.md')).rejects.toThrow();
+  });
+});

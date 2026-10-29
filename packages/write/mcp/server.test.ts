@@ -14,8 +14,8 @@ beforeEach(() => {
   fs.seed('/books/Novel/Book.md', BOOK);
 });
 
-async function connect(clientName: string, agent?: string) {
-  const server = createServer({ fs, root: '/books', agent });
+async function connect(clientName: string, agent?: string, access?: () => Promise<{ createFiles: boolean; editFiles: boolean }>) {
+  const server = createServer({ fs, root: '/books', agent, access });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: clientName, version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -30,7 +30,7 @@ describe('the Cadrel Write MCP server', () => {
   it('offers the tools, with read-only ones marked', async () => {
     const { client } = await connect('claude-ai');
     const tools = (await client.listTools()).tools;
-    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'set_chapters_edited', 'withdraw_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'create_file', 'edit_file', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'set_chapters_edited', 'withdraw_note']);
     expect(tools.find((t) => t.name === 'read_chapter')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === 'add_notes')?.annotations?.readOnlyHint).toBe(false);
     expect(tools.find((t) => t.name === 'set_chapters_edited')?.annotations?.readOnlyHint).toBe(false);
@@ -152,3 +152,53 @@ describe('when the projects folder is wrong', () => {
     expect(out.message).toMatch(/Open Folder/);
   });
 });
+
+describe('creating and editing files (off unless the author allows it)', () => {
+  const on = { createFiles: true, editFiles: true };
+
+  it('refuses both while nothing is allowed, and writes nothing', async () => {
+    for (const access of [undefined, async () => ({ createFiles: false, editFiles: false })]) {
+      const { call } = await connect('claude-ai', undefined, access);
+      const made = await call('create_file', { project: 'Novel', file: 'Two.md', content: '# Hi\n' });
+      expect(made.isError).toBe(true);
+      expect(made.text).toMatch(/Settings → MCP/);
+      const edited = await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'river ran cold', new_text: 'river ran icy' }] });
+      expect(edited.isError).toBe(true);
+    }
+    expect(await fs.stat('/books/Novel/Two.md')).toBeNull();
+    expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
+  });
+
+  it('treats each permission on its own, and re-reads it on every call', async () => {
+    let access = { createFiles: true, editFiles: false };
+    const { call } = await connect('claude-ai', undefined, async () => access);
+    expect((await call('create_file', { project: 'Novel', file: 'Manuscript/Two.md', content: '# Two\n\nText here.\n' })).json()).toMatchObject({ file: 'Manuscript/Two.md', chapters: 1 });
+    expect((await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'cold', new_text: 'icy' }] })).isError).toBe(true);
+    access = { createFiles: false, editFiles: true };
+    expect((await call('create_file', { project: 'Novel', file: 'Three.md', content: 'x' })).isError).toBe(true);
+    expect((await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'river ran cold', new_text: 'river ran icy' }] })).isError).toBe(false);
+    expect(await fs.readText('/books/Novel/Book.md')).toContain('river ran icy');
+  });
+
+  it('creates files without replacing, and keeps to the project', async () => {
+    const { call } = await connect('claude-ai', undefined, async () => on);
+    expect((await call('create_file', { project: 'Novel', file: 'Book.md', content: 'x' })).text).toMatch(/already exists/);
+    expect((await call('create_file', { project: 'Novel', file: 'book.MD', content: 'x' })).text).toMatch(/already exists/);
+    for (const bad of ['../Out.md', '.cadrel/x.md', 'a/../b.md', 'notes.txt', '/abs.md']) expect((await call('create_file', { project: 'Novel', file: bad, content: 'x' })).isError).toBe(true);
+    expect((await call('create_file', { project: 'Nope', file: 'a.md', content: 'x' })).isError).toBe(true);
+    expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
+  });
+
+  it('applies edits all together or not at all', async () => {
+    const { call } = await connect('claude-ai', undefined, async () => on);
+    const miss = await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'slowly', new_text: 'quickly' }, { old_text: 'not there', new_text: 'x' }] });
+    expect(miss.text).toMatch(/Edit 2.*not found/);
+    const many = await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'o', new_text: 'A' }] });
+    expect(many.text).toMatch(/occurs \d+ times/);
+    expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK);
+    const done = await call('edit_file', { project: 'Novel', file: 'Book.md', edits: [{ old_text: 'slowly', new_text: 'quickly' }, { old_text: 'cold', new_text: '' }] });
+    expect(done.json()).toMatchObject({ edits: 2, chapters: 2 });
+    expect(await fs.readText('/books/Novel/Book.md')).toBe(BOOK.replace('slowly', 'quickly').replace('cold', ''));
+  });
+});
+

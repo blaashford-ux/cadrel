@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { KEYWORD_TOOLS } from './keywordTools.js';
 import {
   METRICS, amazonUrl, analyzeCovers, contentMetricsOf, contentStats, excerpt, getManuscripts, categoryReport, coverStats, marketShape, packagingStats, readerVoice, reportMarkdown, successScores, trend, categoryBooks, cohortStats, embeddingStatus, getBook, listAnnotations, listBooks, listCategories,
-  authorNamesOf, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type CategoryBook, type Embedder, type Library, type MetricName,
+  authorNamesOf, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type CategoryBook, type Embedder, type Library, type MetricName, type OutlineSource,
 } from '@cadrel/market-library';
 
 export interface ToolContext {
@@ -12,6 +13,12 @@ export interface ToolContext {
   embedderFor: (model: string) => Promise<Embedder | null>;
   /** The pen names the Studio publishes under; my_books shows only their books. Null or absent: no limit. */
   authorScope?: readonly string[] | null;
+  /** Where the author's outline documents are, when this server can see their projects. */
+  outlines?: OutlineSource;
+  /** Whether the author lets AI tools send keyword suggestions into Cadrel (Settings → MCP). Absent means no. */
+  canSuggestKeywords?: () => Promise<boolean>;
+  /** Which AI is connected ("Claude"), so what it sends is labelled. */
+  client?: () => string | undefined;
 }
 
 export type ToolResult = { data: unknown } | { error: string } | { image: { base64: string; mimeType: string }; data?: unknown };
@@ -697,6 +704,7 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   ...ANALYSIS_TOOLS,
+  ...KEYWORD_TOOLS,
 ];
 
 export const SERVER_INSTRUCTIONS = `Cadrel Market is the user's local library of Amazon Kindle market research (amazon.com only). Start with library_status and list_categories. Every result cites an ASIN and a capture date; include them when you report findings, and say when a figure comes from only some of the books (the "known" counts and detail_captured flags show coverage). ${TEXT_FIELD_NOTICE}`;

@@ -1,10 +1,10 @@
 import type { ContentMetrics } from '@cadrel/market-core';
 import type { HealthRow, VerifyReport } from '@cadrel/market-library';
-import type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource } from '@cadrel/market-library';
+import type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, InjectedSuggestion, OutlineRef, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource } from '@cadrel/market-library';
 import type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, BookPayments, Person, SplitVersion, Statement, StatementBasis } from '@cadrel/market-library';
 import type { BookDetail, BookRow, CategoryReport, CategorySummary, ManuscriptRow, QueueItem, SampleSession, Weights, Opportunity, OpportunityWeights, SalesCurve } from '@cadrel/market-library';
 
-export type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource };
+export type { Exclusion, RemovedBook, KeywordHistoryRow, KeywordIdea, KeywordString, InjectedSuggestion, OutlineRef, CommunityInsights, ThreadRef, OwnBookRow, CalibrationPreview, Calibration, ImportSummary, SalesStatus, KuBook, CommunitySource, SyncResult, KeywordTable, KeywordRow, SearchCompetition, SuggestSource };
 export type { Payout, PaymentOwed, Rollup, AnalysisReport, DetectedAuthor, MonthReport, PaymentsReport, BookPayments, Person, SplitVersion, Statement, StatementBasis };
 export type { HealthRow, VerifyReport, ContentMetrics, BookDetail, BookRow, CategoryReport, CategorySummary, ManuscriptRow, QueueItem, SampleSession, Weights, Opportunity, OpportunityWeights, SalesCurve };
 
@@ -228,6 +228,13 @@ export interface Api {
   /** Five phrases worth searching for a captured category, from what the library holds, leaving out words already in the category and, given an ASIN, that book's title, subtitle and blurb. Makes no request. */
   keywordIdeas(categoryKey: string, asin?: string): Promise<KeywordIdea[]>;
   keywordStrings(categoryKey: string, asin?: string): Promise<KeywordString[]>;
+  /** The outline documents found in the person's projects, and which one this category's suggestions are built on. */
+  keywordOutlines(categoryKey: string): Promise<{ available: boolean; outlines: OutlineRef[]; chosen: { project: string; file: string } | null; readable: boolean }>;
+  /** Builds the category's suggestions on this outline (null: on the category alone). */
+  setKeywordOutline(categoryKey: string, ref: { project: string; file: string } | null): Promise<void>;
+  /** Suggestions an AI tool sent in through the MCP server. */
+  injectedSuggestions(categoryKey: string): Promise<InjectedSuggestion[]>;
+  dismissInjectedSuggestion(id: number): Promise<void>;
   stopKeywords(): Promise<boolean>;
   /** The text of a CSV saved by Google Trends' Download button. */
   /** Import a Google Trends CSV; with a category key its terms are filed under that category's keyword research. */
@@ -271,5 +278,5 @@ export interface Api {
 
 export const CHANNELS = [
   'status', 'chooseLibrary', 'setPort', 'token', 'rotateToken', 'categories', 'books', 'book', 'cover', 'issues',
-  'queue', 'openNext', 'openBook', 'openShelf', 'setQueueState', 'excludeFromCategory', 'restoreToCategory', 'categoryExclusions', 'bookLists', 'removeBook', 'revealBook', 'rebuild', 'analysis', 'exportCategory', 'successWeights', 'setSuccessWeights', 'rankCategories', 'opportunityWeights', 'setOpportunityWeights', 'salesCurve', 'setSalesCurve', 'maintenanceStatus', 'verifyLibrary', 'parserHealth', 'backupLibrary', 'moveLibrary', 'exportData', 'importData', 'pairingCode', 'openExtensionFolder', 'openLogs', 'settings', 'setSettings', 'bookText', 'attachManuscript', 'attachManuscriptPath', 'removeText', 'readSample', 'indexStatus', 'buildIndex', 'mcpConfig', 'installClaudeExtension', 'appInfo', 'communitySources', 'addCommunitySource', 'removeCommunitySource', 'syncCommunity', 'communityStatus', 'stopCommunity', 'keywordTable', 'keywordLookup', 'keywordStatus', 'keywordHistory', 'removeKeywordHistory', 'clearKeywordHistory', 'keywordIdeas', 'keywordStrings', 'stopKeywords', 'importTrends', 'removeTrend', 'openTrends', 'openAmazonSearch', 'communityInsights', 'openThread', 'ownBooks', 'ownBook', 'setOwnBook', 'updateState', 'checkForUpdates', 'installUpdate', 'openReleasePage', 'githubTokenStatus', 'setGithubToken', 'reconnect', 'forceDisconnect', 'freePort',
+  'queue', 'openNext', 'openBook', 'openShelf', 'setQueueState', 'excludeFromCategory', 'restoreToCategory', 'categoryExclusions', 'bookLists', 'removeBook', 'revealBook', 'rebuild', 'analysis', 'exportCategory', 'successWeights', 'setSuccessWeights', 'rankCategories', 'opportunityWeights', 'setOpportunityWeights', 'salesCurve', 'setSalesCurve', 'maintenanceStatus', 'verifyLibrary', 'parserHealth', 'backupLibrary', 'moveLibrary', 'exportData', 'importData', 'pairingCode', 'openExtensionFolder', 'openLogs', 'settings', 'setSettings', 'bookText', 'attachManuscript', 'attachManuscriptPath', 'removeText', 'readSample', 'indexStatus', 'buildIndex', 'mcpConfig', 'installClaudeExtension', 'appInfo', 'communitySources', 'addCommunitySource', 'removeCommunitySource', 'syncCommunity', 'communityStatus', 'stopCommunity', 'keywordTable', 'keywordLookup', 'keywordStatus', 'keywordHistory', 'removeKeywordHistory', 'clearKeywordHistory', 'keywordIdeas', 'keywordStrings', 'keywordOutlines', 'setKeywordOutline', 'injectedSuggestions', 'dismissInjectedSuggestion', 'stopKeywords', 'importTrends', 'removeTrend', 'openTrends', 'openAmazonSearch', 'communityInsights', 'openThread', 'ownBooks', 'ownBook', 'setOwnBook', 'updateState', 'checkForUpdates', 'installUpdate', 'openReleasePage', 'githubTokenStatus', 'setGithubToken', 'reconnect', 'forceDisconnect', 'freePort',
 ] as const satisfies readonly (keyof Api)[];

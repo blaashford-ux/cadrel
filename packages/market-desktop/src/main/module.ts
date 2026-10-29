@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { ensureExtensionCopy } from './extensionCopy';
 import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, type WebContents } from 'electron';
 import { Logger } from './log.js';
+import type { OutlineSource } from '@cadrel/market-library';
 import { AppService, type McpBrand } from './service.js';
 import { CHANNELS } from '../shared/api.js';
 
@@ -40,6 +41,8 @@ export interface MarketHost {
   mcpBrand?: McpBrand;
   /** The pen names this Studio publishes under. Imports bring in only these authors' books, and My Books shows only them. Null: no limit. */
   authorScope?: () => readonly string[] | null;
+  /** Where the person's outline documents are (Cadrel finds them in the projects), so keyword suggestions can be built on one. */
+  outlines?: OutlineSource;
   /** How an AI app launches the MCP server. Default: Cadrel Market's own bundled server next to the code. */
   mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
 }
@@ -63,6 +66,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     userData: host.dataDir,
     updatesDisabledReason: host.updatesDisabledReason,
     authorScope: host.authorScope,
+    outlines: host.outlines,
     openExternal: (url) => {
       // Amazon pages, the Google Trends comparison the keyword view builds, and Reddit threads shown in the community analysis; nothing else is opened on the user's behalf
       if (!/^https:\/\/www\.amazon\.com\//.test(url) && !/^https:\/\/trends\.google\.com\/trends\/explore\?/.test(url) && !/^https:\/\/www\.reddit\.com\/r\/[A-Za-z0-9_]+\/comments\//.test(url)) throw new Error('refusing to open ' + url);
@@ -256,6 +260,10 @@ export function createMarketModule(host: MarketHost): MarketModule {
     clearKeywordHistory: () => service.clearKeywordHistory(),
     keywordIdeas: (c: string, asin?: string) => service.keywordIdeas(c, asin),
     keywordStrings: (c: string, asin?: string) => service.keywordStrings(c, asin),
+    keywordOutlines: (c: string) => service.keywordOutlines(c),
+    setKeywordOutline: (c: string, ref: { project: string; file: string } | null) => service.setKeywordOutline(c, ref),
+    injectedSuggestions: (c: string) => service.injectedSuggestions(c),
+    dismissInjectedSuggestion: (id: number) => service.dismissInjectedSuggestion(id),
     stopKeywords: () => service.stopKeywords(),
     importTrends: (csv: string, c?: string) => service.importTrends(csv, c),
     removeTrend: (k: string) => service.removeTrend(k),

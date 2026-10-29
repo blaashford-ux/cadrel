@@ -16,7 +16,15 @@ export function createServer(ctx: ToolContext): McpServer {
 }
 
 /** Cadrel Market's tools, registered on any MCP server (so one server can carry several modules' tools). */
-export function registerMarketTools(server: McpServer, ctx: ToolContext): void {
+export function registerMarketTools(server: McpServer, base: ToolContext): void {
+  // Which AI is connected, from the client's own name, so what it sends in is labelled.
+  const ctx: ToolContext = {
+    ...base,
+    client: () => {
+      const n = base.client?.() ?? server.server.getClientVersion()?.name ?? '';
+      return /claude|anthropic/i.test(n) ? 'Claude' : /openai|chatgpt|gpt|codex/i.test(n) ? 'GPT' : n.trim().slice(0, 40) || 'AI';
+    },
+  };
   for (const t of TOOLS) {
     server.registerTool(
       t.name,

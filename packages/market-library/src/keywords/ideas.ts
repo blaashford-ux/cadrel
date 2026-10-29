@@ -4,6 +4,7 @@ import { ELEMENTS, communityInsights, phrasesOf, stem } from '../analysis/commun
 import { listCommunitySources } from '../community.js';
 import { normalizeKeyword } from './suggest.js';
 import { lexiconHits, looksLikeSearchTerm } from './lexicon.js';
+import { outlineProfile, outlineSupports } from './outline.js';
 
 /**
  * Phrases worth searching on the Keywords tab for a captured category, from what is already in the library: the tropes the listed
@@ -11,14 +12,17 @@ import { lexiconHits, looksLikeSearchTerm } from './lexicon.js';
  *
  * A keyword that repeats a word Amazon already indexes from the book's other metadata earns nothing, so a suggestion never contains a
  * word of the category (name and path) or, when a book is chosen, of that book's title, subtitle and blurb: those words are cut out of
- * the phrase, and a phrase with nothing left is dropped. Some tropes are also tied to one readership (reverse harem / why choose is
+ * the phrase, and a phrase with nothing left is dropped. When the book's outline is given, what it says comes first (it is the only thing that
+ * knows what this book is), what the category's books and readers add comes next, and category phrases the outline does not support are held back. Some tropes are also tied to one readership (reverse harem / why choose is
  * women's romance), and are not suggested for a category whose name or subreddits say it is aimed at men.
  */
 export interface KeywordIdea {
   keyword: string;
   /** Why it is suggested, in words. */
   reason: string;
-  source: 'readers' | 'blurbs' | 'titles';
+  source: 'readers' | 'blurbs' | 'titles' | 'outline';
+  /** How many times the chosen outline mentions it; absent when no outline was used. 0 means the category suggests it but the outline does not say it. */
+  outlineMentions?: number;
   /**
    * What the stored autocomplete answers say about the phrase, without asking anyone: 'listed' when a source has suggested it,
    * 'empty' when every source asked answered with no suggestions (too specific for autocomplete), 'unknown' when it has not been looked up.
@@ -108,6 +112,10 @@ export interface Candidate {
   reason: string;
   source: KeywordIdea['source'];
   books: Set<number>;
+  /** The trope this phrase stands for, when it came from one. */
+  element?: string;
+  /** Mentions in the outline, when one was used. */
+  outline?: number;
 }
 
 /** Everything suggestions are built from: the candidate phrases, best first, and the words Amazon already reads. */
@@ -117,7 +125,7 @@ export interface CandidatePool {
   bookCount: number;
 }
 
-export function candidatePool(db: Db, categoryKey: string, o: { asin?: string } = {}): CandidatePool {
+export function candidatePool(db: Db, categoryKey: string, o: { asin?: string; outline?: string } = {}): CandidatePool {
   const cat = db.prepare('SELECT name, path FROM category WHERE key = ?').get(categoryKey) as { name: string | null; path: string | null } | undefined;
   if (!cat) throw new Error('unknown category');
   let path: { name: string }[] = [];
@@ -135,13 +143,13 @@ export function candidatePool(db: Db, categoryKey: string, o: { asin?: string } 
   const community = communityInsights(db, categoryKey);
   for (const e of community.elements.filter((x) => x.asked > 0)) {
     const phrase = distinctive(searchPhraseOf(e.element), taken);
-    if (phrase && !(audience === 'men' && WOMENS_ROMANCE.has(e.element))) candidates.push({ phrase, score: 100 + e.asked * 3 + (e.signal === 'underserved' ? 20 : 0), reason: `named in ${e.asked} reader request${e.asked === 1 ? '' : 's'}${e.signal === 'underserved' ? ', and few listed books carry it' : ''}`, source: 'readers', books: withElement(e.element) });
+    if (phrase && !(audience === 'men' && WOMENS_ROMANCE.has(e.element))) candidates.push({ phrase, score: 100 + e.asked * 3 + (e.signal === 'underserved' ? 20 : 0), reason: `named in ${e.asked} reader request${e.asked === 1 ? '' : 's'}${e.signal === 'underserved' ? ', and few listed books carry it' : ''}`, source: 'readers', books: withElement(e.element), element: e.element });
   }
   // what the listed books carry
   for (const [element, re] of Object.entries(ELEMENTS)) {
     const n = texts.filter((t) => re.test(t)).length;
     const phrase = distinctive(searchPhraseOf(element), taken);
-    if (n >= 3 && phrase && !(audience === 'men' && WOMENS_ROMANCE.has(element))) candidates.push({ phrase, score: n, reason: `in ${n} of the ${books.length} listed books' titles and blurbs`, source: 'blurbs', books: withElement(element) });
+    if (n >= 3 && phrase && !(audience === 'men' && WOMENS_ROMANCE.has(element))) candidates.push({ phrase, score: n, reason: `in ${n} of the ${books.length} listed books' titles and blurbs`, source: 'blurbs', books: withElement(element), element });
   }
   // words that recur in the listed titles
   const df = new Map<string, number>();
@@ -158,11 +166,33 @@ export function candidatePool(db: Db, categoryKey: string, o: { asin?: string } 
     covered.add(phrase);
     candidates.push({ phrase, score: hit.size, reason: `in ${hit.size} of the ${books.length} listed books' titles and blurbs`, source: 'blurbs', books: hit });
   }
+  if (o.outline?.trim()) {
+    const profile = outlineProfile(o.outline, taken);
+    for (const c of candidates) {
+      const n = outlineSupports(profile, c.phrase, c.element);
+      c.outline = n;
+      if (n > 0) {
+        c.score += 200 + Math.min(n, 20) * 5;
+        c.reason += `; your outline says it${n > 1 ? ` (${n} mentions)` : ''}`;
+      } else c.score *= 0.35;
+    }
+    // what the outline carries that the category's books do not: this book's own angle
+    const lex = lexiconHits(texts);
+    const add = (phrase: string, n: number, kind: string, hit: Set<number>, element?: string) => {
+      const ph = distinctive(phrase, taken);
+      if (!ph || covered.has(ph) || candidates.some((c) => c.phrase === ph) || (audience === 'men' && /\bwhy choose\b/.test(ph))) return;
+      covered.add(ph);
+      candidates.push({ phrase: ph, score: 150 + Math.min(n, 20) * 5, reason: `${kind} in your outline${n > 1 ? ` (${n} mentions)` : ''}${hit.size ? `; ${hit.size} of the ${books.length} listed books carry it too` : '; none of the listed books carry it, so it may set your book apart'}`, source: 'outline', books: hit, element, outline: n });
+    };
+    for (const [element, n] of profile.elements) if (!(audience === 'men' && WOMENS_ROMANCE.has(element))) add(searchPhraseOf(element), n, 'a trope', withElement(element), element);
+    for (const [term, n] of profile.terms) add(term, n, 'named', lex.get(term) ?? new Set());
+    for (const [ph, n] of profile.phrases) add(ph, n, 'a recurring phrase', new Set(stems.flatMap((st, i) => (ph.split(' ').every((w) => st.has(w)) ? [i] : []))));
+  }
   candidates.sort((a, b) => b.score - a.score || a.phrase.localeCompare(b.phrase));
   return { candidates, taken, bookCount: books.length };
 }
 
-export function suggestKeywords(db: Db, categoryKey: string, count = 5, o: { asin?: string } = {}): KeywordIdea[] {
+export function suggestKeywords(db: Db, categoryKey: string, count = 5, o: { asin?: string; outline?: string } = {}): KeywordIdea[] {
   const { candidates } = candidatePool(db, categoryKey, o);
   const out: KeywordIdea[] = [];
   const have = new Set<string>();
@@ -171,7 +201,7 @@ export function suggestKeywords(db: Db, categoryKey: string, count = 5, o: { asi
     const k = normalizeKeyword(c.phrase);
     if (!k || k.length > 80 || have.has(k)) continue;
     have.add(k);
-    out.push({ keyword: k, reason: c.reason, source: c.source, ...autocompleteStatus(db, k) });
+    out.push({ keyword: k, reason: c.reason, source: c.source, ...(c.outline !== undefined ? { outlineMentions: c.outline } : {}), ...autocompleteStatus(db, k) });
   }
   return out;
 }
