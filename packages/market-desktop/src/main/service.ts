@@ -963,7 +963,7 @@ export class AppService {
   books(o?: { categoryKey?: string; search?: string }) { return listBooks(this.need().db, o); }
   book(asin: string): BookDetail | null { assertAsin(asin); return getBook(this.need().db, asin); }
   issues(): IssueRow[] { return listIssues(this.need().db); }
-  queue(o?: { categoryKey?: string; includeSkipped?: boolean }) { return queue(this.need().db, o); }
+  queue(o?: { categoryKey?: string; includeSkipped?: boolean; onlyNew?: boolean }) { return queue(this.need().db, o); }
 
   /** Latest cover as a data URL, or null. */
   cover(asin: string): string | null {
@@ -1157,9 +1157,9 @@ export class AppService {
     return this.bookText(asin);
   }
 
-  async openNext(categoryKey?: string): Promise<QueueItem | null> {
+  async openNext(categoryKey?: string, onlyNew?: boolean): Promise<QueueItem | null> {
     const lib = this.need();
-    const item = nextInQueue(lib.db, categoryKey);
+    const item = nextInQueue(lib.db, categoryKey, onlyNew);
     if (!item) return null;
     lib.setQueue(item.asin, 'opened');
     await this.opts.openExternal(amazonUrl(item.asin));

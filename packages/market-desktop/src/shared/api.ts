@@ -138,9 +138,9 @@ export interface Api {
   book(asin: string): Promise<BookDetail | null>;
   cover(asin: string): Promise<string | null>;
   issues(): Promise<IssueRow[]>;
-  queue(opts?: { categoryKey?: string; includeSkipped?: boolean }): Promise<QueueItem[]>;
+  queue(opts?: { categoryKey?: string; includeSkipped?: boolean; onlyNew?: boolean }): Promise<QueueItem[]>;
   /** Opens the next pending book's page in the browser and marks it opened. Null when nothing is pending. */
-  openNext(categoryKey?: string): Promise<QueueItem | null>;
+  openNext(categoryKey?: string, onlyNew?: boolean): Promise<QueueItem | null>;
   openBook(asin: string): Promise<void>;
   /** Opens the category's Best Sellers page on Amazon in the browser. */
   openShelf(categoryKey: string): Promise<void>;

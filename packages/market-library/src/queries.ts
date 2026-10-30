@@ -52,6 +52,8 @@ export interface QueueItem {
   author: string | null;
   price: number | null;
   state: 'pending' | 'opened' | 'skipped';
+  /** On the newest capture of its list, but on none of the category's earlier captures: it joined the list since you last looked. */
+  isNew: boolean;
 }
 
 /** Queue bucket for books known only from search results. */
@@ -191,11 +193,14 @@ export function listIssues(db: Db): { source: string; ref: string; field: string
  * Books seen on the newest capture of a list that have no detail capture yet, best rank first.
  * A book on several lists appears once, at its best rank.
  */
-export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boolean } = {}): QueueItem[] {
+export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boolean; onlyNew?: boolean } = {}): QueueItem[] {
   const fromLists = opts.categoryKey === UNCATEGORISED ? [] : (db
     .prepare(
       `SELECT e.asin, min(e.rank) AS rank, l.category_key AS categoryKey, ${categoryNameSql('c')} AS categoryName,
-         max(e.title) AS title, max(e.author) AS author, max(e.price) AS price, q.state AS qstate
+         max(e.title) AS title, max(e.author) AS author, max(e.price) AS price, q.state AS qstate,
+         max(EXISTS (SELECT 1 FROM list_capture p WHERE p.category_key = l.category_key AND p.captured_at < l.captured_at)
+           AND NOT EXISTS (SELECT 1 FROM list_entry pe JOIN list_capture p ON p.id = pe.list_capture_id
+                           WHERE p.category_key = l.category_key AND p.captured_at < l.captured_at AND pe.asin = e.asin)) AS isNew
        FROM list_entry e
        JOIN (${LATEST_LISTS}) l ON l.id = e.list_capture_id
        JOIN category c ON c.key = l.category_key
@@ -205,13 +210,13 @@ export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boo
        GROUP BY e.asin
        ORDER BY rank, e.asin`,
     )
-    .all(...(opts.categoryKey ? [opts.categoryKey] : [])) as (Omit<QueueItem, 'state'> & { qstate: string | null })[]);
+    .all(...(opts.categoryKey ? [opts.categoryKey] : [])) as (Omit<QueueItem, 'state' | 'isNew'> & { qstate: string | null; isNew: number })[]);
   // Books seen only on a search page have no category yet (a search does not say); a book on a captured list stays under that
   // list's category, and its detail capture, which carries the book's categories, takes it out of the queue.
-  const fromSearches = opts.categoryKey && opts.categoryKey !== UNCATEGORISED ? [] : (db
+  const fromSearches = (opts.categoryKey && opts.categoryKey !== UNCATEGORISED) || opts.onlyNew ? [] : (db
     .prepare(
       `SELECT e.asin, min(e.position) AS rank, '${UNCATEGORISED}' AS categoryKey, 'Uncategorised' AS categoryName,
-         max(e.title) AS title, max(e.author) AS author, max(e.price) AS price, q.state AS qstate
+         max(e.title) AS title, max(e.author) AS author, max(e.price) AS price, q.state AS qstate, 0 AS isNew
        FROM search_entry e
        LEFT JOIN queue_item q ON q.asin = e.asin
        WHERE e.sponsored = 0
@@ -220,15 +225,15 @@ export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boo
        GROUP BY e.asin
        ORDER BY rank, e.asin`,
     )
-    .all() as (Omit<QueueItem, 'state'> & { qstate: string | null })[]);
+    .all() as (Omit<QueueItem, 'state' | 'isNew'> & { qstate: string | null; isNew: number })[]);
   return [...fromLists, ...fromSearches]
-    .map(({ qstate, ...r }) => ({ ...r, state: (qstate ?? 'pending') as QueueItem['state'] }))
-    .filter((r) => opts.includeSkipped || r.state !== 'skipped');
+    .map(({ qstate, isNew, ...r }) => ({ ...r, isNew: !!isNew, state: (qstate ?? 'pending') as QueueItem['state'] }))
+    .filter((r) => (opts.includeSkipped || r.state !== 'skipped') && (!opts.onlyNew || r.isNew));
 }
 
 /** First pending item (opened ones wait for their capture; skipped ones are out). */
-export function nextInQueue(db: Db, categoryKey?: string): QueueItem | null {
-  return queue(db, { categoryKey }).find((q) => q.state === 'pending') ?? null;
+export function nextInQueue(db: Db, categoryKey?: string, onlyNew?: boolean): QueueItem | null {
+  return queue(db, { categoryKey, onlyNew }).find((q) => q.state === 'pending') ?? null;
 }
 
 export function setQueueState(db: Db, asin: string, state: 'opened' | 'skipped' | 'pending', now = new Date().toISOString()): void {
@@ -241,8 +246,8 @@ export function setQueueState(db: Db, asin: string, state: 'opened' | 'skipped' 
 }
 
 /** Pick the next pending book, mark it opened, and return it (the caller opens its URL). */
-export function openNext(db: Db, categoryKey?: string): (QueueItem & { url: string }) | null {
-  const item = nextInQueue(db, categoryKey);
+export function openNext(db: Db, categoryKey?: string, onlyNew?: boolean): (QueueItem & { url: string }) | null {
+  const item = nextInQueue(db, categoryKey, onlyNew);
   if (!item) return null;
   setQueueState(db, item.asin, 'opened');
   return { ...item, state: 'opened', url: amazonUrl(item.asin) };
