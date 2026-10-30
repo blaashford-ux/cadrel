@@ -4,7 +4,8 @@
  *
  * The one rule that matters: nothing here ever writes a manuscript file. The only files written are review files under
  * `<project>/.cadrel/review/`, one per agent and editing pass, which Cadrel Write shows beside everyone else's notes, and the
- * project's edited-chapter marks (`<project>/.cadrel/edited.json`), which `set_chapters_edited` can change.
+ * project's edited-chapter marks (`<project>/.cadrel/edited.json`), which `set_chapters_edited` can change. The authoring
+ * skills' own files (premise, outline, characters, blurb, trackers) are written by `projectFiles.ts`, which refuses manuscript folders.
  */
 import { splitChapters } from '../chapters';
 import type { FsEntry, FsPort } from '../fsPort';
@@ -60,7 +61,7 @@ export class AgentError extends Error {}
 
 const safe = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 24);
 const uid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`);
-const join = (a: string, b: string) => `${a.replace(/[\\/]+$/, '')}/${b}`;
+export const join = (a: string, b: string) => `${a.replace(/[\\/]+$/, '')}/${b}`;
 
 /**
  * Who a note is signed as. With no skill it is just the AI ("Claude", file `ai-claude`); a skill adds its own tag
@@ -79,12 +80,12 @@ export function reviewerFor(ctx: AgentContext, skill?: string): { id: string; na
 
 // ---- finding things on disk ------------------------------------------------------------------
 
-async function child(fs: FsPort, dir: string, name: string): Promise<FsEntry | undefined> {
+export async function child(fs: FsPort, dir: string, name: string): Promise<FsEntry | undefined> {
   const entries = await fs.readdir(dir).catch(() => [] as FsEntry[]);
   return entries.find((e) => e.name === name && !e.isSymbolicLink);
 }
 
-const badName = (s: string) => !s || s === '.' || s === '..' || s.startsWith('.') || /[\\/:]/.test(s);
+export const badName = (s: string) => !s || s === '.' || s === '..' || s.startsWith('.') || /[\\/:]/.test(s);
 
 /** Prefix of the names under which projects shared with this person for editing are listed. */
 const SHARED_PREFIX = `${SHARED_WITH_ME}/`;
@@ -102,7 +103,7 @@ async function isCollaboration(ctx: AgentContext, dir: string): Promise<boolean>
  * The project folder: a real folder directly inside the Root, or a project shared with this person for editing, which is named
  * "Shared With Me/<folder>". Projects shared for review only are never offered, since the author owns the notes on those.
  */
-async function projectDir(ctx: AgentContext, project: string): Promise<string> {
+export async function projectDir(ctx: AgentContext, project: string): Promise<string> {
   if (typeof project === 'string' && project.startsWith(SHARED_PREFIX)) {
     const name = project.slice(SHARED_PREFIX.length);
     const holder = await child(ctx.fs, ctx.root, SHARED_WITH_ME);
@@ -494,7 +495,7 @@ function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: s
 
 // Writes to one project's review files happen one at a time, so two calls can't overwrite each other.
 const queues = new Map<string, Promise<unknown>>();
-function serial<T>(key: string, job: () => Promise<T>): Promise<T> {
+export function serial<T>(key: string, job: () => Promise<T>): Promise<T> {
   const run = (queues.get(key) ?? Promise.resolve()).then(job, job);
   queues.set(key, run.catch(() => undefined));
   return run;

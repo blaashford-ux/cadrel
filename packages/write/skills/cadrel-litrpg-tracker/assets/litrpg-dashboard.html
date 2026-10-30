@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__CADREL_TITLE__</title>
+<!--
+  LitRPG tracker dashboard. One self-contained page: no network, no libraries. The data is the JSON block at the bottom of <body>:
+  { project, last_updated_chapter, chapters:[numbers with events],
+    characters:[{ name,
+                  snapshots:[{ chapter, sheet:{ name, level?, xp_total?, xp_to_next_level?, class?:{name,attributes_per_level?,class_skills?},
+                                               attributes?:[{name,value}], skills?:[{name,description?,cost?,cooldown?,duration?,effect?}],
+                                               items?:[{name,description?}], titles?:[{name,effect?,equipped?}], companions?:[{name,type?,level?,xp?}] } }],
+                  events:[{ id, chapter, type, text }] }],
+    flags:[{ id, type, character, chapters, description, status }] }
+  A snapshot is the character as of the end of that chapter; "as of chapter N" uses the last snapshot at or before N.
+  Replace the marker in that block with the JSON (escape "<" as <) to build the page by hand.
+-->
+<style>
+  :root {
+    --bg: #f4f2ed; --card: #ffffff; --ink: #1b2130; --muted: #5c6575; --line: #e2ded3; --soft: #eeebe3;
+    --accent: #5a3fc0; --accent-ink: #ffffff; --accent-soft: #ece8fa; --gold: #a66b00; --gold-soft: #fbf0d6;
+    --good: #1c7c58; --warn: #b4410f; --warn-soft: #fdeee3;
+    --shadow: 0 1px 2px rgba(27,33,48,.06), 0 6px 18px rgba(27,33,48,.05);
+    --c1: #5a3fc0; --c2: #d1601b; --c3: #1d8a6b; --c4: #2a73c4; --c5: #b08a00; --c6: #c0396b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12141d; --card: #1b1f2c; --ink: #e9ecf4; --muted: #9ba5b7; --line: #2c3345; --soft: #232838;
+      --accent: #a794ff; --accent-ink: #14112b; --accent-soft: #2a2550; --gold: #f0c36a; --gold-soft: #3a3020;
+      --good: #5fcf9f; --warn: #f09a63; --warn-soft: #3a2a20; --shadow: none;
+      --c1: #a794ff; --c2: #f09a63; --c3: #5fcf9f; --c4: #74b4f5; --c5: #e3c35a; --c6: #ee8fb2;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12141d; --card: #1b1f2c; --ink: #e9ecf4; --muted: #9ba5b7; --line: #2c3345; --soft: #232838;
+    --accent: #a794ff; --accent-ink: #14112b; --accent-soft: #2a2550; --gold: #f0c36a; --gold-soft: #3a3020;
+    --good: #5fcf9f; --warn: #f09a63; --warn-soft: #3a2a20; --shadow: none;
+    --c1: #a794ff; --c2: #f09a63; --c3: #5fcf9f; --c4: #74b4f5; --c5: #e3c35a; --c6: #ee8fb2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 56px; }
+  header h1 { margin: 0; font: 700 28px/1.15 Georgia, "Iowan Old Style", "Times New Roman", serif; letter-spacing: -.01em; }
+  header .sub { margin: 4px 0 0; color: var(--muted); }
+  button, select, input { font: inherit; color: inherit; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 22px 0 6px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .stat b { display: block; font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .stat.alert b { color: var(--warn); }
+  .cast { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+  .cast button { background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 16px; cursor: pointer; }
+  .cast button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .scrub { display: flex; align-items: center; gap: 14px; margin: 16px 0 4px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px; box-shadow: var(--shadow); }
+  .scrub label { white-space: nowrap; font-weight: 600; }
+  .scrub input[type=range] { flex: 1; accent-color: var(--accent); min-width: 0; }
+  .scrub button { border: 1px solid var(--line); background: var(--soft); border-radius: 8px; padding: 4px 12px; cursor: pointer; }
+  section { margin-top: 26px; }
+  h2 { font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 650; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .hero { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
+  .lvl { width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: conic-gradient(var(--accent) var(--pct, 0%), var(--soft) 0); position: relative; }
+  .lvl::before { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--card); }
+  .lvl div { position: relative; line-height: 1; } .lvl small { display: block; font-size: 10px; letter-spacing: .12em; color: var(--muted); text-transform: uppercase; margin-bottom: 3px; }
+  .lvl b { font: 700 32px/1 Georgia, serif; }
+  .hero h3 { margin: 0; font: 700 26px/1.15 Georgia, serif; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--gold-soft); color: var(--gold); margin: 6px 6px 0 0; }
+  .bar { height: 10px; border-radius: 6px; background: var(--soft); overflow: hidden; margin-top: 12px; max-width: 460px; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--c4)); border-radius: 6px; }
+  .xpline { color: var(--muted); font-size: 13px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .none { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .attr { background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+  .attr small { display: block; color: var(--muted); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; }
+  .attr b { font: 700 28px/1.1 Georgia, serif; font-variant-numeric: tabular-nums; }
+  .attr .meter { height: 5px; border-radius: 3px; background: var(--line); margin-top: 6px; overflow: hidden; } .attr .meter i { display: block; height: 100%; background: var(--accent); }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile h4 { margin: 0 0 4px; font-size: 15px; }
+  .tile p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .meta span { font-size: 11.5px; background: var(--accent-soft); color: var(--accent); padding: 1px 8px; border-radius: 999px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .chartcard svg { display: block; width: 100%; height: auto; }
+  svg text { fill: var(--muted); font: 11px system-ui, sans-serif; }
+  .filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .filters button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 2px 11px; font-size: 12.5px; cursor: pointer; }
+  .filters button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .feed { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow: auto; }
+  .feed li { display: grid; grid-template-columns: 62px 22px 1fr; gap: 6px; padding: 7px 0; border-top: 1px solid var(--line); align-items: baseline; }
+  .feed li:first-child { border-top: 0; } .feed .ch { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .feed.dim li.later { opacity: .35; }
+  .flagcard { border-left: 4px solid var(--warn); background: var(--card); border-radius: 10px; border-top: 1px solid var(--line); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 14px; margin-bottom: 9px; }
+  .flagcard.resolved { border-left-color: var(--good); opacity: .65; }
+  .flagcard .t { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--warn); font-weight: 700; } .flagcard.resolved .t { color: var(--good); }
+  .allgood { color: var(--good); }
+  footer { margin-top: 36px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 700px) { .hero { grid-template-columns: 1fr; justify-items: start; } .two { grid-template-columns: 1fr; } header h1 { font-size: 23px; } .scrub { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1 id="title"></h1><p class="sub" id="sub"></p></header>
+  <div class="stats" id="stats"></div>
+  <div class="cast" id="cast" role="group" aria-label="Character"></div>
+  <div class="scrub"><label for="chap">As of chapter <span id="chapnum"></span></label><input id="chap" type="range" min="0" max="0" step="1"><button id="latest" type="button">Latest</button></div>
+  <section id="herosec"><div class="card hero" id="hero"></div></section>
+  <section id="attrsec" hidden><h2>Attributes</h2><div class="card"><div class="attrs" id="attrs"></div></div></section>
+  <section id="skillsec" hidden><h2>Skills &amp; abilities</h2><div class="grid" id="skills"></div></section>
+  <section id="gearsec" hidden><h2>Items, titles &amp; companions</h2><div class="grid" id="gear"></div></section>
+  <section id="chartsec"><h2>Progress</h2><div class="two"><div class="card chartcard"><div class="none" id="c1t"></div><div id="chart1"></div></div><div class="card chartcard"><div class="none" id="c2t"></div><div id="chart2"></div></div></div></section>
+  <section><h2>What happened</h2><div class="card"><div class="filters" id="filters"></div><ul class="feed" id="feed"></ul></div></section>
+  <section><h2>Consistency flags</h2><div id="flags"></div></section>
+  <footer id="foot"></footer>
+</div>
+<script id="data" type="application/json">__CADREL_DATA__</script>
+<script>
+(function () {
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'class') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  var NS = 'http://www.w3.org/2000/svg';
+  function s(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  var chars = D.characters || [], chapters = (D.chapters || []).slice();
+  var cur = chars.length ? 0 : -1, idx = Math.max(0, chapters.length - 1), type = '';
+  var ICON = { level_up: '▲', xp_award: '✦', stat_allocation: '◆', class_assigned: '⚔', skill_gained: '✧', item_gained: '◈', item_lost: '◇', title_gained: '★', summon_gained: '❖', quest_reward: '✔' };
+  var TYPE = { level_up: 'Levels', xp_award: 'XP', stat_allocation: 'Stats', class_assigned: 'Class', skill_gained: 'Skills', item_gained: 'Items', item_lost: 'Items', title_gained: 'Titles', summon_gained: 'Companions', quest_reward: 'Quests' };
+  var openFlags = (D.flags || []).filter(function (f) { return f.status === 'open'; });
+  var nEvents = chars.reduce(function (n, c) { return n + c.events.length; }, 0);
+
+  $('title').textContent = (D.project ? D.project + ' ' : '') + 'LitRPG tracker';
+  $('sub').textContent = 'Tracked through chapter ' + (D.last_updated_chapter || 0) + '. Every number comes from the book; nothing here is guessed.';
+  [[chars.length, 'characters'], [nEvents, 'events logged'], [chapters.length ? chapters[chapters.length - 1] : 0, 'latest chapter with events'], [openFlags.length, 'open flags', openFlags.length > 0]].forEach(function (x) {
+    $('stats').appendChild(h('div', { class: 'stat' + (x[2] ? ' alert' : '') }, [h('b', { text: String(x[0]) }), h('span', { text: x[1] })]));
+  });
+  chars.forEach(function (c, i) { var b = h('button', { type: 'button', text: c.name, 'aria-pressed': String(i === cur) }); b.addEventListener('click', function () { cur = i; draw(); }); $('cast').appendChild(b); });
+  var slider = $('chap'); slider.max = Math.max(0, chapters.length - 1); slider.value = idx;
+  slider.addEventListener('input', function () { idx = +slider.value; draw(); });
+  $('latest').addEventListener('click', function () { idx = Math.max(0, chapters.length - 1); slider.value = idx; draw(); });
+
+  function asOf() { return chapters.length ? chapters[idx] : 0; }
+  function sheetAt(c, ch) { var best = null; c.snapshots.forEach(function (sn) { if (sn.chapter <= ch) best = sn.sheet; }); return best; }
+  function fmt(n) { return Number(n).toLocaleString(); }
+
+  function drawHero(sh, c) {
+    var el = $('hero'); el.textContent = '';
+    if (!sh) { el.style.display = 'block'; el.appendChild(h('p', { class: 'none', text: c.name + ' has nothing logged yet as of this chapter.' })); return; }
+    el.style.display = '';
+    var pct = sh.xp_total != null && sh.xp_to_next_level != null && sh.xp_total + sh.xp_to_next_level > 0 ? Math.round(sh.xp_total / (sh.xp_total + sh.xp_to_next_level) * 100) : 0;
+    var lvl = h('div', { class: 'lvl' }, [h('div', {}, [h('small', { text: 'Level' }), h('b', { text: sh.level != null ? String(sh.level) : '?' })])]);
+    lvl.style.setProperty('--pct', pct + '%');
+    var right = h('div', {}, [h('h3', { text: c.name })]);
+    if (sh['class']) { right.appendChild(h('span', { class: 'badge', text: sh['class'].name })); if (sh['class'].attributes_per_level) right.appendChild(h('span', { class: 'badge', text: sh['class'].attributes_per_level + ' per level' })); }
+    if (sh.xp_total != null) {
+      if (sh.xp_to_next_level != null) right.appendChild(h('div', { class: 'bar', role: 'img', 'aria-label': pct + '% of the way to the next level' }, [h('i', { style: 'width:' + pct + '%' })]));
+      right.appendChild(h('div', { class: 'xpline', text: fmt(sh.xp_total) + ' XP' + (sh.xp_to_next_level != null ? ' · ' + fmt(sh.xp_to_next_level) + ' to the next level' : '') }));
+    }
+    el.appendChild(lvl); el.appendChild(right);
+  }
+  function drawAttrs(sh) {
+    var a = (sh && sh.attributes) || []; $('attrsec').hidden = !a.length; var el = $('attrs'); el.textContent = '';
+    var max = Math.max.apply(null, a.map(function (x) { return x.value; }).concat([1]));
+    a.forEach(function (x) { el.appendChild(h('div', { class: 'attr' }, [h('small', { text: x.name }), h('b', { text: String(x.value) }), h('div', { class: 'meter' }, [h('i', { style: 'width:' + Math.round(x.value / max * 100) + '%' })])])); });
+  }
+  function drawSkills(sh) {
+    var a = (sh && sh.skills) || []; $('skillsec').hidden = !a.length; var el = $('skills'); el.textContent = '';
+    a.forEach(function (k) {
+      var meta = []; [['cost', 'Cost'], ['cooldown', 'Cooldown'], ['duration', 'Duration']].forEach(function (p) { if (k[p[0]]) meta.push(h('span', { text: p[1] + ': ' + k[p[0]] })); });
+      el.appendChild(h('div', { class: 'tile' }, [h('h4', { text: k.name }), meta.length ? h('div', { class: 'meta' }, meta) : null, k.effect ? h('p', { text: k.effect }) : null, k.description && k.description !== k.effect ? h('p', { text: k.description }) : null]));
+    });
+  }
+  function drawGear(sh) {
+    var el = $('gear'); el.textContent = ''; var n = 0;
+    function add(kind, o, body, extra) { n++; el.appendChild(h('div', { class: 'tile' }, [h('div', { class: 'none', style: 'font-size:11px;letter-spacing:.08em;text-transform:uppercase', text: kind }), h('h4', { text: o.name }), extra, body ? h('p', { text: body }) : null])); }
+    ((sh && sh.items) || []).forEach(function (o) { add('Item', o, o.description); });
+    ((sh && sh.titles) || []).forEach(function (o) { add('Title', o, o.effect, o.equipped ? h('div', { class: 'meta' }, [h('span', { text: 'Equipped' })]) : null); });
+    ((sh && sh.companions) || []).forEach(function (o) { var m = []; if (o.type) m.push(h('span', { text: o.type })); if (o.level != null) m.push(h('span', { text: 'Level ' + o.level })); if (o.xp != null) m.push(h('span', { text: fmt(o.xp) + ' XP' })); add('Companion', o, null, m.length ? h('div', { class: 'meta' }, m) : null); });
+    $('gearsec').hidden = !n;
+  }
+
+  // Line chart of one numeric property over chapters (step line, since values change at chapters).
+  function chart(box, titleEl, title, c, prop, col, now) {
+    box.textContent = ''; titleEl.textContent = title;
+    var pts = c.snapshots.filter(function (sn) { return sn.sheet[prop] != null; }).map(function (sn) { return { x: sn.chapter, y: sn.sheet[prop] }; });
+    if (pts.length < 1) { box.appendChild(h('p', { class: 'none', text: 'No values yet.' })); return; }
+    var W = 520, H = 200, L = 44, R = 12, T = 10, B = 26;
+    var x0 = pts[0].x, x1 = Math.max(pts[pts.length - 1].x, now); if (x1 === x0) x1 = x0 + 1;
+    var ymax = Math.max.apply(null, pts.map(function (p) { return p.y; })); if (ymax <= 0) ymax = 1;
+    function nice(v) { var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)); var f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+    var step = nice(ymax / 4), top = Math.ceil(ymax / step) * step;
+    function X(v) { return L + (v - x0) / (x1 - x0) * (W - L - R); } function Y(v) { return T + (1 - v / top) * (H - T - B); }
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': title });
+    for (var v = 0; v <= top + 1e-9; v += step) { svg.appendChild(s('line', { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: 'var(--line)' })); var t = s('text', { x: L - 6, y: Y(v) + 4, 'text-anchor': 'end' }); t.textContent = v >= 1000 ? (v / 1000) + 'k' : v; svg.appendChild(t); }
+    var xs = Math.max(1, Math.ceil((x1 - x0) / 6)); for (var q = x0; q <= x1; q += xs) { var tx = s('text', { x: X(q), y: H - 7, 'text-anchor': 'middle' }); tx.textContent = 'Ch ' + q; svg.appendChild(tx); }
+    var d = 'M' + X(pts[0].x).toFixed(1) + ' ' + Y(pts[0].y).toFixed(1);
+    for (var i = 1; i < pts.length; i++) d += 'H' + X(pts[i].x).toFixed(1) + 'V' + Y(pts[i].y).toFixed(1);
+    d += 'H' + X(x1).toFixed(1);
+    var area = d + 'V' + Y(0).toFixed(1) + 'H' + X(pts[0].x).toFixed(1) + 'Z';
+    svg.appendChild(s('path', { d: area, fill: col, opacity: .12 }));
+    svg.appendChild(s('path', { d: d, fill: 'none', stroke: col, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+    pts.forEach(function (p) { var ci = s('circle', { cx: X(p.x), cy: Y(p.y), r: 3.5, fill: 'var(--card)', stroke: col, 'stroke-width': 2 }); var tt = s('title', {}); tt.textContent = 'Chapter ' + p.x + ': ' + fmt(p.y); ci.appendChild(tt); svg.appendChild(ci); });
+    if (now >= x0) svg.appendChild(s('line', { x1: X(now), x2: X(now), y1: T, y2: H - B, stroke: 'var(--ink)', 'stroke-dasharray': '3 4', opacity: .5 }));
+    box.appendChild(svg);
+  }
+
+  function drawFeed(c, ch) {
+    var f = $('filters'); f.textContent = '';
+    var kinds = []; c.events.forEach(function (e) { if (kinds.indexOf(TYPE[e.type]) < 0) kinds.push(TYPE[e.type]); });
+    [''].concat(kinds).forEach(function (k) { var b = h('button', { type: 'button', text: k || 'Everything', 'aria-pressed': String(type === k) }); b.addEventListener('click', function () { type = k; drawFeed(c, ch); }); f.appendChild(b); });
+    var feed = $('feed'); feed.textContent = '';
+    c.events.slice().reverse().filter(function (e) { return !type || TYPE[e.type] === type; }).forEach(function (e) {
+      feed.appendChild(h('li', { class: e.chapter > ch ? 'later' : '' }, [h('span', { class: 'ch', text: 'Ch ' + e.chapter }), h('span', { 'aria-hidden': 'true', text: ICON[e.type] || '•' }), h('span', { text: e.text })]));
+    });
+    if (!feed.children.length) feed.appendChild(h('li', {}, [h('span'), h('span'), h('span', { class: 'none', text: 'Nothing logged.' })]));
+    feed.className = 'feed dim';
+  }
+
+  function drawFlags() {
+    var el = $('flags'); el.textContent = '';
+    if (!(D.flags || []).length) { el.appendChild(h('div', { class: 'card allgood', text: '✓ The arithmetic checks out so far: no flags.' })); return; }
+    D.flags.forEach(function (x) {
+      el.appendChild(h('div', { class: 'flagcard' + (x.status === 'resolved' ? ' resolved' : '') }, [
+        h('div', { class: 't', text: x.type.replace(/_/g, ' ') + (x.character ? ' · ' + x.character : '') + (x.status === 'resolved' ? ' · resolved' : '') }),
+        h('div', { text: x.description }),
+        x.chapters && x.chapters.length ? h('div', { class: 'none', text: 'Chapters ' + x.chapters.join(', ') }) : null
+      ]));
+    });
+  }
+
+  function draw() {
+    document.querySelectorAll('#cast button').forEach(function (b, i) { b.setAttribute('aria-pressed', String(i === cur)); });
+    var ch = asOf(); $('chapnum').textContent = chapters.length ? String(ch) : '–'; slider.disabled = chapters.length < 2;
+    if (cur < 0) { $('hero').textContent = 'No characters logged yet.'; return; }
+    var c = chars[cur], sh = sheetAt(c, ch);
+    drawHero(sh, c); drawAttrs(sh); drawSkills(sh); drawGear(sh);
+    chart($('chart1'), $('c1t'), 'Level by chapter', c, 'level', 'var(--c1)', ch);
+    chart($('chart2'), $('c2t'), 'Total XP by chapter', c, 'xp_total', 'var(--c2)', ch);
+    drawFeed(c, ch);
+  }
+  draw(); drawFlags();
+  $('foot').textContent = 'Built from the LitRPG ledger. Moving the slider replays the log up to that chapter. Open flags are for the author to resolve; a flag is not a verdict.';
+})();
+</script>
+</body>
+</html>

@@ -53,8 +53,28 @@ describe('the AI Kit', () => {
     expect(s).toContain('claude mcp add cadrel-write -- node "C:\\Users\\me\\Downloads\\Cadrel Write AI Kit\\cadrel-write-mcp.js" --root "C:\\Users\\me\\Cadrel Write"');
     expect(s).toContain("[mcp_servers.cadrel-write]");
     const r = strFromU8(file('README.txt').data);
-    for (const needle of ['cadrel-write.mcpb', 'Settings > Capabilities > Skills', 'C:\\Users\\me\\Cadrel Write', 'Line edit', 'Copy edit', 'developmental_edit']) expect(r).toContain(needle);
+    for (const needle of ['cadrel-write.mcpb', 'Settings > Capabilities > Skills', 'C:\\Users\\me\\Cadrel Write', 'Line edit', 'Copy edit', 'line_edit, copy_edit']) expect(r).toContain(needle);
     expect(file('cadrel-write-mcp.js').data).toBe(server);
+  });
+});
+
+describe('the AI Kit with authoring skills that carry files', () => {
+  const author: KitSkill = { name: 'cadrel-timeline-tracker', id: 'timeline_tracker', tag: 'Timeline Tracker', kind: 'author', markdown: '---\nname: cadrel-timeline-tracker\ndescription: "t"\n---\n\n# Timeline Tracker\n', body: '# Timeline Tracker', files: { 'assets/timeline-view.html': '<html></html>' } };
+  const k = buildKit({ skills: [...skills, author], server, version: '0.6.0', root: 'C:\\Cadrel', serverPath: 'C:\\k\\cadrel-write-mcp.js' });
+  const f = (p: string) => k.find((x) => x.path === p)!;
+
+  it('zips the skill with its files, and lists them in its folder', () => {
+    expect(Object.keys(unzipSync(f('skills/cadrel-timeline-tracker.zip').data)).sort()).toEqual(['cadrel-timeline-tracker/SKILL.md', 'cadrel-timeline-tracker/assets/timeline-view.html']);
+    expect(strFromU8(f('skills/folders/cadrel-timeline-tracker/assets/timeline-view.html').data)).toBe('<html></html>');
+  });
+
+  it('gives GPT an authoring skill without the notes instruction, and tells the two kinds apart in the README', () => {
+    expect(strFromU8(f('for-gpt/cadrel-timeline-tracker.md').data)).toBe('# Timeline Tracker\n');
+    const r = strFromU8(f('README.txt').data);
+    expect(r).toContain('THE TWO EDITING PASSES');
+    expect(r).toContain('THE ONE AUTHORING SKILL');
+    expect(r).toContain('(three of them)');
+    expect(r).not.toContain('"Claude · Timeline Tracker"');
   });
 });
 

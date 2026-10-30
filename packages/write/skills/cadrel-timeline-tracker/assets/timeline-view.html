@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__CADREL_TITLE__</title>
+<!--
+  Timeline view. One self-contained page: no network, no libraries. The data is the JSON block at the bottom of <body>:
+  { project, last_updated_chapter,
+    days: [{ key, n, chapters:[{chapter,mode,flashback?}], locations, characters_present, pov_character, major_events,
+             elapsed_time_claims:[{quote,source_chapter}], calendar_claims:[{quote,source_chapter}], daily_quests_completed,
+             time_of_day_markers, weekday, day_type, day_confidence, day_range_if_uncertain }],
+    flags: [{ id, type, days_involved, chapters_involved, description, quotes:[{quote,chapter}], status }],
+    series: [{ character, points:[{ day, level, xp_total }] }] }
+  Replace the marker in that block with the JSON (escape "<" as <) to build the page by hand.
+-->
+<style>
+  :root {
+    --bg: #f5f3ee; --card: #ffffff; --ink: #1c2230; --muted: #5d6676; --line: #e3dfd5; --soft: #efece4;
+    --accent: #3a56c8; --accent-ink: #ffffff; --accent-soft: #e6eafa; --warn: #b4410f; --warn-soft: #fdeee3; --ok: #1d7a57;
+    --full: #3a56c8; --summ: #8ea0e6; --off: #b9bfcc;
+    --shadow: 0 1px 2px rgba(28,34,48,.06), 0 4px 14px rgba(28,34,48,.05);
+    --c1: #3a56c8; --c2: #d1601b; --c3: #1d8a6b; --c4: #8a3fb5; --c5: #b08a00; --c6: #c0396b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151d; --card: #1a1f2b; --ink: #e8ebf3; --muted: #9aa4b5; --line: #2b3243; --soft: #222838;
+      --accent: #8da2ff; --accent-ink: #11152a; --accent-soft: #252d4d; --warn: #f09a63; --warn-soft: #3a2a20; --ok: #5fcf9f;
+      --full: #8da2ff; --summ: #55639f; --off: #4a5468; --shadow: none;
+      --c1: #8da2ff; --c2: #f09a63; --c3: #5fcf9f; --c4: #c79bf0; --c5: #e3c35a; --c6: #ee8fb2;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12151d; --card: #1a1f2b; --ink: #e8ebf3; --muted: #9aa4b5; --line: #2b3243; --soft: #222838;
+    --accent: #8da2ff; --accent-ink: #11152a; --accent-soft: #252d4d; --warn: #f09a63; --warn-soft: #3a2a20; --ok: #5fcf9f;
+    --full: #8da2ff; --summ: #55639f; --off: #4a5468; --shadow: none;
+    --c1: #8da2ff; --c2: #f09a63; --c3: #5fcf9f; --c4: #c79bf0; --c5: #e3c35a; --c6: #ee8fb2;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 56px; }
+  header h1 { margin: 0; font: 700 28px/1.15 Georgia, "Iowan Old Style", "Times New Roman", serif; letter-spacing: -.01em; }
+  header .sub { margin: 4px 0 0; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 22px 0 8px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow); }
+  .stat b { display: block; font-size: 24px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .stat.alert b { color: var(--warn); }
+  section { margin-top: 30px; }
+  h2 { font-size: 13px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin: 0 0 12px; font-weight: 650; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-top: 18px; }
+  .toolbar label { color: var(--muted); font-size: 13px; display: flex; gap: 8px; align-items: center; }
+  select, button { font: inherit; color: inherit; }
+  select { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-left: auto; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
+  .m-full { background: var(--full); } .m-summarized { background: var(--summ); }
+  .m-off_page { background: transparent; border: 1.5px dashed var(--off); }
+
+  /* Day ribbon */
+  .ribbon { position: relative; overflow-x: auto; padding: 8px 4px 18px; scrollbar-width: thin; }
+  .track { display: flex; align-items: stretch; gap: 0; min-width: min-content; position: relative; padding-top: 22px; }
+  .track::before { content: ""; position: absolute; left: 0; right: 0; top: 10px; height: 3px; background: var(--line); border-radius: 2px; }
+  .day { flex: 0 0 168px; margin-right: 10px; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 12px 11px; cursor: pointer; position: relative; box-shadow: var(--shadow); transition: transform .12s, border-color .12s; }
+  .day::before { content: ""; position: absolute; top: -17px; left: 18px; width: 13px; height: 13px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); }
+  .day:hover { transform: translateY(-2px); }
+  .day:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .day[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+  .day[aria-pressed="true"]::before { background: var(--accent); }
+  .day.dim { opacity: .35; }
+  .day .n { font: 700 22px/1 Georgia, serif; }
+  .day .wk { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .day .chips { margin: 8px 0 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip { font-size: 11px; padding: 1px 7px; border-radius: 999px; border: 1px solid transparent; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .chip.m-full { color: var(--accent-ink); }
+  .chip.m-summarized { color: var(--ink); }
+  .chip.m-off_page { color: var(--muted); }
+  .day .ev { font-size: 12.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .day .flag { position: absolute; top: 9px; right: 10px; color: var(--warn); font-size: 13px; }
+  .gap { flex: 0 0 auto; align-self: flex-start; margin: -2px 12px 0 2px; font-size: 11px; color: var(--muted); background: var(--bg); padding: 0 6px; position: relative; top: 2px; white-space: nowrap; }
+  .unplaced { margin-top: 10px; font-size: 13px; color: var(--muted); }
+
+  /* Detail */
+  .detail { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; box-shadow: var(--shadow); }
+  .detail h3 { margin: 0; font: 700 24px/1.2 Georgia, serif; }
+  .detail .row { display: grid; grid-template-columns: 150px 1fr; gap: 6px 18px; padding: 12px 0; border-top: 1px solid var(--line); }
+  .detail .row:first-of-type { margin-top: 14px; }
+  .detail .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; padding-top: 3px; }
+  .detail ul { margin: 0; padding-left: 18px; } .detail li { margin: 2px 0; }
+  .tag { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--soft); margin: 0 6px 6px 0; }
+  .tag.pov { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .quote { margin: 0 0 8px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--soft); border-radius: 0 8px 8px 0; font-style: italic; }
+  .quote small { display: block; font-style: normal; color: var(--muted); margin-top: 2px; }
+  .hint { color: var(--muted); }
+
+  /* Chart */
+  .chartcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px 12px; box-shadow: var(--shadow); }
+  .tabs { display: inline-flex; background: var(--soft); border-radius: 9px; padding: 3px; margin-bottom: 8px; }
+  .tabs button { border: 0; background: transparent; padding: 4px 12px; border-radius: 7px; cursor: pointer; color: var(--muted); }
+  .tabs button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  svg text { fill: var(--muted); font: 11px system-ui, sans-serif; }
+  .key { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; margin-top: 4px; }
+  .key i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: 3px; }
+
+  /* Chapter map */
+  .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 6px; }
+  .cell { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 5px 4px; text-align: center; cursor: pointer; line-height: 1.2; }
+  .cell b { display: block; font-size: 11px; color: var(--muted); font-weight: 600; }
+  .cell span { font-size: 14px; font-variant-numeric: tabular-nums; }
+  .cell.m-full { background: var(--accent-soft); border-color: var(--full); } .cell.m-summarized { background: var(--soft); border-color: var(--summ); }
+  .cell.m-off_page { background: transparent; border: 1.5px dashed var(--off); } .cell.none { opacity: .45; cursor: default; }
+  .cell:focus-visible { outline: 3px solid var(--accent); }
+
+  /* Flags */
+  .flagcard { background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; box-shadow: var(--shadow); }
+  .flagcard.resolved { border-left-color: var(--ok); opacity: .7; }
+  .flagcard .t { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--warn); font-weight: 700; }
+  .flagcard.resolved .t { color: var(--ok); }
+  .allgood { color: var(--ok); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 640px) { .detail .row { grid-template-columns: 1fr; } .legend { margin-left: 0; } header h1 { font-size: 23px; } }
+  @media print { body { background: #fff; } .toolbar, .tabs { display: none; } .ribbon { overflow: visible; } .track { flex-wrap: wrap; row-gap: 26px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title"></h1>
+    <p class="sub" id="sub"></p>
+  </header>
+  <div class="stats" id="stats"></div>
+  <div class="toolbar">
+    <label>Follow a character <select id="who"><option value="">Everyone</option></select></label>
+    <div class="legend"><span><i class="m-full"></i>Shown in full</span><span><i class="m-summarized"></i>Summarized</span><span><i class="m-off_page"></i>Off the page</span></div>
+  </div>
+  <section aria-label="Days"><h2>Day by day</h2><div class="ribbon"><div class="track" id="track"></div></div><div class="unplaced" id="unplaced"></div></section>
+  <section aria-label="Selected day" id="detailsec"><h2>Selected day</h2><div class="detail" id="detail"></div></section>
+  <section aria-label="Progression" id="chartsec" hidden><h2>Progression by day</h2><div class="chartcard"><div class="tabs" role="group" aria-label="Measure"><button type="button" data-m="level" aria-pressed="true">Level</button><button type="button" data-m="xp_total" aria-pressed="false">Total XP</button></div><div id="chart"></div><div class="key" id="key"></div></div></section>
+  <section aria-label="Chapters"><h2>Which day is each chapter?</h2><div class="map" id="map"></div></section>
+  <section aria-label="Flags"><h2>Timeline flags</h2><div id="flags"></div></section>
+  <footer id="foot"></footer>
+</div>
+<script id="data" type="application/json">__CADREL_DATA__</script>
+<script>
+(function () {
+  var D = JSON.parse(document.getElementById('data').textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'class') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  var MODE = { full_scene: 'full', summarized: 'summarized', off_page: 'off_page' };
+  var MODE_LABEL = { full_scene: 'shown in full', summarized: 'summarized', off_page: 'off the page' };
+  var days = D.days || [], placed = days.filter(function (d) { return d.n !== null && d.day_confidence !== 'uncertain'; }), unplaced = days.filter(function (d) { return !(d.n !== null && d.day_confidence !== 'uncertain'); });
+  var openFlags = (D.flags || []).filter(function (f) { return f.status === 'open'; });
+  var chapterDay = {}; // chapter -> {key, mode}
+  days.forEach(function (d) { (d.chapters || []).forEach(function (c) { if (!chapterDay[c.chapter] || (!c.flashback && c.mode === 'full_scene')) chapterDay[c.chapter] = { key: d.key, mode: c.mode }; }); });
+  var chapterCount = Object.keys(chapterDay).length;
+  var selected = null, who = '';
+
+  $('title').textContent = D.project ? D.project + ' timeline' : 'Timeline';
+  var first = placed[0], last = placed[placed.length - 1];
+  $('sub').textContent = placed.length ? 'Day ' + first.n + ' to day ' + last.n + (last.n - first.n ? ' · ' + (last.n - first.n + 1) + ' days of story time' : '') + ' · tracked through chapter ' + D.last_updated_chapter : 'Nothing placed yet';
+  [[placed.length + unplaced.length, 'days tracked'], [chapterCount, 'chapters placed'], [D.last_updated_chapter || 0, 'tracked through chapter'], [openFlags.length, 'open flags', openFlags.length > 0]].forEach(function (s) {
+    $('stats').appendChild(h('div', { class: 'stat' + (s[2] ? ' alert' : '') }, [h('b', { text: String(s[0]) }), h('span', { text: s[1] })]));
+  });
+  var people = {}; days.forEach(function (d) { (d.characters_present || []).concat(d.pov_character ? [d.pov_character] : []).forEach(function (p) { people[p] = 1; }); });
+  Object.keys(people).sort().forEach(function (p) { $('who').appendChild(h('option', { value: p, text: p })); });
+  $('who').addEventListener('change', function () { who = this.value; draw(); });
+
+  function present(d) { return !who || d.pov_character === who || (d.characters_present || []).indexOf(who) >= 0; }
+  function chip(c) { return h('span', { class: 'chip m-' + (MODE[c.mode] || 'full'), title: 'Chapter ' + c.chapter + ' ' + (MODE_LABEL[c.mode] || '') + (c.flashback ? ' (flashback)' : ''), text: 'Ch ' + c.chapter + (c.flashback ? ' ↶' : '') }); }
+  function dayFlags(d) { return openFlags.filter(function (f) { return (f.days_involved || []).indexOf(d.key) >= 0; }); }
+
+  function node(d) {
+    var fl = dayFlags(d).length;
+    var b = h('button', { type: 'button', class: 'day' + (present(d) ? '' : ' dim'), 'aria-pressed': String(selected === d.key), 'aria-label': 'Day ' + d.key }, [
+      h('div', {}, [h('span', { class: 'n', text: d.n !== null ? 'Day ' + d.n : 'Unplaced' }), h('span', { class: 'wk', text: d.weekday || '' })]),
+      h('div', { class: 'chips' }, (d.chapters || []).map(chip)),
+      h('div', { class: 'ev', text: (d.major_events || [])[0] || (d.locations || [])[0] || '' }),
+      fl ? h('span', { class: 'flag', title: fl + ' open flag(s)', text: '⚠' }) : null
+    ]);
+    b.addEventListener('click', function () { selected = d.key; draw(); $('detailsec').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); });
+    return b;
+  }
+
+  function drawTrack() {
+    var t = $('track'); t.textContent = '';
+    placed.forEach(function (d, i) {
+      if (i > 0) { var gap = d.n - placed[i - 1].n - 1; if (gap > 0) t.appendChild(h('div', { class: 'gap', text: '+' + gap + ' day' + (gap > 1 ? 's' : '') + ' skipped' })); }
+      t.appendChild(node(d));
+    });
+    var u = $('unplaced'); u.textContent = '';
+    if (unplaced.length) {
+      u.appendChild(h('span', { text: 'Not pinned to a day: ' }));
+      unplaced.forEach(function (d) { var b = node(d); b.style.display = 'inline-block'; b.style.margin = '6px 8px 0 0'; b.style.flex = 'none'; var ch = (d.chapters || []).map(function (c) { return 'Ch ' + c.chapter; }).join(', '); u.appendChild(b); b.querySelector('.n').textContent = 'Day ?' + (d.day_range_if_uncertain ? ' (' + d.day_range_if_uncertain.join('–') + ')' : ''); b.title = ch; });
+    }
+  }
+
+  function row(k, v) { return v ? h('div', { class: 'row' }, [h('div', { class: 'k', text: k }), h('div', {}, [v])]) : null; }
+  function list(a) { return a && a.length ? h('ul', {}, a.map(function (x) { return h('li', { text: x }); })) : null; }
+  function quotes(a) { return a && a.length ? h('div', {}, a.map(function (c) { return h('blockquote', { class: 'quote' }, ['“' + c.quote + '”', h('small', { text: 'Chapter ' + c.source_chapter + (c.days != null ? ' · states ' + c.days + ' day(s)' : '') })]); })) : null; }
+  function tags(a, pov) { return a && a.length ? h('div', {}, a.map(function (x) { return h('span', { class: 'tag' + (x === pov ? ' pov' : ''), text: x === pov ? x + ' · POV' : x }); })) : null; }
+
+  function drawDetail() {
+    var el = $('detail'); el.textContent = '';
+    var d = days.filter(function (x) { return x.key === selected; })[0];
+    if (!d) { el.appendChild(h('p', { class: 'hint', text: 'Select a day above to see what happens on it, where, who is there, and exactly what the text says about the time.' })); return; }
+    el.appendChild(h('h3', { text: d.n !== null && d.day_confidence !== 'uncertain' ? 'Day ' + d.n + (d.weekday ? ' · ' + d.weekday : '') : 'Day not pinned down' + (d.day_range_if_uncertain ? ' (probably day ' + d.day_range_if_uncertain.join(' to ') + ')' : '') }));
+    var kinds = []; if (d.day_type) kinds.push(d.day_type === 'weekend' ? 'A weekend day' : 'A weekday');
+    [row('Chapters', h('div', {}, (d.chapters || []).map(function (c) { return h('span', { class: 'tag', text: 'Chapter ' + c.chapter + ' · ' + (MODE_LABEL[c.mode] || c.mode) + (c.flashback ? ' · flashback' : '') }); }))),
+     row('Calendar', kinds.length ? h('span', { text: kinds.join(' · ') }) : null),
+     row('Where', tags(d.locations)), row('Who', tags(d.characters_present, d.pov_character)),
+     row('What happens', list(d.major_events)),
+     row('Time of day', tags(d.time_of_day_markers)),
+     row('How much time passes', quotes(d.elapsed_time_claims)),
+     row('Calendar clues', quotes(d.calendar_claims)),
+     row('Daily Quests', d.daily_quests_completed && d.daily_quests_completed.length ? tags(d.daily_quests_completed) : null)
+    ].forEach(function (r) { if (r) el.appendChild(r); });
+    var fl = dayFlags(d);
+    if (fl.length) el.appendChild(row('Open flags', h('div', {}, fl.map(function (f) { return h('div', { class: 'tag', text: '⚠ ' + f.description }); }))));
+  }
+
+  // Chart: level or total XP against day, one line per character.
+  var measure = 'level';
+  function drawChart() {
+    var sec = $('chartsec'); var S = (D.series || []).filter(function (s) { return s.points.some(function (p) { return p[measure] != null; }); });
+    if (!(D.series || []).length) { sec.hidden = true; return; } sec.hidden = false;
+    var box = $('chart'); box.textContent = ''; $('key').textContent = '';
+    var pts = []; S.forEach(function (s) { s.points.forEach(function (p) { if (p[measure] != null) pts.push(p); }); });
+    if (!pts.length) { box.appendChild(h('p', { class: 'hint', text: 'No values for this measure yet.' })); return; }
+    var W = 760, H = 270, L = 48, R = 16, T = 14, B = 30;
+    var x0 = Math.min.apply(null, pts.map(function (p) { return p.day; })), x1 = Math.max.apply(null, pts.map(function (p) { return p.day; })); if (x1 === x0) x1 = x0 + 1;
+    var y1 = Math.max.apply(null, pts.map(function (p) { return p[measure]; })), y0 = 0; if (y1 === y0) y1 = 1;
+    function nice(v) { var p = Math.pow(10, Math.floor(Math.log(v) / Math.LN10)); var f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+    var step = nice(y1 / 4), top = Math.ceil(y1 / step) * step;
+    function X(v) { return L + (v - x0) / (x1 - x0) * (W - L - R); } function Y(v) { return T + (1 - v / top) * (H - T - B); }
+    var NS = 'http://www.w3.org/2000/svg';
+    function s(tag, a) { var e = document.createElementNS(NS, tag); for (var k in a) e.setAttribute(k, a[k]); return e; }
+    var svg = s('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', role: 'img', 'aria-label': 'Chart of ' + (measure === 'level' ? 'level' : 'total XP') + ' by day' });
+    for (var v = 0; v <= top + 1e-9; v += step) { svg.appendChild(s('line', { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: 'var(--line)' })); var t = s('text', { x: L - 8, y: Y(v) + 4, 'text-anchor': 'end' }); t.textContent = v >= 1000 ? (v / 1000) + 'k' : v; svg.appendChild(t); }
+    var xs = Math.max(1, Math.ceil((x1 - x0) / 8)); for (var d = x0; d <= x1; d += xs) { var tx = s('text', { x: X(d), y: H - 8, 'text-anchor': 'middle' }); tx.textContent = 'Day ' + d; svg.appendChild(tx); }
+    S.forEach(function (ser, i) {
+      var col = 'var(--c' + ((i % 6) + 1) + ')'; var p = ser.points.filter(function (q) { return q[measure] != null; }); if (!p.length) return;
+      var path = ''; p.forEach(function (q, j) { path += (j ? 'L' : 'M') + X(q.day).toFixed(1) + ' ' + Y(q[measure]).toFixed(1); });
+      svg.appendChild(s('path', { d: path, fill: 'none', stroke: col, 'stroke-width': 2.5, 'stroke-linejoin': 'round' }));
+      p.forEach(function (q) { var c = s('circle', { cx: X(q.day), cy: Y(q[measure]), r: 4, fill: 'var(--card)', stroke: col, 'stroke-width': 2 }); var tt = s('title', {}); tt.textContent = ser.character + ' · day ' + q.day + ' · ' + (measure === 'level' ? 'level ' : 'XP ') + q[measure]; c.appendChild(tt); svg.appendChild(c); });
+      $('key').appendChild(h('span', {}, [h('i', { style: 'background:' + col }), ser.character]));
+    });
+    box.appendChild(svg);
+  }
+  document.querySelectorAll('.tabs button').forEach(function (b) { b.addEventListener('click', function () { measure = b.getAttribute('data-m'); document.querySelectorAll('.tabs button').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); }); drawChart(); }); });
+
+  function drawMap() {
+    var m = $('map'); m.textContent = ''; var max = 0; Object.keys(chapterDay).forEach(function (k) { max = Math.max(max, +k); }); max = Math.max(max, D.last_updated_chapter || 0);
+    for (var c = 1; c <= max; c++) {
+      var e = chapterDay[c]; var dd = e ? days.filter(function (x) { return x.key === e.key; })[0] : null;
+      var cell = h(e ? 'button' : 'div', { class: 'cell ' + (e ? 'm-' + (MODE[e.mode] || 'full') : 'none'), title: e ? 'Chapter ' + c + ' is on day ' + e.key : 'Chapter ' + c + ' is not placed yet' }, [h('b', { text: 'Ch ' + c }), h('span', { text: e ? (dd && dd.n !== null && dd.day_confidence !== 'uncertain' ? 'Day ' + dd.n : 'Day ?') : '·' })]);
+      if (e) { cell.setAttribute('type', 'button'); (function (key) { cell.addEventListener('click', function () { selected = key; draw(); $('detailsec').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }); })(e.key); }
+      m.appendChild(cell);
+    }
+  }
+
+  function drawFlags() {
+    var f = $('flags'); f.textContent = '';
+    if (!(D.flags || []).length) { f.appendChild(h('div', { class: 'allgood', text: '✓ Nothing contradicts anything else so far.' })); return; }
+    D.flags.forEach(function (x) {
+      f.appendChild(h('div', { class: 'flagcard' + (x.status === 'resolved' ? ' resolved' : '') }, [
+        h('div', { class: 't', text: x.type.replace(/_/g, ' ') + (x.status === 'resolved' ? ' · resolved' : '') }),
+        h('div', { text: x.description }),
+        x.chapters_involved && x.chapters_involved.length ? h('div', { class: 'hint', text: 'Chapters ' + x.chapters_involved.join(', ') + (x.days_involved && x.days_involved.length ? ' · days ' + x.days_involved.join(', ') : '') }) : null,
+        quotes((x.quotes || []).map(function (q) { return { quote: q.quote, source_chapter: q.chapter }; }))
+      ]));
+    });
+  }
+
+  function draw() { drawTrack(); drawDetail(); }
+  draw(); drawChart(); drawMap(); drawFlags();
+  $('foot').textContent = 'Built from the timeline ledger. Every day number traces to a quote in the text; a flag stays open until the author decides it is a real error or an intended skip.';
+})();
+</script>
+</body>
+</html>

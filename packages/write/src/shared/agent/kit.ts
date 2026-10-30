@@ -25,8 +25,12 @@ export interface KitSkill {
   name: string;
   /** Prompt id, e.g. "line_edit". */
   id: string;
-  /** What notes are signed with, e.g. "Line edit". */
+  /** What notes are signed with, e.g. "Line edit" (a review skill), or the skill's title (an authoring skill). */
   tag: string;
+  /** A review skill leaves notes on the manuscript; an authoring skill makes files in the project. Default: review. */
+  kind?: 'review' | 'author';
+  /** Other files the skill carries (HTML templates), by path inside its folder. */
+  files?: Record<string, string>;
   /** The whole SKILL.md, front matter included. */
   markdown: string;
   /** The instructions without front matter. */
@@ -84,9 +88,14 @@ function extension(i: KitInput, b: KitBrand): Uint8Array {
 }
 
 /** One skill as a zip with the skill's folder at the top, the shape Claude's skill upload expects. */
-const skillZip = (s: KitSkill): Uint8Array => zipSync({ [`${s.name}/SKILL.md`]: strToU8(s.markdown) });
+const skillZip = (s: KitSkill): Uint8Array =>
+  zipSync({ [`${s.name}/SKILL.md`]: strToU8(s.markdown), ...Object.fromEntries(Object.entries(s.files ?? {}).map(([p, c]) => [`${s.name}/${p}`, strToU8(c)])) });
+const isReview = (s: KitSkill) => (s.kind ?? 'review') === 'review';
 
 function readme(i: KitInput): string {
+  const review = i.skills.filter(isReview);
+  const author = i.skills.filter((s) => !isReview(s));
+  const n = (list: KitSkill[]) => ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'][list.length] ?? String(list.length);
   const lines = [
     'CADREL WRITE AI KIT',
     '=============',
@@ -98,21 +107,30 @@ function readme(i: KitInput): string {
     '  1. Double-click cadrel-write.mcpb, or drag it into Claude Desktop under Settings > Extensions. Install it, and check the',
     `     projects folder it asks for is empty or is: ${i.root} (the folder that holds your book folders, not one book's folder).`,
     '     Empty is best: it follows the Root Folder you set in Cadrel Write.',
-    '  2. Add the skills: Settings > Capabilities > Skills > upload each zip in the "skills" folder (three of them).',
+    '  2. Add the skills: Settings > Capabilities > Skills > upload each zip in the "skills" folder (' + n(i.skills) + ' of them).',,
     '  3. Start a chat and ask: "Do a line edit of the chapters in my project <name>."',
     '',
     'CLAUDE CODE',
-    '  1. Copy the three folders inside skills\\folders into your skills folder (~/.claude/skills).',
+    '  1. Copy the folders inside skills\\folders into your skills folder (~/.claude/skills).',
     '  2. Add the server: open connect-settings.txt and run the "Claude Code" command. It needs Node.js 20 or newer.',
     '',
     'GPT (Codex CLI, the OpenAI Agents SDK and other apps that can run an MCP server)',
     '  1. Add the server with the Codex settings in connect-settings.txt (needs Node.js 20 or newer).',
-    '  2. In those apps the three editing passes are available as prompts named developmental_edit, line_edit and copy_edit.',
+    `  2. In those apps the skills are available as prompts: ${i.skills.map((s) => s.id).join(', ')}.`,
     '  3. For anything else, paste one of the files in the "for-gpt" folder into your custom instructions.',
     '  The ChatGPT app and claude.ai on the web cannot reach a program on your PC, so they cannot use the server.',
     '',
-    'THE THREE EDITING PASSES',
-    ...i.skills.map((s) => `  ${s.tag}: notes are signed "Claude · ${s.tag}" (or "GPT · ${s.tag}")`),
+    `THE ${n(review).toUpperCase()} EDITING PASS${review.length === 1 ? '' : 'ES'}`,
+    ...review.map((s) => `  ${s.tag}: notes are signed "Claude · ${s.tag}" (or "GPT · ${s.tag}")`),
+    ...(author.length
+      ? [
+          '',
+          `THE ${n(author).toUpperCase()} AUTHORING SKILL${author.length === 1 ? '' : 'S'}`,
+          '  These make files in your project (never in the manuscript): a premise, characters, an outline, a blurb, keywords, and trackers with',
+          '  pages you can open in a browser. They never overwrite a file without asking, and keep the version they replace.',
+          ...author.map((s) => `  ${s.tag}`),
+        ]
+      : []),
     '',
     'If you move your Cadrel Write Root Folder, update the projects folder in the settings you added.',
     'These files are made by Cadrel Write (version ' + i.version + '). Choose Notes > AI... in Cadrel Write to save them again after an update.',
@@ -150,7 +168,8 @@ export function buildKit(i: KitInput): KitFile[] {
     ...i.skills.flatMap((s) => [
       { path: `skills/${s.name}.zip`, data: skillZip(s) },
       text(`skills/folders/${s.name}/SKILL.md`, s.markdown),
-      text(`for-gpt/${s.name}.md`, `${s.body}\n\nWhen you call add_notes, set skill to "${s.tag}".\n`),
+      ...Object.entries(s.files ?? {}).map(([p, c]) => text(`skills/folders/${s.name}/${p}`, c)),
+      text(`for-gpt/${s.name}.md`, isReview(s) ? `${s.body}\n\nWhen you call add_notes, set skill to "${s.tag}".\n` : `${s.body}\n`),
     ]),
   ];
 }

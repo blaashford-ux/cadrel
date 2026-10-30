@@ -30,7 +30,7 @@ describe('the Cadrel Write MCP server', () => {
   it('offers the tools, with read-only ones marked', async () => {
     const { client } = await connect('claude-ai');
     const tools = (await client.listTools()).tools;
-    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'get_notes', 'list_chapters', 'list_files', 'list_projects', 'read_chapter', 'reply_to_note', 'search_text', 'set_chapters_edited', 'withdraw_note']);
+    expect(tools.map((t) => t.name).sort()).toEqual(['add_notes', 'build_tracker_view', 'check_keywords', 'check_tracker', 'edit_project_file', 'get_notes', 'list_chapters', 'list_files', 'list_project_files', 'list_projects', 'litrpg_log', 'litrpg_state', 'read_chapter', 'read_project_file', 'reply_to_note', 'search_text', 'set_chapters_edited', 'timeline_log', 'withdraw_note', 'write_project_file']);
     expect(tools.find((t) => t.name === 'read_chapter')?.annotations?.readOnlyHint).toBe(true);
     expect(tools.find((t) => t.name === 'add_notes')?.annotations?.readOnlyHint).toBe(false);
     expect(tools.find((t) => t.name === 'set_chapters_edited')?.annotations?.readOnlyHint).toBe(false);
