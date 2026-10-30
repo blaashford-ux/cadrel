@@ -3,6 +3,7 @@ node_modules/
 .wrangler/
 .dev.vars
 dist-electron/
+dist-mobile/
 release/
 **/assets/vendor/
 *.log
