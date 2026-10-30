@@ -10,6 +10,16 @@ const studioCall = async (channel: string, ...args: unknown[]) => {
 
 // Sandboxed preload (CommonJS). Everything the shell's page may do is listed here; nothing generic is exposed.
 const api: CadrelApi = {
+  scope: {
+    get: () => ipcRenderer.invoke('shell:scope:get'),
+    set: (change) => ipcRenderer.invoke('shell:scope:set', change),
+    openMenu: (at) => ipcRenderer.invoke('shell:scope:menu', at),
+    onChange: (cb) => {
+      const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
+      ipcRenderer.on('shell:scope', h);
+      return () => ipcRenderer.removeListener('shell:scope', h);
+    }
+  },
   studios: {
     get: () => studioCall('shell:studios:get'),
     setActive: (id) => studioCall('shell:studios:setActive', id),

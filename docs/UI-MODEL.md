@@ -92,9 +92,32 @@ Confirmed:
 - A Market category can already be linked to several Projects.
 - Skills assume one project folder.
 
-Not yet checked: the filters each shell page (Notes, Files, Planner, Dashboard, My Books) already has. Phase 1 starts with that audit.
+The page audit (done in Phase 1), what each shell page filters today:
+
+| Page | Today |
+|---|---|
+| Notes | already has a project picker (that project and its subprojects), local to the page, default all |
+| Files | search text only; no notion of a project |
+| Planner | pipeline by workflow and level (all / top / sub); the calendar shows every task; no project filter |
+| Dashboard | lists every project and every Market category |
+| My Books | filters by pen name and text; no project |
+| Home | lists the top-level projects |
+
+So only Notes has anything to build on; the rest start from "everything", and Phase 3 adds the scope to each.
 
 ## 9. Phases
+
+**Phase 1 is built** (the scope engine; no page follows it yet):
+- `viewScope` in the kernel: what a Project and a Book are to the UI, resolving a request against the tree (an archived or deleted Project or Book never leaves the app pointing at nothing), `viewScopeOf` (the scope that shows a given record) and `inViewScope` (whether a record is inside a scope), which Phase 3's pages will use to filter. A Book that is only implied (the Project has just one) is not remembered as a choice, so a second Book brings back *All books*.
+- One scope per Studio, held in the main process (`ScopeHost`), remembered in the Studio's own settings, re-checked after every change to the project tree, and announced to the shell and to every module view only when it changes.
+- The shell reads and changes it (`window.cadrel.scope`: `get`, `set`, `onChange`, `openMenu`). Write, Market and Finance get a **read-only** `window.cadrelScope` (`get`, `onChange`), added to each module's preload when the shell builds it; a module cannot change the scope, which the main process enforces.
+- The rail has a scope button (Project, and Book when there is more than one) that opens a **native menu**. The mock's wide selects don't fit the 64 px rail, and a list drawn in the page would be hidden behind the module views, which are native views above the page; a native menu draws above them.
+- Opening a project from Home or a dashboard row makes it the scope. Browsing the tree on the Projects page does not, so looking around never changes what Write shows.
+- No page filters by it yet, so the rail does not yet mark pages "project" or "all" (it would say something untrue).
+
+Not in Phase 1: Market, Write and Finance *use* `cadrelScope` (Phase 3), closing a Book (Phase 2, so "open Book" today means "not archived").
+
+The plan:
 
 0. **This spec and the mock.** Agree the rules.
 1. **Scope engine.** Audit the pages' existing filters. One scope (Studio, Project, Book) in the shell, the rail switcher, persistence per Studio, and a way to pass it to Write, Market and Finance. No page changes yet.

@@ -16,6 +16,8 @@ import { Rail } from './Rail';
 import { Settings } from './Settings';
 import { MyBooks } from './MyBooks';
 import { useStudio } from './useStudio';
+import { useScope } from './useScope';
+import { viewScopeOf } from '@cadrel/kernel';
 
 const api = window.cadrel;
 const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
@@ -41,6 +43,7 @@ function usePaint() {
 
 export function App() {
   usePaint();
+  const scope = useScope();
   const [page, setPage] = useState<Page>('home');
   const [win, setWin] = useState<WindowInfo | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -82,6 +85,18 @@ export function App() {
     }
   }, []);
 
+  // Opening a project from another page (Home, a dashboard row) also makes it the scope; browsing the tree on the Projects page does not.
+  const openProject = useCallback(
+    (id: string) => {
+      select(id);
+      const tree = studio.state?.tree;
+      const want = tree ? viewScopeOf(tree, id) : null;
+      if (want) void api.scope.set(want).catch(() => undefined);
+      void api.navigate('projects');
+    },
+    [select, studio.state?.tree]
+  );
+
   const refresh = useCallback(() => void api.overview().then(setOverview, () => undefined), []);
   // These pages show live data: load on arrival, on focus, and every so often while they are the page.
   useEffect(() => {
@@ -105,7 +120,7 @@ export function App() {
 
   return (
     <div className={`shell${rounded ? ' rounded' : ''}${win?.overlay ? ' has-controls' : ''}`}>
-      <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} />
+      <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} scope={scope} />
       <main className={`content${own ? '' : ' hidden'}`} aria-label={TITLES[page]}>
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
         <header className={`strip${win?.overlay ? ' overlay' : ''}`}>
@@ -113,15 +128,15 @@ export function App() {
           {win?.overlay && <span className="strip-gap" aria-hidden="true" />}
         </header>
         <div className={`page page-${page}`}>
-          {page === 'home' && <Home overview={overview} studio={studio.state} studios={studios} onGo={go} onProject={(id) => (select(id), go('projects'))} />}
+          {page === 'home' && <Home overview={overview} studio={studio.state} studios={studios} onGo={go} onProject={openProject} />}
           {blocked && <NotConnected studio={studios!.studios.find((s) => s.id === studios!.activeId)!} />}
           {!blocked && page === 'projects' && (
             <Projects studio={studio.state} overview={overview} error={studio.error} clearError={studio.clearError} act={studio.act} onGo={go} selected={selected} onSelect={select} />
           )}
-          {!blocked && page === 'mybooks' && <MyBooks studio={studio.state} act={studio.act} error={studio.error} clearError={studio.clearError} onProject={(id) => (select(id), go('projects'))} />}
+          {!blocked && page === 'mybooks' && <MyBooks studio={studio.state} act={studio.act} error={studio.error} clearError={studio.clearError} onProject={openProject} />}
           {!blocked && page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
-          {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={(id) => (select(id), go('projects'))} onRefresh={refresh} />}
-          {!blocked && page === 'planner' && <Planner studio={studio.state} onProject={(id) => (select(id), go('projects'))} />}
+          {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={openProject} onRefresh={refresh} />}
+          {!blocked && page === 'planner' && <Planner studio={studio.state} onProject={openProject} />}
           {!blocked && page === 'files' && <Files />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}

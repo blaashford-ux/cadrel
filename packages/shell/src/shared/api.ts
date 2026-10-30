@@ -4,7 +4,7 @@ import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kernel';
+import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
@@ -789,7 +789,26 @@ export interface StagesApi {
   move(projectId: string, to: string): Promise<void>;
 }
 
+/** The scope with the names to show for it, so a page or module view needs nothing else to label it. */
+export interface ScopeView extends ResolvedViewScope {
+  projectName: string | null;
+  /** The chosen Book's name, or null for all books. */
+  bookName: string | null;
+}
+
+/** The Project and Book the app is showing (docs/UI-MODEL.md). One scope for the whole app: the shell's pages and the module views follow it. */
+export interface ScopeApi {
+  get(): Promise<ScopeView>;
+  /** Changes the Project and/or the Book; answers with the scope that resulted (a Book that is not the Project's is dropped). */
+  set(change: Partial<ViewScope>): Promise<ScopeView>;
+  /** Opens the native menu for choosing the Project and Book at a point in the window (native, so it draws above the module views). */
+  openMenu(at: { x: number; y: number }): Promise<void>;
+  /** Called whenever the scope changes, whoever changed it (another page, a project archived). */
+  onChange(cb: (scope: ScopeView) => void): () => void;
+}
+
 export interface CadrelApi {
+  scope: ScopeApi;
   studios: StudiosApi;
   stages: StagesApi;
   workflow: WorkflowApi;

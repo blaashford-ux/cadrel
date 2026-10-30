@@ -1,5 +1,7 @@
 import type { Page } from '../shared/api';
+import type { ScopeView } from '../shared/api';
 import { Avatar } from './Avatar';
+import { ScopeButton } from './ScopeButton';
 import { Emblem } from './brand/Emblem';
 
 interface Item {
@@ -33,7 +35,7 @@ const ADMIN: Item = { page: 'admin', label: 'Admin', icon: svg('M12 3 4.5 6v5.5c
 const SETTINGS: Item = { page: 'settings', label: 'Settings', icon: svg('M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 13.5a7.7 7.7 0 0 0 0-3l1.9-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4L4.6 10.5a7.7 7.7 0 0 0 0 3l-1.9 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4-1.9-1.5Z') };
 
 /** The left rail: where you are, and where else you can go. Studio pages on top, the modules below, settings at the foot. */
-export function Rail({ page, onGo, isAdmin, updateAvailable }: { page: Page; onGo: (p: Page) => void; isAdmin: boolean; updateAvailable: boolean }) {
+export function Rail({ page, onGo, isAdmin, updateAvailable, scope }: { page: Page; onGo: (p: Page) => void; isAdmin: boolean; updateAvailable: boolean; scope: ScopeView | null }) {
   const item = (it: Item) => (
     <li key={it.page}>
       <button type="button" className="rail-btn" aria-label={it.label} aria-current={page === it.page ? 'page' : undefined} title={it.label} onClick={() => onGo(it.page)}>
@@ -48,6 +50,7 @@ export function Rail({ page, onGo, isAdmin, updateAvailable }: { page: Page; onG
       <div className="rail-mark" role="img" aria-label="Cadrel">
         <span className="mark-tile"><Emblem size={30} /></span>
       </div>
+      <ScopeButton scope={scope} />
       <ul>{TOP.map(item)}</ul>
       <hr className="rail-sep" />
       <ul>{MODULES.map(item)}</ul>

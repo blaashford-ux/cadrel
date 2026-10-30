@@ -142,6 +142,74 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 60_000);
 
+  it('Scope: the rail shows the Project and Book, every module view is told, only the shell can change it, and it survives a restart', async () => {
+    // Its own Studio: the projects made here must not be in the one the other tests share.
+    const h = fs.mkdtempSync(path.join(tmp, 'scope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'scope-data-'));
+    const first = await launch({ home: h, userData: ud });
+    const { app, shell } = first;
+    const studio = (fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => (window as any).cadrel.studio[f as string](...(a as unknown[])), [fn, args] as const);
+    const scopeNow = () => shell.evaluate(() => (window as any).cadrel.scope.get());
+    expect(await shell.locator('.scope-btn').count()).toBe(0); // no projects: nothing to scope
+
+    const series = (await studio('createProject', { name: 'Dragon Rider', kind: 'Series' })) as { id: string };
+    await shell.locator('.scope-btn').waitFor();
+    expect(await shell.locator('.scope-btn').innerText()).toBe('Dragon Rider');
+    const b1 = (await studio('createProject', { name: 'Book 1', parentId: series.id, kind: 'Book' })) as { id: string };
+    const b2 = (await studio('createProject', { name: 'Book 2', parentId: series.id, kind: 'Book' })) as { id: string };
+    await waitFor(async () => (await shell.locator('.scope-btn').innerText()).includes('All books'), 'the rail to offer all books');
+    expect(await scopeNow()).toMatchObject({ projectName: 'Dragon Rider', book: null, bookName: null, books: [b1.id, b2.id], bookImplied: false });
+
+    // Every module view has the read-only bridge and hears about a change.
+    const seen: Record<string, Page> = {};
+    for (const [label, id] of [['Write', 'write'], ['Market', 'market'], ['Finance', 'finance']] as const) {
+      await shell.getByRole('button', { name: label, exact: true }).click();
+      seen[id] = await waitFor(() => app.windows().find((w) => w.url().includes(`/modules/${id}/`)), `the ${label} view`);
+      expect(await seen[id]!.evaluate(() => Object.keys((window as any).cadrelScope).sort())).toEqual(['get', 'onChange']);
+      expect(await seen[id]!.evaluate(async () => (await (window as any).cadrelScope.get()).projectName)).toBe('Dragon Rider');
+      await seen[id]!.evaluate(() => {
+        (window as any).heard = [];
+        (window as any).cadrelScope.onChange((s: { bookName: string | null }) => (window as any).heard.push(s.bookName));
+      });
+    }
+    await shell.getByRole('button', { name: 'Home', exact: true }).click();
+    expect(await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }).then((s: any) => s.bookName), b2.id)).toBe('Book 2');
+    for (const id of ['write', 'market', 'finance']) await waitFor(async () => (await seen[id]!.evaluate(() => (window as any).heard)).includes('Book 2'), `the ${id} view to hear the change`);
+    expect(await shell.locator('.scope-btn').innerText()).toContain('Book 2');
+
+    // A module view can ask but not change, even by calling the channel itself.
+    const refused = await app.evaluate(async ({ ipcMain, BrowserWindow }) => {
+      const view = BrowserWindow.getAllWindows()[0]!.contentView.children[0] as any;
+      const set = (ipcMain as any)._invokeHandlers.get('shell:scope:set');
+      try {
+        await set({ sender: view.webContents }, { book: null });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(refused).toBe(true);
+    expect((await scopeNow()).bookName).toBe('Book 2');
+
+    // A Book that is not the Project's is dropped, and archiving the Book in scope moves the scope on and tells everyone.
+    const other = (await studio('createProject', { name: 'The Lost King' })) as { id: string };
+    const lostBook = (await studio('createProject', { name: 'The Lost King', parentId: other.id, kind: 'Book' })) as { id: string };
+    expect(await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }), lostBook.id)).toMatchObject({ projectName: 'Dragon Rider', bookName: null });
+    await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }), b2.id);
+    await studio('archiveProject', b2.id, true);
+    await waitFor(async () => (await scopeNow()).bookImplied === true, 'the scope to move off the archived Book');
+    expect(await scopeNow()).toMatchObject({ projectName: 'Dragon Rider', book: b1.id });
+    await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), other.id);
+    expect(await scopeNow()).toMatchObject({ projectName: 'The Lost King', book: lostBook.id, bookImplied: true });
+    await app.close();
+
+    // Remembered for the Studio across a restart.
+    const second = await launch({ home: h, userData: ud });
+    await second.shell.locator('.scope-btn').waitFor();
+    expect(await second.shell.evaluate(() => (window as any).cadrel.scope.get().then((s: any) => s.projectName))).toBe('The Lost King');
+    await second.app.close();
+  }, 150_000);
+
   it('Dashboard and Home show a project made in Write', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();

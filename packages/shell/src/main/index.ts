@@ -24,13 +24,14 @@ import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './c
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
+import { ScopeHost, scopeMenu } from './scope';
 import { StudioService } from './studio';
 import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import { AI_ACCESS_FILE, accessReader, sanitizeAccess, type AiAccess } from '@cadrel/write/src/shared/agent/access';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, type ViewScope, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
@@ -83,6 +84,10 @@ let settings: SettingsStore;
 /** The active Studio's own settings (where its Projects and Write folders are, if the person moved them). */
 let studioSettings: SettingsStore;
 let studio: StudioService;
+/** What the app is showing: the Project and Book every page and module view follows (docs/UI-MODEL.md). */
+let scope: ScopeHost;
+/** Checks the scope against the Studio's projects after something may have changed them; never lets a failure reach the caller. */
+const rescope = (): void => void scope?.refresh().catch(() => undefined);
 let users: UserStore;
 let admin: AdminStore;
 let studios: StudioRegistry;
@@ -690,7 +695,9 @@ function registerShellIpc(): void {
     ipcMain.handle(channel, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         if (err instanceof ProjectError || err instanceof NoteError || (err instanceof Error && /^There is no project/.test(err.message))) return { __error: err.message };
         throw err;
@@ -701,7 +708,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:manage:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -711,7 +720,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -1046,6 +1057,29 @@ function registerShellIpc(): void {
   });
   manageOp('unfiled', () => manager.unfiled());
   manageOp('adopt', (name: string, parentId?: string | null) => manager.adopt(name, parentId));
+  // The scope: the shell's pages ask and change it; the module views (Write, Market, Finance) can only ask, and are told when it changes.
+  ipcMain.handle('shell:scope:get', async (e) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    return scope.get();
+  });
+  ipcMain.handle('shell:scope:set', async (e, change: unknown) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
+    const id = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && v.length <= 80 ? v : undefined);
+    return scope.set({ ...(id(c.project) !== undefined ? { project: id(c.project) } : {}), ...(id(c.book) !== undefined ? { book: id(c.book) } : {}) } as Partial<ViewScope>);
+  });
+  ipcMain.handle('shell:scope:menu', async (e, at: unknown) => {
+    if (!fromShell(e) || !win || win.isDestroyed()) throw new Error('not allowed');
+    const pos = (at && typeof at === 'object' ? at : {}) as { x?: unknown; y?: unknown };
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined);
+    const items = scopeMenu((await studio.studio.read()).tree, await scope.get());
+    const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: 'radio' as const, checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
+    menu.popup({ window: win, x: num(pos.x), y: num(pos.y) });
+  });
+  ipcMain.handle('scope:get', async (e) => {
+    if (!(['write', 'market', 'finance'] as const).some((id) => views[id] && e.sender === views[id]!.webContents)) throw new Error('not allowed');
+    return scope.get();
+  });
   studioOp('studio:state', () => studio.state());
   studioOp('studio:createProject', async (o: Parameters<StudioService['createProject']>[0]) => ({ id: (await studio.createProject(o)).id }));
   studioOp('studio:updateProject', (id: string, c: { name?: string; kind?: string }) => studio.updateProject(id, c));
@@ -1305,6 +1339,18 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
+    scope = new ScopeHost({
+      tree: async () => (await studio.studio.read()).tree,
+      remembered: () => studioSettings.get().scope,
+      remember: (s) => studioSettings.update((x) => void (x.scope = s)),
+      announce: (r) => {
+        if (win && !win.isDestroyed()) win.webContents.send('shell:scope', r);
+        for (const id of ['write', 'market', 'finance'] as const) {
+          const c = views[id]?.webContents;
+          if (c && !c.isDestroyed()) c.send('scope:changed', r);
+        }
+      }
+    });
 
     write = await createWriteModule({
       getWindow: () => win,
