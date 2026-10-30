@@ -48,6 +48,9 @@ const UNUSABLE = new Set([
   'best', 'bestseller', 'bestselling', 'top', 'popular', 'award', 'winning', 'free', 'new', 'sale', 'discount', 'cheap', 'deal', 'review',
 ]);
 
+/** True for a word that is wasted or not allowed in a KDP keyword: filler, generic words, claims and sales terms. */
+export const isUnusableKeywordWord = (w: string): boolean => FILLER.has(w.toLowerCase()) || UNUSABLE.has(w.toLowerCase()) || UNUSABLE.has(stem(w.toLowerCase()));
+
 interface Item {
   words: string[];
   stems: string[];
@@ -85,10 +88,10 @@ function together(a: Set<number>, b: Set<number>): number {
 }
 
 /** Up to seven strings of at most 50 characters (fewer when the library has too few distinct terms), strongest first. */
-export function suggestKeywordStrings(db: Db, categoryKey: string, o: { asin?: string; count?: number; maxChars?: number } = {}): KeywordString[] {
+export function suggestKeywordStrings(db: Db, categoryKey: string, o: { asin?: string; outline?: string; count?: number; maxChars?: number } = {}): KeywordString[] {
   const count = Math.max(1, Math.min(o.count ?? KEYWORD_STRING_COUNT, 20));
   const maxChars = Math.max(10, Math.min(o.maxChars ?? KEYWORD_STRING_LIMIT, 200));
-  const pool = candidatePool(db, categoryKey, { asin: o.asin });
+  const pool = candidatePool(db, categoryKey, { asin: o.asin, outline: o.outline });
 
   const items: Item[] = [];
   const seen = new Set<string>();

@@ -8,7 +8,7 @@ import { zipSync, strToU8 } from 'fflate';
 import {
   ArcticShift, addCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
-  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, purgeBook, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
+  applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, getOutlineChoice, setOutlineChoice, listInjectedSuggestions, dismissInjectedSuggestion, type OutlineRef, type OutlineSource, type InjectedSuggestion, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, purgeBook, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
   Library, amazonUrl, getBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
   type BookDetail, type QueueItem, type RemovedBook,
@@ -117,6 +117,8 @@ export interface ServiceOptions {
   mcpBrand?: McpBrand;
   /** Pause between autocomplete requests, in ms; tests set 0. */
   keywordDelayMs?: number;
+  /** Where the person's outline documents are, for keyword suggestions. Absent where the host has no projects to look in. */
+  outlines?: OutlineSource;
 }
 
 export interface AppInfo {
@@ -666,20 +668,62 @@ export class AppService {
 
   clearKeywordHistory(): void { clearKeywordHistory(this.need().db); }
 
-  /** Five phrases worth searching for a captured category, from what the library already holds (no request is made). With a book's ASIN, words already in its title, subtitle and blurb are left out too. */
-  keywordIdeas(categoryKey: string, asin?: string): KeywordIdea[] {
+  /** The outline chosen for a category's suggestions, read now; undefined when none is chosen or it can no longer be read. */
+  private async outlineText(categoryKey: string): Promise<string | undefined> {
+    const choice = getOutlineChoice(this.need().db, categoryKey);
+    if (!choice || !this.opts.outlines) return undefined;
+    return (await this.opts.outlines.read(choice).catch(() => null)) ?? undefined;
+  }
+
+  /** Five phrases worth searching for a captured category, from what the library already holds (no request is made). With a book's ASIN, words already in its title, subtitle and blurb are left out too. With an outline chosen for the category, suggestions are built on it. */
+  async keywordIdeas(categoryKey: string, asin?: string): Promise<KeywordIdea[]> {
     const lib = this.need();
     const r = resolveCategory(lib.db, String(categoryKey));
     if ('error' in r) throw new Error(r.error);
-    return suggestKeywords(lib.db, r.category.key, 5, { asin: asin ? String(asin) : undefined });
+    return suggestKeywords(lib.db, r.category.key, 5, { asin: asin ? String(asin) : undefined, outline: await this.outlineText(r.category.key) });
   }
 
   /** Seven keyword strings (one per KDP keyword box, 50 characters each) for a captured category, from what the library already holds (no request is made). */
-  keywordStrings(categoryKey: string, asin?: string): KeywordString[] {
+  async keywordStrings(categoryKey: string, asin?: string): Promise<KeywordString[]> {
     const lib = this.need();
     const r = resolveCategory(lib.db, String(categoryKey));
     if ('error' in r) throw new Error(r.error);
-    return suggestKeywordStrings(lib.db, r.category.key, { asin: asin ? String(asin) : undefined });
+    return suggestKeywordStrings(lib.db, r.category.key, { asin: asin ? String(asin) : undefined, outline: await this.outlineText(r.category.key) });
+  }
+
+  /** The outline documents found in the person's projects, and the one chosen for this category. */
+  async keywordOutlines(categoryKey: string): Promise<{ available: boolean; outlines: OutlineRef[]; chosen: { project: string; file: string } | null; readable: boolean }> {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    const chosen = getOutlineChoice(lib.db, r.category.key);
+    if (!this.opts.outlines) return { available: false, outlines: [], chosen, readable: false };
+    const outlines = await this.opts.outlines.list().catch(() => []);
+    return { available: true, outlines, chosen, readable: !chosen || (await this.outlineText(r.category.key)) !== undefined };
+  }
+
+  /** Chooses (or with null, clears) the outline a category's suggestions are built on. Only an outline the host lists can be chosen. */
+  async setKeywordOutline(categoryKey: string, ref: { project: string; file: string } | null): Promise<void> {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    if (ref) {
+      const found = (await this.opts.outlines?.list().catch(() => []))?.some((o) => o.project === ref.project && o.file === ref.file);
+      if (!found) throw new Error('that is not one of the outline documents found in your projects');
+    }
+    setOutlineChoice(lib.db, r.category.key, ref);
+  }
+
+  /** Suggestions an AI tool sent in for a category (not dismissed). */
+  injectedSuggestions(categoryKey: string): InjectedSuggestion[] {
+    const lib = this.need();
+    const r = resolveCategory(lib.db, String(categoryKey));
+    if ('error' in r) throw new Error(r.error);
+    return listInjectedSuggestions(lib.db, r.category.key);
+  }
+
+  dismissInjectedSuggestion(id: number): void {
+    dismissInjectedSuggestion(this.need().db, Number(id));
   }
 
   /** Import the CSV that Google Trends' Download button saves (the renderer reads the file and passes its text). */
@@ -1147,6 +1191,11 @@ export class AppService {
   excludeFromCategory(asin: string, categoryKey: string): void {
     assertAsin(asin);
     this.need().excludeFromCategory(asin, String(categoryKey));
+    this.dataChanged();
+  }
+
+  renameCategory(categoryKey: string, name: string): void {
+    this.need().renameCategory(String(categoryKey), typeof name === 'string' ? name : '');
     this.dataChanged();
   }
 

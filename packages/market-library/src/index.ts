@@ -52,3 +52,5 @@ export * from './keywords/ideas.js';
 export * from './keywords/strings.js';
 export * from './datapack.js';
 export * from './keywords/lexicon.js';
+export * from './keywords/outline.js';
+export * from './keywords/injected.js';

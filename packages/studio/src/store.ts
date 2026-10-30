@@ -8,7 +8,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
+  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, renameTopic, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
   replyToNote, sanitizeNotes, sanitizeTree, setArchived, setNoteStatus, unlinkRecord, updateProject,
   type NewNote, type Note, type NoteStatus, type Project, type ProjectTree
 } from '@cadrel/kernel';
@@ -154,6 +154,14 @@ export class Studio {
 
   editNote(id: string, patch: { body?: string; category?: string | null }): Promise<void> {
     return this.change((d) => ({ data: { ...d, notes: editNote(d.notes, id, patch) }, result: undefined }));
+  }
+
+  /** Rename a topic on every note that has it (empty `to` removes it); returns how many notes changed. */
+  renameNoteTopic(from: string, to: string | null): Promise<number> {
+    return this.change((d) => {
+      const r = renameTopic(d.notes, from, to);
+      return { data: { ...d, notes: r.notes }, result: r.changed };
+    });
   }
 
   replyToNote(id: string, reply: { author: string; body: string }): Promise<void> {

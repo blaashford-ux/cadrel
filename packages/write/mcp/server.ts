@@ -7,6 +7,8 @@ import { z } from 'zod';
 import {
   addNotes,
   AgentError,
+  createFile,
+  editFile,
   getNotes,
   listChapters,
   listFiles,
@@ -23,6 +25,7 @@ import { checkKeywords } from '../src/shared/agent/keywords';
 import { editProjectFile, listProjectFiles, readProjectFile, writeProjectFile } from '../src/shared/agent/projectFiles';
 import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type ViewTemplates } from '../src/shared/agent/trackers';
 import { EVENT_TYPES } from '../src/shared/agent/litrpg';
+import type { AiAccess } from '../src/shared/agent/access';
 import { SKILLS } from './skills.generated';
 
 /** The page templates the tracker skills carry as assets. */
@@ -43,6 +46,8 @@ export interface ServerOptions {
   version?: string;
   /** The folders that were looked at to find the projects, first choice first; named in the reply when there are none. */
   tried?: { root: string; source: string }[];
+  /** What the person has allowed the AI to change, read afresh at each change. Without it nothing may be created or edited. */
+  access?: () => Promise<AiAccess>;
 }
 
 /** Which AI is connected, from the client's own name, so notes say who wrote them. */
@@ -94,7 +99,8 @@ export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
 /** What the AI is told about Cadrel Write's tools. A server that adds other modules' tools puts this beside theirs. */
 export const WRITE_INSTRUCTIONS =
   'Cadrel Write holds a writer\'s book projects as Markdown files. As an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
-  'You cannot change the manuscript; the author reviews your notes in Cadrel Write and accepts or rejects each one. Quote text exactly as read_chapter returns it. ' +
+  'By default you cannot change the manuscript: the author reviews your notes in Cadrel Write and accepts or rejects each one. Quote text exactly as read_chapter returns it. ' +
+  'create_file and edit_file work only if the author has allowed them under Settings → MCP in Cadrel (both are off until they do). If one is refused, do not try to get round it: tell the author what you wanted to change, leave add_notes suggestions, and mention the setting. ' +
   'As a development partner: list_project_files, read_project_file, write_project_file and edit_project_file work on the project\'s other files (premise, outline, characters, worldbuilding, blurb, keywords), never on the manuscript, and never replace a file without mode "replace". ' +
   'The trackers keep a LitRPG mechanics ledger (litrpg_log, litrpg_state) and a timeline ledger (timeline_log) in the project\'s Tracking folder, check them with check_tracker, and draw them with build_tracker_view. check_keywords validates KDP backend keywords. ' +
   'The prompts (series_developer, premise_to_outline, outline_to_blurb, outline_to_keywords, timeline_tracker, litrpg_tracker, and the three editing passes) are step-by-step working methods; start one when the author asks for that kind of work.';
@@ -107,7 +113,7 @@ export function createServer(o: ServerOptions): McpServer {
 
 /** Cadrel Write's tools and editing-skill prompts, registered on any MCP server (so one server can carry several modules' tools). */
 export function registerWriteTools(server: McpServer, o: ServerOptions): void {
-  const ctx = (): AgentContext => ({ fs: o.fs, root: o.root, ...agentFromClient(server.server.getClientVersion()?.name, o.agent) });
+  const ctx = (): AgentContext => ({ fs: o.fs, root: o.root, access: o.access, ...agentFromClient(server.server.getClientVersion()?.name, o.agent) });
   const run = <T>(job: (c: AgentContext) => Promise<T>) => async () => {
     try {
       return reply(await job(ctx()));
@@ -402,6 +408,49 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       annotations: write,
     },
     (a) => run((c) => buildTrackerView(c, a.project, { view: a.view, character: a.character, as_of_chapter: a.as_of_chapter, return_html: a.return_html }, viewTemplates()))()
+  );
+
+  const writes = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
+
+  server.registerTool(
+    'create_file',
+    {
+      description:
+        'Create a new Markdown manuscript file in a project (for example a new chapter or a notes file). It never replaces a file that exists. ' +
+        'Off unless the author has allowed AI tools to create files in Cadrel (Settings → MCP): if it is off the call is refused and nothing is written.',
+      inputSchema: {
+        project,
+        file: z.string().describe('Path of the new file inside the project, ending in .md, e.g. "Manuscript/Chapter 2.md". Folders on the way are made if needed.'),
+        content: z.string().describe(`The Markdown text of the file (up to ${LIMITS.fileContent} characters).`),
+      },
+      annotations: writes,
+    },
+    (a) => run((c) => createFile(c, a.project, a.file, a.content))()
+  );
+
+  server.registerTool(
+    'edit_file',
+    {
+      description:
+        'Change the text of an existing manuscript file by replacing exact passages of its Markdown. Every edit must match exactly one place; if any does not, nothing is changed. ' +
+        'Off unless the author has allowed AI tools to edit files in Cadrel (Settings → MCP): if it is off the call is refused and nothing is written. ' +
+        'Prefer add_notes suggestions unless the author has asked you to make the change yourself.',
+      inputSchema: {
+        project,
+        file,
+        edits: z
+          .array(
+            z.object({
+              old_text: z.string().describe('The exact Markdown now in the file (see read_chapter with include_markdown). Must occur once: include enough surrounding text.'),
+              new_text: z.string().describe('What replaces it. Empty deletes the passage.'),
+            })
+          )
+          .min(1)
+          .max(LIMITS.editsPerCall),
+      },
+      annotations: { ...writes, destructiveHint: true },
+    },
+    (a) => run((c) => editFile(c, a.project, a.file, a.edits))()
   );
 
   // The same instructions the skills carry, for clients that have prompts but not skills (GPT-based ones among them).

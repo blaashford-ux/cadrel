@@ -1,5 +1,6 @@
 import type { Db } from '../schema.js';
 import { exportUserData } from '../userdata.js';
+import { categoryNameSql } from '../queries.js';
 import { authorNamesOf, splitPenNames } from '../authors.js';
 import { scopeMatcher, type AuthorScope } from './scope.js';
 
@@ -90,7 +91,7 @@ const SELECT = `
     (SELECT max(captured_at) FROM snapshot WHERE asin = o.asin) AS lastCaptured,
     (SELECT r.rank FROM snapshot s JOIN rank_entry r ON r.snapshot_id = s.id AND r.scope = 'overall' AND r.store = 'kindle' WHERE s.asin = o.asin ORDER BY s.captured_at DESC LIMIT 1) AS overallRank,
     (SELECT e.rank FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id WHERE e.asin = o.asin ORDER BY l.captured_at DESC, e.rank LIMIT 1) AS listRank,
-    (SELECT c.name FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id JOIN category c ON c.key = l.category_key WHERE e.asin = o.asin ORDER BY l.captured_at DESC, e.rank LIMIT 1) AS listCategory,
+    (SELECT ${categoryNameSql('c')} FROM list_entry e JOIN list_capture l ON l.id = e.list_capture_id JOIN category c ON c.key = l.category_key WHERE e.asin = o.asin ORDER BY l.captured_at DESC, e.rank LIMIT 1) AS listCategory,
     (SELECT CASE WHEN count(CASE source WHEN 'upload' THEN 1 END) > 0 THEN 'manuscript' WHEN count(*) > 0 THEN 'sample' END FROM manuscript WHERE asin = o.asin) AS text,
     (SELECT rating_value FROM snapshot WHERE asin = o.asin ORDER BY captured_at DESC LIMIT 1) AS ratingValue,
     (SELECT rating_count FROM snapshot WHERE asin = o.asin ORDER BY captured_at DESC LIMIT 1) AS ratingCount,

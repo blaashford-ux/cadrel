@@ -172,6 +172,10 @@ const api: CadrelApi = {
       return () => ipcRenderer.removeListener('shell:user', h);
     }
   },
+  mcp: {
+    get: () => ipcRenderer.invoke('shell:mcp:get'),
+    set: (change) => studioCall('shell:mcp:set', change)
+  },
   prefs: {
     folders: () => ipcRenderer.invoke('shell:prefs:folders'),
     choose: (which) => studioCall('shell:prefs:choose', which),

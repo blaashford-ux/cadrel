@@ -18,7 +18,7 @@ const FIX = path.resolve(__dirname, '../../../fixtures/amazon-com');
 const read = (n: string) => zlib.gunzipSync(fs.readFileSync(path.join(FIX, n))).toString('utf8');
 const BOOK = '# One\n\nShe walked slowly to the door.\n\n# Two\n\nThe river ran cold.\n';
 
-const WRITE_TOOLS = ['add_notes', 'build_tracker_view', 'check_keywords', 'check_tracker', 'edit_project_file', 'get_notes', 'list_chapters', 'list_files', 'list_project_files', 'list_projects', 'litrpg_log', 'litrpg_state', 'read_chapter', 'read_project_file', 'reply_to_note', 'search_text', 'set_chapters_edited', 'timeline_log', 'withdraw_note', 'write_project_file'];
+const WRITE_TOOLS = ['add_notes', 'build_tracker_view', 'check_keywords', 'check_tracker', 'create_file', 'edit_file', 'edit_project_file', 'get_notes', 'list_chapters', 'list_files', 'list_project_files', 'list_projects', 'litrpg_log', 'litrpg_state', 'read_chapter', 'read_project_file', 'reply_to_note', 'search_text', 'set_chapters_edited', 'timeline_log', 'withdraw_note', 'write_project_file'];
 
 let libRoot: string;
 let lib: Library;
@@ -86,7 +86,7 @@ describe('the Cadrel MCP server', () => {
     const { client } = await connect(both());
     const tools = (await client.listTools()).tools;
     for (const n of ['list_projects', 'list_files', 'list_chapters', 'read_chapter', 'search_text', 'get_notes']) expect(tools.find((t) => t.name === n)?.annotations?.readOnlyHint, n).toBe(true);
-    for (const n of ['add_notes', 'reply_to_note', 'set_chapters_edited']) expect(tools.find((t) => t.name === n)?.annotations?.readOnlyHint, n).toBe(false);
+    for (const n of ['add_notes', 'create_file', 'edit_file', 'reply_to_note', 'set_chapters_edited']) expect(tools.find((t) => t.name === n)?.annotations?.readOnlyHint, n).toBe(false);
     expect(tools.find((t) => t.name === 'withdraw_note')?.annotations?.destructiveHint).toBe(true);
   });
 

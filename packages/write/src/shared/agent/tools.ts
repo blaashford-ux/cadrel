@@ -2,10 +2,12 @@
  * What an AI reviewer can do in a project: read chapters and leave comments and suggestions. Plain functions over `FsPort`
  * (no MCP, no Electron), so they are tested directly and any transport (MCP now, REST later) can wrap them.
  *
- * The one rule that matters: nothing here ever writes a manuscript file. The only files written are review files under
- * `<project>/.cadrel/review/`, one per agent and editing pass, which Cadrel Write shows beside everyone else's notes, and the
- * project's edited-chapter marks (`<project>/.cadrel/edited.json`), which `set_chapters_edited` can change. The authoring
- * skills' own files (premise, outline, characters, blurb, trackers) are written by `projectFiles.ts`, which refuses manuscript folders.
+ * The one rule that matters: no manuscript file is written unless the person has switched that permission on (`ctx.access`, off by
+ * default: see ./access). `createFile` and `editFile` are the only functions that touch manuscript files, and each checks first. The
+ * other files written are review files under `<project>/.cadrel/review/`, one per agent and editing pass, which Cadrel Write shows
+ * beside everyone else's notes, and the project's edited-chapter marks (`<project>/.cadrel/edited.json`), which `set_chapters_edited`
+ * can change. The authoring skills' own files (premise, outline, characters, blurb, trackers) are written by `projectFiles.ts`,
+ * which never writes into a manuscript folder at all, whatever the permission.
  */
 import { splitChapters } from '../chapters';
 import type { FsEntry, FsPort } from '../fsPort';
@@ -26,6 +28,7 @@ import { chapterIds, withChapterEdited } from '../projects';
 import { classify, SHARED_WITH_ME } from '../sync/rules';
 import { countWords } from '../words';
 import { flattenMarkdown } from './flatten';
+import { NO_AI_ACCESS, type AiAccess } from './access';
 
 /** Skills Cadrel Write ships; anything else a skill calls itself is used as given. */
 const KNOWN_SKILLS: Record<string, string> = { developmental: 'Developmental edit', line: 'Line edit', copy: 'Copy edit' };
@@ -40,6 +43,10 @@ export const LIMITS = {
   replacement: 2000,
   files: 600,
   chaptersPerCall: 500,
+  /** Characters in one new file, and in the text of one edit. */
+  fileContent: 300000,
+  editsPerCall: 50,
+  editText: 50000,
   /** Words above which `read_chapter` warns that the chapter is long. */
   longChapter: 15000,
 } as const;
@@ -52,6 +59,8 @@ export interface AgentContext {
   agent: string;
   /** How the AI is shown in the Notes panel, e.g. "Claude". */
   agentName: string;
+  /** What the person lets the AI change; read at the moment of each change. Absent means nothing. */
+  access?: () => Promise<AiAccess>;
   now?: () => Date;
   newId?: () => string;
 }
@@ -573,4 +582,155 @@ export function withdrawNote(ctx: AgentContext, project: string, noteId: string)
     await makeReviews(ctx.fs).save(dir, fileId, serializeReviewFile(next));
     return { id: item.id };
   });
+}
+
+// ---- creating and editing manuscript files -----------------------------------------------------
+// Off unless the person has allowed them in Cadrel's settings. Each call checks the setting afresh.
+
+const SETTINGS_HINT = 'The author can turn it on in Cadrel under Settings → MCP.';
+
+async function allowed(ctx: AgentContext, what: keyof AiAccess, doing: string): Promise<void> {
+  const a = (await ctx.access?.().catch(() => NO_AI_ACCESS)) ?? NO_AI_ACCESS;
+  if (a[what] !== true) throw new AgentError(`The author has not allowed AI tools to ${doing}, so nothing was changed. ${SETTINGS_HINT} Until then, leave your suggestions with add_notes.`);
+}
+
+/** Writes through a temporary file so a crash cannot leave half a manuscript. */
+async function replaceText(ctx: AgentContext, abs: string, text: string): Promise<void> {
+  const tmp = `${abs}.${Math.floor(Math.random() * 1e9)}.tmp`;
+  try {
+    await ctx.fs.writeText(tmp, text);
+    await ctx.fs.rename(tmp, abs);
+  } catch (e) {
+    await ctx.fs.rm(tmp, { force: true }).catch(() => undefined);
+    throw e;
+  }
+}
+
+/**
+ * Makes a new manuscript (Markdown) file in a project, with any folders on its path. Never replaces a file that exists:
+ * changing one is `editFile`, and needs its own permission.
+ */
+export async function createFile(ctx: AgentContext, project: string, file: string, content: string): Promise<{ file: string; words: number; chapters: number }> {
+  await allowed(ctx, 'createFiles', 'create files');
+  if (typeof content !== 'string') throw new AgentError('content must be the text of the new file (Markdown).');
+  if (content.length > LIMITS.fileContent) throw new AgentError(`content is too long (${content.length} characters; the limit is ${LIMITS.fileContent}). Create the file with the first part, and add the rest in more files.`);
+  const dir = await projectDir(ctx, project);
+  const parts = typeof file === 'string' ? file.split('/') : [];
+  if (!parts.length || parts.some(badName) || !/\.(md|markdown)$/i.test(parts[parts.length - 1])) {
+    throw new AgentError(`"${file}" is not a valid new file name. Use a path ending in .md inside the project, like "Manuscript/Chapter 2.md"; names cannot start with a dot or contain : or \\.`);
+  }
+  return serial(`${ctx.root}/${project}`, async () => {
+    let abs = dir;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const e = await child(ctx.fs, abs, parts[i]);
+      abs = join(abs, parts[i]);
+      if (e && !e.isDirectory) throw new AgentError(`"${parts.slice(0, i + 1).join('/')}" is a file, not a folder.`);
+      if (!e) {
+        try {
+          await ctx.fs.mkdir(abs);
+        } catch (err) {
+          throw new AgentError(`Could not make the folder "${parts.slice(0, i + 1).join('/')}" in "${project}".`);
+        }
+      }
+    }
+    const name = parts[parts.length - 1];
+    const taken = (await ctx.fs.readdir(abs).catch(() => [] as FsEntry[])).some((e) => e.name.toLowerCase() === name.toLowerCase());
+    if (taken) throw new AgentError(`"${file}" already exists in "${project}". Pick another name; changing an existing file is edit_file.`);
+    const target = join(abs, name);
+    try {
+      await ctx.fs.writeText(target, content, { exclusive: true });
+    } catch (e) {
+      throw new AgentError(`"${file}" could not be created in "${project}" (${(e as { code?: string }).code ?? 'write failed'}).`);
+    }
+    const rel = parts.join('/');
+    return { file: rel, words: countWords(content), chapters: splitChapters(content, await chapterLevel(ctx, dir)).chapters.length };
+  });
+}
+
+export interface TextEdit {
+  /** Exact Markdown text now in the file; must occur exactly once. */
+  old_text: string;
+  new_text: string;
+}
+
+/**
+ * Changes the text of an existing manuscript file by replacing exact passages. All edits are checked against the file first and applied
+ * together, or none are: a passage that is missing or occurs more than once stops the whole call, and the message says which.
+ */
+export async function editFile(ctx: AgentContext, project: string, file: string, edits: TextEdit[]): Promise<{ file: string; edits: number; words: number; chapters: number }> {
+  await allowed(ctx, 'editFiles', 'edit files');
+  if (!Array.isArray(edits) || !edits.length) throw new AgentError('edits must list at least one { old_text, new_text } change.');
+  if (edits.length > LIMITS.editsPerCall) throw new AgentError(`At most ${LIMITS.editsPerCall} edits per call.`);
+  return serial(`${ctx.root}/${project}`, async () => {
+    const { abs, rel } = await manuscriptPath(ctx, project, file);
+    const dir = await projectDir(ctx, project);
+    let text = await ctx.fs.readText(abs);
+    edits.forEach((ed, i) => {
+      const n = `Edit ${i + 1}`;
+      if (!ed || typeof ed.old_text !== 'string' || typeof ed.new_text !== 'string') throw new AgentError(`${n}: give old_text and new_text.`);
+      if (!ed.old_text) throw new AgentError(`${n}: old_text is empty. To add text, quote the text next to where it should go and include it in new_text.`);
+      if (ed.old_text.length > LIMITS.editText || ed.new_text.length > LIMITS.editText) throw new AgentError(`${n}: old_text and new_text can each be at most ${LIMITS.editText} characters.`);
+      const at = occurrences(text, ed.old_text);
+      if (at.length === 0) throw new AgentError(`${n}: old_text was not found in "${rel}", so nothing was changed. Copy it exactly from the file, Markdown marks included (read_chapter with include_markdown shows them).`);
+      if (at.length > 1) throw new AgentError(`${n}: old_text occurs ${at.length} times in "${rel}", so nothing was changed. Include more of the surrounding text so it matches one place.`);
+      text = text.slice(0, at[0]) + ed.new_text + text.slice(at[0] + ed.old_text.length);
+    });
+    if (text.length > LIMITS.fileContent * 3) throw new AgentError('The edited file would be too long.');
+    await replaceText(ctx, abs, text);
+    return { file: rel, edits: edits.length, words: countWords(text), chapters: splitChapters(text, await chapterLevel(ctx, dir)).chapters.length };
+  });
+}
+
+// ---- outlines --------------------------------------------------------------------------------
+// Read-only. Market's keyword suggestions are built from a book's outline, so they need to find one and read it.
+
+export interface OutlineFile {
+  project: string;
+  /** Path inside the project, as list_files gives it. */
+  file: string;
+  /** The first heading, else the file name. */
+  title: string;
+  words: number;
+  /** Why it looks like an outline: its file name, or the folder it is in. */
+  match: 'name' | 'folder';
+}
+
+const OUTLINE_NAME = /outline|beat[ _-]?sheet|synopsis|treatment|plot[ _-]?(?:plan|summary|notes)?\b|story[ _-]?(?:plan|structure)|chapter[ _-]?(?:plan|list|breakdown)/i;
+const OUTLINE_FOLDER = /^(?:outlines?|plot|plotting|planning|story)$/i;
+/** Longest outline read: a long outline is cut, and the reader is told. */
+export const OUTLINE_CHARS = 60000;
+
+/**
+ * The files in the projects that look like outlines: named for one ("Outline.md", "Beat sheet.md", "Synopsis.md") or sitting in a folder
+ * named for one ("Outline/Book 1.md"). Manuscript chapters are never matched by their folder. Best guesses first: a file named "outline" before a synopsis.
+ */
+export async function listOutlines(ctx: AgentContext, project?: string): Promise<OutlineFile[]> {
+  const out: OutlineFile[] = [];
+  for (const p of project ? [{ project }] : await listProjects(ctx)) {
+    const files = await listFiles(ctx, p.project).catch(() => []);
+    for (const f of files) {
+      const parts = f.file.split('/');
+      const base = parts[parts.length - 1].replace(/\.(md|markdown)$/i, '');
+      const byName = OUTLINE_NAME.test(base);
+      const byFolder = parts.length > 1 && parts.slice(0, -1).some((s) => OUTLINE_FOLDER.test(s));
+      if (!byName && !byFolder) continue;
+      let title = base;
+      try {
+        const head = (await ctx.fs.readText(`${await projectDir(ctx, p.project)}/${f.file}`)).match(/^\s*#{1,3}\s+(.+)$/m);
+        if (head) title = head[1].trim().slice(0, 120);
+      } catch {
+        /* the file name will do */
+      }
+      out.push({ project: p.project, file: f.file, title, words: f.words, match: byName ? 'name' : 'folder' });
+    }
+  }
+  const rank = (o: OutlineFile) => (/outline/i.test(o.file) ? 0 : o.match === 'name' ? 1 : 2);
+  return out.sort((a, b) => rank(a) - rank(b) || a.project.localeCompare(b.project) || a.file.localeCompare(b.file));
+}
+
+/** The Markdown of one outline file (cut at OUTLINE_CHARS). Any manuscript file in a project can be named, as with read_chapter. */
+export async function readOutline(ctx: AgentContext, project: string, file: string): Promise<{ project: string; file: string; text: string; truncated: boolean }> {
+  const { abs, rel } = await manuscriptPath(ctx, project, file);
+  const text = await ctx.fs.readText(abs);
+  return { project, file: rel, text: text.slice(0, OUTLINE_CHARS), truncated: text.length > OUTLINE_CHARS };
 }

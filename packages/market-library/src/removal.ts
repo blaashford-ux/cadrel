@@ -4,6 +4,7 @@ import type { Db } from './schema.js';
 import { removeVec } from './chunks.js';
 import { isAsin } from './layout.js';
 import { exportUserData } from './userdata.js';
+import { categoryNameSql } from './queries.js';
 
 /**
  * Taking books out. Two different things:
@@ -55,7 +56,7 @@ export function excludedAsins(db: Db, categoryKey: string): Set<string> {
 export function listExclusions(db: Db, categoryKey?: string): Exclusion[] {
   return db
     .prepare(
-      `SELECT x.category_key AS categoryKey, c.name AS categoryName, x.asin, x.title, x.excluded_at AS excludedAt
+      `SELECT x.category_key AS categoryKey, ${categoryNameSql('c')} AS categoryName, x.asin, x.title, x.excluded_at AS excludedAt
        FROM category_exclusion x LEFT JOIN category c ON c.key = x.category_key
        WHERE (?1 IS NULL OR x.category_key = ?1) ORDER BY x.excluded_at DESC, x.asin`,
     )
@@ -66,11 +67,11 @@ export function listExclusions(db: Db, categoryKey?: string): Exclusion[] {
 export function listedIn(db: Db, asin: string): { key: string; name: string | null }[] {
   return db
     .prepare(
-      `SELECT DISTINCT c.key, c.name FROM list_entry e
+      `SELECT DISTINCT c.key, ${categoryNameSql('c')} AS name FROM list_entry e
          JOIN list_capture lc ON lc.id = e.list_capture_id
          JOIN category c ON c.key = lc.category_key
        WHERE e.asin = ? AND lc.captured_at = (SELECT max(captured_at) FROM list_capture x WHERE x.category_key = lc.category_key AND x.list_kind = lc.list_kind AND x.page = lc.page)
-       ORDER BY c.name`,
+       ORDER BY name`,
     )
     .all(asin) as unknown as { key: string; name: string | null }[];
 }

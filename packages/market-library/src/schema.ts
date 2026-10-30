@@ -567,6 +567,32 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  // Keyword suggestions an AI tool sent in through the MCP server (it has read the book's outline and the category and can do better than the
+  // built-in rules). Shown beside Cadrel's own suggestions, labelled with who sent them; the user can dismiss any. A newer set from the same tool
+  // for the same category replaces its earlier one, except what the user dismissed, which stays dismissed.
+  `
+  CREATE TABLE keyword_suggestion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category_key TEXT NOT NULL,
+    asin TEXT,
+    kind TEXT NOT NULL CHECK (kind IN ('keyword','string')),
+    keyword TEXT NOT NULL,
+    reason TEXT,
+    client TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    dismissed_at TEXT,
+    UNIQUE (category_key, kind, keyword)
+  );
+  `,
+  // The user's own name for a category. The name Amazon gives it is rewritten by every list capture, so a rename is kept apart from it
+  // (and from the category row, which a rebuild recreates). User-authored: mirrored to user/user-data.json.
+  `
+  CREATE TABLE category_rename (
+    category_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    renamed_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function openDb(file: string): Db {
