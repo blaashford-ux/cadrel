@@ -34,7 +34,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
   const [pdraft, setPdraft] = useState<ProjectsDraft | null>(null);
   const [pInitial, setPinitial] = useState('');
   const [projectCount, setProjectCount] = useState(0);
-  const [tab, setTab] = useState<Tab>('chapters');
+  const [tab, setTab] = useState<Tab>(window.cadrelWrite.capabilities.reader ? 'appearance' : 'chapters');
   // Theme colours: shown on the page as they are changed, and put back to the saved ones if the dialog closes without saving.
   const [theme, setTheme] = useState<ThemeCustom | undefined>(undefined);
   const [themeInitial, setThemeInitial] = useState('');
@@ -183,7 +183,7 @@ export function SettingsDialog({ onSave, beforeMove, onClose }: Props) {
               ['export', 'Export'],
               ['projects', 'Projects']
             ] as const
-          ).filter(([k]) => k !== 'projects' || window.cadrelWrite.capabilities.manageProjects).map(([k, label]) => (
+          ).filter(([k]) => (window.cadrelWrite.capabilities.reader ? k === 'appearance' : k !== 'projects' || window.cadrelWrite.capabilities.manageProjects)).map(([k, label]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>
               {label}
             </button>

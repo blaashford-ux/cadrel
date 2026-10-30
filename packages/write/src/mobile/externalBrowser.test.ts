@@ -5,6 +5,10 @@ describe('parsePickedLink', () => {
   it('reads the picked file ids', () => {
     expect(parsePickedLink('cadrel-write://picked?ids=abc123%2Cdef456')).toEqual(['abc123', 'def456']);
   });
+  it('reads the same link under Cadrel Reader’s scheme', () => {
+    expect(parsePickedLink('cadrel-reader://picked?ids=abc123')).toEqual(['abc123']);
+    expect(parsePickedLink('cadrel-reader://picked?cancelled=1')).toEqual([]);
+  });
   it('gives an empty list when the picker was cancelled or failed', () => {
     expect(parsePickedLink('cadrel-write://picked?cancelled=1')).toEqual([]);
     expect(parsePickedLink('cadrel-write://picked?error=1')).toEqual([]);

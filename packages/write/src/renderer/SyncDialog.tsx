@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { SyncStatus } from '../shared/api';
+import { appName } from './appName';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -44,7 +45,9 @@ export function SyncDialog({ status, onClose }: Props) {
         {!status.connected ? (
           <>
             <p className="modal-hint">
-              Keep your projects in a folder called <strong>Cadrel</strong> in your Google Drive, and up to date on every device you sign in on. Cadrel Write can only see the files it creates there, never the rest of your Drive.
+              {window.cadrelWrite.capabilities.reader
+                ? 'Sign in with Google so the manuscripts people share with you can be opened, and your comments and suggestions reach them. Cadrel Reader can only see the files you pick for an invitation, never the rest of your Drive.'
+                : <>Keep your projects in a folder called <strong>Cadrel</strong> in your Google Drive, and up to date on every device you sign in on. {appName()} can only see the files it creates there, never the rest of your Drive.</>}
             </p>
             {status.message && <div className="modal-error" role="alert">{status.message}</div>}
             <div className="modal-actions">
@@ -89,7 +92,7 @@ export function SyncDialog({ status, onClose }: Props) {
               <div className="sync-block">
                 <strong>New Cadrel folder in Drive</strong>
                 <p className="muted small">
-                  Cadrel Write couldn’t see an existing <em>Cadrel</em> folder in your Drive, so it made one. If you expected projects from another device to arrive, they’re in a different folder this app can’t see.
+                  {appName()} couldn’t see an existing <em>Cadrel</em> folder in your Drive, so it made one. If you expected projects from another device to arrive, they’re in a different folder this app can’t see.
                 </p>
               </div>
             )}

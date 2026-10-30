@@ -42,6 +42,8 @@ import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
+import { ReaderHome, sharedAsSummaries } from './ReaderHome';
+import { appName } from './appName';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
 import type { Anchor } from '../shared/review/comments';
@@ -156,6 +158,8 @@ export function App() {
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [showJoin, setShowJoin] = useState(false);
+  /** Cadrel Reader: an invitation link the app was opened with, to pre-fill the Open invitation dialog. */
+  const [inviteLink, setInviteLink] = useState('');
   const [showSharingHome, setShowSharingHome] = useState(false);
   const [shared, setShared] = useState<SharedProject[]>([]);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
@@ -166,7 +170,8 @@ export function App() {
   /** Set when the open project was shared with this person: a reviewer can read and annotate it, a collaborator can edit it too. */
   const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
   const isCollaborator = sharedHere?.role === 'edit';
-  const isReviewer = sharedHere !== undefined && !isCollaborator;
+  // Cadrel Reader only ever shows other people's projects, read-only; elsewhere a project is read-only when it was shared with you.
+  const isReviewer = caps.reader === true || (sharedHere !== undefined && !isCollaborator);
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
@@ -366,6 +371,14 @@ export function App() {
     if (caps.review) void window.cadrelWrite.listShared().then(setShared).catch(() => undefined);
   }, [caps.review]);
   useEffect(reloadShared, [reloadShared, atHome]);
+  // Cadrel Reader: a `cadrel-reader:` invitation link that opened the app (or arrived while it was open) fills in the Open invitation dialog.
+  useEffect(() => {
+    const api = window.cadrelWrite;
+    if (!caps.review || !api.takeInviteLink) return;
+    const take = () => void api.takeInviteLink!().then((link) => link && (setInviteLink(link), setShowJoin(true))).catch(() => undefined);
+    take();
+    return api.onInviteLink?.(take);
+  }, [caps.review]);
 
   const exchange = useCallback(async () => {
     if (!caps.review || !projectPath) return;
@@ -416,9 +429,9 @@ export function App() {
     ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${s.project ? ' · ' + s.project.meta.name : ''}`
     : s.project
       ? s.project.meta.name
-      : 'Cadrel Write';
+      : appName();
   useEffect(() => {
-    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — Cadrel Write` : 'Cadrel Write';
+    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — ${appName()}` : appName();
   }, [activeTab, titleText, activeDirty]);
 
   // ---- actions ---------------------------------------------------------------------------
@@ -439,7 +452,7 @@ export function App() {
   };
 
   const promptNewFile = (dir: string) =>
-    setPrompt({
+    caps.reader ? undefined : setPrompt({
       title: 'New file',
       hint: `In folder “${basename(dir)}”`,
       label: 'File name',
@@ -450,7 +463,7 @@ export function App() {
     });
 
   const promptNewFolder = (dir: string) =>
-    setPrompt({
+    caps.reader ? undefined : setPrompt({
       title: 'New folder',
       hint: `In folder “${basename(dir)}”`,
       label: 'Folder name',
@@ -466,7 +479,7 @@ export function App() {
     });
 
   const promptRename = (row: Row) =>
-    setPrompt({
+    caps.reader ? undefined : setPrompt({
       title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
       label: 'New name',
       initial: row.label,
@@ -477,7 +490,7 @@ export function App() {
     });
 
   const promptNewChapter = (file: string, after: number) =>
-    setPrompt({
+    caps.reader ? undefined : setPrompt({
       title: 'New chapter',
       hint: `After “${s.docs.get(file)?.chapters[after]?.title || 'the preamble'}” in ${basename(file)}`,
       label: 'Chapter title',
@@ -504,6 +517,7 @@ export function App() {
 
   /** Moves a chapter and keeps the tree focus on it. */
   const moveRow = async (row: Row, delta: -1 | 1) => {
+    if (caps.reader) return;
     const idx = await ws.moveChapter(row.path, row.chapter!, delta);
     if (idx !== null) setFocusKey(chapterKey(row.path, idx));
   };
@@ -532,6 +546,7 @@ export function App() {
   };
 
   const deleteRow = (row: Row) => {
+    if (caps.reader) return;
     if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
     else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
   };
@@ -814,13 +829,14 @@ export function App() {
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
     'new-project': () => manage && setShowNewProject(true),
     'projects-home': () => void goHome(),
+    'open-invitation': () => caps.review && setShowJoin(true),
     sync: () => caps.sync && setShowSync(true),
     about: () => setShowAbout(true),
     'switch-project': () => setShowQuick(true),
     'project-settings': () => s.project && setProjectSettings(s.project.path),
     'project-progress': () => s.project && setShowProgress(true),
     save: () => void ws.save(),
-    'change-folder': () => void ws.openFolder(),
+    'change-folder': () => caps.folderPicker && void ws.openFolder(),
     refresh: () => void ws.refresh(),
     'new-file': () => s.root && promptNewFile(dirFor(null)),
     'new-folder': () => s.root && promptNewFolder(dirFor(null)),
@@ -971,7 +987,7 @@ export function App() {
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
           </div>
         )}
-        {caps.sync && !caps.windowChrome && syncStatus && !syncStatus.connected && started && !welcome && (
+        {caps.sync && !caps.windowChrome && !caps.reader && syncStatus && !syncStatus.connected && started && !welcome && (
           <div className="banner info sync-banner" role="status">
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
@@ -985,7 +1001,11 @@ export function App() {
             onConnect={() => setShowSync(true)}
           />
         ) : (
-          <ProjectsHome {...homeProps} />
+          caps.reader ? (
+            <ReaderHome shared={shared} sync={syncStatus} onOpen={(dir) => void openProject(dir)} onJoin={() => setShowJoin(true)} onConnect={() => setShowSync(true)} />
+          ) : (
+            <ProjectsHome {...homeProps} />
+          )
         ))}
       </div>
     ) : (
@@ -995,15 +1015,15 @@ export function App() {
           <ProjectSwitcher
             name={s.project ? s.project.meta.name : s.root?.name ?? ''}
             isProject={s.project !== null}
-            projects={listing?.projects ?? []}
+            projects={caps.reader ? sharedAsSummaries(shared) : listing?.projects ?? []}
             currentPath={s.project?.path ?? null}
             openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
             onNew={manage ? () => setShowNewProject(true) : undefined}
             onOpenFolder={caps.folderPicker ? () => void ws.openFolder() : undefined}
-            onSettings={() => s.project && setProjectSettings(s.project.path)}
-            onProgress={() => setShowProgress(true)}
+            onSettings={caps.reader ? undefined : () => s.project && setProjectSettings(s.project.path)}
+            onProgress={caps.reader ? undefined : () => setShowProgress(true)}
           />
           <button
             onClick={() => void ws.refresh()}
@@ -1027,6 +1047,8 @@ export function App() {
               <Icon name="upload" /> Import
             </button>
           )}
+          {!caps.reader && (
+            <>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             <Icon name="filePlus" /> File
           </button>
@@ -1038,6 +1060,8 @@ export function App() {
           >
             <Icon name="folderPlus" /> Folder
           </button>
+            </>
+          )}
         </div>
         {s.root ? (
           <>
@@ -1071,7 +1095,7 @@ export function App() {
                 onFocusKey={setFocusKey}
                 onActivate={(r) => void activateRow(r)}
                 onToggle={(r) => void ws.toggleExpanded(r.path, r.kind === 'file')}
-                onContextMenu={(row, x, y) => setMenu({ row, x, y })}
+                onContextMenu={(row, x, y) => !caps.reader && setMenu({ row, x, y })}
                 onRename={promptRename}
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
@@ -1109,7 +1133,7 @@ export function App() {
         )}
         {orphan && (
           <div className="banner warn" role="alert">
-            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside Cadrel Write?).{' '}
+            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside {appName()}?).{' '}
             <button onClick={() => setRelink(orphan)}>Link to a file…</button>{' '}
             <button onClick={() => setIgnoredOrphans(new Set([...ignoredOrphans, orphan]))}>Ignore</button>
           </div>
@@ -1124,7 +1148,7 @@ export function App() {
 
         <div className="panes">
           {s.tabs.length === 0 && (
-            <p className="muted pad">{s.root ? 'Select a chapter to edit it.' : 'Open a folder to get started.'}</p>
+            <p className="muted pad">{s.root ? (caps.reader ? 'Select a chapter to read it.' : 'Select a chapter to edit it.') : 'Open a folder to get started.'}</p>
           )}
           {s.tabs.map((tab) => {
             const doc = s.docs.get(tab.file);
@@ -1222,9 +1246,11 @@ export function App() {
                       {tab.mode === 'visual' ? 'Source' : 'Visual'}
                     </button>
                     )}
-                    <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
-                      Save (Ctrl+S)
-                    </button>
+                    {!caps.reader && (
+                      <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
+                        Save (Ctrl+S)
+                      </button>
+                    )}
                     {caps.windowChrome && (
                       <button className="zone-btn" aria-label="Zone Mode" aria-pressed={zone} title={zone ? 'Leave Zone Mode (F8)' : 'Zone Mode: full screen, just this file (F8)'} onClick={toggleZone}>
                         <Icon name={zone ? 'shrink' : 'expand'} /> Zone
@@ -1309,7 +1335,7 @@ export function App() {
             onUndo={() => void ws.undoAction()}
             onRedo={() => void ws.redoAction()}
             project={
-              s.project && s.progress
+              s.project && s.progress && !caps.reader
                 ? {
                     total: s.progress.total,
                     goal: goalFor(s.project.meta)?.targetWords ?? null,
@@ -1330,7 +1356,7 @@ export function App() {
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}
           request={noteRequest}
-          onShare={caps.review && !sharedHere ? () => setShowShare(true) : undefined}
+          onShare={caps.review && !sharedHere && !caps.reader ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}
@@ -1401,13 +1427,14 @@ export function App() {
     )}
     {showJoin && (
       <JoinDialog
+        initialLink={inviteLink}
         onJoined={(sp) => {
           setMe(loadIdentity());
           setShared((l) => [...l.filter((x) => x.dir !== sp.dir), sp]);
           setShowJoin(false);
           void openProject(sp.dir);
         }}
-        onClose={() => setShowJoin(false)}
+        onClose={() => (setShowJoin(false), setInviteLink(''))}
       />
     )}
     {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
@@ -1443,7 +1470,7 @@ export function App() {
     )}
     {showQuick && (
       <QuickSwitcher
-        projects={listing?.projects ?? []}
+        projects={caps.reader ? sharedAsSummaries(shared) : listing?.projects ?? []}
         currentPath={s.project?.path ?? null}
         openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}

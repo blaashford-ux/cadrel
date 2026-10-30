@@ -46,6 +46,7 @@ export type MenuAction =
   | 'export'
   | 'settings'
   | 'new-project'
+  | 'open-invitation'
   | 'projects-home'
   | 'switch-project'
   | 'project-settings'
@@ -429,6 +430,13 @@ export interface ReviewSharingApi {
   pickInBrowser?(url: string): Promise<string[] | null>;
   /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
   joinReview(link: string, name: string): Promise<SharedProject>;
+  /**
+   * Cadrel Reader: an invitation link the app was opened with (a `cadrel-reader:` link clicked in a message or on the invitation page),
+   * or null. Taking it clears it.
+   */
+  takeInviteLink?(): Promise<string | null>;
+  /** Cadrel Reader: called when an invitation link arrives while the app is already open. */
+  onInviteLink?(cb: () => void): () => void;
 }
 
 /** Which optional parts of the app a platform provides, so the UI can leave out what is missing. */
@@ -455,9 +463,18 @@ export interface Capabilities {
   ai: boolean;
   /** Creating and managing projects here. False inside Cadrel, where the Projects page does that and Write only opens them. */
   manageProjects: boolean;
+  /**
+   * Cadrel Reader: the app is only for reading projects other people shared and giving feedback on them. Every project is read-only,
+   * and nothing for writing, sharing or exporting is shown.
+   */
+  reader?: boolean;
 }
 
 export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, importDocx: true, sync: true, review: true, update: true, ai: true, manageProjects: false };
+/** Cadrel Reader on Windows: read what was shared with you, comment and suggest. No writing, sharing, export, import or AI. */
+export const READER_CAPABILITIES: Capabilities = { export: false, windowChrome: true, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false, manageProjects: false, reader: true };
+/** Cadrel Reader on the phone. */
+export const READER_MOBILE_CAPABILITIES: Capabilities = { ...READER_CAPABILITIES, windowChrome: false };
 /** The phone: the editor and projects, nothing desktop-specific. */
 export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false, manageProjects: true };
 

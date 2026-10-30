@@ -1,3 +1,4 @@
+import { appName } from './appName';
 import logo from './logo.png';
 
 interface Props {
@@ -31,7 +32,7 @@ export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, ca
         <img className="tb-logo" src={logo} alt="" width={24} height={24} />
       )}
       <div className="mb-title" title={title}>
-        {showFiles ? title : 'Cadrel Write'}
+        {showFiles ? title : appName()}
         {dirty && <span className="dirty" aria-label="unsaved changes"> ●</span>}
       </div>
       {find && (
@@ -52,7 +53,7 @@ export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, ca
         </button>
       )}
       {onAbout && (
-        <button type="button" className="mb-btn" aria-label="About Cadrel Write" onClick={onAbout}>
+        <button type="button" className="mb-btn" aria-label={`About ${appName()}`} onClick={onAbout}>
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 11v5M12 8h.01" />

@@ -33,7 +33,8 @@ import { existingFolder, SettingsStore } from './settings';
 import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
 import { pickInBrowser } from './pickerBrowser';
 import { checkBeforeLaunch, downloadInstaller } from './update';
-import { fetchLatestRelease, type UpdateInfo } from '../src/shared/update';
+import { fetchLatestRelease, fetchReleaseFor, type UpdateInfo } from '../src/shared/update';
+import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 import { createReviewHost } from '../src/shared/review/host';
@@ -84,6 +85,11 @@ export interface WriteHost {
   projectStages?: () => Promise<ReadonlyMap<string, ProjectStage>>;
   /** When set, Cadrel Write's own updater is off and says this (a host app updates as a whole). */
   updatesDisabledReason?: string;
+  /**
+   * Cadrel Reader: only for reading projects other people shared and giving feedback. The channels for writing, sharing, exporting, AI and
+   * managing projects are not registered, invitations to edit are refused, the menu is the short one, and updates come from Reader's releases.
+   */
+  reader?: boolean;
 }
 
 export let settings: SettingsStore;
@@ -213,7 +219,8 @@ async function reviewHost(): Promise<ReviewSharingApi> {
     stateFile: path.join(dataDir, 'shares.json'),
     drive: () => svc.driveApi(),
     connected: () => svc.isConnected(),
-    accessToken: () => svc.accessToken()
+    accessToken: () => svc.accessToken(),
+    ...(host.reader ? { allowEdit: false, appName: 'Cadrel Reader' } : {})
   });
 }
 
@@ -266,6 +273,8 @@ async function renameProjectFolder(p: string, name: string): Promise<string> {
 
 /** A project the host asked Write to open, held until Write's page is there to take it. */
 let pendingProject: string | null = null;
+/** Cadrel Reader: an invitation link the app was opened with, until the window collects it. */
+let pendingInvite: string | null = null;
 
 function projectPath(p: string): string {
   const full = path.resolve(p);
@@ -569,6 +578,11 @@ function registerIpc(): void {
     pendingProject = null;
     return p;
   });
+  handle('review:takeInviteLink', () => {
+    const link = pendingInvite;
+    pendingInvite = null;
+    return link;
+  });
   handle('app:takeLaunchFiles', async () => {
     const files = pendingFiles.splice(0);
     const ok: string[] = [];
@@ -605,6 +619,7 @@ function registerIpc(): void {
   handle('update:version', () => app.getVersion());
   handle('update:check', () => {
     if (host.updatesDisabledReason) throw new Error(host.updatesDisabledReason);
+    if (host.reader) return fetchReleaseFor(fetch, 'windows', app.getVersion(), 'reader');
     return fetchLatestRelease(fetch, 'windows', app.getVersion());
   });
   handle('update:install', async (e, info: UpdateInfo) => {
@@ -653,6 +668,8 @@ export function updateLog(line: string): void {
 
 export interface WriteModule {
   queueFile(file: string): void;
+  /** Cadrel Reader: hands the window an invitation link (from a `cadrel-reader:` link that opened or was sent to the app). */
+  queueInvite(link: string): void;
   /** Does the editor hold unsaved edits? */
   hasUnsaved(): boolean;
   /** The projects in the Root Folder (for a host's overview). */
@@ -723,16 +740,27 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
   setChromeTheme(h.theme ? h.theme.get().custom : settings.get().prefs?.themeCustom);
 
   registerIpc();
+  if (h.reader) for (const channel of READER_BLOCKED_CHANNELS) ipcMain.removeHandler(channel);
   if ((host.defaultRoot && !settings.projects().rootFolder) || host.projectsFolder) await fsp.mkdir(projectsRoot(), { recursive: true }).catch(() => undefined);
   void aiRemote.load(); // comes back up only if the user left it on
   registerWindowChrome(() => host.getWindow(), () => host.getContents());
   installMenu(
     { get: () => (host.theme ? host.theme.get().source : settings.get().theme ?? 'system'), set: setTheme },
-    { getContents: () => host.getContents(), asApplicationMenu: host.standalone }
+    { getContents: () => host.getContents(), asApplicationMenu: host.standalone, reader: h.reader === true }
   );
   void ensureSync().then((svc) => svc.syncNow()); // does nothing unless Google Drive is connected
   return {
     queueFile,
+    queueInvite(link) {
+      pendingInvite = link;
+      const win = host.getWindow();
+      if (win && !win.isDestroyed()) {
+        if (win.isMinimized()) win.restore();
+        win.show();
+        win.focus();
+        host.getContents()?.send('review:inviteLink');
+      }
+    },
     hasUnsaved: () => dirtyFiles.length > 0,
     listProjects: () => projects.listProjects(projectsRoot()),
     projectsRoot,
@@ -770,7 +798,8 @@ export async function createWriteModule(h: WriteHost): Promise<WriteModule> {
     },
     attach(contents, win) {
       contents.on('before-input-event', (e, input) => {
-        if (input.type === 'keyDown' && input.key === 'F1' && !input.control && !input.alt && !input.shift) {
+        // F1 opens Write's help, which describes writing and sharing: Cadrel Reader has none to open.
+        if (!host.reader && input.type === 'keyDown' && input.key === 'F1' && !input.control && !input.alt && !input.shift) {
           e.preventDefault();
           openHelp();
         }
