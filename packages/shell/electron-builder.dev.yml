@@ -1,6 +1,7 @@
 # The development build's installer, so it installs beside the stable Cadrel instead of over it. Everything else comes from
 # electron-builder.yml. A different appId gives it its own install folder, its own uninstall entry and its own Windows identity;
-# the product name gives it its own Start menu entry, shortcut and program file ("Cadrel Dev.exe"). The installer file keeps the
+# the product name gives it its own Start menu entry, shortcut and program file ("Cadrel Dev.exe"). Its data is the stable app's
+# (the app chooses the folder at run time, see src/main/index.ts), not its own. The installer file keeps the
 # Cadrel-Setup-<version> name (the version already says -dev.N) because the updater and the release workflow find it by that name.
 # It claims no file types: the stable Cadrel keeps opening .md files.
 extends: ./electron-builder.yml
