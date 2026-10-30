@@ -55,8 +55,11 @@ const TEST = process.env.CADREL_TEST === '1';
 // `Cadrel.exe --smoke-test=<file>` runs a headless self-test of the installed app and exits (see smoke.ts).
 const smokeArg = process.argv.find((a) => a.startsWith('--smoke-test='));
 
-app.setName('Cadrel');
-if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.cadrel');
+// A development build (its version ends -dev.N) is a separate app beside the stable one: its own name, Windows identity and data folder
+// (%APPDATA%\Cadrel Dev), so both can be installed and even open at once without sharing settings or fighting over the single-instance lock.
+const DEV_BUILD = /-dev(\.|$)/.test(app.getVersion());
+app.setName(DEV_BUILD ? 'Cadrel Dev' : 'Cadrel');
+if (process.platform === 'win32') app.setAppUserModelId(DEV_BUILD ? 'com.blaashford.cadrel.dev' : 'com.blaashford.cadrel');
 if (process.env.CADREL_USER_DATA) app.setPath('userData', process.env.CADREL_USER_DATA);
 
 // Everything Cadrel keeps for a person lives under one folder (%APPDATA%\Cadrel): the shell's settings, the studio, the user, and one
@@ -569,7 +572,7 @@ function createWindow(): void {
     ...restoredBounds(),
     minWidth: 800,
     minHeight: 500,
-    title: 'Cadrel',
+    title: DEV_BUILD ? 'Cadrel Dev' : 'Cadrel',
     // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
     // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
     // only) a normal frame.
