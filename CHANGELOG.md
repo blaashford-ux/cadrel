@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## 0.5.0 (in development)
+## 0.5.0
 
 - **A development build installs beside the stable one, on the same data.** Builds that are not of `main` now use their own app id, product name (**Cadrel Dev**), Start menu entry, shortcut, install folder and program file (`Cadrel Dev.exe`), so both can be installed and neither overwrites the other. The dev build uses the stable app's data folder (`%APPDATA%\Cadrel`), so it has the same Studios, settings, projects and Market library. Because they share data, only one can be open at a time (opening the dev build while the stable one is running says so), and a dev build that changes how data is stored changes it for the stable app too. The dev build claims no file types, so the stable Cadrel keeps opening `.md` files. The installer file keeps its `Cadrel-Setup-<version>` name, which the updater looks for.
 
