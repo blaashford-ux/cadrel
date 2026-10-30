@@ -208,6 +208,7 @@ interface ModuleManifest {
 | `manuscript` | chapter engine, words, tree, find, progress | MDEdit `src/shared` |
 | `export` | EPUB, DOCX, print PDF, matter, trim, fonts, epubcheck harness | MDEdit `src/shared/export`, `electron/export` |
 | `mod-write` | editor UI, tabs, drafts, Book Details | MDEdit `src/renderer` |
+| `reader` | **Cadrel Reader**, a separate app for beta readers: Write's editor and review panel in reader mode (`reader: true`), its own installer, data folder, version and update feed. Imports `@cadrel/write`; nothing else imports it. See [packages/reader/README.md](../packages/reader/README.md) | new |
 | `market` | parsers, analysis, keywords, community, search/chunks | BookScout `core`, `library` |
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |

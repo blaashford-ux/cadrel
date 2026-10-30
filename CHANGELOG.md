@@ -2,6 +2,14 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Cadrel Reader 0.9.0
+
+Cadrel Reader is a new, separate app for beta readers (released under tags `reader-vX.Y.Z`; its version is in `packages/reader/VERSION`). It is Write's reading and review experience on its own: open an invitation, read the manuscript, leave comments and suggestions, and they reach the author through Google Drive. It has no writing, sharing, export, import, AI or project management. It has its own installer (`CadrelReader-Setup-<version>.exe`), its own data folder (`%APPDATA%\Cadrel Reader`, shared projects in `Documents\Cadrel Reader\Shared With Me`) and its own update feed, and it installs beside Cadrel. See [packages/reader/README.md](packages/reader/README.md).
+
+## Unreleased (Cadrel)
+
+- **Invitations for readers now send people to Cadrel Reader.** The invitation message a reader receives links to Cadrel Reader's release instead of the full app, and the invitation page offers **Open in Cadrel Reader**. Invitations to edit a manuscript with its author are unchanged and still point at Cadrel. Cadrel's updater and Reader's now each read only their own releases, so one cannot be offered the other's installer.
+
 ## 0.5.0
 
 - **A development build installs beside the stable one, on the same data.** Builds that are not of `main` now use their own app id, product name (**Cadrel Dev**), Start menu entry, shortcut, install folder and program file (`Cadrel Dev.exe`), so both can be installed and neither overwrites the other. The dev build uses the stable app's data folder (`%APPDATA%\Cadrel`), so it has the same Studios, settings, projects and Market library. Because they share data, only one can be open at a time (opening the dev build while the stable one is running says so), and a dev build that changes how data is stored changes it for the stable app too. The dev build claims no file types, so the stable Cadrel keeps opening `.md` files. The installer file keeps its `Cadrel-Setup-<version>` name, which the updater looks for.
