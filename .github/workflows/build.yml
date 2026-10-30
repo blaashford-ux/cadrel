@@ -90,7 +90,11 @@ jobs:
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'smoke.json'
-          $p = Start-Process -FilePath 'packages\shell\release\win-unpacked\Cadrel.exe' -ArgumentList "--smoke-test=$out" -Wait -PassThru
+          # The program is "Cadrel.exe" for a stable build and "Cadrel Dev.exe" for a development build (see electron-builder.dev.yml).
+          $exe = Get-ChildItem 'packages\shell\release\win-unpacked' -Filter 'Cadrel*.exe' | Where-Object { $_.Name -notmatch 'Uninstall' } | Select-Object -First 1
+          if (-not $exe) { throw 'No Cadrel program was found in win-unpacked.' }
+          Write-Host "Smoke testing $($exe.Name)"
+          $p = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test=$out" -Wait -PassThru
           if (Test-Path $out) { Get-Content $out } else { Write-Host 'The smoke test wrote no result file.' }
           if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
       - uses: actions/upload-artifact@v4

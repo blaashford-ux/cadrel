@@ -55,8 +55,14 @@ const TEST = process.env.CADREL_TEST === '1';
 // `Cadrel.exe --smoke-test=<file>` runs a headless self-test of the installed app and exits (see smoke.ts).
 const smokeArg = process.argv.find((a) => a.startsWith('--smoke-test='));
 
-app.setName('Cadrel');
-if (process.platform === 'win32') app.setAppUserModelId('com.blaashford.cadrel');
+// A development build (its version ends -dev.N) is a separate program beside the stable one: its own name and Windows identity, so both
+// can be installed and each has its own Start menu entry. It deliberately uses the stable app's data folder (%APPDATA%\Cadrel), so it sees
+// the same Studios, settings, projects and Market library. Two programs on one set of data means only one can be open at a time (the
+// single-instance lock below is per data folder), and a dev build that changes how data is stored changes it for the stable app too.
+const DEV_BUILD = /-dev(\.|$)/.test(app.getVersion());
+app.setName(DEV_BUILD ? 'Cadrel Dev' : 'Cadrel');
+if (process.platform === 'win32') app.setAppUserModelId(DEV_BUILD ? 'com.blaashford.cadrel.dev' : 'com.blaashford.cadrel');
+if (DEV_BUILD && !process.env.CADREL_USER_DATA) app.setPath('userData', path.join(app.getPath('appData'), 'Cadrel'));
 if (process.env.CADREL_USER_DATA) app.setPath('userData', process.env.CADREL_USER_DATA);
 
 // Everything Cadrel keeps for a person lives under one folder (%APPDATA%\Cadrel): the shell's settings, the studio, the user, and one
@@ -569,7 +575,7 @@ function createWindow(): void {
     ...restoredBounds(),
     minWidth: 800,
     minHeight: 500,
-    title: 'Cadrel',
+    title: DEV_BUILD ? 'Cadrel Dev' : 'Cadrel',
     // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
     // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
     // only) a normal frame.
@@ -1222,6 +1228,8 @@ function registerShellIpc(): void {
 // ---- startup ------------------------------------------------------------------------------------
 
 if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
+  // The other program (stable or dev) is using the same data. It is brought to the front by its own second-instance handler.
+  if (DEV_BUILD) dialog.showErrorBox('Cadrel is already open', 'Cadrel (or another build of it) is already running and uses the same data. Close it first to open Cadrel Dev.');
   app.quit();
 } else {
   app.on('second-instance', (_e, argv, cwd) => {

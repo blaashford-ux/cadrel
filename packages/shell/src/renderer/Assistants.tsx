@@ -70,7 +70,7 @@ export function Assistants() {
         </p>
         <div className="row">
           <button type="button" className="primary" disabled={busy} onClick={() => void run(async () => `Saved to ${await api.assistants.saveKit()}. Open README.txt there for the steps.`)}>Download the AI Kit</button>
-          <span className="muted small">The Claude extension, the editing skills, the server and the steps for Claude and GPT, in one folder in Downloads.</span>
+          <span className="muted small">The Claude extension, the editing and authoring skills, the server and the steps for Claude and GPT, in one folder in Downloads.</span>
         </div>
         <div className="row">
           <button type="button" disabled={busy} onClick={() => void run(async () => `Saved ${await api.assistants.saveExtension()}. In Claude Desktop open Settings → Extensions and drag it into the window.`)}>Download the Claude Desktop extension</button>

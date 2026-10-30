@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/shell",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Cadrel: the studio suite",
   "main": "dist/main.mjs",
@@ -10,8 +10,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "version:sync": "node scripts/sync-version.mjs",
-    "pack": "node scripts/sync-version.mjs && node scripts/build.mjs && electron-builder --dir --publish never",
-    "dist": "node scripts/sync-version.mjs && node scripts/build.mjs && electron-builder --win nsis --publish never"
+    "pack": "node scripts/sync-version.mjs && node scripts/build.mjs && node scripts/builder.mjs --dir --publish never",
+    "dist": "node scripts/sync-version.mjs && node scripts/build.mjs && node scripts/builder.mjs --win nsis --publish never"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.7.0",

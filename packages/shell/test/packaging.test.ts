@@ -14,6 +14,21 @@ describe('packaging', () => {
     expect(pinned).toBe(req('electron/package.json').version);
   });
 
+  it('a development build installs beside the stable one: own app id, product name and shortcut, no file types, and the same installer file name', async () => {
+    const dev = fs.readFileSync(path.join(PKG, 'electron-builder.dev.yml'), 'utf8');
+    expect(dev).toMatch(/^extends: \.\/electron-builder\.yml$/m);
+    expect(dev).toMatch(/^appId: com\.blaashford\.cadrel\.dev$/m);
+    expect(dev).toMatch(/^productName: Cadrel Dev$/m);
+    expect(dev).toMatch(/^fileAssociations: \[\]$/m);
+    expect(dev).toMatch(/^ {2}shortcutName: Cadrel Dev$/m);
+    expect(dev).not.toMatch(/artifactName/); // the updater and release workflow look for Cadrel-Setup-*.exe
+    expect(yml).toMatch(/^appId: com\.blaashford\.cadrel$/m);
+    const { configFor } = await import(path.join(PKG, 'scripts', 'builder.mjs'));
+    expect(configFor('dev.7')).toBe('electron-builder.dev.yml');
+    expect(configFor('')).toBe('electron-builder.yml');
+    expect(configFor(undefined)).toBe('electron-builder.yml');
+  });
+
   it('the installer version matches the VERSION file', () => {
     expect(() => execFileSync('node', ['scripts/sync-version.mjs', '--check'], { cwd: PKG, stdio: 'pipe' })).not.toThrow();
   });

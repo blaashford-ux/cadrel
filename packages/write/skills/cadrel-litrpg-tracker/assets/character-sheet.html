@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__CADREL_TITLE__</title>
+<!--
+  Character sheet. One self-contained, printable page: no network, no libraries. It shows KNOWN VALUES ONLY: a field the book
+  has not given is left out of the data and never drawn, an empty section is not drawn, and there are no notes, quotes,
+  flags or chapter references (only "as of chapter N"). The data is the JSON block at the bottom of <body>:
+  { name, as_of_chapter, level?, xp_total?, xp_to_next_level?, class?:{ name, attributes_per_level?, class_skills?:[] },
+    attributes?:[{ name, value }], skills?:[{ name, description?, cost?, cooldown?, duration?, effect? }],
+    items?:[{ name, description? }], titles?:[{ name, effect?, equipped? }], companions?:[{ name, type?, level?, xp? }] }
+  Replace the marker in that block with the JSON (escape "<" as <) to build the page by hand.
+-->
+<style>
+  :root {
+    --bg: #ece8de; --paper: #fffdf8; --ink: #231f2e; --muted: #6a6478; --line: #ddd6c4; --soft: #f4efe3;
+    --accent: #5b3fb8; --accent-2: #7e63d8; --accent-ink: #ffffff; --gold: #9a6700; --gold-soft: #f8ecd0;
+    --shadow: 0 2px 4px rgba(35,31,46,.08), 0 16px 40px rgba(35,31,46,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1018; --paper: #1a1b27; --ink: #ecebf4; --muted: #a29fb4; --line: #34354a; --soft: #232436;
+      --accent: #a794ff; --accent-2: #7e69e0; --accent-ink: #14112b; --gold: #f0c36a; --gold-soft: #35301f; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1018; --paper: #1a1b27; --ink: #ecebf4; --muted: #a29fb4; --line: #34354a; --soft: #232436;
+    --accent: #a794ff; --accent-2: #7e69e0; --accent-ink: #14112b; --gold: #f0c36a; --gold-soft: #35301f; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 820px; margin: 28px auto; padding: 0 16px; }
+  .sheet { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; position: relative; }
+  .sheet::after { content: ""; position: absolute; inset: 7px; border: 1px solid var(--line); border-radius: 12px; pointer-events: none; }
+  .banner { padding: 34px 38px 26px; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-ink); display: flex; gap: 24px; align-items: center; }
+  .banner .who { flex: 1; min-width: 0; }
+  .banner h1 { margin: 0; font: 700 38px/1.1 Georgia, "Iowan Old Style", "Times New Roman", serif; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .banner .cls { margin-top: 8px; font-size: 14px; letter-spacing: .12em; text-transform: uppercase; opacity: .92; }
+  .banner .cls span + span::before { content: "·"; margin: 0 10px; opacity: .7; }
+  .medal { flex: none; width: 104px; height: 104px; border-radius: 50%; display: grid; place-items: center; text-align: center; background: var(--paper); color: var(--ink); box-shadow: 0 0 0 5px rgba(255,255,255,.28), 0 6px 18px rgba(0,0,0,.25); }
+  .medal small { display: block; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  .medal b { display: block; font: 700 42px/1 Georgia, serif; color: var(--accent); }
+  .xp { padding: 16px 38px 4px; }
+  .xp .bar { height: 12px; border-radius: 7px; background: var(--soft); border: 1px solid var(--line); overflow: hidden; }
+  .xp .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+  .xp .line { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .body { padding: 14px 38px 30px; }
+  h2 { display: flex; align-items: center; gap: 12px; margin: 26px 0 12px; font: 650 12px/1 system-ui, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .attrs { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 12px; }
+  .attr { text-align: center; padding: 12px 6px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+  .attr b { display: block; font: 700 32px/1.05 Georgia, serif; font-variant-numeric: tabular-nums; }
+  .attr span { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .entry { border: 1px solid var(--line); border-radius: 12px; padding: 12px 15px; break-inside: avoid; background: var(--paper); }
+  .entry h3 { margin: 0; font: 700 17px/1.25 Georgia, serif; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .entry p { margin: 5px 0 0; font-size: 14px; color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+  .pills span { font-size: 12px; padding: 1px 9px; border-radius: 999px; background: var(--gold-soft); color: var(--gold); font-variant-numeric: tabular-nums; }
+  .pills span.on { background: var(--accent); color: var(--accent-ink); }
+  .skillsline { margin: 0; font-size: 14px; color: var(--muted); }
+  .foot { padding: 0 38px 28px; text-align: center; color: var(--muted); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 0 30px; }
+  @media (max-width: 600px) { .banner { padding: 26px 22px 20px; gap: 14px; } .banner h1 { font-size: 28px; } .medal { width: 84px; height: 84px; } .medal b { font-size: 32px; } .xp, .body, .foot { padding-left: 22px; padding-right: 22px; } .list { grid-template-columns: 1fr; } }
+  @media print {
+    @page { margin: 12mm; }
+    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { margin: 0; padding: 0; max-width: none; } .sheet { box-shadow: none; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page"><article class="sheet" id="sheet" aria-label="Character sheet"></article></div>
+<script id="data" type="application/json">__CADREL_DATA__</script>
+<script>
+(function () {
+  var S = JSON.parse(document.getElementById('data').textContent);
+  var root = document.getElementById('sheet');
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'class') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  var has = function (v) { return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length); };
+  var fmt = function (n) { return Number(n).toLocaleString(); };
+  document.title = (S.name || 'Character') + ' · Character sheet';
+
+  // Banner: the name, the class, and the level if there is one.
+  var cls = [];
+  if (S['class'] && has(S['class'].name)) cls.push(h('span', { text: S['class'].name }));
+  if (S['class'] && has(S['class'].attributes_per_level)) cls.push(h('span', { text: S['class'].attributes_per_level + ' per level' }));
+  var who = h('div', { class: 'who' }, [h('h1', { text: S.name }), cls.length ? h('div', { class: 'cls' }, cls) : null]);
+  var banner = h('header', { class: 'banner' }, [who]);
+  if (has(S.level)) banner.appendChild(h('div', { class: 'medal', 'aria-label': 'Level ' + S.level }, [h('div', {}, [h('small', { text: 'Level' }), h('b', { text: String(S.level) })])]));
+  root.appendChild(banner);
+
+  // Experience: only what is known. The bar needs both numbers.
+  if (has(S.xp_total) || has(S.xp_to_next_level)) {
+    var xp = h('div', { class: 'xp' });
+    if (has(S.xp_total) && has(S.xp_to_next_level) && S.xp_total + S.xp_to_next_level > 0) {
+      var pct = Math.round(S.xp_total / (S.xp_total + S.xp_to_next_level) * 100);
+      xp.appendChild(h('div', { class: 'bar', role: 'img', 'aria-label': pct + ' percent of the way to the next level' }, [h('i', { style: 'width:' + pct + '%' })]));
+    }
+    xp.appendChild(h('div', { class: 'line' }, [h('span', { text: has(S.xp_total) ? fmt(S.xp_total) + ' XP' : '' }), h('span', { text: has(S.xp_to_next_level) ? fmt(S.xp_to_next_level) + ' to next level' : '' })]));
+    root.appendChild(xp);
+  }
+
+  var body = h('div', { class: 'body' });
+  function section(title, content) { if (!content) return; body.appendChild(h('h2', { text: title })); body.appendChild(content); }
+
+  if (has(S.attributes)) section('Attributes', h('div', { class: 'attrs' }, S.attributes.map(function (a) { return h('div', { class: 'attr' }, [h('b', { text: String(a.value) }), h('span', { text: a.name })]); })));
+
+  if (S['class'] && has(S['class'].class_skills)) section('Class skills', h('p', { class: 'skillsline', text: S['class'].class_skills.join(' · ') }));
+
+  if (has(S.skills)) section('Skills & abilities', h('div', { class: 'list' }, S.skills.map(function (k) {
+    var pills = []; [['cost', 'Cost'], ['cooldown', 'Cooldown'], ['duration', 'Duration']].forEach(function (p) { if (has(k[p[0]])) pills.push(h('span', { text: p[1] + ' ' + k[p[0]] })); });
+    return h('div', { class: 'entry' }, [h('h3', { text: k.name }), pills.length ? h('div', { class: 'pills' }, pills) : null, has(k.effect) ? h('p', { text: k.effect }) : null, has(k.description) && k.description !== k.effect ? h('p', { text: k.description }) : null]);
+  })));
+
+  if (has(S.items)) section('Items', h('div', { class: 'list' }, S.items.map(function (i) { return h('div', { class: 'entry' }, [h('h3', { text: i.name }), has(i.description) ? h('p', { text: i.description }) : null]); })));
+
+  if (has(S.titles)) section('Titles', h('div', { class: 'list' }, S.titles.map(function (t) { return h('div', { class: 'entry' }, [h('h3', { text: t.name }), t.equipped ? h('div', { class: 'pills' }, [h('span', { class: 'on', text: 'Equipped' })]) : null, has(t.effect) ? h('p', { text: t.effect }) : null]); })));
+
+  if (has(S.companions)) section('Companions', h('div', { class: 'list' }, S.companions.map(function (c) {
+    var pills = []; if (has(c.type)) pills.push(h('span', { text: c.type })); if (has(c.level)) pills.push(h('span', { text: 'Level ' + c.level })); if (has(c.xp)) pills.push(h('span', { text: fmt(c.xp) + ' XP' }));
+    return h('div', { class: 'entry' }, [h('h3', { text: c.name }), pills.length ? h('div', { class: 'pills' }, pills) : null]);
+  })));
+
+  if (!body.children.length && !has(S.level) && !has(S.xp_total)) body.appendChild(h('p', { class: 'empty', text: 'Nothing about ' + S.name + ' has been established in the book yet.' }));
+  root.appendChild(body);
+  if (has(S.as_of_chapter)) root.appendChild(h('div', { class: 'foot', text: 'As of chapter ' + S.as_of_chapter }));
+})();
+</script>
+</body>
+</html>
