@@ -44,7 +44,7 @@ import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
 import { appName } from './appName';
-import { useWriteScope } from './useWriteScope';
+import { useShowAllManuscripts, useWriteScope } from './useWriteScope';
 import { folderInScope, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
@@ -177,7 +177,8 @@ export function App() {
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   // Inside Cadrel, Write shows only the manuscripts of the Project and Book Cadrel is showing (docs/UI-MODEL.md); a closed Book is read-only.
   const wscope = useWriteScope();
-  const folders = useMemo(() => scopedFolders(wscope), [wscope]);
+  const [showAll, setShowAll] = useShowAllManuscripts();
+  const folders = useMemo(() => (showAll ? null : scopedFolders(wscope)), [wscope, showAll]);
   const closedHere = !!projectPath && scopedFolderOf(projectPath, folders)?.closed === true;
   /** Nothing here can be changed: Cadrel Reader, a project shared for review, or a closed Book. */
   const locked = isReviewer || closedHere;
@@ -705,7 +706,7 @@ export function App() {
   const homeProps = {
     config: pConfig,
     listing: scopedListing,
-    scope: folders && wscope ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders, hidden: Math.max(0, (listing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
+    scope: wscope?.project ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders: folders ?? [], all: showAll, setAll: setShowAll, hidden: Math.max(0, (listing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     shared,

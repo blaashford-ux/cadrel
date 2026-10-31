@@ -369,3 +369,9 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 
 /* Books on a Project's page, and closed Books in the tree. */
 .book-list .closed, .tree-row.closed { opacity: .65; }
+
+/* The Project / everything switch on a page. */
+.seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent); border-radius: 10px; overflow: hidden; }
+.seg button { padding: 5px 12px; background: none; color: var(--fg); border: 0; border-radius: 0; }
+.seg button[aria-pressed='true'] { background: var(--selected); color: var(--accent); font-weight: 600; }
+.seg button:hover:not([aria-pressed='true']) { background: var(--raised); }

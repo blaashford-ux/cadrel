@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { inViewScope, type ProjectTree } from '@cadrel/kernel';
 import { NotesPanel } from '@cadrel/ui';
+import { ScopeToggle, usePageScope } from './PageScope';
 import type { BookPage, BookSaveResult, CatalogueBookRow, CatalogueDetail, CatalogueList, MyBookRow, MyBooksList, StudioState } from '../shared/api';
 
 const api = window.cadrel.myBooks;
@@ -368,7 +370,8 @@ function NewBook({ list, onDone }: { list: CatalogueList; onDone: (id: string) =
   );
 }
 
-function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; reload: () => void; onOpen: (id: string) => void }) {
+function CatalogueListView({ list, reload, onOpen, tree }: { list: CatalogueList; reload: () => void; onOpen: (id: string) => void; tree?: ProjectTree }) {
+  const ps = usePageScope('mybooks');
   const [search, setSearch] = useState('');
   const [seriesF, setSeriesF] = useState('');
   const [adding, setAdding] = useState(false);
@@ -376,8 +379,8 @@ function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; relo
   const money = list.financeVisible;
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return list.books.filter((b) => (!seriesF || (seriesF === '__none' ? !b.seriesId : b.seriesId === seriesF)) && (!q || `${b.title} ${b.penName} ${b.seriesName ?? ''} ${b.editions.map((e) => `${e.asin ?? ''} ${e.isbn ?? ''}`).join(' ')}`.toLowerCase().includes(q)));
-  }, [list, search, seriesF]);
+    return list.books.filter((b) => (!ps.scope || !tree || (!!b.projectId && inViewScope(tree, ps.scope, b.projectId))) && (!seriesF || (seriesF === '__none' ? !b.seriesId : b.seriesId === seriesF)) && (!q || `${b.title} ${b.penName} ${b.seriesName ?? ''} ${b.editions.map((e) => `${e.asin ?? ''} ${e.isbn ?? ''}`).join(' ')}`.toLowerCase().includes(q)));
+  }, [list, search, seriesF, ps.scope, tree]);
   const grouped = useMemo(() => {
     const out: { key: string; name: string | null; books: CatalogueBookRow[] }[] = [];
     for (const s of list.series) {
@@ -391,7 +394,7 @@ function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; relo
   return (
     <div className="mybooks">
       <p className="muted">Every book in your catalogue, in its series, with its stage and manuscript progress from its project, and its listing, sales and royalties joined from Market and Finance by ASIN.</p>
-      {list.unlisted.length > 0 && (
+      {list.unlisted.length > 0 && !ps.on && (
         <section className="banner" aria-label="Books not in the catalogue yet">
           <strong>{list.unlisted.length} book{list.unlisted.length === 1 ? '' : 's'} from your KDP reports and Market {list.unlisted.length === 1 ? 'is' : 'are'} not in the catalogue yet.</strong>{' '}
           {list.may.create && <button type="button" className="primary" onClick={() => void run(() => api.addFromMarket(list.unlisted.map((u) => u.asin)).then((r) => { if (r.skipped.length) throw new Error(`Added ${r.added.length}. ${r.skipped.map((s) => `${s.asin}: ${s.reason}`).join(' ')}`); return r; }), 'Added to the catalogue.')}>Add {list.unlisted.length === 1 ? 'it' : 'them all'}</button>}
@@ -401,6 +404,7 @@ function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; relo
       {err && <div className="banner error" role="alert">{err}</div>}
       {note && <div className="banner info" role="status">{note}</div>}
       <div className="row">
+        <ScopeToggle s={ps} what="All books" />
         <input aria-label="Search books" placeholder="Search title, pen name, series, ASIN or ISBN" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select aria-label="Series" value={seriesF} onChange={(e) => setSeriesF(e.target.value)}>
           <option value="">All series</option><option value="__none">Standalone</option>
@@ -409,7 +413,9 @@ function CatalogueListView({ list, reload, onOpen }: { list: CatalogueList; relo
         {list.may.create && <button type="button" onClick={() => setAdding(!adding)}>{adding ? 'Cancel' : 'New book…'}</button>}
       </div>
       {adding && <NewBook list={list} onDone={(id) => (setAdding(false), reload(), onOpen(id))} />}
-      {list.books.length === 0 ? (
+      {ps.on && list.books.length > 0 && rows.length === 0 ? (
+        <div className="empty"><p><strong>No books of {ps.title} are in the catalogue.</strong></p><p className="muted">Open a book and link it to this project (or one of its books) to see it here, or show all books.</p></div>
+      ) : list.books.length === 0 ? (
         <div className="empty"><p><strong>No books in the catalogue yet.</strong></p><p className="muted">Create one with New book, or add the books Market already knows from your KDP reports.</p></div>
       ) : (
         grouped.map((g) => (
@@ -649,6 +655,6 @@ export function MyBooks(props: Props & { onProject?: (id: string) => void }) {
       <CatalogueBookView bookId={open} financeVisible={list.financeVisible} studio={props.studio} act={props.act} onBack={() => setOpen(null)} onProject={props.onProject} />
     </>
   ) : (
-    <CatalogueListView list={list} reload={load} onOpen={setOpen} />
+    <CatalogueListView list={list} reload={load} onOpen={setOpen} tree={props.studio?.tree} />
   );
 }

@@ -11,7 +11,7 @@ interface Props {
   config: ProjectsConfig | null;
   listing: RootListing | null;
   /** Inside Cadrel: the Project (and Book) being shown and its manuscript folders. The listing is already narrowed to them. */
-  scope?: { title: string; folders: ScopedFolder[]; hidden: number };
+  scope?: { title: string; folders: ScopedFolder[]; hidden: number; /** Showing every manuscript, not only the Project's. */ all: boolean; setAll(all: boolean): void };
   loading: boolean;
   onOpen(path: string): void;
   /** Absent where Cadrel's Projects page creates and manages projects. */
@@ -70,7 +70,7 @@ export function ProjectsHome(p: Props) {
     const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.stage?.key === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
     const place = (x: ProjectSummary) => p.scope?.folders.findIndex((f) => scopedFolderOf(x.path, [f])) ?? 0;
     return list.sort((a, b) =>
-      p.scope && sort === 'recent' ? place(a) - place(b) : sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
+      p.scope && !p.scope.all && sort === 'recent' ? place(a) - place(b) : sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
   }, [all, query, sort, showArchived, status]);
 
@@ -91,13 +91,17 @@ export function ProjectsHome(p: Props) {
       <div className="home-inner">
         <header className="home-head">
           <div>
-            <h1>{p.scope ? p.scope.title : 'Projects'}</h1>
+            <h1>{p.scope && !p.scope.all ? p.scope.title : 'Projects'}</h1>
             {p.scope && (
-              <p className="muted small home-scope">
-                The manuscripts of this project{p.scope.hidden > 0 ? `; ${p.scope.hidden} more belong to other projects (choose the project in the rail to see them)` : ''}.
+              <p className="home-scope">
+                <span className="seg" role="group" aria-label="Which manuscripts">
+                  <button type="button" aria-pressed={!p.scope.all} onClick={() => p.scope!.setAll(false)} title="Only this project's manuscripts">{p.scope.title}</button>
+                  <button type="button" aria-pressed={p.scope.all} onClick={() => p.scope!.setAll(true)} title="Every manuscript, including ones that belong to no project">All manuscripts</button>
+                </span>
+                {!p.scope.all && p.scope.hidden > 0 && <span className="muted small"> {p.scope.hidden} more belong to other projects or none.</span>}
               </p>
             )}
-            <div className="home-root" hidden={!!p.scope}>
+            <div className="home-root" hidden={!!p.scope && !p.scope.all}>
               <Icon name="folder" size={14} />
               <code className="path" title="Root Folder">
                 {p.config?.root ?? '…'}
@@ -168,9 +172,9 @@ export function ProjectsHome(p: Props) {
 
         {p.listing?.exists && all.length === 0 && (
           <div className="home-empty">
-            <h2>{p.scope ? `Nothing is linked to ${p.scope.title} yet` : p.onNew ? 'Start your first project' : 'Nothing to write in yet'}</h2>
-            {p.scope ? (
-              <p className="muted">Link a manuscript to it, or add a book, on Cadrel’s Projects page.{p.scope.hidden > 0 ? ` ${p.scope.hidden} manuscript${p.scope.hidden === 1 ? '' : 's'} belong to other projects.` : ''}</p>
+            <h2>{p.scope && !p.scope.all ? `Nothing is linked to ${p.scope.title} yet` : p.onNew ? 'Start your first project' : 'Nothing to write in yet'}</h2>
+            {p.scope && !p.scope.all ? (
+              <p className="muted">Link a manuscript to it, or add a book, on Cadrel’s Projects page.{p.scope.hidden > 0 ? ` ${p.scope.hidden} manuscript${p.scope.hidden === 1 ? '' : 's'} belong to other projects or none: choose All manuscripts above to see ${p.scope.hidden === 1 ? 'it' : 'them'}.` : ''}</p>
             ) : p.onNew ? (
               <>
                 <p className="muted">A project is a folder with the structure you choose: manuscript, characters, research and exports. Pick a template to begin.</p>
@@ -196,7 +200,7 @@ export function ProjectsHome(p: Props) {
             return (
               <div
                 key={x.path}
-                className={'project-card' + (x.meta.archived ? ' archived' : '') + (p.scope && scopedFolderOf(x.path, p.scope.folders)?.closed ? ' closed' : '')}
+                className={'project-card' + (x.meta.archived ? ' archived' : '') + (p.scope && !p.scope.all && scopedFolderOf(x.path, p.scope.folders)?.closed ? ' closed' : '')}
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${x.name}`}
@@ -225,7 +229,7 @@ export function ProjectsHome(p: Props) {
                 </div>
                 <div className="card-meta">
                   {(() => {
-                    const f = p.scope ? scopedFolderOf(x.path, p.scope.folders) : undefined;
+                    const f = p.scope && !p.scope.all ? scopedFolderOf(x.path, p.scope.folders) : undefined;
                     return f ? <><span className="chip">{f.label}</span>{f.closed && <span className="chip">closed</span>}</> : null;
                   })()}
                   {x.meta.stage && <StageChip stage={x.meta.stage} />}

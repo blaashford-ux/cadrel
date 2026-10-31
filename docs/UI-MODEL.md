@@ -129,6 +129,20 @@ Not in Phase 1: Market, Write and Finance *use* `cadrelScope` (Phase 3).
 
 Not in Phase 2: a separate "series" folder template (the shipped `series` and `novel` templates already differ and are the defaults for a Project and a Book), and the Planner still lists Projects (with no stage) beside Books until Phase 3.
 
+**Phase 3 is built for Write, Market and the shell's own pages** (Notes, Planner, Dashboard, My Books, Home). **Not done: Finance and Files.**
+- **The scope carries the records inside it.** `viewScopeLinks` lists, for the Project (and Book) in scope, every module record attached to it: Write folders and Market categories, each saying whether it is the series', a Book's or inside a Book, and whether that Book is closed. Records in a hidden closed Book are left out. Modules read this and never the project tree.
+- **Write** (inside Cadrel) lists only the manuscripts in scope: the series' folder first, then each Book's, each card labelled; the switchers are narrowed too. A manuscript opened from Cadrel's Projects page first makes its project the scope, and when the scope moves off the open manuscript Write goes back to its list. A closed Book's manuscript is **read-only** (editor, new file, rename, delete, move), with a banner. Manuscripts that belong to no project would otherwise vanish, so Write's home always has an **All manuscripts** switch, remembered, and says how many are outside the scope. Write on its own has no scope.
+- **Market** lists only the categories assigned to the Project in Queue, Library, Analysis, Keywords and the category comparison, with a header switch **Project | All**. Nothing is filtered in the library: a queue, book list or "open next" with no category chosen covers each category in scope; the search-only "uncategorised" bucket and the all-categories keyword option are left out of a Project. A Project with nothing assigned says so, with *Show all categories*.
+- **Notes, Planner, Dashboard, My Books** each follow the scope with a **Project | Everything** switch remembered per page: Notes shows the Project's, its Books' and the series' own (and says how many belong to other projects or none); the Planner shows its Books' stages and its tasks and deadlines; the Dashboard its projects, manuscripts and categories; My Books its catalogue books (those linked to the Project or its Books). **Home** lists the project in scope first, marked *current*.
+- **Closed Books** drop out of every one of these unless *Show closed books* is on.
+- **Found on the way:** a page that mounted after the scope was known showed everything for a moment while it asked again; the window now keeps the last scope heard. And five older end-to-end tests assumed every project and category was visible; they now say so explicitly (switch to All) or wait on Write's landmark, not its heading.
+
+**Not done in Phase 3**
+- **Finance.** Its figures are aggregated inside the library's queries, so scoping it means those queries taking a set of books (by ASIN), not a filter in the page. The scope would need to carry the Project's ASINs (from the catalogue's book links); neither exists yet.
+- **Files.** The vault is its own working folder (`<Studio>/Vault`) with no link to the project tree, so there is nothing to scope it by until files are attached to projects.
+- **My Books' Market-only list** (used where this computer has no catalogue records) has no project to filter by.
+- **Per-Book Market categories.** Categories are assigned to the Project; a Book in scope shows the Project's categories.
+
 The plan:
 
 0. **This spec and the mock.** Agree the rules.
