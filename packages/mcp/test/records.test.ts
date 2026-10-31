@@ -167,3 +167,36 @@ describe('the records tools', () => {
     void newRecordId;
   });
 });
+
+describe('the records tools follow who is assigned to the project', () => {
+  it('lists only the tasks of projects the person is assigned to, and gives work only to people assigned to the project', async () => {
+    const tree = () => studio.read().then((d) => d.tree);
+    svc = new StudioService({ db, studioId: S, access: dbAccess(db, S), now: NOW, projects: tree });
+    ana = svc.as('ana');
+    const series = await studio.createProject({ name: 'Dragon Rider', kind: 'Series' });
+    const b1 = await studio.createProject({ name: 'Book 1', parentId: series.id, kind: 'Book' });
+    const b2 = await studio.createProject({ name: 'Book 2', parentId: series.id, kind: 'Book' });
+    const eve = (await ana.people.create({ name: 'Eve Editor' })).id;
+    const bo = (await ana.people.create({ name: 'Bo Author' })).id;
+    await ana.people.grant({ subject: { kind: 'person', id: eve }, roleId: 'role_editor', scope: { kind: 'project', id: b1.id } });
+    await ana.people.grant({ subject: { kind: 'person', id: bo }, roleId: 'role_author', scope: { kind: 'project', id: b2.id } });
+
+    const owner = await connect('ana');
+    expect((await owner.call('work_add_task', { project: 'Book 1', title: 'Edit pass', assignee: 'Eve Editor' })).isError).toBe(false);
+    const refused = await owner.call('work_add_task', { project: 'Book 1', title: 'Wrong person', assignee: 'Bo Author' });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/Bo Author is not assigned to this project/);
+    expect((await owner.call('work_add_task', { project: 'Book 2', title: 'Proof', assignee: 'Bo Author' })).isError).toBe(false);
+    const names = (await owner.call('work_people', { project: 'Book 1' })).json() as { name: string }[];
+    expect(names.map((n) => n.name).sort()).toEqual(['Ana', 'Eve Editor']);
+
+    // Eve acts through the assistant: she is an Editor on Book 1 only, so Book 2's work is not there for her.
+    const eveSide = await connect(eve);
+    const mine = await eveSide.call('work_tasks', { state: 'any' });
+    expect(mine.json().tasks.map((t: { title: string }) => t.title)).toEqual(['Edit pass']);
+    const other = await eveSide.call('work_add_task', { project: 'Book 2', title: 'Sneaky' });
+    expect(other.isError).toBe(true);
+    expect(other.text).toMatch(/no such project/i);
+    void b1;
+  });
+});

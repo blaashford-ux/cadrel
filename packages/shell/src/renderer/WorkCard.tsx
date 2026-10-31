@@ -81,7 +81,7 @@ function Tasks({ s, projectId, projectName, run }: Sub) {
           <input type="date" aria-label="Due" value={due} onChange={(e) => setDue(e.target.value)} />
           <select aria-label="Assigned to" value={who} onChange={(e) => setWho(e.target.value)}>
             <option value="">Not assigned</option>
-            {s.people.filter((p) => s.may.assign || p.id === s.me).map((p) => <option key={p.id} value={p.id}>{p.id === s.me ? `${p.name} (me)` : p.name}</option>)}
+            {s.assignable.filter((p) => s.may.assign || p.id === s.me).map((p) => <option key={p.id} value={p.id}>{p.id === s.me ? `${p.name} (me)` : p.name}</option>)}
           </select>
           <button type="submit" className="primary" disabled={!title.trim() || (kind === 'deadline' && !due)}>Add</button>
         </form>
@@ -142,7 +142,8 @@ function Signoffs({ s, projectId, projectName, run }: Sub) {
             <input aria-label="Note" className="grow-text" placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <div className="row" role="group" aria-label="Who is asked">
-            {s.people.map((p) => (
+            {s.assignable.length === 0 && <span className="muted small">Nobody is assigned to this project yet. Give someone a role on it, under People, to ask them.</span>}
+            {s.assignable.map((p) => (
               <label key={p.id} className="inline small"><input type="checkbox" checked={picked.includes(p.id)} onChange={(e) => setPicked(e.target.checked ? [...picked, p.id] : picked.filter((x) => x !== p.id))} /> {p.id === s.me ? `${p.name} (me)` : p.name}</label>
             ))}
             <button type="submit" className="primary" disabled={!label.trim() || picked.length === 0}>Ask</button>

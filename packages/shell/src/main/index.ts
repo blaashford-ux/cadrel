@@ -1349,6 +1349,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       fs: nodeFs,
       viewer: (tree) => peopleHost.myVisibility(tree)
     });
+    peopleHost.setProjects(async () => (await studio.studio.read()).tree);
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
     scope = new ScopeHost({

@@ -62,7 +62,7 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
 
   /** The assistant is a tool of the person's role: a role without `assistant.use` has none of these. */
   const allowed = async () => {
-    if (!(await as().can('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
   };
   /** Notes in the audit log that the person's change was made by the assistant, so the record is honest about who typed it. */
   const viaAssistant = async (tool: string, target: string) => {
@@ -98,8 +98,17 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
 
   server.registerTool(
     'work_people',
-    { description: 'The people in the studio (id and name), for assigning tasks and asking for sign-offs. Needs permission to see people.', inputSchema: {}, annotations: readOnly },
-    () => guarded(async () => (await allowed(), (await as().people.list()).map((p) => ({ id: p.id, name: p.name, kind: p.kind }))))
+    {
+      description: 'The people in the studio (id and name), for assigning tasks and asking for sign-offs. Pass `project` to get only the people who are assigned to it: a task or sign-off can be given to nobody else. Needs permission to see people.',
+      inputSchema: { project: projectRef.optional() },
+      annotations: readOnly
+    },
+    (a) =>
+      guarded(async () => {
+        await allowed();
+        if (a.project) return as().work.assignable(resolveProject((await o.studio.read()).tree, a.project));
+        return (await as().people.list()).map((p) => ({ id: p.id, name: p.name, kind: p.kind }));
+      })
   );
 
   server.registerTool(

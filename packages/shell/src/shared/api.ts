@@ -647,6 +647,8 @@ export type WorkState =
       available: true;
       me: string;
       people: { id: string; name: string }[];
+      /** The people a task or sign-off on this project may be given to: those assigned to it. */
+      assignable: { id: string; name: string }[];
       /** What the person using the app may do with work: task.edit (their own), task.assign (hand work over), task.manage (anyone's). */
       may: { edit: boolean; assign: boolean; manage: boolean };
       tasks: OnProject<TaskRecord>[];

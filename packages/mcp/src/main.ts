@@ -102,7 +102,7 @@ async function findRecords(open: boolean): Promise<Found<{ module: McpModule; cl
     const { access } = await import('node:fs/promises');
     await access(file);
     db = await openStudioDb(file);
-    const service = new StudioService({ db, studioId, access: dbAccess(db, studioId) });
+    const service = new StudioService({ db, studioId, access: dbAccess(db, studioId), projects: async () => (await studio.read()).tree });
     const d = db;
     // The Books in a Done stage, by the acting person's reading of the workflows (the same rule the app uses to hide and lock them).
     const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));

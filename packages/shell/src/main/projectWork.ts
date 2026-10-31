@@ -30,12 +30,12 @@ export class ProjectWork {
     if (!getProject(tree, projectId)) throw new WorkError('There is no such project.');
     const ids = subtreeIds(tree, projectId);
     const name = (id: string | null) => (id ? getProject(tree, id)?.name ?? '(removed project)' : '');
-    const [tasks, approvals, decisions, approved, people, edit, assign, manage] = await Promise.all([
-      work.tasks({ projectIds: ids, state: 'any' }), work.approvals({ projectIds: ids }), work.decisions({ projectIds: ids }), work.approvedLabels(projectId), this.people.peopleList(),
-      this.people.may('task.edit'), this.people.may('task.assign'), this.people.may('task.manage')
+    const [tasks, approvals, decisions, approved, people, assignable, edit, assign, manage] = await Promise.all([
+      work.tasks({ projectIds: ids, state: 'any' }), work.approvals({ projectIds: ids }), work.decisions({ projectIds: ids }), work.approvedLabels(projectId), this.people.peopleList(), this.people.assignable(projectId),
+      this.people.mayOn('task.edit', projectId), this.people.mayOn('task.assign', projectId), this.people.mayOn('task.manage', projectId)
     ]);
     return {
-      available: true, me: this.people.me, people, may: { edit, assign, manage }, approved,
+      available: true, me: this.people.me, people, assignable, may: { edit, assign, manage }, approved,
       tasks: tasks.map((t) => ({ ...t, projectName: name(t.projectId) })),
       approvals: approvals.map((a) => ({ ...a, projectName: name(a.projectId) })),
       decisions: decisions.map((d) => ({ ...d, projectName: name(d.projectId) }))
