@@ -6,3 +6,5 @@
 - Versions: [docs/VERSIONING.md](docs/VERSIONING.md) (current: see [`VERSION`](VERSION))
 - Branches, builds and releases: [docs/RELEASING.md](docs/RELEASING.md)
 - Changes: [CHANGELOG.md](CHANGELOG.md)
+- How the UI scopes work to a Project and its Books (design, with a clickable mock): [docs/UI-MODEL.md](docs/UI-MODEL.md)
+- Cadrel Reader, the beta readers' app (released apart from Cadrel): [packages/reader/README.md](packages/reader/README.md)

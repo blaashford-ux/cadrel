@@ -3,8 +3,9 @@ name: build
 # Runs on every pull request into dev or main and is reused by release.yml.
 #   test     typecheck, the whole test suite (unit, real Electron end-to-end, real PDF layout, epubcheck, DOCX), and a
 #            smoke test of the packaged Linux app
-#   windows  builds the Windows installer, smoke-tests the installed layout, and attaches the installer to the run:
-#            Actions tab -> the run -> Artifacts -> Cadrel-windows-installer
+#   windows  builds the Windows installers (Cadrel, and Cadrel Reader which is released apart from it), smoke-tests the installed
+#            layout, and attaches the installers to the run: Actions tab -> the run -> Artifacts -> Cadrel-windows-installer
+#            and CadrelReader-windows-installer
 on:
   pull_request:
     branches: [main, dev]
@@ -31,6 +32,10 @@ jobs:
         run: |
           # a PR into main (or a push to it) is a release, so it must carry a new version
           if [ "${{ github.base_ref || github.ref_name }}" = "main" ]; then scripts/check-version.sh --newer; else scripts/check-version.sh; fi
+      - name: Check Cadrel Reader's version
+        run: |
+          # Reader has its own version (packages/reader/VERSION) and tags (reader-vX.Y.Z); a release of it that touches Reader must raise it
+          if [ "${{ github.base_ref || github.ref_name }}" = "main" ]; then scripts/check-reader-version.sh --newer; else scripts/check-reader-version.sh; fi
       - name: System tools used by the integration tests
         # xvfb: run Electron headless · poppler: pdfinfo/pdffonts · java + epubcheck: EPUB validation
         # libreoffice-writer: opens the generated DOCX
@@ -59,6 +64,12 @@ jobs:
           exit "${code:-0}"
       - name: Run the shell end-to-end suite against the packaged app
         run: CADREL_PACKAGED_BIN="$PWD/packages/shell/release/linux-unpacked/cadrel" xvfb-run -a npx vitest run --root packages/shell test/shell.e2e.test.ts
+      - name: Build Cadrel Reader and smoke-test it (starts in reader mode, author channels gone, first screen is Shared with me)
+        run: |
+          npm run build -w @cadrel/reader
+          xvfb-run -a npx electron packages/reader --no-sandbox --smoke-test="$RUNNER_TEMP/reader-smoke.json" || code=$?
+          cat "$RUNNER_TEMP/reader-smoke.json" || echo "The Reader smoke test wrote no result file."
+          exit "${code:-0}"
 
   windows:
     needs: test
@@ -101,5 +112,36 @@ jobs:
         with:
           name: Cadrel-windows-installer
           path: packages/shell/release/Cadrel-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Build the Cadrel Reader installer
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          # Same rule as above: a build that is not of `main` reports "<version>-dev.<run number>", matching the reader-v… tag it is published under.
+          CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
+          # The Google Desktop OAuth client secret (repository secret GOOGLE_DESKTOP_CLIENT_SECRET, as in docs/imported/mdedit/DEVELOPMENT.md); without it Google sign-in says it is not set up in this build.
+          CADREL_WRITE_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:CSC_LINK)) {
+            Remove-Item Env:CSC_LINK, Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+            $env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+            Write-Host 'No signing certificate configured: building an UNSIGNED installer.'
+          }
+          npm run dist -w @cadrel/reader
+      - name: Smoke test the installed Cadrel Reader
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'reader-smoke.json'
+          $exe = 'packages\reader\release\win-unpacked\Cadrel Reader.exe'
+          if (-not (Test-Path $exe)) { throw "No $exe was built." }
+          $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test=$out" -Wait -PassThru
+          if (Test-Path $out) { Get-Content $out } else { Write-Host 'The smoke test wrote no result file.' }
+          if ($p.ExitCode -ne 0) { throw "Reader smoke test failed (exit code $($p.ExitCode))" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CadrelReader-windows-installer
+          path: packages/reader/release/CadrelReader-Setup-*.exe
           if-no-files-found: error
           retention-days: 30

@@ -4,7 +4,7 @@
  *
  * A Studio this person only joined has its people and roles on its server (M2), so there is nothing here to manage and the page says so.
  */
-import { bootstrapStudio } from '@cadrel/kernel';
+import { bootstrapStudio, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
 import type { PeopleState, WorkflowState } from '../shared/api';
@@ -30,6 +30,12 @@ export class PeopleHost {
   private studioId = '';
   private why = 'The people and roles of this Studio are managed by its owner.';
   private penScope: string[] | null = null;
+  private projects: (() => Promise<ProjectTree | null>) | null = null;
+
+  /** Tells the records where the Studio's project tree is, so tasks and sign-offs follow who is assigned to what. */
+  setProjects(tree: () => Promise<ProjectTree | null>): void {
+    this.projects = tree;
+  }
 
   /** Opens (or creates) the records file. An owned Studio starts with its twelve default roles and this person as Owner; a joined one has none here. */
   async open(o: { file: string; studioId: string; owned: boolean; ownerName: string; now?: () => Date }): Promise<void> {
@@ -47,7 +53,7 @@ export class PeopleHost {
     // the person using this computer is the Owner who holds the studio-wide Owner role first
     const row = await this.db.first<{ id: string }>("SELECT subject_id AS id FROM assignment WHERE studio_id = ? AND role_id = 'role_owner' AND scope_kind = 'studio' AND subject_kind = 'person' ORDER BY granted_at, id LIMIT 1", [this.studioId]);
     this.meId = row!.id;
-    this.svc = new StudioService({ db: this.db, studioId: this.studioId, access: dbAccess(this.db, this.studioId), now: o.now });
+    this.svc = new StudioService({ db: this.db, studioId: this.studioId, access: dbAccess(this.db, this.studioId), now: o.now, projects: async () => (this.projects ? this.projects() : null) });
     await this.refreshPenNames();
   }
 
@@ -118,12 +124,38 @@ export class PeopleHost {
     return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c) });
   }
 
+  /**
+   * The projects the person using the app can see, or null where this computer holds no records for the Studio (a Studio only joined: its
+   * people and roles are on its server, so there is nothing here to limit by). The Owner and an Admin see every project.
+   */
+  async myVisibility(tree: ProjectTree): Promise<ProjectVisibility | null> {
+    return this.svc ? this.svc.as(this.meId).visibleProjects(tree) : null;
+  }
+
+  /** What another person can see, for the People page ("what would they see?"). Only for someone who may manage people. */
+  async visibilityOf(personId: string, tree: ProjectTree): Promise<{ all: boolean; assigned: string[]; context: string[] }> {
+    if (!this.svc) throw new Error(this.why);
+    if (!(await this.svc.as(this.meId).can('people.manage')) && !(await this.svc.as(this.meId).can('roles.manage'))) throw new Error('Only someone who manages people and roles can see what another person can see.');
+    const v = await this.svc.as(String(personId)).visibleProjects(tree);
+    return { all: v.all, assigned: v.all ? [] : [...v.assigned], context: [...v.context] };
+  }
+
   /** Whether the person using the app holds a capability at the studio. */
   async may(capability: string): Promise<boolean> {
     return this.svc ? this.svc.as(this.meId).can(capability) : false;
   }
 
-  /** The active people, for choosing an assignee or an approver. */
+  /** Whether the person using the app holds a capability on a project (or anywhere, with none). */
+  async mayOn(capability: string, projectId?: string | null): Promise<boolean> {
+    return this.svc ? this.svc.as(this.meId).canOn(capability, projectId) : false;
+  }
+
+  /** The active people a task or sign-off on this project may be given to: those assigned to it. */
+  async assignable(projectId: string): Promise<{ id: string; name: string }[]> {
+    return this.svc ? this.svc.as(this.meId).work.assignable(projectId) : [];
+  }
+
+  /** The active people, for naming an assignee or an approver. */
   async peopleList(): Promise<{ id: string; name: string }[]> {
     return this.svc ? (await this.svc.as(this.meId).people.list()).map((p) => ({ id: p.id, name: p.name })) : [];
   }

@@ -25,6 +25,7 @@ import { goalFor, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
+import { HtmlView } from './HtmlView';
 import { EditBar } from './EditBar';
 import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
@@ -42,6 +43,10 @@ import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
+import { ReaderHome, sharedAsSummaries } from './ReaderHome';
+import { appName } from './appName';
+import { useShowAllManuscripts, useWriteScope } from './useWriteScope';
+import { folderInScope, hiddenFolders, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
 import type { Anchor } from '../shared/review/comments';
@@ -71,6 +76,10 @@ export function App() {
   const [ws] = useState(() => new Workspace(window.cadrelWrite));
   const s = useWorkspace(ws);
   const [filter, setFilter] = useState('');
+  /** A web page (tracker page, chapter record) shown in place of the open tab. */
+  const [page, setPage] = useState<string | null>(null);
+  const rootPath = s.root?.path;
+  useEffect(() => setPage(null), [rootPath]);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
   /** Cut / Copy / Paste / Select all for the editor, opened by press-and-hold or right-click on the text. */
@@ -156,6 +165,8 @@ export function App() {
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [showJoin, setShowJoin] = useState(false);
+  /** Cadrel Reader: an invitation link the app was opened with, to pre-fill the Open invitation dialog. */
+  const [inviteLink, setInviteLink] = useState('');
   const [showSharingHome, setShowSharingHome] = useState(false);
   const [shared, setShared] = useState<SharedProject[]>([]);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
@@ -166,8 +177,21 @@ export function App() {
   /** Set when the open project was shared with this person: a reviewer can read and annotate it, a collaborator can edit it too. */
   const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
   const isCollaborator = sharedHere?.role === 'edit';
-  const isReviewer = sharedHere !== undefined && !isCollaborator;
+  // Cadrel Reader only ever shows other people's projects, read-only; elsewhere a project is read-only when it was shared with you.
+  const isReviewer = caps.reader === true || (sharedHere !== undefined && !isCollaborator);
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
+  // Inside Cadrel, Write shows only the manuscripts of the Project and Book Cadrel is showing (docs/UI-MODEL.md); a closed Book is read-only.
+  const wscope = useWriteScope();
+  const [showAll, setShowAll] = useShowAllManuscripts();
+  const folders = useMemo(() => (showAll ? null : scopedFolders(wscope)), [wscope, showAll]);
+  const closedHere = !!projectPath && scopedFolderOf(projectPath, folders)?.closed === true;
+  /** Nothing here can be changed: Cadrel Reader, a project shared for review, or a closed Book. */
+  const locked = isReviewer || closedHere;
+  /** Nothing in the tree can be changed (new, rename, delete, move): Cadrel Reader or a closed Book. */
+  const noEdit = caps.reader === true || closedHere;
+  const noSee = useMemo(() => hiddenFolders(wscope), [wscope]);
+  const seenListing = useMemo(() => (listing && noSee.size ? { ...listing, projects: listing.projects.filter((p) => !noSee.has(basename(p.path))) } : listing), [listing, noSee]);
+  const scopedListing = useMemo(() => (seenListing && folders ? { ...seenListing, projects: inScope(seenListing.projects, folders), folders: [] } : seenListing), [seenListing, folders]);
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
     window.cadrelWrite,
@@ -361,11 +385,24 @@ export function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
 
+  // A manuscript linked to (or taken from) the Project in scope, or a change of scope, changes what the list should show.
+  useEffect(() => {
+    if (wscope) void reloadListing();
+  }, [wscope, reloadListing]);
+
   // Projects shared with this person, and the exchange of notes with Drive for the open project.
   const reloadShared = useCallback(() => {
     if (caps.review) void window.cadrelWrite.listShared().then(setShared).catch(() => undefined);
   }, [caps.review]);
   useEffect(reloadShared, [reloadShared, atHome]);
+  // Cadrel Reader: a `cadrel-reader:` invitation link that opened the app (or arrived while it was open) fills in the Open invitation dialog.
+  useEffect(() => {
+    const api = window.cadrelWrite;
+    if (!caps.review || !api.takeInviteLink) return;
+    const take = () => void api.takeInviteLink!().then((link) => link && (setInviteLink(link), setShowJoin(true))).catch(() => undefined);
+    take();
+    return api.onInviteLink?.(take);
+  }, [caps.review]);
 
   const exchange = useCallback(async () => {
     if (!caps.review || !projectPath) return;
@@ -416,9 +453,9 @@ export function App() {
     ? `${activeChapter ? chapterLabel(activeChapter) + ' — ' : ''}${basename(activeTab.file)}${s.project ? ' · ' + s.project.meta.name : ''}`
     : s.project
       ? s.project.meta.name
-      : 'Cadrel Write';
+      : appName();
   useEffect(() => {
-    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — Cadrel Write` : 'Cadrel Write';
+    document.title = activeTab ? `${titleText}${activeDirty ? ' ●' : ''} — ${appName()}` : appName();
   }, [activeTab, titleText, activeDirty]);
 
   // ---- actions ---------------------------------------------------------------------------
@@ -439,7 +476,7 @@ export function App() {
   };
 
   const promptNewFile = (dir: string) =>
-    setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New file',
       hint: `In folder “${basename(dir)}”`,
       label: 'File name',
@@ -450,7 +487,7 @@ export function App() {
     });
 
   const promptNewFolder = (dir: string) =>
-    setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New folder',
       hint: `In folder “${basename(dir)}”`,
       label: 'Folder name',
@@ -466,7 +503,7 @@ export function App() {
     });
 
   const promptRename = (row: Row) =>
-    setPrompt({
+    noEdit || row.html ? undefined : setPrompt({
       title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
       label: 'New name',
       initial: row.label,
@@ -477,7 +514,7 @@ export function App() {
     });
 
   const promptNewChapter = (file: string, after: number) =>
-    setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New chapter',
       hint: `After “${s.docs.get(file)?.chapters[after]?.title || 'the preamble'}” in ${basename(file)}`,
       label: 'Chapter title',
@@ -499,11 +536,12 @@ export function App() {
     if (!tab || !doc) return;
     if (tab.chapter < doc.chapters.length - 1) void ws.gotoChapter(1);
     // Moving on from the last chapter counts as leaving it, so the Editing stage's "Mark Edited?" comes first, then the dialog.
-    else if (!isReviewer) void ws.offerMarkEdited(tab.id).then(() => promptNewChapter(tab.file, tab.chapter));
+    else if (!locked) void ws.offerMarkEdited(tab.id).then(() => promptNewChapter(tab.file, tab.chapter));
   };
 
   /** Moves a chapter and keeps the tree focus on it. */
   const moveRow = async (row: Row, delta: -1 | 1) => {
+    if (noEdit) return;
     const idx = await ws.moveChapter(row.path, row.chapter!, delta);
     if (idx !== null) setFocusKey(chapterKey(row.path, idx));
   };
@@ -532,12 +570,15 @@ export function App() {
   };
 
   const deleteRow = (row: Row) => {
+    if (noEdit || row.html) return; // pages are permanent records
     if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
     else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
   };
 
   const activateRow = async (row: Row) => {
     setFocusKey(row.key);
+    if (row.kind === 'file' && row.html) return setPage(row.path);
+    setPage(null);
     if (row.kind === 'chapter') return ws.openChapter(row.path, row.chapter!);
     if (row.kind === 'dir') return row.expandable ? ws.toggleExpanded(row.path, false) : undefined;
     // A file row: open it if it has no tab, switch to its tab if it isn't the active one, and only
@@ -568,6 +609,7 @@ export function App() {
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
       ];
     }
+    if (row.kind === 'file' && row.html) return reveal;
     if (row.kind === 'file') {
       const exportItems: MenuItem[] = row.exportBlocked
         ? [{ label: 'Can’t export: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
@@ -620,14 +662,20 @@ export function App() {
 
   // ---- projects --------------------------------------------------------------------------
 
+  const goHomeRef = useRef<() => Promise<void>>(async () => undefined);
   const openProject = async (path: string) => {
     setShowQuick(false);
     await ws.openProject(path);
   };
+  // If the Project or Book Cadrel is showing changes to one this manuscript is not part of, go back to the list instead of leaving it open.
+  useEffect(() => {
+    if (projectPath && (noSee.has(basename(projectPath)) || (folders && !folderInScope(projectPath, folders)))) void goHomeRef.current();
+  }, [folders, projectPath, noSee]);
   const goHome = async () => {
     setShowQuick(false);
     if (await ws.closeProject()) void reloadListing();
   };
+  goHomeRef.current = goHome;
   const changeRoot = async () => {
     const folder = await window.cadrelWrite.pickFolder();
     if (!folder) return;
@@ -667,7 +715,8 @@ export function App() {
   const manage = caps.manageProjects;
   const homeProps = {
     config: pConfig,
-    listing,
+    listing: scopedListing,
+    scope: wscope?.project ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders: folders ?? [], all: showAll, setAll: setShowAll, hidden: Math.max(0, (seenListing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     shared,
@@ -814,13 +863,14 @@ export function App() {
   const actions: Record<MenuAction | 'toggle-mode' | 'focus-filter', () => void> = {
     'new-project': () => manage && setShowNewProject(true),
     'projects-home': () => void goHome(),
+    'open-invitation': () => caps.review && setShowJoin(true),
     sync: () => caps.sync && setShowSync(true),
     about: () => setShowAbout(true),
     'switch-project': () => setShowQuick(true),
     'project-settings': () => s.project && setProjectSettings(s.project.path),
     'project-progress': () => s.project && setShowProgress(true),
     save: () => void ws.save(),
-    'change-folder': () => void ws.openFolder(),
+    'change-folder': () => caps.folderPicker && void ws.openFolder(),
     refresh: () => void ws.refresh(),
     'new-file': () => s.root && promptNewFile(dirFor(null)),
     'new-folder': () => s.root && promptNewFolder(dirFor(null)),
@@ -971,7 +1021,7 @@ export function App() {
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
           </div>
         )}
-        {caps.sync && !caps.windowChrome && syncStatus && !syncStatus.connected && started && !welcome && (
+        {caps.sync && !caps.windowChrome && !caps.reader && syncStatus && !syncStatus.connected && started && !welcome && (
           <div className="banner info sync-banner" role="status">
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
@@ -979,13 +1029,17 @@ export function App() {
         {started && !welcome && (showSharingHome && caps.review ? (
           <SharingHome
             config={pConfig}
-            listing={listing}
+            listing={seenListing}
             sync={syncStatus}
             onBack={() => setShowSharingHome(false)}
             onConnect={() => setShowSync(true)}
           />
         ) : (
-          <ProjectsHome {...homeProps} />
+          caps.reader ? (
+            <ReaderHome shared={shared} sync={syncStatus} onOpen={(dir) => void openProject(dir)} onJoin={() => setShowJoin(true)} onConnect={() => setShowSync(true)} />
+          ) : (
+            <ProjectsHome {...homeProps} />
+          )
         ))}
       </div>
     ) : (
@@ -995,15 +1049,15 @@ export function App() {
           <ProjectSwitcher
             name={s.project ? s.project.meta.name : s.root?.name ?? ''}
             isProject={s.project !== null}
-            projects={listing?.projects ?? []}
+            projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
             currentPath={s.project?.path ?? null}
             openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
             onHome={() => void goHome()}
             onNew={manage ? () => setShowNewProject(true) : undefined}
             onOpenFolder={caps.folderPicker ? () => void ws.openFolder() : undefined}
-            onSettings={() => s.project && setProjectSettings(s.project.path)}
-            onProgress={() => setShowProgress(true)}
+            onSettings={caps.reader ? undefined : () => s.project && setProjectSettings(s.project.path)}
+            onProgress={caps.reader ? undefined : () => setShowProgress(true)}
           />
           <button
             onClick={() => void ws.refresh()}
@@ -1027,6 +1081,8 @@ export function App() {
               <Icon name="upload" /> Import
             </button>
           )}
+          {!noEdit && (
+            <>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             <Icon name="filePlus" /> File
           </button>
@@ -1038,6 +1094,8 @@ export function App() {
           >
             <Icon name="folderPlus" /> Folder
           </button>
+            </>
+          )}
         </div>
         {s.root ? (
           <>
@@ -1071,7 +1129,7 @@ export function App() {
                 onFocusKey={setFocusKey}
                 onActivate={(r) => void activateRow(r)}
                 onToggle={(r) => void ws.toggleExpanded(r.path, r.kind === 'file')}
-                onContextMenu={(row, x, y) => setMenu({ row, x, y })}
+                onContextMenu={(row, x, y) => !noEdit && setMenu({ row, x, y })}
                 onRename={promptRename}
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
@@ -1102,6 +1160,11 @@ export function App() {
       />
 
       <main className="content">
+        {closedHere && (
+          <div className="banner info" role="status">
+            This book is closed, so it is read-only here. Reopen it on Cadrel’s Projects page to edit.
+          </div>
+        )}
         {s.error && (
           <div className="banner error" role="alert">
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
@@ -1109,7 +1172,7 @@ export function App() {
         )}
         {orphan && (
           <div className="banner warn" role="alert">
-            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside Cadrel Write?).{' '}
+            Export settings for “{basename(orphan).replace(/\.export\.json$/i, '')}” no longer match a file (renamed outside {appName()}?).{' '}
             <button onClick={() => setRelink(orphan)}>Link to a file…</button>{' '}
             <button onClick={() => setIgnoredOrphans(new Set([...ignoredOrphans, orphan]))}>Ignore</button>
           </div>
@@ -1120,17 +1183,22 @@ export function App() {
           </div>
         )}
 
-        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => ws.activateTab(id)} onClose={(id) => void ws.closeTab(id)} />}
+        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => { setPage(null); ws.activateTab(id); }} onClose={(id) => void ws.closeTab(id)} />}
 
         <div className="panes">
-          {s.tabs.length === 0 && (
-            <p className="muted pad">{s.root ? 'Select a chapter to edit it.' : 'Open a folder to get started.'}</p>
+          {page && (
+            <section className="pane report" aria-label={basename(page)}>
+              <HtmlView file={page} version={s.root} onReveal={caps.folderPicker ? () => ws.reveal(page) : undefined} />
+            </section>
+          )}
+          {!page && s.tabs.length === 0 && (
+            <p className="muted pad">{s.root ? (caps.reader ? 'Select a chapter to read it.' : 'Select a chapter to edit it.') : 'Open a folder to get started.'}</p>
           )}
           {s.tabs.map((tab) => {
             const doc = s.docs.get(tab.file);
             const chapter = doc?.chapters[tab.chapter];
             if (!doc || !chapter) return null;
-            const active = tab.id === s.activeId;
+            const active = tab.id === s.activeId && !page;
             const dirty = tab.draft !== null;
             const report = reportOf(doc);
             if (report && !rawReports.has(tab.id)) {
@@ -1171,7 +1239,7 @@ export function App() {
                       <Icon name="left" />
                     </button>
                     {tab.chapter >= doc.chapters.length - 1 ? (
-                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={isReviewer} onClick={nextOrNewChapter}>
+                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={locked} onClick={nextOrNewChapter}>
                         <Icon name="plus" />
                       </button>
                     ) : (
@@ -1205,7 +1273,7 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
-                    {!isReviewer && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
+                    {!locked && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
                       <span className="align-group" role="group" aria-label="Text alignment">
                         {([['left', 'alignLeft', 'Left'], ['center', 'alignCenter', 'Centre'], ['right', 'alignRight', 'Right'], ['justify', 'alignJustify', 'Justify']] as const).map(([a, icon, label]) => (
                           <button key={a} type="button" aria-label={`Align ${label.toLowerCase()}`} title={`Align ${label.toLowerCase()} (Ctrl+Shift+${a === 'left' ? 'L' : a === 'center' ? 'E' : a === 'right' ? 'R' : 'J'}); pick it again to remove`} onClick={() => navs.current.get(tab.id)?.format?.align(a)}>
@@ -1214,7 +1282,7 @@ export function App() {
                         ))}
                       </span>
                     )}
-                    {!isReviewer && !zone && (
+                    {!locked && !zone && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
@@ -1222,9 +1290,11 @@ export function App() {
                       {tab.mode === 'visual' ? 'Source' : 'Visual'}
                     </button>
                     )}
-                    <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
-                      Save (Ctrl+S)
-                    </button>
+                    {!caps.reader && (
+                      <button className="save-btn" onClick={() => void ws.save(tab.id)} disabled={!dirty}>
+                        Save (Ctrl+S)
+                      </button>
+                    )}
                     {caps.windowChrome && (
                       <button className="zone-btn" aria-label="Zone Mode" aria-pressed={zone} title={zone ? 'Leave Zone Mode (F8)' : 'Zone Mode: full screen, just this file (F8)'} onClick={toggleZone}>
                         <Icon name={zone ? 'shrink' : 'expand'} /> Zone
@@ -1257,7 +1327,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
-                    readOnly={isReviewer}
+                    readOnly={locked}
                     onContextMenu={
                       projectPath && caps.windowChrome
                         ? ({ x, y }) => {
@@ -1309,7 +1379,7 @@ export function App() {
             onUndo={() => void ws.undoAction()}
             onRedo={() => void ws.redoAction()}
             project={
-              s.project && s.progress
+              s.project && s.progress && !caps.reader
                 ? {
                     total: s.progress.total,
                     goal: goalFor(s.project.meta)?.targetWords ?? null,
@@ -1330,7 +1400,7 @@ export function App() {
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}
           request={noteRequest}
-          onShare={caps.review && !sharedHere ? () => setShowShare(true) : undefined}
+          onShare={caps.review && !sharedHere && !caps.reader ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}
@@ -1401,13 +1471,14 @@ export function App() {
     )}
     {showJoin && (
       <JoinDialog
+        initialLink={inviteLink}
         onJoined={(sp) => {
           setMe(loadIdentity());
           setShared((l) => [...l.filter((x) => x.dir !== sp.dir), sp]);
           setShowJoin(false);
           void openProject(sp.dir);
         }}
-        onClose={() => setShowJoin(false)}
+        onClose={() => (setShowJoin(false), setInviteLink(''))}
       />
     )}
     {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
@@ -1443,7 +1514,7 @@ export function App() {
     )}
     {showQuick && (
       <QuickSwitcher
-        projects={listing?.projects ?? []}
+        projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
         currentPath={s.project?.path ?? null}
         openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}

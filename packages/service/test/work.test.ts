@@ -88,3 +88,110 @@ describe('linking a book to its project', () => {
     expect(await denied(me.linkProject(book.id, `p-${key}`)), 'link').toBe(!has('catalogue.edit'));
   });
 });
+
+describe('records follow who is assigned to the project', () => {
+  async function world() {
+    const { createProject, emptyTree } = await import('@cadrel/kernel');
+    let tree = emptyTree();
+    const mk = (name: string, parentId: string | null = null) => {
+      const r = createProject(tree, { name, parentId });
+      tree = r.tree;
+      return r.project.id;
+    };
+    const ser = mk('Dragon Rider');
+    const b1 = mk('Book 1', ser);
+    const b2 = mk('Book 2', ser);
+    const secret = mk('Secret');
+    const db = memoryStudioDb();
+    await bootstrapStudio(db, { studioId: S, actor: 'ana', now: NOW().toISOString() } as Ctx, { id: 'ana', name: 'Ana' });
+    const svc = new StudioService({ db, studioId: S, access: dbAccess(db, S), now: NOW, projects: async () => tree });
+    const ana = svc.as('ana');
+    const assign = async (name: string, roleKey: string, projectId: string | null) => {
+      const p = await ana.people.create({ name });
+      await ana.people.grant({ subject: { kind: 'person', id: p.id }, roleId: `role_${roleKey}`, scope: projectId ? { kind: 'project', id: projectId } : STUDIO });
+      return p.id;
+    };
+    return { svc, ana, assign, ser, b1, b2, secret };
+  }
+
+  it('lists, counts and reads only the records of projects the person is assigned to; the Owner reaches all', async () => {
+    const { svc, ana, assign, b1, b2, secret } = await world();
+    const eve = await assign('Eve', 'editor', b1);
+    const t1 = await ana.work.createTask({ projectId: b1, title: 'On book 1', assigneeId: eve });
+    const t2 = await ana.work.createTask({ projectId: b2, title: 'On book 2' });
+    const t3 = await ana.work.createTask({ projectId: secret, title: 'On the secret' });
+    await ana.work.requestApproval({ projectId: b1, label: 'Cover', approverIds: [eve] });
+    await ana.work.requestApproval({ projectId: secret, label: 'Plot', approverIds: ['ana'] });
+    await ana.work.record({ projectId: b2, title: 'Hidden decision', outcome: 'x' });
+    await ana.work.record({ projectId: b1, title: 'Seen decision', outcome: 'x' });
+    await ana.work.record({ projectId: null, title: 'Studio decision', outcome: 'x' });
+
+    const me = svc.as(eve).work;
+    expect((await me.tasks({ state: 'any' })).map((t) => t.title)).toEqual(['On book 1']);
+    expect(await me.task(t2.id)).toBeNull();
+    expect(await me.task(t3.id)).toBeNull();
+    expect((await me.task(t1.id))?.title).toBe('On book 1');
+    expect(await me.openTaskCount([b1, b2, secret])).toBe(1);
+    expect((await me.approvals()).map((a) => a.label)).toEqual(['Cover']);
+    expect((await me.decisions()).map((d) => d.title).sort()).toEqual(['Seen decision', 'Studio decision']);
+    expect((await ana.work.tasks({ state: 'any' }))).toHaveLength(3);
+    expect(await ana.work.openTaskCount([b1, b2, secret])).toBe(3);
+  });
+
+  it('refuses to create or change records on a project the person is not assigned to, as if it were not there', async () => {
+    const { svc, ana, assign, b1, b2 } = await world();
+    const eve = await assign('Eve', 'editor', b1);
+    const bo = await assign('Bo', 'editor', b2);
+    const on2 = await ana.work.createTask({ projectId: b2, title: 'On book 2', assigneeId: bo });
+    const me = svc.as(eve).work;
+    for (const attempt of [
+      () => me.createTask({ projectId: b2, title: 'x' }),
+      () => me.requestApproval({ projectId: b2, label: 'x', approverIds: [eve] }),
+      () => me.record({ projectId: b2, title: 'x', outcome: 'y' }),
+      () => me.updateTask(on2.id, { title: 'y' }),
+      () => me.setState(on2.id, 'done'),
+      () => me.approvedLabels(b2),
+      () => me.assignable(b2)
+    ]) await expect(attempt()).rejects.toThrow(/no such project|not there/);
+  });
+
+  it('a task or sign-off can go only to someone assigned to its project', async () => {
+    const { svc, ana, assign, ser, b1, b2 } = await world();
+    const eve = await assign('Eve', 'editor', b1);
+    const bo = await assign('Bo', 'author', b2);
+    const studioWide = await assign('Sam', 'editor', null); // a studio-wide role does not assign anyone
+    const lead = await assign('Lee', 'series_lead', ser); // a role on the series covers its books
+    const admin = await assign('Ada', 'admin', null); // sees every project
+
+    await expect(ana.work.createTask({ projectId: b1, title: 'x', assigneeId: bo })).rejects.toThrow(/Bo is not assigned to this project/);
+    await expect(ana.work.createTask({ projectId: b1, title: 'x', assigneeId: studioWide })).rejects.toThrow(/Sam is not assigned/);
+    for (const ok of [eve, lead, admin, 'ana']) expect((await ana.work.createTask({ projectId: b1, title: 'ok', assigneeId: ok })).assigneeId).toBe(ok);
+
+    const t = await ana.work.createTask({ projectId: b1, title: 'move me', assigneeId: eve });
+    await expect(ana.work.updateTask(t.id, { assigneeId: bo })).rejects.toThrow(/not assigned/);
+    expect((await ana.work.updateTask(t.id, { assigneeId: lead })).assigneeId).toBe(lead);
+    expect((await ana.work.updateTask(t.id, { title: 'renamed' })).title).toBe('renamed'); // changing nothing about the assignee asks nothing of it
+
+    await expect(ana.work.requestApproval({ projectId: b1, label: 'Cover', approverIds: [eve, bo] })).rejects.toThrow(/Bo is not assigned.*sign-off/);
+    expect((await ana.work.requestApproval({ projectId: b1, label: 'Cover', approverIds: [eve, lead] })).label).toBe('Cover');
+
+    expect((await ana.work.assignable(b1)).map((p) => p.id).sort()).toEqual([admin, eve, lead, 'ana'].sort());
+    expect((await svc.as(eve).work.assignable(b1)).map((p) => p.id)).toContain(lead);
+    expect((await ana.work.assignable(b2)).map((p) => p.id)).toContain(bo);
+  });
+
+  it('a project shown only as the container of a book the person is on is not theirs to work on', async () => {
+    const { svc, ana, assign, ser, b1 } = await world();
+    const eve = await assign('Eve', 'editor', b1);
+    await ana.work.createTask({ projectId: ser, title: 'Series-level' });
+    expect(await svc.as(eve).work.tasks({ state: 'any' })).toEqual([]);
+    await expect(svc.as(eve).work.createTask({ projectId: ser, title: 'x' })).rejects.toThrow(/no such project/);
+  });
+
+  it('limits nothing without a project tree to go by', async () => {
+    const { svc, ana, person } = await studio();
+    const eve = await person('Eve', 'editor');
+    await ana.work.createTask({ projectId: 'anything', title: 'x', assigneeId: eve });
+    expect(await svc.as(eve).work.tasks({ state: 'any' })).toHaveLength(1);
+  });
+});

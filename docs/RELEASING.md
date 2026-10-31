@@ -24,6 +24,19 @@ Builds are always downloadable without a release: open the run in the **Actions*
 3. Open a PR `dev` → `main`. The `build` check must pass (including the version check). Merge it.
 4. The `release` workflow publishes `vX.Y.Z`.
 
+## Cadrel Reader is released separately
+
+Cadrel Reader (the beta readers' app, `packages/reader`) has its own version file, tags and installer, so it can be updated without a Cadrel release and the other way round. See [VERSIONING.md](VERSIONING.md).
+
+| Event | Result |
+|-------|--------|
+| Merge to `main`, `packages/reader/VERSION` raised | Release `reader-vX.Y.Z` with `CadrelReader-Setup-X.Y.Z.exe` and `SHA256SUMS.txt`. Not marked latest. |
+| Merge to `main`, `packages/reader/VERSION` unchanged | Nothing for Reader (its tag exists). |
+| Merge to `main`, Cadrel's `VERSION` unchanged (a Reader-only or docs-only change) | Nothing for Cadrel. |
+| Merge to `dev` that touches `packages/reader` or `packages/write` | Pre-release `reader-vX.Y.Z-dev.N`. |
+
+Builds are also on the run page as the **CadrelReader-windows-installer** artifact. The Windows build needs the repository secret `GOOGLE_DESKTOP_CLIENT_SECRET` for Google sign-in to work in the installed app (as it did for MDEdit); without it Reader builds but says Google isn't set up. The Android app is not built here (see `packages/reader/README.md`).
+
 ## The build
 
 `scripts/build.sh` produces everything in `dist/`. It is currently a placeholder that zips the tracked source. Replace it with the real build once there is one; the workflows publish whatever ends up in `dist/`.

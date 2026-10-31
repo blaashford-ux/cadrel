@@ -8,6 +8,8 @@
 export type KindArea = 'manuscripts' | 'canon' | 'assets' | 'launch' | 'none';
 /** What the assistant may do with files of this kind by default. */
 export type KindAi = 'read' | 'notes' | 'none';
+/** Which level of the Project / Book structure a kind belongs to. */
+export type KindLevel = 'series' | 'book' | 'either';
 
 export interface FileKind {
   id: string;
@@ -23,6 +25,11 @@ export interface FileKind {
   /** Feeds Continuity and the series bible. */
   canon: boolean;
   area: KindArea;
+  /**
+   * Where files of this kind live: on the Project (series level: the bible, characters, world), on a Book (manuscript, outline), or either.
+   * A Book reads the Project's files for context. (docs/UI-MODEL.md)
+   */
+  level: KindLevel;
   ai: KindAi;
   /** Extensions it normally has, lower case with the dot. */
   ext: string[];
@@ -35,28 +42,31 @@ const MD = ['.md', '.markdown'];
 export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.tif', '.tiff', '.bmp'];
 
 const k = (id: string, name: string, description: string, rest: Partial<FileKind> & Pick<FileKind, 'area'>): FileKind => ({
-  id, name, description, prose: false, counts: false, exportable: false, canon: false, ai: 'read', ext: [], folder: null, builtin: true, ...rest
+  id, name, description, prose: false, counts: false, exportable: false, canon: false, level: 'book', ai: 'read', ext: [], folder: null, builtin: true, ...rest
 });
 
 export const BUILT_IN_KINDS: FileKind[] = [
-  k('manuscript', 'Manuscript', 'The text of a book: one or more drafts. This is what is edited, counted, exported and reviewed.', { prose: true, counts: true, exportable: true, canon: true, ai: 'notes', area: 'manuscripts', ext: MD, folder: 'Manuscript' }),
-  k('matter', 'Front and back matter', 'Title page, dedication, copyright page, about the author, also by.', { prose: true, exportable: true, ai: 'notes', area: 'manuscripts', ext: MD }),
-  k('outline', 'Outline', 'Beats and the chapter-by-chapter plan.', { prose: true, canon: true, area: 'canon', ext: MD, folder: 'Outline' }),
-  k('premise', 'Premise', 'The concept: logline, pitch, series arc.', { prose: true, canon: true, area: 'canon', ext: MD, folder: 'Premise' }),
-  k('character', 'Character', 'A character sheet: who they are, what they want, how they speak.', { prose: true, canon: true, area: 'canon', ext: MD, folder: 'Characters' }),
-  k('world', 'Worldbuilding', 'Places, magic and rules, history, culture: reference for the story world.', { prose: true, canon: true, area: 'canon', ext: MD, folder: 'Worldbuilding' }),
-  k('research', 'Research', 'Notes and source material the author gathered. Not part of the story.', { area: 'canon', ext: [...MD, '.pdf', '.txt'], folder: 'Research' }),
-  k('style', 'Style sheet', 'Voice notes, spelling and naming choices.', { prose: true, area: 'canon', ext: MD }),
-  k('brief', 'Brief', 'A brief for cover art, a blurb or a campaign.', { prose: true, area: 'assets', ext: MD }),
-  k('copy', 'Marketing copy', 'Blurbs, descriptions, ad text, newsletter copy.', { prose: true, area: 'launch', ext: MD }),
-  k('image', 'Image', 'A picture: cover art, map, character art, a reference or inspiration image, a photo.', { area: 'assets', ext: IMAGE_EXTENSIONS, folder: 'Images' }),
-  k('asset', 'Production file', 'A source or working file that is not a plain picture: layered art (PSD), fonts, design files.', { area: 'assets', ext: ['.psd', '.ai', '.xcf', '.kra', '.ttf', '.otf'] }),
-  k('export', 'Export', 'A generated file: EPUB, PDF, DOCX. Rebuilt from a manuscript, never edited by hand.', { ai: 'none', area: 'manuscripts', ext: ['.epub', '.pdf', '.docx'], folder: 'Exports' }),
-  k('reference', 'Reference', 'An imported file kept as it came, such as a Word draft or a PDF.', { area: 'canon', ext: ['.docx', '.pdf', '.odt'] }),
-  k('other', 'Not sorted yet', 'Not classified. Choose a kind so it is treated properly.', { ai: 'none', area: 'none' })
+  k('manuscript', 'Manuscript', 'The text of a book: one or more drafts. This is what is edited, counted, exported and reviewed.', { level: 'book', prose: true, counts: true, exportable: true, canon: true, ai: 'notes', area: 'manuscripts', ext: MD, folder: 'Manuscript' }),
+  k('matter', 'Front and back matter', 'Title page, dedication, copyright page, about the author, also by.', { level: 'book', prose: true, exportable: true, ai: 'notes', area: 'manuscripts', ext: MD }),
+  k('outline', 'Outline', 'Beats and the chapter-by-chapter plan.', { level: 'book', prose: true, canon: true, area: 'canon', ext: MD, folder: 'Outline' }),
+  k('premise', 'Premise', 'The concept: logline, pitch, series arc.', { level: 'either', prose: true, canon: true, area: 'canon', ext: MD, folder: 'Premise' }),
+  k('character', 'Character', 'A character sheet: who they are, what they want, how they speak.', { level: 'either', prose: true, canon: true, area: 'canon', ext: MD, folder: 'Characters' }),
+  k('world', 'Worldbuilding', 'Places, magic and rules, history, culture: reference for the story world.', { level: 'either', prose: true, canon: true, area: 'canon', ext: MD, folder: 'Worldbuilding' }),
+  k('research', 'Research', 'Notes and source material the author gathered. Not part of the story.', { level: 'either', area: 'canon', ext: [...MD, '.pdf', '.txt'], folder: 'Research' }),
+  k('style', 'Style sheet', 'Voice notes, spelling and naming choices.', { level: 'either', prose: true, area: 'canon', ext: MD }),
+  k('brief', 'Brief', 'A brief for cover art, a blurb or a campaign.', { level: 'book', prose: true, area: 'assets', ext: MD }),
+  k('copy', 'Marketing copy', 'Blurbs, descriptions, ad text, newsletter copy.', { level: 'book', prose: true, area: 'launch', ext: MD }),
+  k('image', 'Image', 'A picture: cover art, map, character art, a reference or inspiration image, a photo.', { level: 'either', area: 'assets', ext: IMAGE_EXTENSIONS, folder: 'Images' }),
+  k('asset', 'Production file', 'A source or working file that is not a plain picture: layered art (PSD), fonts, design files.', { level: 'either', area: 'assets', ext: ['.psd', '.ai', '.xcf', '.kra', '.ttf', '.otf'] }),
+  k('export', 'Export', 'A generated file: EPUB, PDF, DOCX. Rebuilt from a manuscript, never edited by hand.', { level: 'book', ai: 'none', area: 'manuscripts', ext: ['.epub', '.pdf', '.docx'], folder: 'Exports' }),
+  k('reference', 'Reference', 'An imported file kept as it came, such as a Word draft or a PDF.', { level: 'either', area: 'canon', ext: ['.docx', '.pdf', '.odt'] }),
+  k('other', 'Not sorted yet', 'Not classified. Choose a kind so it is treated properly.', { level: 'either', ai: 'none', area: 'none' })
 ];
 
 export const OTHER_KIND = 'other';
+
+/** Whether a kind may sit at a level (a Project or a Book): `either` fits both. */
+export const kindFitsLevel = (kind: Pick<FileKind, 'level'>, at: 'series' | 'book'): boolean => kind.level === 'either' || kind.level === at;
 
 const BY_ID = new Map(BUILT_IN_KINDS.map((x) => [x.id, x]));
 export const builtInKind = (id: string): FileKind | undefined => BY_ID.get(id);
@@ -64,7 +74,7 @@ export const builtInKind = (id: string): FileKind | undefined => BY_ID.get(id);
 /** A lookup over the built-ins plus a studio's own kinds (which may not reuse a built-in id). */
 export function kindRegistry(custom: FileKind[] = []): Map<string, FileKind> {
   const m = new Map(BY_ID);
-  for (const c of custom) if (!m.has(c.id)) m.set(c.id, { ...c, builtin: false });
+  for (const c of custom) if (!m.has(c.id)) m.set(c.id, { ...c, level: c.level ?? 'either', builtin: false }); // a kind saved before levels existed fits either
   return m;
 }
 

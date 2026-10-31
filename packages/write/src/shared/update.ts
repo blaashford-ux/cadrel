@@ -6,6 +6,21 @@ const DOWNLOAD_PREFIX = `https://github.com/${RELEASES_REPO}/releases/download/`
 
 export type UpdatePlatform = 'windows' | 'android';
 
+/**
+ * The two apps that update from this repository's releases. Cadrel's own are tagged `vX.Y.Z`; Cadrel Reader's are tagged
+ * `reader-vX.Y.Z`, so either can be released without the other and neither is ever offered the other's installer.
+ */
+export type UpdateProduct = 'cadrel' | 'reader';
+
+/** The tag prefix of each product's releases. */
+export const TAG_PREFIX: Record<UpdateProduct, string> = { cadrel: 'v', reader: 'reader-v' };
+
+/** The product a release tag belongs to ("reader-v0.9.0" is the Reader's, "v0.5.0" is Cadrel's), or null for anything else. */
+export function productOfTag(tag: string): UpdateProduct | null {
+  if (tag.startsWith(TAG_PREFIX.reader)) return 'reader';
+  return /^v?\d/.test(tag) ? 'cadrel' : null;
+}
+
 export interface UpdateAsset {
   name: string;
   url: string;
@@ -41,9 +56,9 @@ interface ReleaseJson {
   assets?: unknown;
 }
 
-const ASSET_PATTERN: Record<UpdatePlatform, RegExp> = {
-  windows: /^Cadrel-Setup-.*\.exe$/i,
-  android: /^Cadrel-.*\.apk$/i
+const ASSET_PATTERN: Record<UpdateProduct, Record<UpdatePlatform, RegExp>> = {
+  cadrel: { windows: /^Cadrel-Setup-.*\.exe$/i, android: /^Cadrel-.*\.apk$/i },
+  reader: { windows: /^CadrelReader-Setup-.*\.exe$/i, android: /^CadrelReader-.*\.apk$/i }
 };
 
 /** [major, minor, patch] plus the pre-release suffix ("beta.1" in "0.5.0-beta.1"), if any. Null if it isn't a version. */
@@ -87,10 +102,11 @@ export function compareVersions(a: string, b: string): number {
 export const isDevBuild = (version: string): boolean => /-dev(\.|$)/.test(version);
 
 /** Reads GitHub's "latest release" JSON into what the About dialog needs. Throws if it isn't a usable release. */
-export function parseRelease(json: unknown, platform: UpdatePlatform, current: string): UpdateInfo {
+export function parseRelease(json: unknown, platform: UpdatePlatform, current: string, product: UpdateProduct = 'cadrel'): UpdateInfo {
   const r = (json ?? {}) as ReleaseJson;
   const tag = typeof r.tag_name === 'string' ? r.tag_name : '';
-  const latest = tag.replace(/^v/, '');
+  if (tag && (productOfTag(tag) ?? product) !== product) throw new Error(`That release (${tag}) is not for this app.`);
+  const latest = tag.startsWith(TAG_PREFIX.reader) ? tag.slice(TAG_PREFIX.reader.length) : tag.replace(/^v/, '');
   if (!parseVersion(latest)) throw new Error('GitHub returned a release without a version number.');
   const assets = (Array.isArray(r.assets) ? r.assets : []).flatMap((a): UpdateAsset[] => {
     const o = a as { name?: unknown; browser_download_url?: unknown; size?: unknown };
@@ -104,7 +120,7 @@ export function parseRelease(json: unknown, platform: UpdatePlatform, current: s
     available: compareVersions(latest, current) > 0,
     notes: typeof r.body === 'string' ? r.body : '',
     pageUrl: typeof r.html_url === 'string' ? r.html_url : `https://github.com/${RELEASES_REPO}/releases/latest`,
-    asset: assets.find((a) => ASSET_PATTERN[platform].test(a.name)) ?? null,
+    asset: assets.find((a) => ASSET_PATTERN[product][platform].test(a.name)) ?? null,
     sumsUrl: assets.find((a) => a.name === 'SHA256SUMS.txt')?.url ?? null
   };
 }
@@ -135,18 +151,24 @@ export const RELEASES_URL = `https://api.github.com/repos/${RELEASES_REPO}/relea
 
 /**
  * The release a build should offer: a development build looks only at development releases (pre-releases tagged "-dev.N"), the newest
- * one; a stable build looks only at the newest stable release. Neither is ever offered the other kind.
+ * one; a stable build looks only at the newest stable release. Neither is ever offered the other kind, and a product is only ever
+ * offered its own releases (see `UpdateProduct`).
  */
-export async function fetchReleaseFor(fetchFn: typeof fetch, platform: UpdatePlatform, current: string): Promise<UpdateInfo> {
-  if (!isDevBuild(current)) return fetchLatestRelease(fetchFn, platform, current);
+export async function fetchReleaseFor(fetchFn: typeof fetch, platform: UpdatePlatform, current: string, product: UpdateProduct = 'cadrel'): Promise<UpdateInfo> {
+  // Cadrel's stable releases are GitHub's "latest"; Reader's never are (they are published with latest off), so Reader always lists.
+  if (product === 'cadrel' && !isDevBuild(current)) return fetchLatestRelease(fetchFn, platform, current);
   const res = await fetchFn(RELEASES_URL, { headers: { Accept: 'application/vnd.github+json' } });
-  if (!res.ok) throw new Error(`GitHub answered ${res.status} when asking for the development releases.`);
+  if (!res.ok) throw new Error(`GitHub answered ${res.status} when asking for the ${isDevBuild(current) ? 'development ' : ''}releases.`);
   const list = (await res.json()) as unknown;
-  const dev = (Array.isArray(list) ? list : []).filter((r): r is Record<string, unknown> => {
+  const wantDev = isDevBuild(current);
+  const mine = (Array.isArray(list) ? list : []).filter((r): r is Record<string, unknown> => {
     const o = r as { draft?: unknown; prerelease?: unknown; tag_name?: unknown };
-    return o.draft !== true && o.prerelease === true && typeof o.tag_name === 'string' && isDevBuild(o.tag_name.replace(/^v/, ''));
+    if (o.draft === true || typeof o.tag_name !== 'string' || productOfTag(o.tag_name) !== product) return false;
+    const version = o.tag_name.startsWith(TAG_PREFIX.reader) ? o.tag_name.slice(TAG_PREFIX.reader.length) : o.tag_name.replace(/^v/, '');
+    return wantDev ? o.prerelease === true && isDevBuild(version) : o.prerelease !== true && !isDevBuild(version);
   });
-  if (!dev.length) throw new Error('No development release has been published yet.');
-  const newest = dev.reduce((a, b) => (compareVersions(String(b.tag_name), String(a.tag_name)) > 0 ? b : a));
-  return parseRelease(newest, platform, current);
+  if (!mine.length) throw new Error(wantDev ? 'No development release has been published yet.' : 'No release has been published yet.');
+  const versionOf = (r: Record<string, unknown>) => String(r.tag_name).replace(/^(reader-)?v/, '');
+  const newest = mine.reduce((a, b) => (compareVersions(versionOf(b), versionOf(a)) > 0 ? b : a));
+  return parseRelease(newest, platform, current, product);
 }

@@ -8,7 +8,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, renameTopic, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
+  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, clearWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, renameTopic, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
   replyToNote, sanitizeNotes, sanitizeTree, setArchived, setNoteStatus, unlinkRecord, updateProject,
   type NewNote, type Note, type NoteStatus, type Project, type ProjectTree
 } from '@cadrel/kernel';
@@ -90,6 +90,11 @@ export class Studio {
   /** Gives a project made before workflows existed its workflow, once. A project that has one cannot be given another. */
   adoptWorkflow(id: string, workflowId: string, stage: string): Promise<void> {
     return this.change((d) => ({ data: { ...d, tree: adoptWorkflow(d.tree, id, workflowId, stage) }, result: undefined }));
+  }
+
+  /** Takes the stage off a project that should not have one (a Project above its Books). */
+  clearWorkflow(id: string): Promise<void> {
+    return this.change((d) => ({ data: { ...d, tree: clearWorkflow(d.tree, id) }, result: undefined }));
   }
 
   /** A stage was removed from a workflow: the projects in it go to the stage chosen for them. Returns how many moved. */

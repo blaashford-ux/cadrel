@@ -19,7 +19,7 @@ One ledger file per project: `Tracking/LitRPG Ledger.json`, changed only through
 
 You have Cadrel's project tools. A project is a folder of Markdown files, and the manuscript is read-only to you.
 
-1. **Find the work.** `list_projects`, then `list_files` and `list_chapters`. Ask which project or file if it isn't clear. Read any notes the project keeps on its game system (a "System", "Rules" or "Worldbuilding" file) first: stated rules such as "5 points per level" are what the arithmetic checks against.
+1. **Find the work, one Book at a time.** In Cadrel a project is a series with Books under it, and a ledger belongs to **one Book**. If `studio_context` is available, call it with the project first (it names the Books and the series files to read). Then `list_projects`, `list_files` and `list_chapters`. With several open Books, pass `book` on every call; if it isn't clear which Book, or which file, ask. A closed Book is read-only: you can query it, not log to it. A series keeps **one ledger file** (`Tracking/LitRPG Ledger.json` in the series' own folder when it has one, with each Book's ledger inside; a book on its own keeps it in its own folder). `litrpg_state`, `check_tracker` and `build_tracker_view` read it **with the earlier Books' ledgers in front**, so a character starts this Book where the last one left them and a jump between Books is flagged; log only this Book's chapters, never an earlier Book's, and chapter numbers are always this Book's own. Read any notes the project keeps on its game system (a "System", "Rules" or "Worldbuilding" file) first: stated rules such as "5 points per level" are what the arithmetic checks against.
 2. **Read** the chapters with `read_chapter`. Use `search_text` to find where a skill or item was first described.
 3. **Log** with `litrpg_log`: `characters: [{ name, events: [{ type, chapter, details, source_quote? }] }]`. Chapter numbers are the chapter as the book numbers it (Chapter 1 is 1), not the 0-based index the chapter tools use. The tool validates every event (a batch with a bad event saves nothing and says which), appends them in chapter order, replays each character, runs the arithmetic checks, and returns the delta and any new flags.
 4. **Query** with `litrpg_state`: `character` (or all), and `as_of_chapter`. If the project also has a timeline ledger, `as_of_day` turns an in-story day into the last chapter narrated by then.
@@ -52,6 +52,8 @@ For each POV or named character with a system Interface (or otherwise explicit m
 - **Correcting a mistake.** The log is append-only. To fix a wrong earlier event, log the right one and set `corrects` to the wrong event's id (ids such as `e12` come back from `litrpg_log` and are in the ledger). Replay then skips the wrong one.
 
 ## Consistency checking
+
+**A permanent page for every chapter.** Each `litrpg_log` also writes `Tracking/Chapters/Chapter N.html` for each chapter it touched: what changed (the events) and where each character stands after it. These are the permanent record. A chapter whose record would not change is left alone; if a later log changes a chapter, the page is rewritten and the old version is kept in the project's history. For chapters logged before this existed, call `build_tracker_view` with `view: "chapters"` to write them all (or only `as_of_chapter`). Cadrel Write and Cadrel Reader list and show these pages.
 
 `litrpg_log` and `check_tracker` raise these automatically, from the numbers:
 

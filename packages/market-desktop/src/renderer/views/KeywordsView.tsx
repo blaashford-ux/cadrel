@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { OwnBookRow, CategorySummary, KeywordHistoryRow, KeywordIdea, KeywordString, InjectedSuggestion, OutlineRef, KeywordJob, KeywordLookupResult, KeywordRow, KeywordTable, SuggestSource } from '../../shared/api.js';
 import { DataTable, type Column } from './DataTable.js';
+import { scopedCategories, useMarketScope } from '../scope.js';
 
 const api = window.cadrelMarket;
 const LABEL: Record<SuggestSource, string> = { amazon: 'Amazon', google: 'Google', bing: 'Bing' };
@@ -41,7 +42,9 @@ export function KeywordsView({ version }: { version: number }) {
 
   // One category for the whole tab: searches and imported trends are filed under it, history is listed for it, and the Reddit column and
   // the suggestions read from it. It starts on the first category; "All categories" files nothing and reads every synced subreddit.
-  useEffect(() => { void api.categories().then((c) => { setCats(c); setCat((cur) => (cur && !c.some((x) => x.key === cur) ? '' : !catChosen && !cur && c[0] ? c[0].key : cur)); }); }, [version]);
+  const scope = useMarketScope();
+  const keys = scope.keys;
+  useEffect(() => { void api.categories().then((all) => { const c = scopedCategories(all, keys); setCats(c); setCat((cur) => (cur && !c.some((x) => x.key === cur) ? (keys ? c[0]?.key ?? '' : '') : !catChosen && !cur && c[0] ? c[0].key : cur)); }); }, [version, scope.token]);
   const ideasCat = cat || cats[0]?.key || '';
   const catName = (k: string) => cats.find((c) => c.key === k)?.name ?? k;
   const loadIdeas = () => (ideasCat ? api.keywordIdeas(ideasCat, forAsin || undefined).then(setIdeas, () => setIdeas([])) : Promise.resolve(setIdeas([])));
@@ -157,7 +160,7 @@ export function KeywordsView({ version }: { version: number }) {
       <div className="row">
         <label>Category{' '}
           <select value={cat} onChange={(e) => { setCatChosen(true); setCat(e.target.value); }} aria-label="Category">
-            <option value="">All categories</option>
+            {!keys && <option value="">All categories</option>}
             {cats.map((c) => <option key={c.key} value={c.key}>{c.name ?? c.key}</option>)}
           </select>
         </label>

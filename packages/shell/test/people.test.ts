@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { createProject, emptyTree } from '@cadrel/kernel';
 import { PEOPLE_CALLS, PeopleHost } from '../src/main/people';
 
 const hosts: PeopleHost[] = [];
@@ -130,5 +131,44 @@ describe('the workflow builder on this computer', () => {
     expect(h.penNameScope()).toEqual(['A. J. Vale', 'Mara Quinn']);
     await h.close();
     expect(h.penNameScope()).toBeNull();
+  });
+});
+
+describe('which projects a person can see', () => {
+  it('the Owner sees all; someone sees only the projects they are assigned to, and a studio-wide role does not assign them', async () => {
+    const { h } = await open();
+    let t = emptyTree();
+    const mk = (name: string, parentId: string | null = null) => {
+      const r = createProject(t, { name, parentId });
+      t = r.tree;
+      return r.project.id;
+    };
+    const ser = mk('Dragon Rider');
+    const b1 = mk('Book 1', ser);
+    const b2 = mk('Book 2', ser);
+    const secret = mk('Secret');
+    const s = await h.state();
+    if (!s.available) throw new Error('expected people');
+
+    expect((await h.myVisibility(t))!.all).toBe(true);
+    const ed = (await h.call('createPerson', { name: 'Eli Editor' })) as { id: string };
+    await h.call('grant', { subject: { kind: 'person', id: ed.id }, roleId: 'role_editor', scope: { kind: 'studio', id: s.studioId } });
+    expect(await h.visibilityOf(ed.id, t)).toEqual({ all: false, assigned: [], context: [] });
+
+    await h.call('grant', { subject: { kind: 'person', id: ed.id }, roleId: 'role_editor', scope: { kind: 'project', id: b1 } });
+    const v = await h.visibilityOf(ed.id, t);
+    expect(v.assigned).toEqual([b1]);
+    expect(v.context).toEqual([ser]); // the series is shown only as the container of their book
+    expect([...v.assigned, ...v.context]).not.toContain(b2);
+    expect([...v.assigned, ...v.context]).not.toContain(secret);
+
+    const admin = (await h.call('createPerson', { name: 'Ada Admin' })) as { id: string };
+    await h.call('grant', { subject: { kind: 'person', id: admin.id }, roleId: 'role_admin', scope: { kind: 'studio', id: s.studioId } });
+    expect((await h.visibilityOf(admin.id, t)).all).toBe(true);
+  });
+
+  it('has nothing to limit by in a Studio this person only joined', async () => {
+    const { h } = await open(false);
+    expect(await h.myVisibility(emptyTree())).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import { LibraryView } from './views/LibraryView.js';
 import { IssuesView } from './views/IssuesView.js';
 import { SettingsView } from './views/SettingsView.js';
 import { AboutView } from './views/AboutView.js';
+import { ScopeProvider, useMarketScope } from './scope.js';
 
 const api = window.cadrelMarket;
 type Tab = 'queue' | 'library' | 'analysis' | 'keywords' | 'issues' | 'settings' | 'about';
@@ -14,12 +15,29 @@ type Tab = 'queue' | 'library' | 'analysis' | 'keywords' | 'issues' | 'settings'
 const TABS: [Tab, string][] = [['queue', 'Queue'], ['library', 'Library'], ['analysis', 'Analysis'], ['keywords', 'Keywords'], ['issues', 'Parser health'], ['settings', 'Settings']];
 
 export function App() {
+  return (
+    <ScopeProvider>
+      <Pages />
+    </ScopeProvider>
+  );
+}
+
+const SCOPED_TABS: Tab[] = ['queue', 'library', 'analysis', 'keywords'];
+
+function Pages() {
+  const scoped = useMarketScope();
   const [status, setStatus] = useState<Status | null>(null);
   const [tab, setTab] = useState<Tab>('queue');
   /** A book another page asked to be shown (My Books in the shell): the Library opens it. */
   const [show, setShow] = useState<{ asin: string } | null>(null);
   /** Bumped whenever a capture arrives so views reload. */
   const [version, setVersion] = useState(0);
+  /** Bumped when the scope changes, so the pages start again on the categories now in scope. */
+  const [scopeTick, setScopeTick] = useState(0);
+  useEffect(() => setScopeTick((n) => n + 1), [scoped.token]);
+  const viewVersion = version + scopeTick;
+  /** The Project has no Market category assigned: these pages say so instead of showing nothing. */
+  const noneInScope = !!scoped.keys && scoped.keys.length === 0 && SCOPED_TABS.includes(tab);
 
   const refresh = useCallback(async () => setStatus(await api.status()), []);
   useEffect(() => {
@@ -52,16 +70,29 @@ export function App() {
           <button key={id} role="tab" className="tab" aria-selected={tab === id} onClick={() => setTab(id)}>{label}</button>
         ))}
         <span className="spacer" />
+        {scoped.available && (
+          <span className="seg" role="group" aria-label="Which categories">
+            <button type="button" className="tab" aria-pressed={scoped.mode === 'project'} onClick={() => scoped.setMode('project')} title="Only the categories assigned to this project">{scoped.title}</button>
+            <button type="button" className="tab" aria-pressed={scoped.mode === 'all'} onClick={() => scoped.setMode('all')} title="Every category in the library">All</button>
+          </span>
+        )}
         <span className={`dot ${status.serverRunning ? 'on' : 'off'}`} title={status.serverError ?? ''}>
           {status.serverRunning ? `Listening on port ${status.port}` : status.serverError ?? 'Not listening'}
         </span>
         {!status.serverRunning && <button className="tab" onClick={() => setTab('settings')}>Fix…</button>}
       </header>
       <main>
-        {tab === 'queue' && <QueueView version={version} />}
-        {tab === 'library' && <LibraryView version={version} show={show} />}
-        {tab === 'analysis' && <AnalysisView version={version} />}
-        {tab === 'keywords' && <KeywordsView version={version} />}
+        {noneInScope && (
+          <div className="empty">
+            <h1>No categories are assigned to {scoped.title}</h1>
+            <p className="muted">Assign a Market category to this project on Cadrel’s Projects page and it appears here.</p>
+            <button type="button" className="primary" onClick={() => scoped.setMode('all')}>Show all categories</button>
+          </div>
+        )}
+        {!noneInScope && tab === 'queue' && <QueueView version={viewVersion} />}
+        {!noneInScope && tab === 'library' && <LibraryView version={viewVersion} show={show} />}
+        {!noneInScope && tab === 'analysis' && <AnalysisView version={viewVersion} />}
+        {!noneInScope && tab === 'keywords' && <KeywordsView version={viewVersion} />}
         {tab === 'issues' && <IssuesView version={version} />}
         {tab === 'settings' && <SettingsView status={status} onChange={refresh} />}
         {tab === 'about' && <AboutView />}

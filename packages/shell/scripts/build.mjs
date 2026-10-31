@@ -32,6 +32,10 @@ const NATIVE = ['electron', 'sqlite-vec', '@huggingface/transformers', 'onnxrunt
 const esmBanner = { js: "import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);" };
 const page = (dir, out) => vite({ root: dir, base: './', plugins: [react()], build: { outDir: out, emptyOutDir: true }, logLevel: 'warn' });
 const preloadCjs = (entry, out) => esbuild({ entryPoints: [entry], outfile: out, bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
+// A module view's preload is the module's own plus the shell's scope bridge (window.cadrelScope: the Project and Book the app is showing).
+const scopeBridge = path.join(root, 'src', 'preload', 'scope.cts');
+const modulePreload = (entry, out) =>
+  esbuild({ stdin: { contents: `import ${JSON.stringify(entry)};\nimport ${JSON.stringify(scopeBridge)};`, resolveDir: root, loader: 'ts' }, outfile: out, bundle: true, platform: 'node', format: 'cjs', target: 'node22', external: ['electron'], logLevel: 'warning' });
 
 // ---- assets Write's print pipeline reads at run time ----
 const polyfill = path.join(path.dirname(createRequire(path.join(write, 'package.json')).resolve('pagedjs')), '..', 'dist', 'paged.polyfill.js');
@@ -44,14 +48,14 @@ fs.copyFileSync(polyfill, path.join(dist, 'assets', 'vendor', 'paged.polyfill.js
 
 // ---- Write's view ----
 await page(path.join(write, 'src', 'renderer'), path.join(dist, 'modules', 'write', 'renderer'));
-await preloadCjs(path.join(write, 'electron', 'preload.ts'), path.join(dist, 'modules', 'write', 'preload.cjs'));
+await modulePreload(path.join(write, 'electron', 'preload.ts'), path.join(dist, 'modules', 'write', 'preload.cjs'));
 
 // ---- Market's view, its MCP server and browser extension ----
 await page(path.join(market, 'src', 'renderer'), path.join(dist, 'modules', 'market', 'renderer'));
-await preloadCjs(path.join(market, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'market', 'preload.cjs'));
+await modulePreload(path.join(market, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'market', 'preload.cjs'));
 // ---- Finance's view (its main half runs inside the shell) ----
 await page(path.join(finance, 'src', 'renderer'), path.join(dist, 'modules', 'finance', 'renderer'));
-await preloadCjs(path.join(finance, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'finance', 'preload.cjs'));
+await modulePreload(path.join(finance, 'src', 'preload', 'index.cts'), path.join(dist, 'modules', 'finance', 'preload.cjs'));
 // The one MCP server for the whole suite (Write's tools and Market's), run by the app's own Node (ELECTRON_RUN_AS_NODE)
 // so it finds the same native modules.
 const version = fs.readFileSync(path.join(root, '..', '..', 'VERSION'), 'utf8').trim();

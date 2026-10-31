@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BUILT_IN_KINDS, IMAGE_EXTENSIONS, builtInKind, folderKindByName, kindGlossary, kindRegistry, suggestKind, type FileKind } from '../src/kinds';
+import { BUILT_IN_KINDS, IMAGE_EXTENSIONS, builtInKind, folderKindByName, kindFitsLevel, kindGlossary, kindRegistry, suggestKind, type FileKind } from '../src/kinds';
 import { AREAS } from '../src/capabilities';
 
 describe('file kinds', () => {
@@ -56,7 +56,7 @@ describe('file kinds', () => {
   });
 
   it('a studio can add kinds but cannot replace a built-in one', () => {
-    const magic: FileKind = { id: 'magic', name: 'Magic system', description: 'Rules of magic.', prose: true, counts: false, exportable: false, canon: true, area: 'canon', ai: 'read', ext: ['.md'], folder: 'Magic', builtin: false };
+    const magic: FileKind = { id: 'magic', name: 'Magic system', description: 'Rules of magic.', prose: true, counts: false, exportable: false, canon: true, area: 'canon', level: 'either', ai: 'read', ext: ['.md'], folder: 'Magic', builtin: false };
     const fake: FileKind = { ...magic, id: 'manuscript', description: 'hijack' };
     const reg = kindRegistry([magic, fake]);
     expect(reg.get('magic')).toBeDefined();
@@ -64,5 +64,22 @@ describe('file kinds', () => {
     expect(folderKindByName('Magic', reg)).toBe('magic');
     expect(kindGlossary(reg)).toContain('- magic: Rules of magic.');
     expect(kindGlossary(reg)).toContain('- image: A picture');
+  });
+});
+
+describe('kind levels', () => {
+  it('every built-in kind says where it lives', () => {
+    expect(BUILT_IN_KINDS.every((k) => ['series', 'book', 'either'].includes(k.level))).toBe(true);
+  });
+  it('a Book’s own material is book-level and a series’ canon can sit at either', () => {
+    expect(builtInKind('manuscript')!.level).toBe('book');
+    expect(builtInKind('outline')!.level).toBe('book');
+    for (const id of ['character', 'world', 'style', 'premise']) expect(builtInKind(id)!.level).toBe('either');
+  });
+  it('either fits both levels; series and book fit only theirs', () => {
+    expect(kindFitsLevel({ level: 'either' }, 'series')).toBe(true);
+    expect(kindFitsLevel({ level: 'either' }, 'book')).toBe(true);
+    expect(kindFitsLevel({ level: 'book' }, 'series')).toBe(false);
+    expect(kindFitsLevel({ level: 'series' }, 'book')).toBe(false);
   });
 });

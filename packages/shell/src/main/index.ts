@@ -24,13 +24,14 @@ import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './c
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
+import { ScopeHost, scopeMenu } from './scope';
 import { StudioService } from './studio';
 import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import { AI_ACCESS_FILE, accessReader, sanitizeAccess, type AiAccess } from '@cadrel/write/src/shared/agent/access';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, viewScopeOf, type ViewScope, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
@@ -83,6 +84,10 @@ let settings: SettingsStore;
 /** The active Studio's own settings (where its Projects and Write folders are, if the person moved them). */
 let studioSettings: SettingsStore;
 let studio: StudioService;
+/** What the app is showing: the Project and Book every page and module view follows (docs/UI-MODEL.md). */
+let scope: ScopeHost;
+/** Checks the scope against the Studio's projects after something may have changed them; never lets a failure reach the caller. */
+const rescope = (): void => void scope?.refresh().catch(() => undefined);
 let users: UserStore;
 let admin: AdminStore;
 let studios: StudioRegistry;
@@ -646,7 +651,7 @@ function createWindow(): void {
 
 /** The stage (name and colour) of the Cadrel project each Write folder belongs to, looked up by folder name. */
 async function stageByFolder(): Promise<{ (folder: string): { name: string; color: string } | null; all(): Map<string, NonNullable<ProjectStageView['stage']>> }> {
-  const tree = (await studio.studio.read()).tree;
+  const tree = await studio.tree();
   const views = await stages.views();
   const byFolder = new Map<string, NonNullable<ProjectStageView['stage']>>();
   for (const l of tree.links) {
@@ -669,7 +674,9 @@ async function overview(): Promise<Overview> {
       }
     })().catch(marketUnavailable)
   ]);
-  return { write: w, market: m };
+  // A manuscript folder that belongs to a project this person cannot see is not listed, nor is its words counted.
+  const hidden = new Set((await studio.hiddenLinks().catch(() => [])).filter((l) => l.module === 'write').map((l) => l.ref));
+  return { write: hidden.size ? { ...w, projects: w.projects.filter((p) => !hidden.has(p.name)) } : w, market: m };
 }
 
 function registerShellIpc(): void {
@@ -690,7 +697,9 @@ function registerShellIpc(): void {
     ipcMain.handle(channel, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         if (err instanceof ProjectError || err instanceof NoteError || (err instanceof Error && /^There is no project/.test(err.message))) return { __error: err.message };
         throw err;
@@ -701,7 +710,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:manage:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -711,7 +722,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -855,6 +868,9 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  manageLike('stages:close', async (bookId: string) => stages.closeBook(String(bookId)));
+  manageLike('stages:reopen', async (bookId: string, to: string) => stages.reopenBook(String(bookId), String(to)));
+  manageLike('stages:clear', async (projectId: string) => stages.clearStage(String(projectId)));
   const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
   manageLike('vault:state', async () => vaultHost().state());
   manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
@@ -882,6 +898,7 @@ function registerShellIpc(): void {
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
+  manageLike('people:visible', async (personId: string) => peopleHost.visibilityOf(String(personId), (await studio.studio.read()).tree));
   manageLike('people:explain', async (personId: string, capability: string, projectId?: string | null) => peopleHost.explain(String(personId), String(capability), projectId));
   // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
   const roleKey = () => {
@@ -894,12 +911,12 @@ function registerShellIpc(): void {
     return v;
   };
   const catalogueSources = async (): Promise<Sources> => ({
-    people: peopleHost, tree: (await studio.studio.read()).tree, stages: await stages.views(),
+    people: peopleHost, tree: await studio.tree(), stages: await stages.views(),
     write: await write.listProjects().then((l) => summariseWrite(l).projects, () => []), market: market.service, financeVisible: financeSeen()
   });
   manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
   manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
-  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, await studio.tree(), String(name), args));
   manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
@@ -1028,6 +1045,7 @@ function registerShellIpc(): void {
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
   manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
+  manageOp('addFirstBook', (id: string, name?: string) => manager.addFirstBook(String(id), typeof name === 'string' ? name : undefined));
   manageOp('rename', (id: string, name: string) => manager.rename(id, name));
   manageOp('archive', (id: string, archived: boolean) => manager.archive(id, archived === true));
   manageOp('remove', (id: string) => manager.remove(id));
@@ -1036,6 +1054,10 @@ function registerShellIpc(): void {
   manageOp('setManuscript', (id: string, patch: { status?: string; notes?: string }) => manager.setManuscript(id, patch ?? {}));
   manageOp('addMissingParts', (id: string) => manager.addMissingParts(id));
   manageOp('open', async (id: string) => {
+    // Write shows only the Project and Book Cadrel is showing, so opening a manuscript from elsewhere first makes it the scope (and shows
+    // closed Books when that is what was asked for), or Write would send it straight back to the list.
+    const want = viewScopeOf(await studio.tree(), id);
+    if (want) await scope.set({ ...want, ...(want.book && (await stages.closedBooks()).has(want.book) ? { showClosed: true } : {}) });
     await manager.open(id);
     showPage('write');
   });
@@ -1046,6 +1068,29 @@ function registerShellIpc(): void {
   });
   manageOp('unfiled', () => manager.unfiled());
   manageOp('adopt', (name: string, parentId?: string | null) => manager.adopt(name, parentId));
+  // The scope: the shell's pages ask and change it; the module views (Write, Market, Finance) can only ask, and are told when it changes.
+  ipcMain.handle('shell:scope:get', async (e) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    return scope.get();
+  });
+  ipcMain.handle('shell:scope:set', async (e, change: unknown) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
+    const id = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && v.length <= 80 ? v : undefined);
+    return scope.set({ ...(id(c.project) !== undefined ? { project: id(c.project) } : {}), ...(id(c.book) !== undefined ? { book: id(c.book) } : {}), ...(typeof c.showClosed === 'boolean' ? { showClosed: c.showClosed } : {}) } as Partial<ViewScope>);
+  });
+  ipcMain.handle('shell:scope:menu', async (e, at: unknown) => {
+    if (!fromShell(e) || !win || win.isDestroyed()) throw new Error('not allowed');
+    const pos = (at && typeof at === 'object' ? at : {}) as { x?: unknown; y?: unknown };
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined);
+    const items = scopeMenu(await studio.tree(), await scope.get());
+    const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: (i.checkbox ? 'checkbox' : 'radio') as 'checkbox' | 'radio', checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
+    menu.popup({ window: win, x: num(pos.x), y: num(pos.y) });
+  });
+  ipcMain.handle('scope:get', async (e) => {
+    if (!(['write', 'market', 'finance'] as const).some((id) => views[id] && e.sender === views[id]!.webContents)) throw new Error('not allowed');
+    return scope.get();
+  });
   studioOp('studio:state', () => studio.state());
   studioOp('studio:createProject', async (o: Parameters<StudioService['createProject']>[0]) => ({ id: (await studio.createProject(o)).id }));
   studioOp('studio:updateProject', (id: string, c: { name?: string; kind?: string }) => studio.updateProject(id, c));
@@ -1301,10 +1346,26 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         const l = await write.listProjects();
         return l.exists ? l.root : null;
       },
-      fs: nodeFs
+      fs: nodeFs,
+      viewer: (tree) => peopleHost.myVisibility(tree)
     });
+    peopleHost.setProjects(async () => (await studio.studio.read()).tree);
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
+    scope = new ScopeHost({
+      tree: () => studio.tree(),
+      hidden: () => studio.hiddenLinks(),
+      closed: () => stages.closedBooks(),
+      remembered: () => studioSettings.get().scope,
+      remember: (s) => studioSettings.update((x) => void (x.scope = s)),
+      announce: (r) => {
+        if (win && !win.isDestroyed()) win.webContents.send('shell:scope', r);
+        for (const id of ['write', 'market', 'finance'] as const) {
+          const c = views[id]?.webContents;
+          if (c && !c.isDestroyed()) c.send('scope:changed', r);
+        }
+      }
+    });
 
     write = await createWriteModule({
       getWindow: () => win,
@@ -1323,7 +1384,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {
-      const link = linksOf((await studio.studio.read()).tree, projectId, 'write')[0];
+      const link = linksOf(await studio.tree(), projectId, 'write')[0];
       if (!link) return null;
       try {
         return (JSON.parse(await fsp.readFile(path.join(write.projectsRoot(), link.ref, '.cadrel', 'project.json'), 'utf8')) as { status?: unknown }).status as string | null;

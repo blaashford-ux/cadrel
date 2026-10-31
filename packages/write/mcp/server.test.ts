@@ -36,6 +36,20 @@ describe('the Cadrel Write MCP server', () => {
     expect(tools.find((t) => t.name === 'set_chapters_edited')?.annotations?.readOnlyHint).toBe(false);
   });
 
+  it('litrpg_log through the server writes a finished page for each chapter it touched', async () => {
+    const { call } = await connect('claude-ai');
+    const r = await call('litrpg_log', { project: 'Novel', characters: [{ name: 'Sean', events: [{ type: 'xp_award', chapter: 2, details: { amount: 400, running_total: 400, xp_to_next_level: 600 } }, { type: 'level_up', chapter: 2, details: { resulting_level: 2 } }] }] });
+    expect(r.isError).toBe(false);
+    expect(r.json().chapter_records).toBeTruthy();
+    const page = await fs.readText('/books/Novel/Tracking/Chapters/Chapter 2.html');
+    expect(page).not.toContain('__CADREL_');
+    expect(page).toContain('"chapter":2');
+    expect(page).toContain('Sean');
+    const again = await call('litrpg_log', { project: 'Novel', characters: [{ name: 'Sean', events: [] }] });
+    expect(again.isError).toBe(false);
+    expect(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 2.html')).toBe(page); // an unchanged chapter is not rewritten
+  });
+
   it('reads a chapter and adds a note, signed with the connecting AI’s name', async () => {
     const { call } = await connect('claude-ai');
     expect((await call('list_projects')).json()).toEqual([{ project: 'Novel', status: 'editing' }]);

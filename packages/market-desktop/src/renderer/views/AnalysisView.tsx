@@ -5,6 +5,7 @@ import { NotesButton } from '../NotesButton.js';
 import { CommunityInsightsPanel } from './CommunityInsights.js';
 import { CharactersPanel, ClustersPanel, CompareCategories, OpportunityPanel, ShelvesPanel } from './OpportunityPanels.js';
 import { ChartCard, GroupedBars, HBars, LineChart, Legend, S1, S2, Scatter } from '../charts.js';
+import { scopedCategories, useMarketScope } from '../scope.js';
 
 const api = window.cadrelMarket;
 const num = (v: number | null | undefined, d = 1) => (v == null ? '–' : Number(v.toFixed(d)).toLocaleString('en-US'));
@@ -55,6 +56,8 @@ function Weighting({ onSaved }: { onSaved: () => void }) {
 }
 
 export function AnalysisView({ version }: { version: number }) {
+  const scope = useMarketScope();
+  const keys = scope.keys;
   const [cats, setCats] = useState<CategorySummary[]>([]);
   const [cat, setCat] = useState('');
   const [topN, setTopN] = useState(10);
@@ -65,8 +68,8 @@ export function AnalysisView({ version }: { version: number }) {
   const [sub, setSub] = useState<'category' | 'text' | 'community'>('category');
 
   useEffect(() => {
-    void api.categories().then((c) => { setCats(c); if (!cat && c[0]) setCat(c[0].key); });
-  }, [version]);
+    void api.categories().then((all) => { const c = scopedCategories(all, keys); setCats(c); setCat((cur) => (cur && c.some((x) => x.key === cur) ? cur : c[0]?.key ?? '')); });
+  }, [version, scope.token]);
   useEffect(() => {
     if (!cat) return;
     setErr('');

@@ -1,4 +1,5 @@
 // Not type-checked with the shell (it imports the Worker, which needs Cloudflare's types, not the DOM ones): vitest checks it by running it.
+// Run `npm run build` in packages/shell first: this drives the BUILT app (dist), so a change to the source is not seen until it is rebuilt.
 // Drives the real built shell in Electron: Home and Dashboard, Write and Market in their own views, and the shell-level
 // behaviour (navigation, layout, isolation, persistence, the unsaved-edits close guard).
 import { execFileSync } from 'node:child_process';
@@ -102,7 +103,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     expect(await write.evaluate(() => [typeof (window as any).cadrelWrite, typeof (window as any).cadrel, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
 
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
@@ -142,11 +143,309 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 60_000);
 
+  it('Scope: the rail shows the Project and Book, every module view is told, only the shell can change it, and it survives a restart', async () => {
+    // Its own Studio: the projects made here must not be in the one the other tests share.
+    const h = fs.mkdtempSync(path.join(tmp, 'scope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'scope-data-'));
+    const first = await launch({ home: h, userData: ud });
+    const { app, shell } = first;
+    const studio = (fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => (window as any).cadrel.studio[f as string](...(a as unknown[])), [fn, args] as const);
+    const scopeNow = () => shell.evaluate(() => (window as any).cadrel.scope.get());
+    expect(await shell.locator('.scope-btn').count()).toBe(0); // no projects: nothing to scope
+
+    const series = (await studio('createProject', { name: 'Dragon Rider', kind: 'Series' })) as { id: string };
+    await shell.locator('.scope-btn').waitFor();
+    expect(await shell.locator('.scope-btn').innerText()).toBe('Dragon Rider');
+    const b1 = (await studio('createProject', { name: 'Book 1', parentId: series.id, kind: 'Book' })) as { id: string };
+    const b2 = (await studio('createProject', { name: 'Book 2', parentId: series.id, kind: 'Book' })) as { id: string };
+    await waitFor(async () => (await shell.locator('.scope-btn').innerText()).includes('All books'), 'the rail to offer all books');
+    expect(await scopeNow()).toMatchObject({ projectName: 'Dragon Rider', book: null, bookName: null, books: [b1.id, b2.id], bookImplied: false });
+
+    // Every module view has the read-only bridge and hears about a change.
+    const seen: Record<string, Page> = {};
+    for (const [label, id] of [['Write', 'write'], ['Market', 'market'], ['Finance', 'finance']] as const) {
+      await shell.getByRole('button', { name: label, exact: true }).click();
+      seen[id] = await waitFor(() => app.windows().find((w) => w.url().includes(`/modules/${id}/`)), `the ${label} view`);
+      expect(await seen[id]!.evaluate(() => Object.keys((window as any).cadrelScope).sort())).toEqual(['get', 'onChange']);
+      expect(await seen[id]!.evaluate(async () => (await (window as any).cadrelScope.get()).projectName)).toBe('Dragon Rider');
+      await seen[id]!.evaluate(() => {
+        (window as any).heard = [];
+        (window as any).cadrelScope.onChange((s: { bookName: string | null }) => (window as any).heard.push(s.bookName));
+      });
+    }
+    await shell.getByRole('button', { name: 'Home', exact: true }).click();
+    const afterSet = await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }), b2.id);
+    expect(afterSet.bookName).toBe('Book 2');
+    for (const id of ['write', 'market', 'finance']) await waitFor(async () => (await seen[id]!.evaluate(() => (window as any).heard)).includes('Book 2'), `the ${id} view to hear the change`);
+    expect(await shell.locator('.scope-btn').innerText()).toContain('Book 2');
+
+    // A module view can ask but not change, even by calling the channel itself.
+    const refused = await app.evaluate(async ({ ipcMain, BrowserWindow }) => {
+      const view = BrowserWindow.getAllWindows()[0]!.contentView.children[0] as any;
+      const set = (ipcMain as any)._invokeHandlers.get('shell:scope:set');
+      try {
+        await set({ sender: view.webContents }, { book: null });
+        return false;
+      } catch {
+        return true;
+      }
+    });
+    expect(refused).toBe(true);
+    expect((await scopeNow()).bookName).toBe('Book 2');
+
+    // A Book that is not the Project's is dropped, and archiving the Book in scope moves the scope on and tells everyone.
+    const other = (await studio('createProject', { name: 'The Lost King' })) as { id: string };
+    const lostBook = (await studio('createProject', { name: 'The Lost King', parentId: other.id, kind: 'Book' })) as { id: string };
+    expect(await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }), lostBook.id)).toMatchObject({ projectName: 'Dragon Rider', bookName: null });
+    await shell.evaluate((id) => (window as any).cadrel.scope.set({ book: id }), b2.id);
+    await studio('archiveProject', b2.id, true);
+    await waitFor(async () => (await scopeNow()).bookImplied === true, 'the scope to move off the archived Book');
+    expect(await scopeNow()).toMatchObject({ projectName: 'Dragon Rider', book: b1.id });
+    await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), other.id);
+    expect(await scopeNow()).toMatchObject({ projectName: 'The Lost King', book: lostBook.id, bookImplied: true });
+    await app.close();
+
+    // Remembered for the Studio across a restart.
+    const second = await launch({ home: h, userData: ud });
+    await second.shell.locator('.scope-btn').waitFor();
+    expect(await second.shell.evaluate(() => (window as any).cadrel.scope.get().then((s: any) => s.projectName))).toBe('The Lost King');
+    await second.app.close();
+  }, 150_000);
+
+  it('Books: only a Book has a stage; a Book can be closed (hidden from the scope), shown again and reopened; a standalone gets its Book; a Project can be given its first Book', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'books-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'books-data-'));
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    const scopeNow = () => call<any>('scope.get');
+    const stageOf = async (id: string) => (await call<Record<string, any>>('stages.views'))[id]?.stage?.name ?? null;
+
+    const series = await call<{ id: string }>('manage.create', { name: 'Dragon Rider', kind: 'Series', template: null });
+    const b1 = await call<{ id: string }>('manage.create', { name: 'Book 1', parentId: series.id, kind: 'Book', template: null });
+    const b2 = await call<{ id: string }>('manage.create', { name: 'Book 2', parentId: series.id, kind: 'Book', template: null });
+    expect(await stageOf(series.id)).toBeNull(); // a Project has no stage
+    expect(await stageOf(b1.id)).toBe('Planning');
+    expect(await stageOf(b2.id)).toBe('Planning');
+
+    // The Project page: Books, not a stage, for the Project; a stage for the Book.
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.getByRole('heading', { level: 3, name: 'Books' }).waitFor();
+    expect(await shell.getByRole('heading', { level: 3, name: 'Stage of this book' }).count()).toBe(0);
+    expect(await shell.locator('.book-list li').allInnerTexts()).toEqual([expect.stringContaining('Book 1'), expect.stringContaining('Book 2')]);
+
+    // Closing a Book hides it from the scope; the Project page still lists it only when closed Books are shown.
+    await shell.locator('.book-list li', { hasText: 'Book 1' }).getByRole('button', { name: 'Close book' }).click();
+    await waitFor(async () => (await scopeNow()).closed.includes(b1.id), 'Book 1 to close');
+    expect(await scopeNow()).toMatchObject({ books: [b2.id], closed: [b1.id], book: b2.id, bookImplied: true, showClosed: false });
+    expect(await stageOf(b1.id)).toBe('Published');
+    await waitFor(async () => (await shell.locator('.book-list li').count()) === 1, 'the closed Book to leave the list');
+    await shell.getByLabel('Show closed books').click(); // it follows the scope, which answers after a round trip, so not .check()
+    await waitFor(async () => (await scopeNow()).showClosed === true, 'closed Books to be shown');
+    expect(await scopeNow()).toMatchObject({ books: [b1.id, b2.id], book: null });
+    expect(await shell.locator('.book-list li', { hasText: 'Book 1' }).innerText()).toContain('closed');
+
+    // Reopen it into a stage that is not a closing one.
+    await shell.locator('.book-list li', { hasText: 'Book 1' }).getByRole('button', { name: 'Reopen…' }).click();
+    await shell.getByRole('group', { name: 'Reopen into' }).getByRole('button').first().click();
+    await waitFor(async () => (await scopeNow()).closed.length === 0, 'Book 1 to reopen');
+    expect(await stageOf(b1.id)).not.toBe('Published');
+
+    // A standalone novel is a Project holding one Book, which has the stage.
+    const solo = await call<{ id: string }>('manage.create', { name: 'The Lost King', kind: 'Standalone', template: null });
+    const tree = (await call<any>('studio.state')).tree;
+    const kids = tree.projects.filter((p: any) => p.parentId === solo.id);
+    expect(kids.map((k: any) => [k.name, k.kind])).toEqual([['The Lost King', 'Book']]);
+    expect(await stageOf(solo.id)).toBeNull();
+    expect(await stageOf(kids[0].id)).toBe('Planning');
+
+    // A Project from before, with a manuscript folder and a stage, is given its first Book: the folder moves to it, with the stage.
+    const old = await call<{ id: string }>('manage.create', { name: 'Old Project', kind: 'Series', template: 'novel' });
+    await app.evaluate(async () => undefined);
+    const before = (await call<any>('studio.state')).tree.links.find((l: any) => l.module === 'write' && l.projectId === old.id);
+    expect(before).toBeTruthy();
+    await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), old.id);
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.locator('.tree-row', { hasText: 'Old Project' }).click();
+    await shell.getByRole('heading', { level: 2, name: 'Old Project' }).waitFor();
+    await shell.getByRole('button', { name: 'Add first book' }).click();
+    await waitFor(async () => (await call<any>('studio.state')).tree.projects.some((p: any) => p.parentId === old.id), 'the first Book');
+    const after = (await call<any>('studio.state')).tree;
+    const first = after.projects.find((p: any) => p.parentId === old.id);
+    expect(first).toMatchObject({ name: 'Old Project', kind: 'Book' });
+    expect(after.links.find((l: any) => l.module === 'write' && l.ref === before.ref).projectId).toBe(first.id); // the folder moved to the Book
+    expect(await stageOf(first.id)).toBe('Planning');
+    await app.close();
+  }, 150_000);
+
+  it('Write shows only the manuscripts of the Project and Book in scope; a closed Book is read-only; leaving the scope closes what is open', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'wscope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'wscope-data-'));
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
+    const folder = (name: string) => write.evaluate(async (n) => { const api = (window as any).cadrelWrite; const cfg = await api.getProjectsConfig(); await api.createProject(n, cfg.templates[0].id); }, name);
+    for (const n of ['Dragon Bible', 'Ember', 'Ash', 'Lost King']) await folder(n);
+    // A chapter in Ember, to try editing once Book 1 is closed.
+    const root = await write.evaluate(async () => (await (window as any).cadrelWrite.getProjectsConfig()).root as string);
+    fs.writeFileSync(path.join(root, 'Ember', 'Manuscript', 'Draft.md'), '# One\n\nThe king had been lost.\n');
+
+    const series = await call<{ id: string }>('manage.create', { name: 'Dragon Rider', kind: 'Series', template: null });
+    const b1 = await call<{ id: string }>('manage.create', { name: 'Book 1', parentId: series.id, kind: 'Book', template: null });
+    const b2 = await call<{ id: string }>('manage.create', { name: 'Book 2', parentId: series.id, kind: 'Book', template: null });
+    const lost = await call<{ id: string }>('manage.create', { name: 'The Lost King', kind: 'Series', template: null });
+    for (const [id, ref] of [[series.id, 'Dragon Bible'], [b1.id, 'Ember'], [b2.id, 'Ash'], [lost.id, 'Lost King']] as const) await call('studio.link', id, 'write', ref);
+    await call('scope.set', { project: series.id, book: null });
+
+    const cards = () => write.locator('.project-card .card-name').allInnerTexts().then((t) => t.sort());
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible', 'Ember']), 'Write to list only Dragon Rider’s manuscripts');
+    expect(await write.getByRole('heading', { level: 1 }).innerText()).toBe('Dragon Rider');
+    expect(await write.locator('.project-card', { hasText: 'Dragon Bible' }).locator('.chip').first().innerText()).toBe('Series');
+    expect(await write.locator('.project-card', { hasText: 'Ember' }).locator('.chip').first().innerText()).toBe('Book 1');
+    expect(await write.getByText(/1 more belong to other projects/).count()).toBe(1);
+
+    // Naming a Book leaves the series and that Book (not the other Book).
+    await call('scope.set', { book: b2.id });
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible']), 'Write to follow the Book');
+
+    // Another Project shows its own.
+    await call('scope.set', { project: lost.id });
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Lost King']), 'Write to follow the Project');
+
+    // Closed Books are hidden; shown, they are marked and read-only.
+    await call('scope.set', { project: series.id, book: null });
+    await call('stages.close', b1.id);
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible']), 'the closed Book to leave Write');
+    await call('scope.set', { showClosed: true });
+    await waitFor(async () => (await cards()).includes('Ember'), 'the closed Book to come back');
+    expect(await write.locator('.project-card', { hasText: 'Ember' }).innerText()).toContain('closed');
+    await write.locator('.project-card', { hasText: 'Ember' }).click();
+    await write.getByText(/This book is closed/).waitFor();
+    await write.locator('[role=treeitem]', { hasText: 'Manuscript' }).first().click();
+    await write.locator('[role=treeitem]', { hasText: 'Draft.md' }).first().click();
+    await write.locator('.ProseMirror').first().waitFor();
+    expect(await write.locator('.ProseMirror').first().getAttribute('contenteditable')).toBe('false'); // a closed Book can be read, not changed
+    expect(await write.getByRole('button', { name: 'New file' }).count()).toBe(0);
+
+    // Leaving the scope while it is open sends Write back to the list.
+    await call('scope.set', { project: lost.id });
+    await write.getByRole('heading', { level: 1 }).filter({ hasText: 'The Lost King' }).waitFor();
+    expect(await write.getByText(/This book is closed/).count()).toBe(0);
+    expect(await cards()).toEqual(['Lost King']);
+    await app.close();
+  }, 150_000);
+
+  it('Market shows only the categories assigned to the Project in scope, with a switch to all, and says so when none are assigned', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'mscope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'mscope-data-'));
+    const lib = path.join(tmp, 'mscope-library');
+    fs.mkdirSync(lib);
+    fs.mkdirSync(path.join(ud, 'studios', 'local', 'market'), { recursive: true });
+    fs.writeFileSync(path.join(ud, 'studios', 'local', 'market', 'config.json'), JSON.stringify({ libraryRoot: lib, port: PORT + 3 }));
+    const fx = path.resolve(PKG, '../../fixtures/amazon-com');
+    const library = Library.open(lib);
+    library.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: zlib.gunzipSync(fs.readFileSync(path.join(fx, 'bestsellers-kindle-humorous-fantasy.html.gz'))).toString('utf8'), capturedAt: '2026-10-17T00:00:00Z' } as never);
+    library.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/6190484011', html: fs.readFileSync(path.join(fx, 'bestsellers-kindle-cozy-fantasy.excerpt.html'), 'utf8'), capturedAt: '2026-10-18T00:00:00Z' } as never);
+    library.close();
+
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    const series = await call<{ id: string }>('manage.create', { name: 'Dragon Rider', kind: 'Series', template: null });
+    const lost = await call<{ id: string }>('manage.create', { name: 'The Lost King', kind: 'Series', template: null });
+    await call('studio.link', series.id, 'market', 'amazon.com:kindle:214873986011'); // Cozy
+    await call('scope.set', { project: series.id });
+
+    await shell.getByRole('button', { name: 'Market', exact: true }).click();
+    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    const options = () => market.getByLabel('Category').locator('option').allInnerTexts();
+    await waitFor(async () => JSON.stringify(await options()) === JSON.stringify(['All of this project’s categories', 'Cozy']), 'Market to offer only Dragon Rider’s category');
+    expect(await market.getByRole('group', { name: 'Which categories' }).innerText()).toContain('Dragon Rider');
+
+    // Library lists only that category's card, and All brings back both.
+    await market.getByRole('tab', { name: 'Library' }).click();
+    await waitFor(async () => (await market.locator('.card h3, .card h2, .card strong').allInnerTexts()).some((t) => /Cozy/.test(t)), 'the Cozy card');
+    expect((await market.locator('.grid3 .card').allInnerTexts()).join(' ')).not.toContain('Humorous');
+    await market.getByRole('button', { name: 'All', exact: true }).click();
+    await waitFor(async () => (await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'All to show every category');
+    await market.getByRole('button', { name: 'Dragon Rider', exact: true }).click();
+    await waitFor(async () => !(await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'the Project to narrow it again');
+
+    // A Project with nothing assigned says so, and offers the way out; the choice sticks across Projects.
+    await call('scope.set', { project: lost.id });
+    await market.getByRole('heading', { name: /No categories are assigned to The Lost King/ }).waitFor();
+    await market.getByRole('button', { name: 'Show all categories' }).click();
+    await waitFor(async () => (await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'all categories');
+    await app.close();
+  }, 150_000);
+
+  it('Notes, Planner, Dashboard and Home follow the Project in scope, each with a switch to everything', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'pages-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'pages-data-'));
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    const mk = (o: Record<string, unknown>) => call<{ id: string }>('manage.create', { template: null, ...o });
+    const dragon = await mk({ name: 'Dragon Rider', kind: 'Series' });
+    const ash = await mk({ name: 'Book 2: Ash', parentId: dragon.id, kind: 'Book' });
+    const ember = await mk({ name: 'Book 1: Ember', parentId: dragon.id, kind: 'Book' });
+    const lost = await mk({ name: 'The Lost King', kind: 'Series' });
+    const lostBook = await mk({ name: 'Lost Book', parentId: lost.id, kind: 'Book' });
+    await call('studio.addNote', { projectId: ash.id, body: 'Chapter 4 drags.' });
+    await call('studio.addNote', { projectId: dragon.id, body: 'Dragons never speak.' });
+    await call('studio.addNote', { projectId: ember.id, body: 'Ember note.' });
+    await call('studio.addNote', { projectId: lostBook.id, body: 'Check the crown timeline.' });
+    const today = new Date();
+    const due = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; // the calendar opens on this month
+    await call('work.createTask', { projectId: ash.id, title: 'Revise chapter 4', due });
+    await call('work.createTask', { projectId: lostBook.id, title: 'Crown timeline', due });
+    await call('scope.set', { project: dragon.id, book: ash.id });
+
+    // Notes: the Book's, and the series' own; not the other Book's, nor another Project's. Everything is one click away.
+    await shell.getByRole('button', { name: 'Notes', exact: true }).click();
+    const notes = () => shell.locator('.cn-note').allInnerTexts().then((t) => t.join(' | '));
+    await waitFor(async () => (await notes()).includes('Chapter 4 drags'), 'Notes to load');
+    let text = await notes();
+    expect(text).toContain('Dragons never speak');
+    expect(text).not.toContain('Ember note');
+    expect(text).not.toContain('crown timeline');
+    await shell.getByRole('group', { name: 'What to show' }).getByRole('button', { name: 'Everything' }).click();
+    await waitFor(async () => (await notes()).includes('crown timeline'), 'Notes to show everything');
+    await shell.getByRole('group', { name: 'What to show' }).getByRole('button', { name: /Dragon Rider/ }).click();
+
+    // Planner: only the Project's Books and tasks.
+    await shell.getByRole('button', { name: 'Planner', exact: true }).click();
+    await shell.getByRole('region', { name: 'Pipeline' }).waitFor();
+    const pipeline = () => shell.getByRole('region', { name: 'Pipeline' }).innerText();
+    await waitFor(async () => (await pipeline()).includes('Book 2: Ash'), 'the pipeline');
+    expect(await pipeline()).not.toContain('Lost Book');
+    await shell.getByRole('tab', { name: 'Calendar' }).click();
+    await shell.getByText('Revise chapter 4').first().waitFor();
+    expect(await shell.locator('.planner').innerText()).not.toContain('Crown timeline');
+
+    // Dashboard: only the Project's rows.
+    await shell.getByRole('button', { name: 'Dashboard', exact: true }).click();
+    const projectsTable = () => shell.getByRole('region', { name: 'Projects' }).or(shell.locator('section[aria-labelledby="d-projects"]')).first().innerText();
+    await waitFor(async () => (await projectsTable()).includes('Dragon Rider'), 'the dashboard');
+    expect(await projectsTable()).not.toContain('The Lost King');
+    await shell.getByRole('group', { name: 'What to show' }).getByRole('button', { name: 'Everything' }).click();
+    await waitFor(async () => (await projectsTable()).includes('The Lost King'), 'the dashboard to show everything');
+    await shell.getByRole('group', { name: 'What to show' }).getByRole('button', { name: /Dragon Rider/ }).click();
+
+    // Home lists the Project in scope first.
+    await call('scope.set', { project: lost.id });
+    await shell.getByRole('button', { name: 'Home', exact: true }).click();
+    await waitFor(async () => (await shell.locator('.project-list li').count()) === 2, 'Home to list the projects');
+    expect((await shell.locator('.project-list li').first().innerText())).toContain('The Lost King');
+    expect((await shell.locator('.project-list li').first().innerText())).toContain('current');
+    await app.close();
+  }, 150_000);
+
   it('Dashboard and Home show a project made in Write', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     await write.evaluate(async () => {
       const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
@@ -174,7 +473,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
 
     // Write: the AI server settings and the kit it saves for Claude Desktop.
     const server = await write.evaluate(() => (window as any).cadrelWrite.getAiServer());
@@ -215,7 +514,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // A manuscript made in Write, to link.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     await write.evaluate(async () => {
       const api = (window as any).cadrelWrite;
       const cfg = await api.getProjectsConfig();
@@ -230,7 +529,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Create' }).click();
     await shell.getByRole('heading', { level: 2, name: 'Dragon Rider' }).waitFor();
 
-    await shell.getByRole('button', { name: 'Add subproject' }).click();
+    await shell.getByRole('button', { name: 'Add book' }).click();
     await shell.getByRole('dialog').getByLabel('Name').fill('Book 1');
     await shell.getByRole('dialog').getByPlaceholder(/Series, Book/).fill('Book');
     await shell.getByRole('button', { name: 'Create' }).click();
@@ -240,7 +539,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
 
     // A duplicate name is refused with a message, not a crash.
     await shell.locator('.tree-row', { hasText: 'Dragon Rider' }).first().click();
-    await shell.getByRole('button', { name: 'Add subproject' }).click();
+    await shell.getByRole('button', { name: 'Add book' }).click();
     await shell.getByRole('dialog').getByLabel('Name').fill('book 1');
     await shell.getByRole('button', { name: 'Create' }).click();
     await shell.getByRole('alert').getByText(/already exists/).waitFor();
@@ -248,9 +547,27 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
 
     // Link the manuscript to the book, and the book's words roll up (the template manuscript is short, so just check the link and the picker).
     await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
-    await shell.getByLabel('Link to this project').selectOption('write:Dragon Rider 1');
-    await shell.getByRole('button', { name: 'Link', exact: true }).click();
+    await shell.getByLabel('Manuscript to attach').selectOption('Dragon Rider 1');
+    await shell.getByRole('button', { name: 'Attach', exact: true }).click();
     await shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
+
+    // Comparable titles and people are associated with the book too: a comp by its ASIN, and a role on this book only (which is how access is given).
+    await shell.getByLabel('ASIN of the comparable title').fill('B0ABC12345');
+    await shell.getByRole('button', { name: 'Add comp' }).click();
+    await shell.locator('.links li', { hasText: 'B0ABC12345' }).waitFor();
+    await shell.getByLabel('ASIN of the comparable title').fill('nope');
+    await shell.getByRole('button', { name: 'Add comp' }).click();
+    await shell.getByRole('alert').getByText(/not an ASIN/).waitFor();
+    await shell.getByLabel('Person or team').selectOption({ index: 1 });
+    await shell.getByLabel('Role on this project').selectOption({ label: 'Editor' });
+    await shell.getByRole('button', { name: 'Give role' }).click();
+    await shell.locator('.links li', { hasText: 'Editor' }).waitFor();
+
+    // Projects are for the people assigned to them; the Owner sees every one, and the People page says so.
+    await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await shell.getByText('Every project: the Owner and an Admin see all of them.').waitFor();
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
 
     // A note on the book appears on the series (its subprojects count) and on the Notes page.
     await shell.getByLabel('New note').fill('Check the dragon\'s age against book 2.');
@@ -274,7 +591,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
     await market.getByRole('tab', { name: 'Queue' }).waitFor();
@@ -322,6 +639,10 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    // Earlier tests left projects in this Studio, so Market starts on the Project in scope, which has no category: look at all of them.
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    const all = market.getByRole('button', { name: 'All', exact: true });
+    await all.waitFor({ timeout: 4000 }).then(() => all.click(), () => undefined); // present once Cadrel has told Market the scope
     await market.getByRole('tab', { name: 'Analysis' }).click();
     await market.getByRole('button', { name: /^Notes/ }).click();
     const box = market.getByRole('dialog', { name: /Notes on/ });
@@ -334,6 +655,9 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
 
     // Same note, studio-wide: on the shell's Notes page, labelled with the Market category it is about.
     await shell.getByRole('button', { name: 'Notes', exact: true }).click();
+    // A note on a category that belongs to no project is the Studio's, so it is outside a Project's scope; the page says so and offers everything.
+    const outside = shell.getByRole('button', { name: 'Show everything' });
+    await outside.waitFor({ timeout: 4000 }).then(() => outside.click(), () => undefined);
     const note = shell.locator('.cn-note', { hasText: 'look thin' });
     await note.waitFor();
     expect(await note.innerText()).toContain('pricing');
@@ -523,7 +847,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // Write shows its projects straight away (no welcome dialog), and Market is already working on its library.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     expect(await write.getByText('Welcome to Cadrel Write').count()).toBe(0);
     await shell.getByRole('button', { name: 'Market', exact: true }).click();
     const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
@@ -646,7 +970,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     // Write has no templates of its own: no Projects/Templates tab in its settings.
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     expect(await write.evaluate(() => (window as any).cadrelWrite.getProjectsConfig().then((c: any) => c.templates.some((t: any) => t.name === 'Serial Fiction')))).toBe(true);
     await write.keyboard.press('Control+,');
     await write.getByRole('dialog', { name: /Settings/ }).waitFor().catch(() => undefined);
@@ -883,7 +1207,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
     const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    await write.getByRole('main', { name: 'Projects' }).waitFor();
     // Write's own page answers the question (it really has nothing unsaved, so it says yes). To observe the moment
     // between the question and the close, the test holds the final close from the main process.
     await app.evaluate(({ BrowserWindow }) => {

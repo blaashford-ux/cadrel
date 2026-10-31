@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Cadrel Write review invitation</title>
+<title>Cadrel review invitation</title>
 <style>
   :root { --bg: #f6f4fb; --fg: #1d1a2b; --muted: #6a6580; --card: #fff; --accent: #0f7a8a; }
   @media (prefers-color-scheme: dark) { :root { --bg: #15131f; --fg: #ece9f7; --muted: #a29cba; --card: #201d2e; --accent: #4cc3d4; } }
@@ -21,17 +21,18 @@
 <body>
 <main id="landing">
   <div class="card">
-    <h1>You’ve been invited to review a project in Cadrel Write</h1>
-    <p>Copy this page’s address, then in Cadrel Write open <strong>Projects → Shared with me → Open invitation</strong> and paste it.</p>
+    <h1 id="title">You’ve been invited to review a project in Cadrel Reader</h1>
+    <p id="how">If Cadrel Reader is installed, open the invitation in it. Otherwise copy this page’s address, then in Cadrel Reader choose <strong>Open invitation…</strong> and paste it.</p>
+    <p><a class="btn" id="open" href="#">Open in Cadrel Reader</a></p>
     <code id="addr"></code>
     <button id="copy" type="button">Copy the link</button>
-    <p>Don’t have Cadrel Write yet? Get it from the project’s releases page on GitHub.</p>
+    <p id="get">Don’t have Cadrel Reader yet? <a id="download" href="https://github.com/blaashford-ux/cadrel/releases?q=reader-v&expanded=true">Get it here</a> (Windows installer and Android app).</p>
   </div>
 </main>
 <div id="picker-msg" hidden>Opening Google’s file picker…</div>
 
 <script>
-// This page has two jobs. Opened by a person it explains what to do with the link. Opened inside Cadrel Write (an iframe,
+// This page has two jobs. Opened by a person it explains what to do with the link. Opened inside Cadrel Reader or Cadrel Write (an iframe,
 // #mode=pick) it runs Google's file picker, which is how Cadrel Write is given access to the two shared files.
 var API_KEY = 'AIzaSyBb4IKQLReiwL9LuAubz0srrPqXhDPbedo'; // public browser key, restricted to this page and the Picker API
 var APP_ID = '312461756737'; // the Google Cloud project number
@@ -43,18 +44,19 @@ if (params.get('mode') === 'pick') {
   msg.hidden = false;
   // Embedded in the app (Windows) the result goes to the parent window. On the phone the page runs in the browser (Google's picker
   // stays blank inside the app's web view) and hands the result back to the app with an cadrel-write:// link.
-  // ret=1: hand back with a cadrel-write://picked link (phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
+  // ret=1: hand back with a cadrel-write://picked link (phone); with app=reader too, a cadrel-reader://picked link (Cadrel Reader on the phone). ret=http://127.0.0.1:<port>/picked?state=...: hand back to the
   // desktop app's local listener. Anything else is ignored, so this page can never send a result to some other address.
   var retParam = params.get('ret');
   var loopback = /^http:\/\/127\.0\.0\.1:\d{2,5}\/picked\?state=[A-Za-z0-9_-]{8,64}$/.test(retParam || '');
+  var reader = params.get('app') === 'reader'; // Cadrel Reader (not Cadrel Write) is the app asking
   var ret = retParam === '1' || loopback;
   var send = function (data) {
     if (!ret) return parent.postMessage(Object.assign({ source: 'cadrel-picker' }, data), '*');
     var answer = data.picked ? 'ids=' + encodeURIComponent(data.picked.join(',')) : data.cancelled ? 'cancelled=1' : 'error=1';
-    var back = loopback ? retParam + '&' + answer : 'cadrel-write://picked?' + answer;
+    var back = loopback ? retParam + '&' + answer : (reader ? 'cadrel-reader://picked?' : 'cadrel-write://picked?') + answer;
     msg.innerHTML = '';
     var a = document.createElement('a');
-    a.href = back; a.textContent = loopback ? 'Back to Cadrel Write' : 'Return to Cadrel Write'; a.className = 'btn';
+    a.href = back; a.textContent = (loopback ? 'Back to ' : 'Return to ') + (reader ? 'Cadrel Reader' : 'Cadrel Write'); a.className = 'btn';
     msg.appendChild(a);
     location.href = back;
   };
@@ -89,6 +91,26 @@ if (params.get('mode') === 'pick') {
   document.getElementById('copy').onclick = function () {
     navigator.clipboard.writeText(location.href).then(function () { document.getElementById('copy').textContent = 'Copied'; });
   };
+  var REPO = 'blaashford-ux/cadrel';
+  if (params.get('m') === 'edit') {
+    // An invitation to edit the manuscript with its author: that is Cadrel's Write app, not the reader.
+    document.getElementById('title').textContent = 'You’ve been invited to work on a project in Cadrel';
+    document.getElementById('how').innerHTML = 'Copy this page’s address, then in Cadrel Write open <strong>Projects → Shared with me → Open invitation</strong> and paste it.';
+    document.getElementById('open').hidden = true;
+    var get = document.getElementById('get');
+    get.innerHTML = 'Don’t have Cadrel yet? <a href="https://github.com/' + REPO + '/releases/latest">Get it here</a>.';
+  } else {
+    // cadrel-reader://join?<the same details> opens Cadrel Reader straight to this invitation when it is installed.
+    document.getElementById('open').href = 'cadrel-reader://join?' + location.hash.slice(1);
+    // Point "Get it here" at Cadrel Reader's newest release (its releases are tagged reader-vX.Y.Z, apart from Cadrel's own).
+    fetch('https://api.github.com/repos/' + REPO + '/releases?per_page=40', { headers: { Accept: 'application/vnd.github+json' } })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (list) {
+        var rel = list.filter(function (x) { return !x.draft && !x.prerelease && /^reader-v/.test(x.tag_name); })[0];
+        if (rel) document.getElementById('download').href = rel.html_url;
+      })
+      .catch(function () {});
+  }
 }
 </script>
 </body>

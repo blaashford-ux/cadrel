@@ -7,7 +7,7 @@
  * Nothing here touches Electron: Write is reached through `WriteFolders`, so this is tested with a fake.
  */
 import path from 'node:path';
-import { descendantsOf, getProject, linksOf } from '@cadrel/kernel';
+import { childrenOf, descendantsOf, getProject, linksOf, viewLevel } from '@cadrel/kernel';
 import { projectNameError, uniqueName } from '@cadrel/write/src/shared/projects';
 import type { StudioService } from './studio';
 import type { ProjectStages } from './stages';
@@ -40,7 +40,7 @@ export class ProjectManager {
 
   /** The folder of a project's manuscript, if it has one. */
   private async folderOf(projectId: string): Promise<{ ref: string; dir: string } | null> {
-    const t = (await this.studio.studio.read()).tree;
+    const t = (await this.studio.tree());
     const l = linksOf(t, projectId, 'write')[0];
     return l ? { ref: l.ref, dir: path.join(this.write.projectsRoot(), l.ref) } : null;
   }
@@ -58,6 +58,21 @@ export class ProjectManager {
    * made (a name Windows will not allow), the project is not created either.
    */
   async create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }> {
+    // A standalone novel is a Project that holds one Book (docs/UI-MODEL.md): the Project is made bare, and its Book gets the folder and the stage.
+    if (!o.parentId && o.kind?.trim().toLowerCase() === 'standalone') {
+      const project = await this.createOne({ name: o.name, kind: o.kind });
+      try {
+        const book = await this.createOne({ name: o.name, parentId: project.id, kind: 'Book', template: o.template, workflowId: o.workflowId });
+        return { id: project.id, folder: book.folder };
+      } catch (e) {
+        await this.studio.deleteProject(project.id, true).catch(() => undefined); // no half-made standalone
+        throw e;
+      }
+    }
+    return this.createOne(o);
+  }
+
+  private async createOne(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }> {
     const template = o.template ?? null;
     // the workflow is chosen here, once, before anything is made; a bad choice makes nothing
     const wf = this.stages ? await this.stages.forNewProject(o.parentId, o.workflowId) : { workflowId: null, stage: null };
@@ -78,10 +93,29 @@ export class ProjectManager {
     }
   }
 
+  /**
+   * Gives a Project that has no Books its first one. The Project's manuscript folder, if it has one, becomes the Book's (the link moves; no
+   * file is copied or moved), and if the Project had a stage the Book starts in it and the Project is left without one. Returns the Book.
+   */
+  async addFirstBook(projectId: string, name?: string): Promise<{ id: string }> {
+    const tree = (await this.studio.tree());
+    const p = getProject(tree, projectId) ?? fail('There is no such project.');
+    if (viewLevel(tree, projectId) !== 'project') fail('Only a project can be given a first book.');
+    if (childrenOf(tree, projectId).some((c) => c.status !== 'archived')) fail('That project already has books.');
+    const folder = linksOf(tree, projectId, 'write')[0];
+    const book = await this.create({ name: (name ?? p.name).trim() || p.name, parentId: projectId, kind: 'Book', template: null, workflowId: p.workflowId });
+    if (folder) await this.studio.link(book.id, 'write', folder.ref); // a manuscript belongs to one project, so this moves it
+    if (p.workflowId && p.stage) {
+      await this.studio.setStage(book.id, p.stage).catch(() => undefined); // keeps where it was; if its workflow no longer has the stage it starts at the first
+      await this.studio.clearWorkflow(projectId);
+    }
+    return book;
+  }
+
   /** Gives an existing project a manuscript folder. */
   async addManuscript(projectId: string, template: string): Promise<string> {
     if (await this.folderOf(projectId)) fail('That project already has a manuscript folder.');
-    const p = getProject((await this.studio.studio.read()).tree, projectId) ?? fail('There is no such project.');
+    const p = getProject((await this.studio.tree()), projectId) ?? fail('There is no such project.');
     const made = await this.write.createProject(await this.freeFolderName(p.name), template);
     await this.studio.link(projectId, 'write', path.basename(made.path));
     return made.path;
@@ -107,7 +141,7 @@ export class ProjectManager {
   /** Archives (or restores) a project, its subprojects, and their manuscript folders. */
   async archive(projectId: string, archived: boolean): Promise<void> {
     await this.studio.archiveProject(projectId, archived);
-    const t = (await this.studio.studio.read()).tree;
+    const t = (await this.studio.tree());
     const ids = archived ? [projectId, ...descendantsOf(t, projectId).map((p) => p.id)] : [projectId];
     for (const id of ids) {
       const f = await this.folderOf(id);
@@ -117,7 +151,7 @@ export class ProjectManager {
 
   /** Deletes the project, its subprojects and their notes, and moves their manuscript folders to the recycle bin. */
   async remove(projectId: string): Promise<string[]> {
-    const t = (await this.studio.studio.read()).tree;
+    const t = (await this.studio.tree());
     const all = [projectId, ...descendantsOf(t, projectId).map((p) => p.id)];
     const folders = (await Promise.all(all.map((id) => this.folderOf(id)))).filter((f): f is { ref: string; dir: string } => !!f);
     const removed = await this.studio.deleteProject(projectId, true);
@@ -127,7 +161,7 @@ export class ProjectManager {
 
   /** A copy of a project's manuscript folder, as a new sibling project (subprojects are not copied). */
   async duplicate(projectId: string): Promise<string> {
-    const tree = (await this.studio.studio.read()).tree;
+    const tree = (await this.studio.tree());
     const p = getProject(tree, projectId) ?? fail('There is no such project.');
     const f = await this.folderOf(projectId);
     const siblings = tree.projects.filter((x) => x.parentId === p.parentId).map((x) => x.name);
@@ -169,7 +203,7 @@ export class ProjectManager {
    * version), and plain folders. Each can be brought in as a project of its own.
    */
   async unfiled(): Promise<{ projects: { name: string }[]; folders: { name: string }[] }> {
-    const t = (await this.studio.studio.read()).tree;
+    const t = (await this.studio.tree());
     const owned = new Set(t.links.filter((l) => l.module === 'write').map((l) => l.ref));
     const { projects, others } = await this.write.listFolders();
     return { projects: projects.filter((p) => !owned.has(p.name)).map((p) => ({ name: p.name })), folders: others.filter((p) => !owned.has(p.name)).map((p) => ({ name: p.name })) };

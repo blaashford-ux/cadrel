@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CategorySummary, Exclusion, QueueItem } from '../../shared/api.js';
+import { scopedCategories, scopedExclusions, scopedOpenNext, scopedQueue, useMarketScope } from '../scope.js';
 
 const api = window.cadrelMarket;
 
@@ -11,13 +12,17 @@ export function QueueView({ version }: { version: number }) {
   const [onlyNew, setOnlyNew] = useState(false);
   const [note, setNote] = useState('');
   const [removed, setRemoved] = useState<Exclusion[]>([]);
+  const scope = useMarketScope();
+  const keys = scope.keys;
+  // A different Project, or Project/All, starts again on all of what is now shown.
+  useEffect(() => setCat(''), [scope.token]);
 
   const load = async () => {
-    setItems(await api.queue({ categoryKey: cat || undefined, includeSkipped: showSkipped, onlyNew }));
-    setCats(await api.categories());
-    setRemoved(await api.categoryExclusions(cat || undefined));
+    setItems(await scopedQueue(api, keys, { categoryKey: cat || undefined, includeSkipped: showSkipped, onlyNew }));
+    setCats(scopedCategories(await api.categories(), keys));
+    setRemoved(await scopedExclusions((k) => api.categoryExclusions(k), keys, cat || undefined));
   };
-  useEffect(() => { void load(); }, [cat, showSkipped, onlyNew, version]);
+  useEffect(() => { void load(); }, [cat, showSkipped, onlyNew, version, scope.token]);
 
   const pending = items.filter((i) => i.state === 'pending').length;
 
@@ -29,13 +34,13 @@ export function QueueView({ version }: { version: number }) {
       </p>
       <div className="row">
         <button className="primary" disabled={pending === 0} onClick={async () => {
-          const it = await api.openNext(cat || undefined, onlyNew);
+          const it = await scopedOpenNext(api, keys, cat || undefined, onlyNew);
           setNote(it ? `Opened ${it.title ?? it.asin}` : onlyNew ? 'No new additions left to open' : 'Nothing left to open');
           await load();
         }}>Open next</button>
         <select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category">
-          <option value="">All categories</option>
-          <option value="uncategorised">Uncategorised (from searches)</option>
+          <option value="">{keys ? 'All of this project’s categories' : 'All categories'}</option>
+          {!keys && <option value="uncategorised">Uncategorised (from searches)</option>}
           {cats.map((c) => <option key={c.key} value={c.key}>{c.name ?? c.key}</option>)}
         </select>
         <label title="Only books that are on the newest capture of a category's list but were on none of its earlier captures: what joined the list since you last captured it."><input type="checkbox" checked={onlyNew} onChange={(e) => setOnlyNew(e.target.checked)} /> New additions only</label>

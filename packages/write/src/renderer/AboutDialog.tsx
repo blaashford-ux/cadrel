@@ -1,3 +1,4 @@
+import { appName } from './appName';
 import { useEffect, useState } from 'react';
 import type { UpdateInfo, UpdateProgress } from '../shared/update';
 import logo from './logo.png';
@@ -57,11 +58,11 @@ export function AboutDialog({ onClose }: { onClose(): void }) {
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && !installing && onClose()}>
-      <div className="modal about-dialog" role="dialog" aria-modal="true" aria-label="About Cadrel Write">
+      <div className="modal about-dialog" role="dialog" aria-modal="true" aria-label={`About ${appName()}`}>
         <div className="about-head">
           <img src={logo} alt="" width={48} height={48} />
           <div>
-            <h3>Cadrel Write</h3>
+            <h3>{appName()}</h3>
             <div className="about-version">{version ? `Version ${version}` : ' '}</div>
           </div>
         </div>
@@ -94,7 +95,7 @@ export function AboutDialog({ onClose }: { onClose(): void }) {
                   : 'Downloading…'}
               </p>
             )}
-            {state.kind === 'handoff' && <p>Update downloaded and verified. Follow the installer to finish; Cadrel Write may close first.</p>}
+            {state.kind === 'handoff' && <p>Update downloaded and verified. Follow the installer to finish; {appName()} may close first.</p>}
             {state.kind === 'error' && <p className="modal-error" role="alert">{state.message}</p>}
           </div>
         )}

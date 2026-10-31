@@ -10,6 +10,16 @@ const studioCall = async (channel: string, ...args: unknown[]) => {
 
 // Sandboxed preload (CommonJS). Everything the shell's page may do is listed here; nothing generic is exposed.
 const api: CadrelApi = {
+  scope: {
+    get: () => ipcRenderer.invoke('shell:scope:get'),
+    set: (change) => ipcRenderer.invoke('shell:scope:set', change),
+    openMenu: (at) => ipcRenderer.invoke('shell:scope:menu', at),
+    onChange: (cb) => {
+      const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
+      ipcRenderer.on('shell:scope', h);
+      return () => ipcRenderer.removeListener('shell:scope', h);
+    }
+  },
   studios: {
     get: () => studioCall('shell:studios:get'),
     setActive: (id) => studioCall('shell:studios:setActive', id),
@@ -34,7 +44,10 @@ const api: CadrelApi = {
   stages: {
     views: () => studioCall('shell:stages:views'),
     options: (projectId) => studioCall('shell:stages:options', projectId),
-    move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
+    move: (projectId, to) => studioCall('shell:stages:move', projectId, to),
+    close: (bookId) => studioCall('shell:stages:close', bookId),
+    reopen: (bookId, to) => studioCall('shell:stages:reopen', bookId, to),
+    clear: (projectId) => studioCall('shell:stages:clear', projectId)
   },
   vault: {
     state: () => studioCall('shell:vault:state'),
@@ -96,7 +109,8 @@ const api: CadrelApi = {
     revoke: (id) => studioCall('shell:people:call', 'revoke', id),
     setExpiry: (id, expiresAt) => studioCall('shell:people:call', 'setExpiry', id, expiresAt),
     explainAccess: (personId, capability, projectId) => studioCall('shell:people:explain', personId, capability, projectId),
-    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
+    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId),
+    visibleProjects: (personId) => studioCall('shell:people:visible', personId)
   },
   myBooks: {
     catalogue: () => studioCall('shell:mybooks:catalogue'),
@@ -131,6 +145,7 @@ const api: CadrelApi = {
     templates: () => studioCall('shell:manage:templates'),
     create: (o) => studioCall('shell:manage:create', o),
     addManuscript: (id, template) => studioCall('shell:manage:addManuscript', id, template),
+    addFirstBook: (id, name) => studioCall('shell:manage:addFirstBook', id, name),
     rename: (id, name) => studioCall('shell:manage:rename', id, name),
     archive: (id, archived) => studioCall('shell:manage:archive', id, archived),
     remove: (id) => studioCall('shell:manage:remove', id),

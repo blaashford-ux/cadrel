@@ -10,10 +10,11 @@ interface Props {
   onError(): void;
 }
 
-/** The invitation page's address in picker mode. `ret` makes it hand its result back to the app through an `cadrel-write://` link. */
+/** The invitation page's address in picker mode. `ret` makes it hand its result back to the app through a `cadrel-write://` link (`cadrel-reader://` for Cadrel Reader). */
 export function pickerUrl(token: string, ids: string[], ret = false): string {
   const q = new URLSearchParams({ mode: 'pick', t: token, p: ids[0] ?? '', c: ids[1] ?? '' });
   if (ret) q.set('ret', '1');
+  if (typeof window !== 'undefined' && window.cadrelWrite?.capabilities?.reader) q.set('app', 'reader'); // so the page names, and hands back to, Cadrel Reader
   return `${JOIN_PAGE}#${q}`;
 }
 

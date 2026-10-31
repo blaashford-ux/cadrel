@@ -8,15 +8,15 @@ interface ExternalBrowserPlugin {
 
 const ExternalBrowser = registerPlugin<ExternalBrowserPlugin>('ExternalBrowser');
 
-/** Reads the file ids from an `cadrel-write://picked?...` link: the ids, an empty list when cancelled, null when it isn't such a link. */
+/** Reads the file ids from a `cadrel-write://picked?...` (or, in Cadrel Reader, `cadrel-reader://picked?...`) link: the ids, an empty list when cancelled, null when it isn't such a link. */
 export function parsePickedLink(url: string): string[] | null {
-  const m = /^cadrel-write:\/\/picked\/?\?(.*)$/i.exec(url);
+  const m = /^cadrel-(?:write|reader):\/\/picked\/?\?(.*)$/i.exec(url);
   if (!m) return null;
   const q = new URLSearchParams(m[1]);
   return (q.get('ids') ?? '').split(',').filter((s) => /^[A-Za-z0-9_-]{2,128}$/.test(s));
 }
 
-/** Runs Google's file picker in the browser and waits for the app to be reopened by its cadrel-write://picked link. */
+/** Runs Google's file picker in the browser and waits for the app to be reopened by its picked link. */
 export async function pickInBrowser(url: string): Promise<string[] | null> {
   return new Promise<string[] | null>((resolve, reject) => {
     const handle = CapacitorApp.addListener('appUrlOpen', (e) => {

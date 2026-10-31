@@ -9,7 +9,7 @@ import { addReference, addVaultFile, bootstrapStudio, checkIn, checkOut, default
 import { StudioService, dbAccess } from '@cadrel/service';
 import { memoryStudioDb, type StudioDb } from '@cadrel/store';
 import { Studio } from '@cadrel/studio';
-import { createCadrelServer, recordsModule, studioModule } from '../src/index.js';
+import { createCadrelServer, projectsModule, recordsModule, studioModule } from '../src/index.js';
 
 const S = 'studio1';
 const NOW = () => new Date('2026-11-10T10:00:00.000Z');
@@ -25,7 +25,12 @@ beforeEach(async () => {
 });
 
 async function connect(personId = 'ana') {
-  const server = createCadrelServer({ modules: [studioModule({ studio }), recordsModule({ service: svc, personId, studio, studioId: S, db })] });
+  const view = (t: import('@cadrel/kernel').ProjectTree) => svc.as(personId).visibleProjects(t);
+  const stageForNewBook = async () => {
+    const wf = await svc.as(personId).workflows.defaultFor('subproject').catch(() => null);
+    return wf ? { workflowId: wf.id, stage: wf.stages[0]!.key } : null;
+  };
+  const server = createCadrelServer({ modules: [studioModule({ studio, view, stageForNewBook }), recordsModule({ service: svc, personId, studio, studioId: S, db }), projectsModule({ service: svc, personId, studio, db, view })] });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'claude-ai', version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -48,7 +53,7 @@ describe('the records tools', () => {
     const names = (await client.listTools()).tools.map((t) => t.name);
     for (const n of NAMES) expect(names).toContain(n);
     expect(names.filter((n) => /^(work|books|files)_/.test(n)).sort()).toEqual(NAMES);
-    expect(names.some((n) => /approve|reject|respond|record|decid|stage|force|check|archive|delete/i.test(n.replace('work_request_approval', '').replace('work_approvals', '').replace('work_decisions', '')))).toBe(false);
+    expect(names.filter((n) => !n.startsWith('studio_')).some((n) => /approve|reject|respond|record|decid|stage|force|check|archive|delete/i.test(n.replace('work_request_approval', '').replace('work_approvals', '').replace('work_decisions', '')))).toBe(false);
   });
 
   it('adds a task by project path and lists it with its assignee, late and waiting state', async () => {
@@ -165,5 +170,132 @@ describe('the records tools', () => {
     expect((await call('files_list', { checked_out_only: true })).json().files).toHaveLength(1);
     expect((await call('files_list', { search: 'cover' })).json().files).toHaveLength(1);
     void newRecordId;
+  });
+});
+
+describe('the records tools follow who is assigned to the project', () => {
+  it('lists only the tasks of projects the person is assigned to, and gives work only to people assigned to the project', async () => {
+    const tree = () => studio.read().then((d) => d.tree);
+    svc = new StudioService({ db, studioId: S, access: dbAccess(db, S), now: NOW, projects: tree });
+    ana = svc.as('ana');
+    const series = await studio.createProject({ name: 'Dragon Rider', kind: 'Series' });
+    const b1 = await studio.createProject({ name: 'Book 1', parentId: series.id, kind: 'Book' });
+    const b2 = await studio.createProject({ name: 'Book 2', parentId: series.id, kind: 'Book' });
+    const eve = (await ana.people.create({ name: 'Eve Editor' })).id;
+    const bo = (await ana.people.create({ name: 'Bo Author' })).id;
+    await ana.people.grant({ subject: { kind: 'person', id: eve }, roleId: 'role_editor', scope: { kind: 'project', id: b1.id } });
+    await ana.people.grant({ subject: { kind: 'person', id: bo }, roleId: 'role_author', scope: { kind: 'project', id: b2.id } });
+
+    const owner = await connect('ana');
+    expect((await owner.call('work_add_task', { project: 'Book 1', title: 'Edit pass', assignee: 'Eve Editor' })).isError).toBe(false);
+    const refused = await owner.call('work_add_task', { project: 'Book 1', title: 'Wrong person', assignee: 'Bo Author' });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toMatch(/Bo Author is not assigned to this project/);
+    expect((await owner.call('work_add_task', { project: 'Book 2', title: 'Proof', assignee: 'Bo Author' })).isError).toBe(false);
+    const names = (await owner.call('work_people', { project: 'Book 1' })).json() as { name: string }[];
+    expect(names.map((n) => n.name).sort()).toEqual(['Ana', 'Eve Editor']);
+
+    // Eve acts through the assistant: she is an Editor on Book 1 only, so Book 2's work is not there for her.
+    const eveSide = await connect(eve);
+    const mine = await eveSide.call('work_tasks', { state: 'any' });
+    expect(mine.json().tasks.map((t: { title: string }) => t.title)).toEqual(['Edit pass']);
+    const other = await eveSide.call('work_add_task', { project: 'Book 2', title: 'Sneaky' });
+    expect(other.isError).toBe(true);
+    expect(other.text).toMatch(/no such project/i);
+    void b1;
+  });
+});
+
+describe('managing projects from the assistant', () => {
+  const tree = () => studio.read().then((d) => d.tree);
+  beforeEach(() => {
+    svc = new StudioService({ db, studioId: S, access: dbAccess(db, S), now: NOW, projects: tree });
+    ana = svc.as('ana');
+  });
+
+  it('creates a series, a book that starts in the default stage, and a standalone made whole; edits and reorders them', async () => {
+    const { call } = await connect();
+    const ser = (await call('studio_create_project', { name: 'Dragon Rider', kind: 'Series' })).json();
+    expect(ser.level).toBe('project');
+    expect(ser).not.toHaveProperty('stage'); // a project has no stage
+    const b1 = (await call('studio_create_project', { name: 'Book 1', parent: 'Dragon Rider' })).json();
+    const b2 = (await call('studio_create_project', { name: 'Book 2', parent: 'Dragon Rider' })).json();
+    expect(b1).toMatchObject({ level: 'book', kind: 'Book' });
+    expect(typeof b1.stage).toBe('string'); // it starts in the default workflow's first stage
+    const solo = (await call('studio_create_project', { name: 'The Lost King', standalone: true })).json();
+    expect(solo.level).toBe('project');
+    const rows = (await call('studio_projects')).json().projects as { name: string; level: string; stage?: string }[];
+    expect(rows.filter((r) => r.name === 'The Lost King').map((r) => r.level).sort()).toEqual(['book', 'project']);
+    expect((await call('studio_create_project', { name: 'x', parent: 'Dragon Rider', standalone: true })).isError).toBe(true);
+
+    await call('studio_update_project', { project: 'Book 2', position: 1 });
+    const order = (await call('studio_projects', { project: 'Dragon Rider' })).json().projects.map((r: { name: string }) => r.name);
+    expect(order.indexOf('Book 2')).toBeLessThan(order.indexOf('Book 1'));
+    expect((await call('studio_update_project', { project: 'Book 1', name: 'Ember' })).json().name).toBe('Ember');
+    void b2;
+  });
+
+  it('links a comparable title by ASIN and refuses what is not one', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Dragon Rider' });
+    expect((await call('studio_link', { module: 'comp', record: 'b0abc12345', project: 'Dragon Rider' })).json().links).toContainEqual({ module: 'comp', record: 'B0ABC12345' });
+    expect((await call('studio_link', { module: 'comp', record: 'nope', project: 'Dragon Rider' })).isError).toBe(true);
+  });
+
+  it('shows a Book\'s stage and moves it through the gates, with every reason when it may not', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Dragon Rider' });
+    await call('studio_create_project', { name: 'Book 1', parent: 'Dragon Rider' });
+    const show = (await call('studio_stage', { project: 'Book 1' })).json();
+    expect(show.stage.name).toBeTruthy();
+    expect(show.closed).toBe(false);
+    expect(show.moves.length).toBeGreaterThan(0);
+    expect((await call('studio_stage', { project: 'Dragon Rider' })).text).toMatch(/not a book/);
+    const target = show.moves.find((m: { allowed: boolean }) => m.allowed);
+    expect(target, 'a first move is open').toBeDefined();
+    {
+      const moved = (await call('studio_stage', { project: 'Book 1', action: 'move', to: target.name })).json();
+      expect(moved.stage.name).toBe(target.name);
+    }
+    const blocked = show.moves.find((m: { allowed: boolean }) => !m.allowed);
+    const stillBlocked = (await call('studio_stage', { project: 'Book 1' })).json().moves.find((m: { allowed: boolean }) => !m.allowed);
+    if (stillBlocked) {
+      const r = await call('studio_stage', { project: 'Book 1', action: 'move', to: stillBlocked.name });
+      expect(r.isError).toBe(true);
+      expect(r.text.length).toBeGreaterThan(10);
+    }
+    void blocked;
+    expect((await call('studio_stage', { project: 'Book 1', action: 'move', to: 'Nonesuch' })).isError).toBe(true);
+    expect((await call('studio_stage', { project: 'Book 1', action: 'reopen', to: 'Nonesuch' })).isError).toBe(true);
+  });
+
+  it('assigns people to a project, so they see it and can be given work there, and takes the role off again', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Dragon Rider' });
+    await call('studio_create_project', { name: 'Book 1', parent: 'Dragon Rider' });
+    const eve = (await ana.people.create({ name: 'Eve Editor' })).id;
+    expect((await call('studio_roles')).json().map((r: { name: string }) => r.name)).toContain('Editor');
+
+    const refused = await call('work_add_task', { project: 'Book 1', title: 'Edit', assignee: 'Eve Editor' });
+    expect(refused.isError).toBe(true); // not assigned to the project yet
+    const made = (await call('studio_assign', { project: 'Book 1', person: 'Eve Editor', role: 'Editor', until: '2027-03-31' })).json();
+    expect(made).toMatchObject({ who: 'Eve Editor', role: 'Editor', project: 'Dragon Rider / Book 1', until: '2027-03-31' });
+    expect((await call('work_add_task', { project: 'Book 1', title: 'Edit', assignee: 'Eve Editor' })).isError).toBe(false);
+
+    const listed = (await call('studio_people', { project: 'Dragon Rider / Book 1' })).json().assigned as { who: string; role: string; applies_to: string; until?: string }[];
+    expect(listed).toEqual([expect.objectContaining({ who: 'Eve Editor', role: 'Editor', applies_to: 'this project', until: '2027-03-31' })]);
+    expect((await call('studio_people', { project: 'Dragon Rider' })).json().assigned).toHaveLength(1); // the series lists its books' roles too
+
+    // Eve, acting through the assistant, sees her book but cannot manage roles
+    const eveSide = await connect(eve);
+    expect(((await eveSide.call('studio_projects')).json().projects as { name: string }[]).map((r) => r.name).sort()).toEqual(['Book 1', 'Dragon Rider']);
+    const noGrant = await eveSide.call('studio_assign', { project: 'Book 1', person: 'Eve Editor', role: 'Author' });
+    expect(noGrant.isError).toBe(true);
+
+    expect((await call('studio_unassign', { assignment: made.assignment })).json()).toEqual({ removed: made.assignment });
+    expect((await call('studio_people', { project: 'Book 1' })).json().assigned).toEqual([]);
+    expect((await call('studio_assign', { project: 'Book 1', person: 'Nobody', role: 'Editor' })).isError).toBe(true);
+    expect((await call('studio_assign', { project: 'Book 1', role: 'Editor' })).isError).toBe(true);
+    expect((await call('studio_unassign', { assignment: 'zzz' })).isError).toBe(true);
   });
 });

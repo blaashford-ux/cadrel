@@ -16,3 +16,5 @@ export * from './people';
 export * from './workflow';
 export * from './work';
 export * from './sql';
+export * from './viewScope';
+export * from './visibility';

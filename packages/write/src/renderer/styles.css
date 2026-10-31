@@ -771,3 +771,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .editor .md-align[data-md-align='center'] ul, .editor .md-align[data-md-align='center'] ol { list-style-position: inside; padding-left: 0; }
 .align-group { display: inline-flex; gap: 2px; margin-right: 4px; }
 .align-group button { padding: 4px 6px; }
+.project-card.closed { opacity: .65; }
+
+/* The Project / all manuscripts switch on Write's home inside Cadrel. */
+.seg { display: inline-flex; border: 1px solid var(--border, rgba(0,0,0,.2)); border-radius: 10px; overflow: hidden; }
+.seg button { padding: 5px 12px; background: none; border: 0; border-radius: 0; }
+.seg button[aria-pressed='true'] { background: var(--selected, rgba(0,0,0,.08)); font-weight: 600; }
+.home-scope { margin: 6px 0; }

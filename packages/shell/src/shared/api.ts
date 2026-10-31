@@ -4,7 +4,7 @@ import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kernel';
+import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
@@ -89,6 +89,8 @@ export interface ManageApi {
   /** `workflowId` is chosen here, once: the project keeps it. Without one, the default for a project (or for a subproject, when it has a parent) is used. */
   create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }>;
   addManuscript(projectId: string, template: string): Promise<string>;
+  /** Gives a Project with no Books its first: the Project's manuscript folder becomes the Book's, and the Book starts in the Project's stage. */
+  addFirstBook(projectId: string, name?: string): Promise<{ id: string }>;
   rename(projectId: string, name: string): Promise<void>;
   archive(projectId: string, archived: boolean): Promise<void>;
   /** Deletes the project, its subprojects and notes, and moves their manuscript folders to the recycle bin. */
@@ -608,6 +610,8 @@ export interface PeopleApi {
   explainAccess(personId: string, capability: string, projectId?: string | null): Promise<{ allowed: boolean; reason: string }>;
   /** Every capability the person holds at the studio, or on one project when `projectId` is given (`*` means all). */
   effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
+  /** The projects a person can see: those they are assigned to (and the Projects above an assigned Book, shown as containers), or all of them. */
+  visibleProjects(personId: string): Promise<{ all: boolean; assigned: string[]; context: string[] }>;
 }
 
 /** The workflows an administrator builds: the stages a book moves through and the gates between them. */
@@ -643,6 +647,8 @@ export type WorkState =
       available: true;
       me: string;
       people: { id: string; name: string }[];
+      /** The people a task or sign-off on this project may be given to: those assigned to it. */
+      assignable: { id: string; name: string }[];
       /** What the person using the app may do with work: task.edit (their own), task.assign (hand work over), task.manage (anyone's). */
       may: { edit: boolean; assign: boolean; manage: boolean };
       tasks: OnProject<TaskRecord>[];
@@ -778,7 +784,7 @@ export interface ProjectStageView {
   workflowName: string;
   stage: { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold' } | null;
 }
-export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
+export interface StageMoveOption { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold'; allowed: boolean; reasons: string[] }
 
 /** Where projects are in their workflows, and the moves between stages. A move is checked against the workflow's gates and the person's roles. */
 export interface StagesApi {
@@ -787,9 +793,38 @@ export interface StagesApi {
   /** Where one project can go, and for each move whether it is open now and what is in the way. Null for a project with no workflow. */
   options(projectId: string): Promise<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null>;
   move(projectId: string, to: string): Promise<void>;
+  /** Closes a Book: moves it to the first Done stage open to this person from where it is. */
+  close(bookId: string): Promise<void>;
+  /** Reopens a closed Book into one of the stages open from its Done stage. */
+  reopen(bookId: string, to: string): Promise<void>;
+  /** Takes the stage off a Project above its Books (made before stages moved to Books). */
+  clear(projectId: string): Promise<void>;
+}
+
+/** The scope with the names to show for it, so a page or module view needs nothing else to label it. */
+export interface ScopeView extends ResolvedViewScope {
+  projectName: string | null;
+  /** The chosen Book's name, or null for all books. */
+  bookName: string | null;
+  /** Every module's records that are inside the scope (the Write folders and Market categories of this Project and Book). */
+  links: ScopeLink[];
+  /** Records of projects the person cannot see: no view lists them, even when it shows everything. */
+  hidden: { module: string; ref: string }[];
+}
+
+/** The Project and Book the app is showing (docs/UI-MODEL.md). One scope for the whole app: the shell's pages and the module views follow it. */
+export interface ScopeApi {
+  get(): Promise<ScopeView>;
+  /** Changes the Project and/or the Book; answers with the scope that resulted (a Book that is not the Project's is dropped). */
+  set(change: Partial<ViewScope>): Promise<ScopeView>;
+  /** Opens the native menu for choosing the Project and Book at a point in the window (native, so it draws above the module views). */
+  openMenu(at: { x: number; y: number }): Promise<void>;
+  /** Called whenever the scope changes, whoever changed it (another page, a project archived). */
+  onChange(cb: (scope: ScopeView) => void): () => void;
 }
 
 export interface CadrelApi {
+  scope: ScopeApi;
   studios: StudiosApi;
   stages: StagesApi;
   workflow: WorkflowApi;

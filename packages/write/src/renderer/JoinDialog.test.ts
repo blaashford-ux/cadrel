@@ -73,3 +73,43 @@ describe('JoinDialog with the picker in the browser', () => {
     expect(host.querySelector('.modal-error')).toBeNull();
   });
 });
+
+describe('JoinDialog in Cadrel Reader', () => {
+  const asReader = () => {
+    (window as unknown as { cadrelWrite: unknown }).cadrelWrite = { pickerToken: async () => 'tok', pickInBrowser, joinReview, capabilities: { reader: true } };
+  };
+  const open = async (initialLink: string) => {
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(JoinDialog, { initialLink, onJoined, onClose: () => undefined })));
+    return root;
+  };
+  const continueButton = () => [...host.querySelectorAll('button')].find((b) => /Continue/.test(b.textContent ?? ''))!;
+
+  it('starts with the link the app was opened with', async () => {
+    asReader();
+    await open(link);
+    expect((host.querySelector('input') as HTMLInputElement).value).toBe(link);
+    expect(continueButton().disabled).toBe(false);
+    expect(host.textContent).toContain('Cadrel Reader is allowed to open this one project');
+  });
+
+  it('refuses an invitation to edit before Google’s picker is ever opened', async () => {
+    asReader();
+    const editLink = buildInviteLink({ packageId: 'pkgFILE123', commentsId: 'cmtFILE456', reviewerId: 'rev12345', project: 'Book', role: 'edit' });
+    await open(editLink);
+    expect(continueButton().disabled).toBe(true);
+    expect(host.querySelector('.modal-error')?.textContent).toMatch(/Cadrel Reader can’t do.*Cadrel Write/);
+    expect(pickInBrowser).not.toHaveBeenCalled();
+  });
+
+  it('tells the invitation page it is Cadrel Reader asking, so the phone is handed back to Reader', async () => {
+    asReader();
+    rounds = [['pkgFILE123', 'cmtFILE456']];
+    const root = await open(link);
+    await act(async () => continueButton().click());
+    await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+    expect(askedFor(0).get('app')).toBe('reader');
+    expect(askedFor(0).get('ret')).toBe('1');
+    root.unmount();
+  });
+});
