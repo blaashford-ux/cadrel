@@ -1,4 +1,4 @@
-import { getProject, resolveViewScope, sameViewScope, viewBooks, viewProjects, type ProjectTree, type ResolvedViewScope, type ViewScope } from '@cadrel/kernel';
+import { getProject, resolveViewScope, sameViewScope, viewBooks, viewProjects, viewScopeLinks, type ProjectTree, type ResolvedViewScope, type ViewScope } from '@cadrel/kernel';
 import type { ScopeView } from '../shared/api';
 
 export interface ScopeHostOptions {
@@ -39,7 +39,7 @@ export class ScopeHost {
   async get(): Promise<ScopeView> {
     const tree = await this.o.tree();
     const r = resolveViewScope(tree, this.want, await this.o.closed());
-    return { ...r, projectName: r.project ? getProject(tree, r.project)?.name ?? null : null, bookName: r.book && !r.bookImplied ? getProject(tree, r.book)?.name ?? null : null };
+    return { ...r, projectName: r.project ? getProject(tree, r.project)?.name ?? null : null, bookName: r.book && !r.bookImplied ? getProject(tree, r.book)?.name ?? null : null, links: viewScopeLinks(tree, r) };
   }
 
   /**
@@ -70,7 +70,7 @@ export class ScopeHost {
     const chosen = { project: r.project, book: r.bookImplied ? null : r.book, showClosed: r.showClosed };
     this.want = chosen;
     this.o.remember(chosen);
-    if (!this.shown || !sameViewScope(this.shown, r) || this.shown.books.join() !== r.books.join() || this.shown.closed.join() !== r.closed.join() || this.shown.projectName !== r.projectName || this.shown.bookName !== r.bookName) {
+    if (!this.shown || !sameViewScope(this.shown, r) || this.shown.books.join() !== r.books.join() || this.shown.closed.join() !== r.closed.join() || this.shown.projectName !== r.projectName || this.shown.bookName !== r.bookName || JSON.stringify(this.shown.links) !== JSON.stringify(r.links)) {
       this.shown = r;
       this.o.announce(r);
     }

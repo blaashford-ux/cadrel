@@ -276,6 +276,65 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 150_000);
 
+  it('Write shows only the manuscripts of the Project and Book in scope; a closed Book is read-only; leaving the scope closes what is open', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'wscope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'wscope-data-'));
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    await shell.getByRole('button', { name: 'Write', exact: true }).click();
+    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
+    await write.getByRole('heading', { name: 'Projects' }).waitFor();
+    const folder = (name: string) => write.evaluate(async (n) => { const api = (window as any).cadrelWrite; const cfg = await api.getProjectsConfig(); await api.createProject(n, cfg.templates[0].id); }, name);
+    for (const n of ['Dragon Bible', 'Ember', 'Ash', 'Lost King']) await folder(n);
+    // A chapter in Ember, to try editing once Book 1 is closed.
+    const root = await write.evaluate(async () => (await (window as any).cadrelWrite.getProjectsConfig()).root as string);
+    fs.writeFileSync(path.join(root, 'Ember', 'Manuscript', 'Draft.md'), '# One\n\nThe king had been lost.\n');
+
+    const series = await call<{ id: string }>('manage.create', { name: 'Dragon Rider', kind: 'Series', template: null });
+    const b1 = await call<{ id: string }>('manage.create', { name: 'Book 1', parentId: series.id, kind: 'Book', template: null });
+    const b2 = await call<{ id: string }>('manage.create', { name: 'Book 2', parentId: series.id, kind: 'Book', template: null });
+    const lost = await call<{ id: string }>('manage.create', { name: 'The Lost King', kind: 'Series', template: null });
+    for (const [id, ref] of [[series.id, 'Dragon Bible'], [b1.id, 'Ember'], [b2.id, 'Ash'], [lost.id, 'Lost King']] as const) await call('studio.link', id, 'write', ref);
+    await call('scope.set', { project: series.id, book: null });
+
+    const cards = () => write.locator('.project-card .card-name').allInnerTexts().then((t) => t.sort());
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible', 'Ember']), 'Write to list only Dragon Rider’s manuscripts');
+    expect(await write.getByRole('heading', { level: 1 }).innerText()).toBe('Dragon Rider');
+    expect(await write.locator('.project-card', { hasText: 'Dragon Bible' }).locator('.chip').first().innerText()).toBe('Series');
+    expect(await write.locator('.project-card', { hasText: 'Ember' }).locator('.chip').first().innerText()).toBe('Book 1');
+    expect(await write.getByText(/1 more belong to other projects/).count()).toBe(1);
+
+    // Naming a Book leaves the series and that Book (not the other Book).
+    await call('scope.set', { book: b2.id });
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible']), 'Write to follow the Book');
+
+    // Another Project shows its own.
+    await call('scope.set', { project: lost.id });
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Lost King']), 'Write to follow the Project');
+
+    // Closed Books are hidden; shown, they are marked and read-only.
+    await call('scope.set', { project: series.id, book: null });
+    await call('stages.close', b1.id);
+    await waitFor(async () => JSON.stringify(await cards()) === JSON.stringify(['Ash', 'Dragon Bible']), 'the closed Book to leave Write');
+    await call('scope.set', { showClosed: true });
+    await waitFor(async () => (await cards()).includes('Ember'), 'the closed Book to come back');
+    expect(await write.locator('.project-card', { hasText: 'Ember' }).innerText()).toContain('closed');
+    await write.locator('.project-card', { hasText: 'Ember' }).click();
+    await write.getByText(/This book is closed/).waitFor();
+    await write.locator('[role=treeitem]', { hasText: 'Manuscript' }).first().click();
+    await write.locator('[role=treeitem]', { hasText: 'Draft.md' }).first().click();
+    await write.locator('.ProseMirror').first().waitFor();
+    expect(await write.locator('.ProseMirror').first().getAttribute('contenteditable')).toBe('false'); // a closed Book can be read, not changed
+    expect(await write.getByRole('button', { name: 'New file' }).count()).toBe(0);
+
+    // Leaving the scope while it is open sends Write back to the list.
+    await call('scope.set', { project: lost.id });
+    await write.getByRole('heading', { level: 1 }).filter({ hasText: 'The Lost King' }).waitFor();
+    expect(await write.getByText(/This book is closed/).count()).toBe(0);
+    expect(await cards()).toEqual(['Lost King']);
+    await app.close();
+  }, 150_000);
+
   it('Dashboard and Home show a project made in Write', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();

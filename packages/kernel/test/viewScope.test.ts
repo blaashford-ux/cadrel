@@ -164,3 +164,63 @@ describe('where a project sits for the UI', () => {
     expect(viewLevel(s.t, 'gone')).toBeNull();
   });
 });
+
+import { linkRecord } from '../src/projects';
+import { viewScopeLinks } from '../src/viewScope';
+describe('the records inside a scope', () => {
+  function linked() {
+    const s = studio();
+    let t = s.t;
+    t = linkRecord(t, s.dragon, 'write', 'Dragon Rider Bible'); // series level
+    t = linkRecord(t, s.b1, 'write', 'Ember');
+    t = linkRecord(t, s.b2, 'write', 'Ash');
+    t = linkRecord(t, s.sub, 'write', 'Cover files'); // inside Book 2
+    t = linkRecord(t, s.dragon, 'market', 'dragon-fantasy');
+    t = linkRecord(t, s.lost, 'market', 'cozy-mystery');
+    t = linkRecord(t, s.only, 'write', 'Lost King');
+    return { ...s, t };
+  }
+  const refs = (links: { module: string; ref: string }[], m: string) => links.filter((l) => l.module === m).map((l) => l.ref).sort();
+
+  it('all books: the Project’s own and every Book’s, and nothing from another Project', () => {
+    const s = linked();
+    const links = viewScopeLinks(s.t, resolveViewScope(s.t, { project: s.dragon }));
+    expect(refs(links, 'write')).toEqual(['Ash', 'Cover files', 'Dragon Rider Bible', 'Ember']);
+    expect(refs(links, 'market')).toEqual(['dragon-fantasy']);
+  });
+
+  it('one Book: that Book’s, what is inside it, and the Project’s own, but not the other Books’', () => {
+    const s = linked();
+    const links = viewScopeLinks(s.t, resolveViewScope(s.t, { project: s.dragon, book: s.b2 }));
+    expect(refs(links, 'write')).toEqual(['Ash', 'Cover files', 'Dragon Rider Bible']);
+  });
+
+  it('says where each sits: the Project, a Book, or inside a Book, and which Book', () => {
+    const s = linked();
+    const links = viewScopeLinks(s.t, resolveViewScope(s.t, { project: s.dragon }));
+    const by = (ref: string) => links.find((l) => l.ref === ref)!;
+    expect(by('Dragon Rider Bible')).toMatchObject({ level: 'project', bookId: null, closed: false });
+    expect(by('Ember')).toMatchObject({ level: 'book', bookId: s.b1 });
+    expect(by('Cover files')).toMatchObject({ level: 'inside', bookId: s.b2, projectId: s.sub });
+  });
+
+  it('leaves out a closed Book’s records, unless closed Books are shown, and then marks them closed', () => {
+    const s = linked();
+    const hidden = viewScopeLinks(s.t, resolveViewScope(s.t, { project: s.dragon }, new Set([s.b1])));
+    expect(refs(hidden, 'write')).toEqual(['Ash', 'Cover files', 'Dragon Rider Bible']);
+    const shown = viewScopeLinks(s.t, resolveViewScope(s.t, { project: s.dragon, showClosed: true }, new Set([s.b1])));
+    expect(shown.find((l) => l.ref === 'Ember')).toMatchObject({ closed: true });
+    expect(shown.find((l) => l.ref === 'Ash')).toMatchObject({ closed: false });
+  });
+
+  it('a Market category shared by two Projects is in the scope of each', () => {
+    const s = linked();
+    const t = linkRecord(s.t, s.lost, 'market', 'dragon-fantasy');
+    expect(refs(viewScopeLinks(t, resolveViewScope(t, { project: s.lost })), 'market')).toEqual(['cozy-mystery', 'dragon-fantasy']);
+    expect(refs(viewScopeLinks(t, resolveViewScope(t, { project: s.dragon })), 'market')).toEqual(['dragon-fantasy']);
+  });
+
+  it('is empty with no Project', () => {
+    expect(viewScopeLinks(emptyTree(), resolveViewScope(emptyTree(), null))).toEqual([]);
+  });
+});

@@ -771,3 +771,4 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .editor .md-align[data-md-align='center'] ul, .editor .md-align[data-md-align='center'] ol { list-style-position: inside; padding-left: 0; }
 .align-group { display: inline-flex; gap: 2px; margin-right: 4px; }
 .align-group button { padding: 4px 6px; }
+.project-card.closed { opacity: .65; }

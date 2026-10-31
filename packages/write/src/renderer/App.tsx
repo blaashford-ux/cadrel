@@ -44,6 +44,8 @@ import { ShareDialog } from './ShareDialog';
 import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
 import { appName } from './appName';
+import { useWriteScope } from './useWriteScope';
+import { folderInScope, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
 import type { Anchor } from '../shared/review/comments';
@@ -173,6 +175,15 @@ export function App() {
   // Cadrel Reader only ever shows other people's projects, read-only; elsewhere a project is read-only when it was shared with you.
   const isReviewer = caps.reader === true || (sharedHere !== undefined && !isCollaborator);
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
+  // Inside Cadrel, Write shows only the manuscripts of the Project and Book Cadrel is showing (docs/UI-MODEL.md); a closed Book is read-only.
+  const wscope = useWriteScope();
+  const folders = useMemo(() => scopedFolders(wscope), [wscope]);
+  const closedHere = !!projectPath && scopedFolderOf(projectPath, folders)?.closed === true;
+  /** Nothing here can be changed: Cadrel Reader, a project shared for review, or a closed Book. */
+  const locked = isReviewer || closedHere;
+  /** Nothing in the tree can be changed (new, rename, delete, move): Cadrel Reader or a closed Book. */
+  const noEdit = caps.reader === true || closedHere;
+  const scopedListing = useMemo(() => (listing && folders ? { ...listing, projects: inScope(listing.projects, folders), folders: [] } : listing), [listing, folders]);
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
     window.cadrelWrite,
@@ -366,6 +377,11 @@ export function App() {
     return () => window.removeEventListener('focus', onFocus);
   }, [atHome, showQuick, showNewProject, reloadListing]);
 
+  // A manuscript linked to (or taken from) the Project in scope, or a change of scope, changes what the list should show.
+  useEffect(() => {
+    if (wscope) void reloadListing();
+  }, [wscope, reloadListing]);
+
   // Projects shared with this person, and the exchange of notes with Drive for the open project.
   const reloadShared = useCallback(() => {
     if (caps.review) void window.cadrelWrite.listShared().then(setShared).catch(() => undefined);
@@ -452,7 +468,7 @@ export function App() {
   };
 
   const promptNewFile = (dir: string) =>
-    caps.reader ? undefined : setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New file',
       hint: `In folder “${basename(dir)}”`,
       label: 'File name',
@@ -463,7 +479,7 @@ export function App() {
     });
 
   const promptNewFolder = (dir: string) =>
-    caps.reader ? undefined : setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New folder',
       hint: `In folder “${basename(dir)}”`,
       label: 'Folder name',
@@ -479,7 +495,7 @@ export function App() {
     });
 
   const promptRename = (row: Row) =>
-    caps.reader ? undefined : setPrompt({
+    noEdit ? undefined : setPrompt({
       title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
       label: 'New name',
       initial: row.label,
@@ -490,7 +506,7 @@ export function App() {
     });
 
   const promptNewChapter = (file: string, after: number) =>
-    caps.reader ? undefined : setPrompt({
+    noEdit ? undefined : setPrompt({
       title: 'New chapter',
       hint: `After “${s.docs.get(file)?.chapters[after]?.title || 'the preamble'}” in ${basename(file)}`,
       label: 'Chapter title',
@@ -512,12 +528,12 @@ export function App() {
     if (!tab || !doc) return;
     if (tab.chapter < doc.chapters.length - 1) void ws.gotoChapter(1);
     // Moving on from the last chapter counts as leaving it, so the Editing stage's "Mark Edited?" comes first, then the dialog.
-    else if (!isReviewer) void ws.offerMarkEdited(tab.id).then(() => promptNewChapter(tab.file, tab.chapter));
+    else if (!locked) void ws.offerMarkEdited(tab.id).then(() => promptNewChapter(tab.file, tab.chapter));
   };
 
   /** Moves a chapter and keeps the tree focus on it. */
   const moveRow = async (row: Row, delta: -1 | 1) => {
-    if (caps.reader) return;
+    if (noEdit) return;
     const idx = await ws.moveChapter(row.path, row.chapter!, delta);
     if (idx !== null) setFocusKey(chapterKey(row.path, idx));
   };
@@ -546,7 +562,7 @@ export function App() {
   };
 
   const deleteRow = (row: Row) => {
-    if (caps.reader) return;
+    if (noEdit) return;
     if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
     else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
   };
@@ -635,14 +651,20 @@ export function App() {
 
   // ---- projects --------------------------------------------------------------------------
 
+  const goHomeRef = useRef<() => Promise<void>>(async () => undefined);
   const openProject = async (path: string) => {
     setShowQuick(false);
     await ws.openProject(path);
   };
+  // If the Project or Book Cadrel is showing changes to one this manuscript is not part of, go back to the list instead of leaving it open.
+  useEffect(() => {
+    if (folders && projectPath && !folderInScope(projectPath, folders)) void goHomeRef.current();
+  }, [folders, projectPath]);
   const goHome = async () => {
     setShowQuick(false);
     if (await ws.closeProject()) void reloadListing();
   };
+  goHomeRef.current = goHome;
   const changeRoot = async () => {
     const folder = await window.cadrelWrite.pickFolder();
     if (!folder) return;
@@ -682,7 +704,8 @@ export function App() {
   const manage = caps.manageProjects;
   const homeProps = {
     config: pConfig,
-    listing,
+    listing: scopedListing,
+    scope: folders && wscope ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders, hidden: Math.max(0, (listing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     shared,
@@ -1015,7 +1038,7 @@ export function App() {
           <ProjectSwitcher
             name={s.project ? s.project.meta.name : s.root?.name ?? ''}
             isProject={s.project !== null}
-            projects={caps.reader ? sharedAsSummaries(shared) : listing?.projects ?? []}
+            projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
             currentPath={s.project?.path ?? null}
             openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
@@ -1047,7 +1070,7 @@ export function App() {
               <Icon name="upload" /> Import
             </button>
           )}
-          {!caps.reader && (
+          {!noEdit && (
             <>
           <button onClick={() => promptNewFile(dirFor(null))} disabled={!s.root} title="New file (Ctrl+N)" aria-label="New file">
             <Icon name="filePlus" /> File
@@ -1095,7 +1118,7 @@ export function App() {
                 onFocusKey={setFocusKey}
                 onActivate={(r) => void activateRow(r)}
                 onToggle={(r) => void ws.toggleExpanded(r.path, r.kind === 'file')}
-                onContextMenu={(row, x, y) => !caps.reader && setMenu({ row, x, y })}
+                onContextMenu={(row, x, y) => !noEdit && setMenu({ row, x, y })}
                 onRename={promptRename}
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
@@ -1126,6 +1149,11 @@ export function App() {
       />
 
       <main className="content">
+        {closedHere && (
+          <div className="banner info" role="status">
+            This book is closed, so it is read-only here. Reopen it on Cadrel’s Projects page to edit.
+          </div>
+        )}
         {s.error && (
           <div className="banner error" role="alert">
             {s.error} <button onClick={() => ws.setError(null)}>Dismiss</button>
@@ -1195,7 +1223,7 @@ export function App() {
                       <Icon name="left" />
                     </button>
                     {tab.chapter >= doc.chapters.length - 1 ? (
-                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={isReviewer} onClick={nextOrNewChapter}>
+                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={locked} onClick={nextOrNewChapter}>
                         <Icon name="plus" />
                       </button>
                     ) : (
@@ -1229,7 +1257,7 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
-                    {!isReviewer && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
+                    {!locked && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
                       <span className="align-group" role="group" aria-label="Text alignment">
                         {([['left', 'alignLeft', 'Left'], ['center', 'alignCenter', 'Centre'], ['right', 'alignRight', 'Right'], ['justify', 'alignJustify', 'Justify']] as const).map(([a, icon, label]) => (
                           <button key={a} type="button" aria-label={`Align ${label.toLowerCase()}`} title={`Align ${label.toLowerCase()} (Ctrl+Shift+${a === 'left' ? 'L' : a === 'center' ? 'E' : a === 'right' ? 'R' : 'J'}); pick it again to remove`} onClick={() => navs.current.get(tab.id)?.format?.align(a)}>
@@ -1238,7 +1266,7 @@ export function App() {
                         ))}
                       </span>
                     )}
-                    {!isReviewer && !zone && (
+                    {!locked && !zone && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
@@ -1283,7 +1311,7 @@ export function App() {
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
-                    readOnly={isReviewer}
+                    readOnly={locked}
                     onContextMenu={
                       projectPath && caps.windowChrome
                         ? ({ x, y }) => {
@@ -1470,7 +1498,7 @@ export function App() {
     )}
     {showQuick && (
       <QuickSwitcher
-        projects={caps.reader ? sharedAsSummaries(shared) : listing?.projects ?? []}
+        projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
         currentPath={s.project?.path ?? null}
         openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}

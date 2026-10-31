@@ -5,10 +5,13 @@ import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
 import type { SharedProject } from '../shared/review/share';
 import { justLongPressed, longPressProps } from './longPress';
+import { scopedFolderOf, type ScopedFolder } from '../shared/scope';
 
 interface Props {
   config: ProjectsConfig | null;
   listing: RootListing | null;
+  /** Inside Cadrel: the Project (and Book) being shown and its manuscript folders. The listing is already narrowed to them. */
+  scope?: { title: string; folders: ScopedFolder[]; hidden: number };
   loading: boolean;
   onOpen(path: string): void;
   /** Absent where Cadrel's Projects page creates and manages projects. */
@@ -65,8 +68,9 @@ export function ProjectsHome(p: Props) {
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = all.filter((x) => x.meta.archived === showArchived && (status === 'all' || x.meta.stage?.key === status) && (q === '' || x.name.toLowerCase().includes(q) || x.meta.templateName.toLowerCase().includes(q)));
+    const place = (x: ProjectSummary) => p.scope?.folders.findIndex((f) => scopedFolderOf(x.path, [f])) ?? 0;
     return list.sort((a, b) =>
-      sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
+      p.scope && sort === 'recent' ? place(a) - place(b) : sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : sort === 'words' ? (b.words ?? -1) - (a.words ?? -1) : (b.lastEdited ?? 0) - (a.lastEdited ?? 0)
     );
   }, [all, query, sort, showArchived, status]);
 
@@ -87,8 +91,13 @@ export function ProjectsHome(p: Props) {
       <div className="home-inner">
         <header className="home-head">
           <div>
-            <h1>Projects</h1>
-            <div className="home-root">
+            <h1>{p.scope ? p.scope.title : 'Projects'}</h1>
+            {p.scope && (
+              <p className="muted small home-scope">
+                The manuscripts of this project{p.scope.hidden > 0 ? `; ${p.scope.hidden} more belong to other projects (choose the project in the rail to see them)` : ''}.
+              </p>
+            )}
+            <div className="home-root" hidden={!!p.scope}>
               <Icon name="folder" size={14} />
               <code className="path" title="Root Folder">
                 {p.config?.root ?? '…'}
@@ -159,8 +168,10 @@ export function ProjectsHome(p: Props) {
 
         {p.listing?.exists && all.length === 0 && (
           <div className="home-empty">
-            <h2>{p.onNew ? 'Start your first project' : 'Nothing to write in yet'}</h2>
-            {p.onNew ? (
+            <h2>{p.scope ? `Nothing is linked to ${p.scope.title} yet` : p.onNew ? 'Start your first project' : 'Nothing to write in yet'}</h2>
+            {p.scope ? (
+              <p className="muted">Link a manuscript to it, or add a book, on Cadrel’s Projects page.{p.scope.hidden > 0 ? ` ${p.scope.hidden} manuscript${p.scope.hidden === 1 ? '' : 's'} belong to other projects.` : ''}</p>
+            ) : p.onNew ? (
               <>
                 <p className="muted">A project is a folder with the structure you choose: manuscript, characters, research and exports. Pick a template to begin.</p>
                 <div className="template-tiles">
@@ -185,7 +196,7 @@ export function ProjectsHome(p: Props) {
             return (
               <div
                 key={x.path}
-                className={'project-card' + (x.meta.archived ? ' archived' : '')}
+                className={'project-card' + (x.meta.archived ? ' archived' : '') + (p.scope && scopedFolderOf(x.path, p.scope.folders)?.closed ? ' closed' : '')}
                 role="button"
                 tabIndex={0}
                 aria-label={`Open ${x.name}`}
@@ -213,6 +224,10 @@ export function ProjectsHome(p: Props) {
                   </button>
                 </div>
                 <div className="card-meta">
+                  {(() => {
+                    const f = p.scope ? scopedFolderOf(x.path, p.scope.folders) : undefined;
+                    return f ? <><span className="chip">{f.label}</span>{f.closed && <span className="chip">closed</span>}</> : null;
+                  })()}
                   {x.meta.stage && <StageChip stage={x.meta.stage} />}
                   <span className="muted small">{x.meta.templateName}</span>
                 </div>

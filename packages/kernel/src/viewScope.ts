@@ -96,3 +96,40 @@ export function inViewScope(t: ProjectTree, scope: Pick<ResolvedViewScope, 'proj
 
 /** True when two scopes name the same Project and Book. */
 export const sameViewScope = (a: ViewScope, b: ViewScope): boolean => a.project === b.project && a.book === b.book && (a.showClosed === true) === (b.showClosed === true);
+
+/** A module's record (a Write manuscript folder, a Market category) attached to a project, as the scope sees it. */
+export interface ScopeLink {
+  module: string;
+  /** The module's own name for the record (a folder name, a category key). */
+  ref: string;
+  /** The project it is attached to, and that project's name. */
+  projectId: string;
+  projectName: string;
+  /** Attached to the Project itself (series level), to a Book, or to something inside a Book. */
+  level: ViewLevel;
+  /** The Book it belongs to: itself for a Book, the Book above it for something inside one, null for the Project's own. */
+  bookId: string | null;
+  /** That Book's name. */
+  bookName: string | null;
+  /** It belongs to a closed Book (only listed while closed Books are being shown). */
+  closed: boolean;
+}
+
+/**
+ * The records of every module that are inside the scope, so a module can show only what belongs to the Project (and Book) without knowing the
+ * project tree: Write lists the folders, Market the categories. What is inside a hidden closed Book is left out. A record linked to several
+ * projects appears once for each one that is in scope.
+ */
+export function viewScopeLinks(t: ProjectTree, scope: ResolvedViewScope): ScopeLink[] {
+  const out: ScopeLink[] = [];
+  for (const l of t.links) {
+    if (!inViewScope(t, scope, l.projectId)) continue;
+    const level = viewLevel(t, l.projectId);
+    if (!level) continue;
+    let bookId: string | null = null;
+    if (level === 'book') bookId = l.projectId;
+    else if (level === 'inside') for (let p = getProject(t, l.projectId); p; p = p.parentId ? getProject(t, p.parentId) : undefined) if (p.parentId && getProject(t, p.parentId)?.parentId === null) bookId = p.id;
+    out.push({ module: l.module, ref: l.ref, projectId: l.projectId, projectName: getProject(t, l.projectId)?.name ?? '', level, bookId, bookName: bookId ? getProject(t, bookId)?.name ?? null : null, closed: bookId !== null && scope.closed.includes(bookId) });
+  }
+  return out;
+}

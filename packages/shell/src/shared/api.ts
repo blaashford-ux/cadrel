@@ -4,7 +4,7 @@ import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ViewScope } from '@cadrel/kernel';
+import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
@@ -802,6 +802,8 @@ export interface ScopeView extends ResolvedViewScope {
   projectName: string | null;
   /** The chosen Book's name, or null for all books. */
   bookName: string | null;
+  /** Every module's records that are inside the scope (the Write folders and Market categories of this Project and Book). */
+  links: ScopeLink[];
 }
 
 /** The Project and Book the app is showing (docs/UI-MODEL.md). One scope for the whole app: the shell's pages and the module views follow it. */

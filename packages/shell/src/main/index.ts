@@ -31,7 +31,7 @@ import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import { AI_ACCESS_FILE, accessReader, sanitizeAccess, type AiAccess } from '@cadrel/write/src/shared/agent/access';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, linksOf, NoteError, type ViewScope, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, viewScopeOf, type ViewScope, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
@@ -1051,6 +1051,10 @@ function registerShellIpc(): void {
   manageOp('setManuscript', (id: string, patch: { status?: string; notes?: string }) => manager.setManuscript(id, patch ?? {}));
   manageOp('addMissingParts', (id: string) => manager.addMissingParts(id));
   manageOp('open', async (id: string) => {
+    // Write shows only the Project and Book Cadrel is showing, so opening a manuscript from elsewhere first makes it the scope (and shows
+    // closed Books when that is what was asked for), or Write would send it straight back to the list.
+    const want = viewScopeOf((await studio.studio.read()).tree, id);
+    if (want) await scope.set({ ...want, ...(want.book && (await stages.closedBooks()).has(want.book) ? { showClosed: true } : {}) });
     await manager.open(id);
     showPage('write');
   });
