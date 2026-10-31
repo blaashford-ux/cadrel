@@ -1,4 +1,5 @@
 // Not type-checked with the shell (it imports the Worker, which needs Cloudflare's types, not the DOM ones): vitest checks it by running it.
+// Run `npm run build` in packages/shell first: this drives the BUILT app (dist), so a change to the source is not seen until it is rebuilt.
 // Drives the real built shell in Electron: Home and Dashboard, Write and Market in their own views, and the shell-level
 // behaviour (navigation, layout, isolation, persistence, the unsaved-edits close guard).
 import { execFileSync } from 'node:child_process';

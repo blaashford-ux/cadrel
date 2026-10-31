@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
@@ -8,11 +9,13 @@ import { skillsSource } from '../scripts/skills.mjs';
 import { createServer } from './server';
 import { SKILLS } from './skills.generated';
 
-const allFolders = readdirSync('skills', { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+// Paths are the package's own, so the test passes from the repo root as well as from this folder.
+const at = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
+const allFolders = readdirSync(at('skills'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 const REVIEW = ['cadrel-copy-edit', 'cadrel-developmental-edit', 'cadrel-line-edit'];
 const AUTHOR = ['cadrel-litrpg-tracker', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords', 'cadrel-premise-to-outline', 'cadrel-series-developer', 'cadrel-timeline-tracker'];
 const folders = REVIEW;
-const read = (f: string) => readFileSync(`skills/${f}/SKILL.md`, 'utf8');
+const read = (f: string) => readFileSync(at(`skills/${f}/SKILL.md`), 'utf8');
 
 describe('the skills', () => {
   it('are the three editing passes and the six authoring skills', () => {
@@ -29,7 +32,7 @@ describe('the skills', () => {
   });
 
   it('are in step with the generated prompts (run `npm run build:skills` if this fails)', () => {
-    expect(readFileSync('mcp/skills.generated.ts', 'utf8')).toBe(skillsSource());
+    expect(readFileSync(at('mcp/skills.generated.ts'), 'utf8')).toBe(skillsSource());
   });
 
   it('share one identical "Working in Cadrel Write" section, so a fix to it can’t miss a skill', () => {
@@ -54,11 +57,11 @@ describe('the skills', () => {
     expect(files('cadrel-timeline-tracker')).toEqual(['assets/timeline-view.html']);
     expect(files('cadrel-litrpg-tracker')).toEqual(['assets/chapter-record.html', 'assets/character-sheet.html', 'assets/litrpg-dashboard.html']);
     for (const t of ['cadrel-timeline-tracker/assets/timeline-view.html', 'cadrel-litrpg-tracker/assets/litrpg-dashboard.html', 'cadrel-litrpg-tracker/assets/character-sheet.html', 'cadrel-litrpg-tracker/assets/chapter-record.html']) {
-      const html = readFileSync(`skills/${t}`, 'utf8');
+      const html = readFileSync(at(`skills/${t}`), 'utf8');
       expect(html.split('__CADREL_DATA__')).toHaveLength(2);
       expect(html.replace('http://www.w3.org/2000/svg', '')).not.toMatch(/https?:\/\/|<script[^>]+src=/);
     }
-    const sheet = readFileSync('skills/cadrel-litrpg-tracker/assets/character-sheet.html', 'utf8');
+    const sheet = readFileSync(at('skills/cadrel-litrpg-tracker/assets/character-sheet.html'), 'utf8');
     expect(sheet.replace(/<!--[\s\S]*?-->/g, '')).not.toMatch(/source_quote|consistency|flag|note|declined/i);
   });
 
