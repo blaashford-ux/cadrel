@@ -164,7 +164,9 @@ The plan:
 3. **Pages, one at a time.** Write, then Market (toggle and category assignment), then Notes, Files and Planner, then Dashboard, My Books, Finance, Home.
 4. **Associations** on the Project page. *(Built: Market categories and manuscripts, each for the whole Project or one Book. People, comps and files wait for the pages that could use them.)*
 5. **Skills and tools.** Book argument, rewritten skills, tests that they save at the right level; trackers on a series ledger.
-6. **Migration, Reader per Book, docs, tests throughout.**
+6. **Migration, Reader per Book, docs, tests throughout.** *(Done. Migration: nothing is moved or copied. A project with a stage keeps it until removed; **Add first book** hands the manuscript folder to the new Book as a link, and a Book made before workflows existed is given the default workflow in the stage it had (`stages.test.ts`). Reader: an invitation shares one Write manuscript folder, which belongs to a Book, so it is per Book already; the series folder can also be shared. Every phase added tests as it was built.)*
+
+**Where things stand.** Built: 1 scope engine, 2 model, 3 pages (Write, Market, Notes, Planner, Dashboard, My Books, Home), 4 Associations (Market categories and manuscripts), 5 skills and tools, 6 migration and docs. Not built: Finance and Files follow the scope, people and comps as associations, a carried timeline ledger (the LitRPG ledger carries across Books in memory only), and one shared ledger file per series.
 
 Each phase ends in something a person can use, and none changes stored data except Phase 2 (stage rules) and *Add first book* (shown and confirmed first).
 
