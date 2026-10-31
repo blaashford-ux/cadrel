@@ -16,6 +16,8 @@ export interface FileNode {
   marked?: boolean;
   /** Another file with the same name already owns this export-settings file. */
   exportBlocked?: boolean;
+  /** A web page (.html/.htm), such as a tracker page: listed and shown, never edited. */
+  html?: boolean;
 }
 
 export interface DirNode {

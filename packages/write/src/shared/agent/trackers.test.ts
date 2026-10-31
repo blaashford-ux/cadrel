@@ -5,7 +5,7 @@ import { replay, type LitrpgEvent } from './litrpg';
 import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type ViewTemplates } from './trackers';
 import { AgentError, type AgentContext } from './tools';
 
-const templates: ViewTemplates = { timeline: '<title>__CADREL_TITLE__</title><script id="data">__CADREL_DATA__</script>', litrpg: '<script>__CADREL_DATA__</script>', sheet: '<title>__CADREL_TITLE__</title><script>__CADREL_DATA__</script>' };
+const templates: ViewTemplates = { chapter: '<title>__CADREL_TITLE__</title><script id="data">__CADREL_DATA__</script>', timeline: '<title>__CADREL_TITLE__</title><script id="data">__CADREL_DATA__</script>', litrpg: '<script>__CADREL_DATA__</script>', sheet: '<title>__CADREL_TITLE__</title><script>__CADREL_DATA__</script>' };
 const setup = () => {
   const fs = new MemoryFs();
   fs.seed('/books/Novel/.cadrel/project.json', '{}');
@@ -307,5 +307,99 @@ describe('a series: the LitRPG ledger carries across Books', () => {
     expect((sheet as { html: string }).html).toContain('"level":2'); // Book 1's level 2 carried into Book 2's chapter 1
     const saved = JSON.parse(await fs.readText('/books/Ash/Tracking/LitRPG Ledger.json'));
     expect(saved.characters.Sean.event_log).toHaveLength(2);
+  });
+});
+
+describe('the permanent record of each chapter', () => {
+  const real = {
+    ...templates,
+    chapter: '<title>__CADREL_TITLE__</title><script id="data" type="application/json">__CADREL_DATA__</script>'
+  };
+  const dataOf = (html: string) => JSON.parse(/<script id="data" type="application\/json">([\s\S]*?)<\/script>/.exec(html)![1]!);
+
+  it('logging a chapter writes its own page: what changed, and where each character stands after it', async () => {
+    const { ctx, fs } = setup();
+    const r = await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] }, { templates: real });
+    expect(r.chapter_records).toEqual(['Tracking/Chapters/Chapter 2.html', 'Tracking/Chapters/Chapter 3.html', 'Tracking/Chapters/Chapter 4.html', 'Tracking/Chapters/Chapter 5.html', 'Tracking/Chapters/Chapter 7.html', 'Tracking/Chapters/Chapter 9.html']);
+    const four = dataOf(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 4.html'));
+    expect(four).toMatchObject({ project: 'Novel', chapter: 4 });
+    expect(four.litrpg.events.map((e: { text: string }) => e.text)).toEqual(['Reached level 2', 'Spent 5 stat points: Strength +3, Agility +2']);
+    expect(four.litrpg.after[0]).toMatchObject({ name: 'Sean', level: 2, xp_total: 400 });
+    expect(four.timeline).toBeNull();
+    const nine = dataOf(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 9.html'));
+    expect(nine.litrpg.after[0].items ?? []).toEqual([]); // the Cloak was lost in this chapter
+  });
+
+  it('a chapter’s page shows where the character stood at the end of that chapter, not the end of the ledger', async () => {
+    const { ctx, fs } = setup();
+    await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] }, { templates: real });
+    const seven = dataOf(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 7.html'));
+    expect(seven.litrpg.after[0].items.map((i: { name: string }) => i.name)).toEqual(['Cloak']);
+    expect(seven.litrpg.after[0].level).toBe(2);
+  });
+
+  it('a chapter nothing was logged for has no page', async () => {
+    const { ctx, fs } = setup();
+    await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] }, { templates: real });
+    expect(await fs.stat('/books/Novel/Tracking/Chapters/Chapter 6.html')).toBeNull();
+    expect(await fs.stat('/books/Novel/Tracking/Chapters/Chapter 1.html')).toBeNull();
+  });
+
+  it('logging the timeline adds the in-story days to the chapters it narrates, in the same page', async () => {
+    const { ctx, fs } = setup();
+    await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] }, { templates: real });
+    const t = await timelineLog(ctx, 'Novel', { days: [{ day: 1, chapters: [{ chapter: 4, mode: 'full_scene' }], locations: ['Keep'], characters_present: ['Sean'], major_events: ['The trial'] }] as never }, { templates: real });
+    expect(t.chapter_records).toEqual(['Tracking/Chapters/Chapter 4.html']);
+    const four = dataOf(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 4.html'));
+    expect(four.litrpg.events).toHaveLength(2); // still there
+    expect(four.timeline.days[0]).toMatchObject({ day: '1', locations: ['Keep'], major_events: ['The trial'] });
+  });
+
+  it('is permanent: a correction writes a new version and keeps the one it replaces; an unchanged chapter is not rewritten', async () => {
+    const { ctx, fs } = setup();
+    await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: [ev('level_up', 4, { resulting_level: 3 })] }] }, { templates: real });
+    const first = await fs.readText('/books/Novel/Tracking/Chapters/Chapter 4.html');
+    // logging something else leaves chapter 4's page exactly as it was
+    const again = await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: [ev('item_gained', 6, { name: 'Cloak' })] }] }, { templates: real });
+    expect(again.chapter_records).toEqual(['Tracking/Chapters/Chapter 6.html']);
+    expect(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 4.html')).toBe(first);
+    // a correction to chapter 4 writes a new page and keeps the old one
+    const fix = await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: [{ ...ev('level_up', 4, { resulting_level: 2 }), corrects: 'e1' }] }] }, { templates: real });
+    expect(fix.chapter_records).toEqual(['Tracking/Chapters/Chapter 4.html']);
+    const now = dataOf(await fs.readText('/books/Novel/Tracking/Chapters/Chapter 4.html'));
+    expect(now.litrpg.after[0].level).toBe(2);
+    const kept = (await fs.readdir('/books/Novel/.cadrel/previous')).map((e) => e.name);
+    expect(kept.some((n) => /Chapter 4/.test(n))).toBe(true);
+  });
+
+  it('does nothing without the page template, so a caller that has none is unaffected', async () => {
+    const { ctx, fs } = setup();
+    const r = await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] });
+    expect(r).not.toHaveProperty('chapter_records');
+    expect(await fs.stat('/books/Novel/Tracking/Chapters')).toBeNull();
+  });
+
+  it('the chapters view brings a ledger logged before records existed up to date, and says what it wrote', async () => {
+    const { ctx, fs } = setup();
+    await litrpgLog(ctx, 'Novel', { characters: [{ name: 'Sean', events: sean }] }); // no records yet
+    const r = await buildTrackerView(ctx, 'Novel', { view: 'chapters' }, real);
+    expect(r).toMatchObject({ view: 'chapters', chapters_covered: 6, unchanged: 0 });
+    expect((r as { written: string[] }).written).toHaveLength(6);
+    expect(await fs.stat('/books/Novel/Tracking/Chapters/Chapter 5.html')).not.toBeNull();
+    const second = await buildTrackerView(ctx, 'Novel', { view: 'chapters' }, real);
+    expect(second).toMatchObject({ written: [], unchanged: 6 }); // nothing changed since
+    const one = await buildTrackerView(ctx, 'Novel', { view: 'chapters', as_of_chapter: 5 }, real);
+    expect(one).toMatchObject({ unchanged: 1 });
+  });
+
+  it('a Book’s page counts what the earlier Books did', async () => {
+    const fs = new MemoryFs();
+    fs.seed('/books/Ember/.cadrel/project.json', '{}');
+    fs.seed('/books/Ash/.cadrel/project.json', '{}');
+    const ctx: AgentContext = { fs, root: '/books', agent: 'claude', agentName: 'Claude' };
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: [ev('level_up', 5, { resulting_level: 7 })] }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: [ev('xp_award', 2, { amount: 50, running_total: null, xp_to_next_level: null })] }] }, { templates: real, earlier: ['Ember'] });
+    const two = dataOf(await fs.readText('/books/Ash/Tracking/Chapters/Chapter 2.html'));
+    expect(two.litrpg.after[0].level).toBe(7); // Book 1's ending, carried in
   });
 });

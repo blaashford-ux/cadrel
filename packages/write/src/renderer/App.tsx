@@ -25,6 +25,7 @@ import { goalFor, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
+import { HtmlView } from './HtmlView';
 import { EditBar } from './EditBar';
 import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
@@ -75,6 +76,10 @@ export function App() {
   const [ws] = useState(() => new Workspace(window.cadrelWrite));
   const s = useWorkspace(ws);
   const [filter, setFilter] = useState('');
+  /** A web page (tracker page, chapter record) shown in place of the open tab. */
+  const [page, setPage] = useState<string | null>(null);
+  const rootPath = s.root?.path;
+  useEffect(() => setPage(null), [rootPath]);
   const [focusKey, setFocusKey] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
   /** Cut / Copy / Paste / Select all for the editor, opened by press-and-hold or right-click on the text. */
@@ -496,7 +501,7 @@ export function App() {
     });
 
   const promptRename = (row: Row) =>
-    noEdit ? undefined : setPrompt({
+    noEdit || row.html ? undefined : setPrompt({
       title: row.kind === 'dir' ? 'Rename folder' : 'Rename file',
       label: 'New name',
       initial: row.label,
@@ -563,13 +568,15 @@ export function App() {
   };
 
   const deleteRow = (row: Row) => {
-    if (noEdit) return;
+    if (noEdit || row.html) return; // pages are permanent records
     if (row.kind === 'chapter') void ws.deleteChapter(row.path, row.chapter!);
     else void ws.deleteNode(row.path, row.kind === 'dir' ? 'folder' : 'file');
   };
 
   const activateRow = async (row: Row) => {
     setFocusKey(row.key);
+    if (row.kind === 'file' && row.html) return setPage(row.path);
+    setPage(null);
     if (row.kind === 'chapter') return ws.openChapter(row.path, row.chapter!);
     if (row.kind === 'dir') return row.expandable ? ws.toggleExpanded(row.path, false) : undefined;
     // A file row: open it if it has no tab, switch to its tab if it isn't the active one, and only
@@ -600,6 +607,7 @@ export function App() {
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
       ];
     }
+    if (row.kind === 'file' && row.html) return reveal;
     if (row.kind === 'file') {
       const exportItems: MenuItem[] = row.exportBlocked
         ? [{ label: 'Can’t export: another file with this name owns the export settings', disabled: true, onClick: () => undefined }]
@@ -1173,17 +1181,22 @@ export function App() {
           </div>
         )}
 
-        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => ws.activateTab(id)} onClose={(id) => void ws.closeTab(id)} />}
+        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => { setPage(null); ws.activateTab(id); }} onClose={(id) => void ws.closeTab(id)} />}
 
         <div className="panes">
-          {s.tabs.length === 0 && (
+          {page && (
+            <section className="pane report" aria-label={basename(page)}>
+              <HtmlView file={page} version={s.root} onReveal={caps.folderPicker ? () => ws.reveal(page) : undefined} />
+            </section>
+          )}
+          {!page && s.tabs.length === 0 && (
             <p className="muted pad">{s.root ? (caps.reader ? 'Select a chapter to read it.' : 'Select a chapter to edit it.') : 'Open a folder to get started.'}</p>
           )}
           {s.tabs.map((tab) => {
             const doc = s.docs.get(tab.file);
             const chapter = doc?.chapters[tab.chapter];
             if (!doc || !chapter) return null;
-            const active = tab.id === s.activeId;
+            const active = tab.id === s.activeId && !page;
             const dirty = tab.draft !== null;
             const report = reportOf(doc);
             if (report && !rawReports.has(tab.id)) {

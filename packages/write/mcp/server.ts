@@ -35,7 +35,7 @@ function viewTemplates(): ViewTemplates {
     if (!t) throw new Error(`The ${skill} skill has no ${path}.`);
     return t;
   };
-  return { timeline: asset('cadrel-timeline-tracker', 'assets/timeline-view.html'), litrpg: asset('cadrel-litrpg-tracker', 'assets/litrpg-dashboard.html'), sheet: asset('cadrel-litrpg-tracker', 'assets/character-sheet.html') };
+  return { timeline: asset('cadrel-timeline-tracker', 'assets/timeline-view.html'), litrpg: asset('cadrel-litrpg-tracker', 'assets/litrpg-dashboard.html'), sheet: asset('cadrel-litrpg-tracker', 'assets/character-sheet.html'), chapter: asset('cadrel-litrpg-tracker', 'assets/chapter-record.html') };
 }
 
 export interface ServerOptions {
@@ -358,7 +358,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'litrpg_log',
     {
       description:
-        'Append mechanics events (levels, XP, stats, class, skills, items, titles, companions) to the project\'s LitRPG ledger, creating it on first use. Events are validated (a bad one saves nothing and says which), kept in chapter order, each character is replayed from the log, and the arithmetic checks run. Returns what changed and any new flags.',
+        'Append mechanics events (levels, XP, stats, class, skills, items, titles, companions) to the project\'s LitRPG ledger, creating it on first use. Events are validated (a bad one saves nothing and says which), kept in chapter order, each character is replayed from the log, and the arithmetic checks run. Returns what changed and any new flags. Each chapter you log also gets a permanent page of its own, Tracking/Chapters/Chapter N.html (what changed in it, and where each character stands after it); a later correction writes a new version and keeps the old one.',
       inputSchema: {
         project,
         book,
@@ -369,7 +369,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: write,
     },
-    (a) => run(async (c) => litrpgLog(c, await ref(a, 'book', true), a as never))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return litrpgLog(c, f, a as never, { templates: viewTemplates(), earlier: await o.earlier?.(f) }); })()
   );
   server.registerTool(
     'litrpg_state',
@@ -384,7 +384,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'timeline_log',
     {
       description:
-        'Merge what the text says about in-story days into the project\'s timeline ledger, creating it on first use: chapters on each day, locations, characters, events, and every elapsed-time or calendar statement with its exact quote. Lists grow and duplicates are ignored, so send only what is new. The chronology checks run and new flags come back.',
+        'Merge what the text says about in-story days into the project\'s timeline ledger, creating it on first use: chapters on each day, locations, characters, events, and every elapsed-time or calendar statement with its exact quote. Lists grow and duplicates are ignored, so send only what is new. The chronology checks run and new flags come back. Each chapter the days mention also gets its permanent page, Tracking/Chapters/Chapter N.html, with the in-story days it narrates.',
       inputSchema: {
         project,
         book,
@@ -414,7 +414,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: write,
     },
-    (a) => run(async (c) => timelineLog(c, await ref(a, 'book', true), a as never))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return timelineLog(c, f, a as never, { templates: viewTemplates(), earlier: await o.earlier?.(f) }); })()
   );
   server.registerTool(
     'check_tracker',
@@ -429,14 +429,14 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'build_tracker_view',
     {
       description:
-        'Draw a ledger as a self-contained HTML page and save it in the project\'s Tracking folder: "timeline" (day ribbon, chapter map, progression chart, flags), "litrpg" (dashboard with an as-of-chapter slider), or "character_sheet" (a printable sheet that shows only known values and no notes; optionally as of a chapter). ' +
+        'Draw a ledger as a self-contained HTML page and save it in the project\'s Tracking folder: "timeline" (day ribbon, chapter map, progression chart, flags), "litrpg" (dashboard with an as-of-chapter slider), "character_sheet" (a printable sheet that shows only known values and no notes; optionally as of a chapter), or "chapters" (the permanent record of each chapter, Tracking/Chapters/Chapter N.html; litrpg_log and timeline_log write these as they go, so use this only to bring up to date a ledger logged before they existed, or one chapter with as_of_chapter). ' +
         'Set return_html to get the page itself back, to show it as an artifact; otherwise only the saved path comes back.',
       inputSchema: {
         project,
         book,
-        view: z.enum(['timeline', 'litrpg', 'character_sheet']),
+        view: z.enum(['timeline', 'litrpg', 'character_sheet', 'chapters']),
         character: z.string().optional().describe('For a character sheet: the character\'s name, or "all".'),
-        as_of_chapter: z.number().int().min(0).optional().describe('For a character sheet: the state as of this chapter.'),
+        as_of_chapter: z.number().int().min(0).optional().describe('For a character sheet: the state as of this chapter. For "chapters": write just this chapter\'s record.'),
         return_html: z.boolean().optional(),
       },
       annotations: write,

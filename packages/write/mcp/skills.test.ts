@@ -52,8 +52,8 @@ describe('the skills', () => {
   it('give each tracker its page templates, and the pages show only what the skill says they do', () => {
     const files = (n: string) => Object.keys(SKILLS.find((s) => s.name === n)!.files).sort();
     expect(files('cadrel-timeline-tracker')).toEqual(['assets/timeline-view.html']);
-    expect(files('cadrel-litrpg-tracker')).toEqual(['assets/character-sheet.html', 'assets/litrpg-dashboard.html']);
-    for (const t of ['cadrel-timeline-tracker/assets/timeline-view.html', 'cadrel-litrpg-tracker/assets/litrpg-dashboard.html', 'cadrel-litrpg-tracker/assets/character-sheet.html']) {
+    expect(files('cadrel-litrpg-tracker')).toEqual(['assets/chapter-record.html', 'assets/character-sheet.html', 'assets/litrpg-dashboard.html']);
+    for (const t of ['cadrel-timeline-tracker/assets/timeline-view.html', 'cadrel-litrpg-tracker/assets/litrpg-dashboard.html', 'cadrel-litrpg-tracker/assets/character-sheet.html', 'cadrel-litrpg-tracker/assets/chapter-record.html']) {
       const html = readFileSync(`skills/${t}`, 'utf8');
       expect(html.split('__CADREL_DATA__')).toHaveLength(2);
       expect(html.replace('http://www.w3.org/2000/svg', '')).not.toMatch(/https?:\/\/|<script[^>]+src=/);

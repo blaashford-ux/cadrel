@@ -43,6 +43,8 @@ If these tools aren't available, keep the ledger in the shape below in a file or
 
 ## Consistency checking
 
+`timeline_log` also writes `Tracking/Chapters/Chapter N.html` for each chapter it touched, with that chapter's in-story day. The same page also carries what the mechanics ledger recorded for it, so there is one permanent page per chapter. An unchanged chapter is not rewritten; a changed one keeps its old version in the project's history.
+
 `timeline_log` and `check_tracker` raise these automatically, as flags with both quotes and chapter numbers:
 
 1. **overlapping_days:** chapters that run backwards through the days (unless marked as a flashback), or a stated number of days that disagrees with the day numbers it sits between.

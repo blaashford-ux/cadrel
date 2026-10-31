@@ -22,6 +22,7 @@ import {
   type LedgerFlag,
   type LitrpgLedger,
 } from './litrpg';
+import { chapterRecordModel, chapterRecordPath, chaptersOf } from './chapterRecords';
 import { readJsonFile, saveToolFile } from './projectFiles';
 import {
   chapterAsOfDay,
@@ -54,6 +55,8 @@ export interface ViewTemplates {
   timeline: string;
   litrpg: string;
   sheet: string;
+  /** The page for one chapter's permanent record (see chapterRecords.ts). */
+  chapter: string;
 }
 
 const projectTitle = (ctx: AgentContext, project: string) => project.replace(/^Shared With Me\//, '');
@@ -76,6 +79,40 @@ async function loadEarlier(ctx: AgentContext, earlier: string[] | undefined): Pr
   }
   return out;
 }
+/**
+ * Writes the permanent record of each of these chapters (`Tracking/Chapters/Chapter N.html`) from the ledgers as they now stand: what was
+ * logged for the chapter and where each character stands after it (with the earlier Books in front), and the in-story days it narrates. A record
+ * is only rewritten when it would change, and the version it replaces is kept (saveToolFile), so nothing once recorded is ever lost.
+ * Returns the files written. Does nothing without the page template.
+ */
+async function writeChapterRecords(ctx: AgentContext, dir: string, project: string, chapters: number[], templates: ViewTemplates | undefined, earlier: string[] | undefined): Promise<string[]> {
+  if (!templates?.chapter) return [];
+  const own = await loadLitrpg(ctx, dir, project);
+  const before = await loadEarlier(ctx, earlier);
+  const litrpg = own.existed || before.length ? (before.length ? carryLedger(own.ledger, before) : own.ledger) : null;
+  const tl = await loadTimeline(ctx, dir, project);
+  const timeline = tl.existed ? tl.ledger : null;
+  const title = projectTitle(ctx, project);
+  const now = new Date().toISOString();
+  const written: string[] = [];
+  for (const chapter of [...new Set(chapters)].filter((c) => c > 0).sort((a, b) => a - b)) {
+    const rel = chapterRecordPath(chapter);
+    const old = await ctx.fs.readText(`${dir}/${rel}`).catch(() => null);
+    const at = old ? /"recorded_at":"([^"]+)"/.exec(old)?.[1] : undefined;
+    const draw = (stamp: string) => {
+      const model = chapterRecordModel({ project: title, chapter, litrpg, timeline, now: stamp });
+      return model ? renderView(templates.chapter, `${title} Chapter ${chapter} record`, model) : null;
+    };
+    const same = at ? draw(at) : null;
+    if (same !== null && same === old) continue; // nothing about this chapter changed
+    const html = draw(now);
+    if (html === null) continue; // neither ledger says anything about it
+    await saveToolFile(ctx, dir, rel, html);
+    written.push(rel);
+  }
+  return written;
+}
+
 async function loadTimeline(ctx: AgentContext, dir: string, project: string): Promise<{ ledger: TimelineLedger; existed: boolean }> {
   const raw = await readJsonFile<unknown>(ctx, dir, TRACKER_PATHS.timeline);
   return { ledger: normalizeTimeline(raw, projectTitle(ctx, project)), existed: raw !== null };
@@ -105,7 +142,7 @@ export interface LitrpgLogInput {
  * Appends events to the mechanics ledger (creating it on first use), recomputes each character's state from the log, runs the
  * arithmetic checks, and reports only what changed. Nothing is saved if any event is invalid, so a batch is all or nothing.
  */
-export function litrpgLog(ctx: AgentContext, project: string, input: LitrpgLogInput) {
+export function litrpgLog(ctx: AgentContext, project: string, input: LitrpgLogInput, opts: { templates?: ViewTemplates; earlier?: string[] } = {}) {
   const chars = input.characters ?? [];
   if (!Array.isArray(chars) || (chars.length === 0 && !input.flags?.length && !input.resolve_flags?.length)) throw new AgentError('Give characters: a list of { name, events }, where each event is { type, chapter, details }.');
   if (chars.length > TRACKER_LIMITS.charactersPerCall) throw new AgentError(`At most ${TRACKER_LIMITS.charactersPerCall} characters per call.`);
@@ -132,8 +169,10 @@ export function litrpgLog(ctx: AgentContext, project: string, input: LitrpgLogIn
     ledger.meta.last_updated_chapter = Math.max(ledger.meta.last_updated_chapter, maxChapter, input.last_updated_chapter ?? 0);
     refresh(ledger);
     await saveToolFile(ctx, dir, TRACKER_PATHS.litrpg, json(ledger));
+    const records = await writeChapterRecords(ctx, dir, project, entries.flatMap((e) => e.events.map((x) => x.chapter)), opts.templates, opts.earlier);
     return {
       ledger: TRACKER_PATHS.litrpg,
+      ...(records.length ? { chapter_records: records } : {}),
       last_updated_chapter: ledger.meta.last_updated_chapter,
       changes: deltas,
       new_flags: [...found, ...mine],
@@ -187,7 +226,7 @@ export interface TimelineLogInput {
 }
 
 /** Merges what the text says about days into the timeline ledger (creating it on first use) and runs the checks. All or nothing. */
-export function timelineLog(ctx: AgentContext, project: string, input: TimelineLogInput) {
+export function timelineLog(ctx: AgentContext, project: string, input: TimelineLogInput, opts: { templates?: ViewTemplates; earlier?: string[] } = {}) {
   const days = input.days ?? [];
   if (!Array.isArray(days) || (days.length === 0 && !input.flags?.length && !input.resolve_flags?.length)) throw new AgentError('Give days: a list of day entries, each with a "day" and the chapters, claims and events the text gives for it.');
   if (days.length > TRACKER_LIMITS.daysPerCall) throw new AgentError(`At most ${TRACKER_LIMITS.daysPerCall} days per call.`);
@@ -206,8 +245,10 @@ export function timelineLog(ctx: AgentContext, project: string, input: TimelineL
     const maxChapter = Math.max(0, ...Object.values(ledger.days).flatMap((d) => d.chapters.map((c) => c.chapter)));
     ledger.meta.last_updated_chapter = Math.max(ledger.meta.last_updated_chapter, maxChapter, input.last_updated_chapter ?? 0);
     await saveToolFile(ctx, dir, TRACKER_PATHS.timeline, json(ledger));
+    const records = await writeChapterRecords(ctx, dir, project, days.flatMap((d) => (d.chapters ?? []).map((c) => c.chapter)), opts.templates, opts.earlier);
     return {
       ledger: TRACKER_PATHS.timeline,
+      ...(records.length ? { chapter_records: records } : {}),
       last_updated_chapter: ledger.meta.last_updated_chapter,
       days_updated: [...new Set(touched)],
       days_tracked: orderedDays(ledger).length,
@@ -246,7 +287,7 @@ export function checkTracker(ctx: AgentContext, project: string, tracker: 'litrp
 // ---- views -----------------------------------------------------------------------------------
 
 export interface BuildViewInput {
-  view: 'timeline' | 'litrpg' | 'character_sheet';
+  view: 'timeline' | 'litrpg' | 'character_sheet' | 'chapters';
   character?: string;
   as_of_chapter?: number;
   return_html?: boolean;
@@ -263,6 +304,16 @@ export function buildTrackerView(ctx: AgentContext, project: string, input: Buil
       await saveToolFile(ctx, dir, file, html);
       return { view: input.view, file, size: html.length, ...extra, ...(input.return_html ? { html } : {}) };
     };
+    if (input.view === 'chapters') {
+      // Writes (or brings up to date) the record of every chapter the ledgers cover, or just `as_of_chapter`. For ledgers logged before records existed.
+      const own = await loadLitrpg(ctx, dir, project);
+      const tl = await loadTimeline(ctx, dir, project);
+      const all = chaptersOf(own.existed ? own.ledger : null, tl.existed ? tl.ledger : null);
+      if (!all.length) throw new AgentError(`There is nothing to record in "${project}" yet. Log chapters with litrpg_log or timeline_log first.`);
+      const wanted = input.as_of_chapter !== undefined ? [input.as_of_chapter] : all;
+      const files = await writeChapterRecords(ctx, dir, project, wanted, templates, earlier);
+      return { view: input.view, chapters_covered: all.length, written: files, unchanged: wanted.length - files.length };
+    }
     if (input.view === 'timeline') {
       const { ledger, existed } = await loadTimeline(ctx, dir, project);
       if (!existed || orderedDays(ledger).length === 0) throw new AgentError(`There is no timeline to draw in "${project}" yet. Log days with timeline_log first.`);

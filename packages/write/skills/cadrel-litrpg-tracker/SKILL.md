@@ -53,6 +53,8 @@ For each POV or named character with a system Interface (or otherwise explicit m
 
 ## Consistency checking
 
+**A permanent page for every chapter.** Each `litrpg_log` also writes `Tracking/Chapters/Chapter N.html` for each chapter it touched: what changed (the events) and where each character stands after it. These are the permanent record. A chapter whose record would not change is left alone; if a later log changes a chapter, the page is rewritten and the old version is kept in the project's history. For chapters logged before this existed, call `build_tracker_view` with `view: "chapters"` to write them all (or only `as_of_chapter`). Cadrel Write and Cadrel Reader list and show these pages.
+
 `litrpg_log` and `check_tracker` raise these automatically, from the numbers:
 
 1. **arithmetic_mismatch:** a stated XP total that isn't the previous total plus this award; stat points that don't add up to the number allocated; an attribute total that isn't its previous value plus the points it was given.
