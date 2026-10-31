@@ -162,7 +162,7 @@ The plan:
 1. **Scope engine.** Audit the pages' existing filters. One scope (Studio, Project, Book) in the shell, the rail switcher, persistence per Studio, and a way to pass it to Write, Market and Finance. No page changes yet.
 2. **Model.** Stage on Books only; series versus book kinds and templates; Add / Close Book; *Add first book* for existing projects.
 3. **Pages, one at a time.** Write, then Market (toggle and category assignment), then Notes, Files and Planner, then Dashboard, My Books, Finance, Home.
-4. **Associations** on the Project page.
+4. **Associations** on the Project page. *(Built: Market categories and manuscripts, each for the whole Project or one Book. People, comps and files wait for the pages that could use them.)*
 5. **Skills and tools.** Book argument, rewritten skills, tests that they save at the right level; trackers on a series ledger.
 6. **Migration, Reader per Book, docs, tests throughout.**
 
@@ -175,6 +175,6 @@ Each phase ends in something a person can use, and none changes stored data exce
 3. Books may add their own series-style files; series files apply to every Book.
 4. Trackers carry across Books in a series.
 5. The assistant is told the project and book explicitly.
-6. Market categories are assigned to the Project, with an optional per-Book override (not designed here; Phase 4).
+6. Market categories are assigned to the Project, with an optional per-Book override: a category assigned to one Book shows in that Book and in the Project, not in the other Books.
 7. Existing projects without Books are left alone, with an *Add first book* action.
 8. Closed Books are hidden by default and read-only when shown.

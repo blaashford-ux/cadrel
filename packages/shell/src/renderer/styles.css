@@ -375,3 +375,5 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 .seg button { padding: 5px 12px; background: none; color: var(--fg); border: 0; border-radius: 0; }
 .seg button[aria-pressed='true'] { background: var(--selected); color: var(--accent); font-weight: 600; }
 .seg button:hover:not([aria-pressed='true']) { background: var(--raised); }
+.associations h4 { margin: 16px 0 4px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted, inherit); }
+.associations .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }

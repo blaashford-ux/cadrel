@@ -546,8 +546,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
 
     // Link the manuscript to the book, and the book's words roll up (the template manuscript is short, so just check the link and the picker).
     await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
-    await shell.getByLabel('Link to this project').selectOption('write:Dragon Rider 1');
-    await shell.getByRole('button', { name: 'Link', exact: true }).click();
+    await shell.getByLabel('Manuscript to attach').selectOption('Dragon Rider 1');
+    await shell.getByRole('button', { name: 'Attach', exact: true }).click();
     await shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
 
     // A note on the book appears on the series (its subprojects count) and on the Notes page.

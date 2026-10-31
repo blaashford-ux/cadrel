@@ -9,6 +9,7 @@ import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
 import { WorkCard } from './WorkCard';
+import { Associations } from './Associations';
 import { useScope } from './useScope';
 
 const api = window.cadrel.studio;
@@ -282,18 +283,6 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
   const nameOf = (id: string) => getProject(tree, id)?.name ?? null;
   const level = viewLevel(tree, p.id);
 
-  const takenWrite = new Set(tree.links.filter((l) => l.module === 'write').map((l) => l.ref));
-  const ownMarket = new Set(mine.filter((l) => l.module === 'market').map((l) => l.ref)); // a category can be in several projects; only this project's own are not offered again
-  const freeWrite = (overview?.write.projects ?? []).filter((w) => !takenWrite.has(w.name));
-  const freeMarket = (overview?.market.categories ?? []).filter((c) => !ownMarket.has(c.key));
-  const [pick, setPick] = useState('');
-  useEffect(() => setPick(''), [p.id]);
-
-  const link = () => {
-    const [module, ref] = [pick.slice(0, pick.indexOf(':')), pick.slice(pick.indexOf(':') + 1)];
-    if (module && ref) void act(() => api.link(p.id, module, ref)).then(() => setPick(''));
-  };
-  const labelOf = (module: string, ref: string) => (module === 'market' ? overview?.market.categories.find((c) => c.key === ref)?.name ?? ref : ref);
 
   return (
     <div className="project-detail">
@@ -367,39 +356,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
         )}
       </section>
 
-      <section className="card" aria-labelledby="pd-links">
-        <h3 id="pd-links">What belongs to it</h3>
-        {mine.length === 0 && <p className="muted">Nothing is linked yet. Link a manuscript from Write or a category from Market, and it counts toward this project.</p>}
-        <ul className="links">
-          {mine.map((l) => {
-            const w = l.module === 'write' ? overview?.write.projects.find((x) => x.name === l.ref) : undefined;
-            const gone = l.module === 'write' ? !!overview?.write.ok && !w : l.module === 'market' ? !!overview?.market.ok && !!overview.market.libraryRoot && !overview.market.categories.some((c) => c.key === l.ref) : false;
-            return (
-              <li key={`${l.module}:${l.ref}`}>
-                <span className="chip">{l.module === 'write' ? 'Manuscript' : 'Market category'}</span>
-                <strong>{labelOf(l.module, l.ref)}</strong>
-                {w && <span className="muted small">{w.stage ? `${w.stage} · ` : null}{w.words === null ? 'no active manuscript' : `${formatWords(w.words)} words`}</span>}
-                {gone && <span className="warn small">not found any more</span>}
-                {l.module === 'market' && (() => {
-                  const others = tree.links.filter((x) => x.module === 'market' && x.ref === l.ref && x.projectId !== p.id).map((x) => nameOf(x.projectId)).filter((n): n is string => !!n);
-                  return others.length ? <span className="muted small">also in {others.join(', ')}</span> : null;
-                })()}
-                <button type="button" className="link" onClick={() => onGo(l.module as ModuleId)}>Open {l.module === 'write' ? 'Write' : 'Market'}</button>
-                <button type="button" className="quiet" onClick={() => void act(() => api.unlink(l.module, l.ref, p.id))}>Unlink</button>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="row">
-          <select value={pick} onChange={(e) => setPick(e.target.value)} aria-label="Link to this project">
-            <option value="">Link a manuscript or category…</option>
-            {freeWrite.length > 0 && <optgroup label="Manuscripts (Write)">{freeWrite.map((w) => <option key={w.name} value={`write:${w.name}`}>{w.name}</option>)}</optgroup>}
-            {freeMarket.length > 0 && <optgroup label="Market categories">{freeMarket.map((c) => <option key={c.key} value={`market:${c.key}`}>{c.name}</option>)}</optgroup>}
-          </select>
-          <button type="button" disabled={!pick} onClick={link}>Link</button>
-        </div>
-        <p className="muted small">A manuscript belongs to one project: linking it here moves it from wherever it was. A Market category can belong to several projects (books in the same genre share one), so linking it here keeps it in the others.</p>
-      </section>
+      <Associations p={p} studio={studio} overview={overview} act={act} onGo={onGo} onSelect={onSelect} />
 
       <section className="card" aria-labelledby="pd-notes">
         <h3 id="pd-notes">Notes{subs.length ? ' (this project and its subprojects)' : ''}</h3>
