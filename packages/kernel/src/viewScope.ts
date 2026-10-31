@@ -133,3 +133,16 @@ export function viewScopeLinks(t: ProjectTree, scope: ResolvedViewScope): ScopeL
   }
   return out;
 }
+
+/**
+ * The Books that are closed: not archived, directly under a Project, and in a stage whose category is Done. One definition for the app and
+ * the assistant, so they cannot disagree about what is closed.
+ */
+export function closedBookIds(t: ProjectTree, workflows: { id: string; stages: { key: string; category: string }[] }[]): Set<string> {
+  const out = new Set<string>();
+  for (const p of t.projects) {
+    if (p.status === 'archived' || !p.workflowId || viewLevel(t, p.id) !== 'book') continue;
+    if (workflows.find((w) => w.id === p.workflowId)?.stages.find((s) => s.key === p.stage)?.category === 'done') out.add(p.id);
+  }
+  return out;
+}

@@ -30,6 +30,8 @@ import { StudioService, dbAccess } from '@cadrel/service';
 import { openStudioDb, type StudioDb } from '@cadrel/store';
 import { RECORDS_INSTRUCTIONS } from './modules/records.js';
 import { watchLifecycle } from './lifecycle.js';
+import { closedBookIds } from '@cadrel/kernel';
+import { makeProjectResolver } from './scope.js';
 
 const VERSION = process.env.CADREL_VERSION || '0.0.0';
 
@@ -73,14 +75,20 @@ const studioPath = studioFile(process.argv.slice(2), process.env);
 const studio = new Studio(studioPath);
 /** The profile sits beside the studio file, in a folder of its own. */
 const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
-const studioFor = (w: Found<{ options: WriteOptions }>) => studioModule({ studio, user, ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+type ClosedBooks = () => Promise<ReadonlySet<string>>;
+const studioFor = (w: Found<{ options: WriteOptions }>, closed?: ClosedBooks) => studioModule({ studio, user, ...(closed ? { closed } : {}), ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+/** Write's options with the Project and Book resolution of the studio's tree (which folder a Project or Book means, what came before a Book). */
+const scoped = (o: WriteOptions, closed?: ClosedBooks): WriteOptions => {
+  const r = makeProjectResolver({ studio, closed });
+  return { ...o, resolve: r.resolve, earlier: r.earlier };
+};
 
 /**
  * The Studio's shared records (tasks, sign-offs, decisions, books, files), when the app says where they are and who the assistant acts for
  * (--records <file> --person <id> --studio-id <id>). Without all three these tools are left out. With `open: false` (the handshake) nothing is opened.
  * The assistant acts as that person under their role's permissions and needs `assistant.use`; it never migrates the file (the app does).
  */
-async function findRecords(open: boolean): Promise<Found<{ module: McpModule; close(): void }>> {
+async function findRecords(open: boolean): Promise<Found<{ module: McpModule; close(): void; closedBooks?: ClosedBooks }>> {
   const file = flag('records');
   const person = flag('person');
   const studioId = flag('studio-id');
@@ -95,7 +103,9 @@ async function findRecords(open: boolean): Promise<Found<{ module: McpModule; cl
     db = await openStudioDb(file);
     const service = new StudioService({ db, studioId, access: dbAccess(db, studioId) });
     const d = db;
-    return { ok: true, value: { module: recordsModule({ service, personId: person, studio, studioId, db }), close: () => d.close() } };
+    // The Books in a Done stage, by the acting person's reading of the workflows (the same rule the app uses to hide and lock them).
+    const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));
+    return { ok: true, value: { module: recordsModule({ service, personId: person, studio, studioId, db }), close: () => d.close(), closedBooks } };
   } catch (e) {
     db?.close();
     return { ok: false, reason: `the records could not be opened (${e instanceof Error ? e.message : String(e)})` };
@@ -204,7 +214,7 @@ async function main(): Promise<void> {
       ...write.value.options,
       token,
       port: Number(flag('port') ?? 47831),
-      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), writeModule(o), ...(market?.ok ? [market.value.module] : [])] })
+      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write, records.ok ? records.value.closedBooks : undefined), ...(records.ok ? [records.value.module] : []), writeModule(scoped(o, records.ok ? records.value.closedBooks : undefined)), ...(market?.ok ? [market.value.module] : [])] })
     });
     watchLifecycle({ retireFile: retireFile(), onStop: (why) => stopNow(why, () => { records.ok && records.value.close(); market?.ok && market.value.close(); }) });
     say(`Cadrel AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)`);
@@ -218,7 +228,8 @@ async function main(): Promise<void> {
   if (!write.ok) say(`Writing tools left out: ${write.reason}.`);
   if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);
   if (!market.ok) say(`Market tools left out: ${market.reason}.`);
-  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(write.value.options)] : []), ...(market.ok ? [market.value.module] : [])] });
+  const closed = records.ok ? records.value.closedBooks : undefined;
+  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write, closed), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(scoped(write.value.options, closed))] : []), ...(market.ok ? [market.value.module] : [])] });
   await server.connect(new StdioServerTransport());
   const closeAll = () => {
     if (market.ok) market.value.close();

@@ -230,3 +230,82 @@ describe('check_keywords', () => {
     expect(checkKeywords(good.slice(0, 6)).problems[0]).toMatchObject({ slot: null });
   });
 });
+
+describe('a series: the LitRPG ledger carries across Books', () => {
+  const twoBooks = () => {
+    const fs = new MemoryFs();
+    fs.seed('/books/Ember/.cadrel/project.json', '{}');
+    fs.seed('/books/Ash/.cadrel/project.json', '{}');
+    const ctx: AgentContext = { fs, root: '/books', agent: 'claude', agentName: 'Claude' };
+    return { fs, ctx };
+  };
+  const book1 = [ev('class_assigned', 1, { name: 'Warden' }), ev('xp_award', 5, { amount: 400, running_total: 400, xp_to_next_level: 600 }), ev('level_up', 6, { resulting_level: 2 })];
+  const book2 = [ev('xp_award', 3, { amount: 600, running_total: 1000, xp_to_next_level: 800 }), ev('level_up', 4, { resulting_level: 3 })];
+
+  it('each Book keeps its own ledger, logged where the Book is', async () => {
+    const { ctx, fs } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: book1 }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: book2 }] });
+    const ash = JSON.parse(await fs.readText('/books/Ash/Tracking/LitRPG Ledger.json'));
+    expect(ash.characters.Sean.event_log).toHaveLength(2); // nothing from Book 1 is copied into it
+  });
+
+  it('a Book starts where the one before left the character, and answers as of its own chapters', async () => {
+    const { ctx } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: book1 }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: book2 }] });
+    const alone = (await litrpgState(ctx, 'Ash', { character: 'Sean', as_of_chapter: 2 })).characters[0].state;
+    expect(alone.level).toBeNull(); // on its own, Book 2 knows nothing of Book 1
+    const carried = (await litrpgState(ctx, 'Ash', { character: 'Sean', as_of_chapter: 2 }, ['Ember'])).characters[0].state;
+    expect(carried).toMatchObject({ level: 2, xp_total: 400, class: { name: 'Warden' } }); // where Book 1 ended, before Book 2's chapter 3
+    const later = (await litrpgState(ctx, 'Ash', { character: 'Sean', as_of_chapter: 4 }, ['Ember'])).characters[0].state;
+    expect(later).toMatchObject({ level: 3, xp_total: 1000 });
+  });
+
+  it('a character who only appears in an earlier Book is known in this one', async () => {
+    const { ctx } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Mira', events: [ev('level_up', 2, { resulting_level: 9 })] }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: book2 }] });
+    const all = await litrpgState(ctx, 'Ash', {}, ['Ember']);
+    expect(all.characters.map((c) => c.character).sort()).toEqual(['Mira', 'Sean']);
+    expect(all.characters.find((c) => c.character === 'Mira')!.state.level).toBe(9);
+  });
+
+  it('Book 2 can be read before it has a ledger of its own', async () => {
+    const { ctx } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: book1 }] });
+    const s = (await litrpgState(ctx, 'Ash', { character: 'Sean' }, ['Ember'])).characters[0].state;
+    expect(s.level).toBe(2);
+  });
+
+  it('the checks find a jump between Books, and never copy the earlier Book’s events or its own old flags into this Book’s file', async () => {
+    const { ctx, fs } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: book1 }] });
+    // Book 2 starts the character at level 5, though Book 1 ended with Sean at level 2.
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: [ev('level_up', 2, { resulting_level: 5 })] }] });
+    const r = await checkTracker(ctx, 'Ash', 'litrpg', ['Ember']);
+    expect(r.new_flags.map((f) => f.type)).toContain('silent_jump');
+    expect(r.new_flags.every((f) => f.chapters_involved.some((c) => c > 0))).toBe(true); // it concerns Book 2
+    const saved = JSON.parse(await fs.readText('/books/Ash/Tracking/LitRPG Ledger.json'));
+    expect(saved.characters.Sean.event_log).toHaveLength(1); // only its own event
+    expect(saved.characters.Sean.event_log.some((e: { id: string }) => e.id.startsWith('b1:'))).toBe(false);
+  });
+
+  it('a correction in an earlier Book still works when carried, and cannot reach this Book’s events', async () => {
+    const { ctx } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: [ev('level_up', 3, { resulting_level: 4 })] }] });
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: [{ ...ev('level_up', 3, { resulting_level: 2 }), corrects: 'e1' }] }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: [ev('xp_award', 1, { amount: 10, running_total: null, xp_to_next_level: null })] }] });
+    expect((await litrpgState(ctx, 'Ash', { character: 'Sean' }, ['Ember'])).characters[0].state.level).toBe(2);
+  });
+
+  it('draws a Book’s dashboard and sheet from the joined ledger without writing it into the ledger', async () => {
+    const { ctx, fs } = twoBooks();
+    await litrpgLog(ctx, 'Ember', { characters: [{ name: 'Sean', events: book1 }] });
+    await litrpgLog(ctx, 'Ash', { characters: [{ name: 'Sean', events: book2 }] });
+    const sheet = await buildTrackerView(ctx, 'Ash', { view: 'character_sheet', character: 'Sean', as_of_chapter: 1, return_html: true }, templates, ['Ember']);
+    expect((sheet as { html: string }).html).toContain('"level":2'); // Book 1's level 2 carried into Book 2's chapter 1
+    const saved = JSON.parse(await fs.readText('/books/Ash/Tracking/LitRPG Ledger.json'));
+    expect(saved.characters.Sean.event_log).toHaveLength(2);
+  });
+});

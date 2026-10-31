@@ -143,6 +143,19 @@ Not in Phase 2: a separate "series" folder template (the shipped `series` and `n
 - **My Books' Market-only list** (used where this computer has no catalogue records) has no project to filter by.
 - **Per-Book Market categories.** Categories are assigned to the Project; a Book in scope shows the Project's categories.
 
+**Phase 5 is built** (the assistant: tools and skills):
+- **Naming a Project and a Book.** Every tool that takes a `project` also takes `book`. The assistant names the Project (a name, path or id) and a Book of it (a name, or the start of one: "Book 2" finds "Book 2: Ash"; "Dragon Rider / Book 3" works too); a plain manuscript folder name from `list_projects` still works, so nothing that is not in a project is lost. It is told explicitly and the tools never follow what is open in the app.
+- **When it is unclear, the tool says what to ask.** Book-level work (manuscript, notes, outline, blurb, keywords, trackers) on a Project with several open Books answers "Dragon Rider has 2 open books (…). Say which one with `book`" and offers only open ones. With exactly one open Book (a standalone novel, or a series with one left open) that Book is the default. Series-level material (`list_project_files`, `read_project_file`, `write_project_file`, `edit_project_file`) named for the Project alone goes to the **series' own folder**; with `book` it goes to the Book's. A project that has no Books yet keeps working as one level.
+- **Closed Books are read-only to the assistant.** Reads work; notes, file writes and tracker logs are refused ("Book 1 is closed… reopen it in Cadrel"). "Closed" is the app's own rule (a Done stage), shared through `closedBookIds` in the kernel; it needs the Studio's records, which the app always passes, so a server started without them cannot tell and treats nothing as closed.
+- **`studio_projects` says what each node is** (Project or Book, its stage, closed, and the manuscript folder to use), and a new **`studio_context`** gives one Project and Book whole: the series files to read first, the Book's own files, the other Books with stages, and where new work belongs, or "ask which Book".
+- **Skills.** The series developer works at the series level and leaves `book` out. The outline, blurb and keywords skills work on one Book: they read the series files first, pass `book`, and save in the Book. The three editing passes review one Book and read the series material first (their shared section is still identical, as a test requires). The two trackers work one Book at a time. Tests pin each skill's level in its text, and the assistant tests prove where files actually land.
+- **Trackers across Books, differently from the spec.** The spec said one ledger per series. Instead each Book keeps its own ledger, and the LitRPG state, checks and views **read it with the earlier Books' in front** (their events placed at "chapter 0"), so a character starts Book 2 where Book 1 left them and a jump between Books is flagged, while logging stays per Book and nothing is copied between ledger files. This keeps every ledger and view in the format it already has. Checks over the joined ledger only keep flags that touch the Book being read. **The timeline ledger is not carried:** its day count and chapter anchors are each Book's own, and the skill says to state the starting day when days continue across Books.
+
+**Not done in Phase 5**
+- Reader invitations per Book: an invitation already shares one manuscript folder, which is a Book's, so there was nothing to change; the series folder can also be shared.
+- A carried timeline, and one shared ledger file per series.
+- Tools to add a Book or close one from the assistant (it can still organise projects with the existing studio tools; closing is a gated workflow move that stays in the app).
+
 The plan:
 
 0. **This spec and the mock.** Agree the rules.

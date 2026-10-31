@@ -6,7 +6,7 @@
  * The tree is a file (@cadrel/studio) and the workflows are records (@cadrel/service), so this joins them. Electron-free; tested in
  * test/stages.test.ts.
  */
-import { childrenOf, getProject, initialStage, linksOf, subtreeIds, viewLevel, type ProjectFacts, type StageCategory, type WorkflowDraft, type WorkflowRecord, type WorkflowUsage } from '@cadrel/kernel';
+import { childrenOf, closedBookIds, getProject, initialStage, linksOf, subtreeIds, viewLevel, type ProjectFacts, type StageCategory, type WorkflowDraft, type WorkflowRecord, type WorkflowUsage } from '@cadrel/kernel';
 import type { StudioService } from './studio';
 import type { StudioWork, StudioWorkflows } from './people';
 
@@ -112,15 +112,8 @@ export class ProjectStages {
    */
   async closedBooks(): Promise<Set<string>> {
     const wfs = this.workflows();
-    const out = new Set<string>();
-    if (!wfs) return out;
-    const list = await wfs.list();
-    const tree = (await this.studio.studio.read()).tree;
-    for (const p of tree.projects) {
-      if (p.status === 'archived' || viewLevel(tree, p.id) !== 'book' || !p.workflowId) continue;
-      if (list.find((w) => w.id === p.workflowId)?.stages.find((s) => s.key === p.stage)?.category === 'done') out.add(p.id);
-    }
-    return out;
+    if (!wfs) return new Set();
+    return closedBookIds((await this.studio.studio.read()).tree, await wfs.list());
   }
 
   /** Closes a Book: moves it to the first Done stage its workflow lets this person reach from where it is, through the gates. */

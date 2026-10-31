@@ -6,7 +6,9 @@
  */
 import {
   appendEvents,
+  carryLedger,
   dashboardModel,
+  flagsForThisBook,
   FLAG_TYPES,
   mergeFlags,
   normalizeLedger,
@@ -62,6 +64,17 @@ const safeFile = (s: string) => s.replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, '
 async function loadLitrpg(ctx: AgentContext, dir: string, project: string): Promise<{ ledger: LitrpgLedger; existed: boolean }> {
   const raw = await readJsonFile<unknown>(ctx, dir, TRACKER_PATHS.litrpg);
   return { ledger: normalizeLedger(raw, projectTitle(ctx, project)), existed: raw !== null };
+}
+/** The ledgers of the Books before this one (their folders, in order), for reading this Book's ledger with theirs in front of it. */
+async function loadEarlier(ctx: AgentContext, earlier: string[] | undefined): Promise<LitrpgLedger[]> {
+  const out: LitrpgLedger[] = [];
+  for (const folder of earlier ?? []) {
+    const dir = await projectDir(ctx, folder).catch(() => null);
+    if (!dir) continue;
+    const raw = await readJsonFile<unknown>(ctx, dir, TRACKER_PATHS.litrpg);
+    if (raw !== null) out.push(normalizeLedger(raw, projectTitle(ctx, folder)));
+  }
+  return out;
 }
 async function loadTimeline(ctx: AgentContext, dir: string, project: string): Promise<{ ledger: TimelineLedger; existed: boolean }> {
   const raw = await readJsonFile<unknown>(ctx, dir, TRACKER_PATHS.timeline);
@@ -130,10 +143,17 @@ export function litrpgLog(ctx: AgentContext, project: string, input: LitrpgLogIn
   });
 }
 
-/** A character's state as of a chapter (or the end of the ledger), or as of an in-story day when the project has a timeline ledger. */
-export async function litrpgState(ctx: AgentContext, project: string, q: { character?: string; as_of_chapter?: number; as_of_day?: number | string }) {
+/**
+ * A character's state as of a chapter (or the end of the ledger), or as of an in-story day when the project has a timeline ledger. Given the
+ * folders of the Books before this one, what happened in them comes first.
+ */
+export async function litrpgState(ctx: AgentContext, project: string, q: { character?: string; as_of_chapter?: number; as_of_day?: number | string }, earlier?: string[]) {
   const dir = await projectDir(ctx, project);
-  const { ledger, existed } = await loadLitrpg(ctx, dir, project);
+  const loaded = await loadLitrpg(ctx, dir, project);
+  const before = await loadEarlier(ctx, earlier);
+  // With earlier Books the ledger is read with theirs in front of it (a character starts this Book where the last one left them).
+  const ledger = before.length ? carryLedger(loaded.ledger, before) : loaded.ledger;
+  const existed = loaded.existed || before.length > 0;
   if (!existed || Object.keys(ledger.characters).length === 0) throw new AgentError(`There is no LitRPG ledger in "${project}" yet. Log the chapters with litrpg_log first.`);
   let chapter = q.as_of_chapter;
   let day: string | undefined;
@@ -201,14 +221,17 @@ export function timelineLog(ctx: AgentContext, project: string, input: TimelineL
 // ---- checking both ---------------------------------------------------------------------------
 
 /** Runs the arithmetic checks over a whole ledger, saves any flag that is new, and lists every flag still open. */
-export function checkTracker(ctx: AgentContext, project: string, tracker: 'litrpg' | 'timeline') {
+export function checkTracker(ctx: AgentContext, project: string, tracker: 'litrpg' | 'timeline', earlier?: string[]) {
   if (tracker !== 'litrpg' && tracker !== 'timeline') throw new AgentError('tracker must be "litrpg" or "timeline".');
   return serial(`${ctx.root}/${project}`, async () => {
     const dir = await projectDir(ctx, project);
     if (tracker === 'litrpg') {
       const { ledger, existed } = await loadLitrpg(ctx, dir, project);
       if (!existed) throw new AgentError(`There is no LitRPG ledger in "${project}" yet.`);
-      const added = mergeFlags(ledger, runChecks(ledger));
+      // With earlier Books the checks run over the joined ledger (so a jump between Books is found), and only what concerns this Book is kept.
+      const before = await loadEarlier(ctx, earlier);
+      const found = before.length ? flagsForThisBook(runChecks(carryLedger(ledger, before))) : runChecks(ledger);
+      const added = mergeFlags(ledger, found);
       if (added.length) await saveToolFile(ctx, dir, TRACKER_PATHS.litrpg, json(ledger));
       return { tracker, new_flags: added, open_flags: ledger.consistency_flags.filter((f) => f.status === 'open'), covers_through_chapter: ledger.meta.last_updated_chapter };
     }
@@ -233,7 +256,7 @@ export interface BuildViewInput {
  * Draws a tracker as a self-contained HTML page, saves it in the project's Tracking folder, and (on request) returns the page
  * itself so it can be shown as an artifact. A character sheet shows only values the book has given, and no notes.
  */
-export function buildTrackerView(ctx: AgentContext, project: string, input: BuildViewInput, templates: ViewTemplates) {
+export function buildTrackerView(ctx: AgentContext, project: string, input: BuildViewInput, templates: ViewTemplates, earlier?: string[]) {
   return serial(`${ctx.root}/${project}`, async () => {
     const dir = await projectDir(ctx, project);
     const done = async (file: string, html: string, extra: Record<string, unknown> = {}) => {
@@ -244,10 +267,14 @@ export function buildTrackerView(ctx: AgentContext, project: string, input: Buil
       const { ledger, existed } = await loadTimeline(ctx, dir, project);
       if (!existed || orderedDays(ledger).length === 0) throw new AgentError(`There is no timeline to draw in "${project}" yet. Log days with timeline_log first.`);
       const mechanics = await loadLitrpg(ctx, dir, project);
-      const model = timelineModel(ledger, mechanics.existed ? mechanics.ledger : null);
+      const before = await loadEarlier(ctx, earlier);
+      const model = timelineModel(ledger, mechanics.existed || before.length ? (before.length ? carryLedger(mechanics.ledger, before) : mechanics.ledger) : null);
       return done(TRACKER_PATHS.timelineView, renderView(templates.timeline, `${model.project} Timeline`, model));
     }
-    const { ledger, existed } = await loadLitrpg(ctx, dir, project);
+    const own = await loadLitrpg(ctx, dir, project);
+    const before = await loadEarlier(ctx, earlier);
+    const ledger = before.length ? carryLedger(own.ledger, before) : own.ledger;
+    const existed = own.existed || before.length > 0;
     const names = Object.keys(ledger.characters);
     if (!existed || names.length === 0) throw new AgentError(`There is no LitRPG ledger in "${project}" yet. Log the chapters with litrpg_log first.`);
     if (input.view === 'litrpg') {

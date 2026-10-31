@@ -97,3 +97,51 @@ describe('the skills', () => {
     await client.close();
   });
 });
+
+describe('the skills know the series level from the Book level', () => {
+  it('the series developer works at the series level: the project, never a Book', () => {
+    const t = read('cadrel-series-developer');
+    expect(t).toMatch(/work at the series level/);
+    expect(t).toMatch(/leave `book` out/);
+    expect(t).toMatch(/series' own folder, not in one Book's/);
+  });
+
+  it('the Book-level authoring skills read the series first, pass the Book, and save in the Book', () => {
+    for (const f of ['cadrel-premise-to-outline', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords']) {
+      const t = read(f);
+      expect(t, f).toMatch(/this work is for \*\*one Book\*\*/);
+      expect(t, f).toMatch(/read first/);
+      expect(t, f).toMatch(/starting with the series/);
+      expect(t, f).toMatch(/pass the same `book`/);
+      expect(t, f).toMatch(/closed Book is read-only/);
+    }
+  });
+
+  it('the trackers work on one Book at a time, and the LitRPG one carries the earlier Books forward', () => {
+    for (const f of ['cadrel-litrpg-tracker', 'cadrel-timeline-tracker']) expect(read(f), f).toMatch(/pass `book` on every call/);
+    expect(read('cadrel-litrpg-tracker')).toMatch(/earlier Books' ledgers in front/);
+    expect(read('cadrel-timeline-tracker')).toMatch(/Nothing is carried between Books automatically/);
+  });
+
+  it('the editing passes review one Book and read the series material first', () => {
+    for (const f of REVIEW) {
+      const t = read(f);
+      expect(t, f).toMatch(/one Book's manuscript/);
+      expect(t, f).toMatch(/`studio_context`/);
+      expect(t, f).toMatch(/pass `book` on every call/);
+      expect(t, f).toMatch(/closed Book can be read but not given notes/);
+    }
+  });
+
+  it('every tool that names a project also takes a book', async () => {
+    const server = createServer({ fs: new MemoryFs(), root: '/books' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'x', version: '1' });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    const tools = (await client.listTools()).tools;
+    const withProject = tools.filter((t) => 'project' in ((t.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}));
+    expect(withProject.length).toBeGreaterThanOrEqual(20);
+    for (const t of withProject) expect((t.inputSchema as { properties: Record<string, unknown> }).properties, t.name).toHaveProperty('book');
+    await client.close();
+  });
+});

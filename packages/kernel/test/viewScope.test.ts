@@ -224,3 +224,24 @@ describe('the records inside a scope', () => {
     expect(viewScopeLinks(emptyTree(), resolveViewScope(emptyTree(), null))).toEqual([]);
   });
 });
+
+import { closedBookIds } from '../src/viewScope';
+describe('which Books are closed', () => {
+  it('a Book in a Done stage, not an archived one, not a Project or what is inside a Book', () => {
+    const s = studio();
+    let t = s.t;
+    const set = (id: string, stage: string) => (t = { ...t, projects: t.projects.map((p) => (p.id === id ? { ...p, workflowId: 'w', stage } : p)) });
+    set(s.b1, 'published'); // done
+    set(s.b2, 'drafting'); // active
+    set(s.sub, 'published'); // inside a Book: not a Book
+    set(s.dragon, 'published'); // a Project: not a Book
+    const wf = [{ id: 'w', stages: [{ key: 'drafting', category: 'active' }, { key: 'published', category: 'done' }] }];
+    expect([...closedBookIds(t, wf)]).toEqual([s.b1]);
+    t = setArchived(t, s.b1, true);
+    expect([...closedBookIds(t, wf)]).toEqual([]);
+  });
+  it('is empty when a Book has no workflow or its workflow is unknown', () => {
+    const s = studio();
+    expect([...closedBookIds(s.t, [])]).toEqual([]);
+  });
+});

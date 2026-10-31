@@ -11,9 +11,9 @@ Converts a story bible and outline into a genre-conventional sales blurb: a narr
 
 You have Cadrel's project tools. A project is a folder of Markdown files.
 
-1. **Find the project.** `list_projects`; if it isn't clear which one, ask.
-2. **See what exists before you create anything.** `list_project_files` shows every file with its kind (premise, outline, character, world, ...). `read_project_file` reads one; a long file comes in parts, so pass `start` to continue. What the author has already written outranks your defaults.
-3. **Save what you make.** `write_project_file` creates a file. It never touches the manuscript, never replaces an existing file unless you pass `mode: "replace"` (the previous version is kept), and can't leave the project folder. Use `edit_project_file` for a small exact change.
+1. **Find the Book.** In Cadrel a project is a series with Books under it, and this work is for **one Book**. If `studio_context` is available, call it with the project (and `book`): it lists the series-level files to **read first** (the series bible, characters, worldbuilding, style sheet, series premise) and the Book's own files. When the project has several open Books, pass `book` on every call, and if it isn't clear which Book, ask; the tools will ask you too. A closed Book is read-only: you can read it, not change it. Without `studio_context`, use `list_projects`; if it isn't clear which one, ask.
+2. **See what exists before you create anything, starting with the series.** `list_project_files` shows every file with its kind (premise, outline, character, world, ...): call it for the series (no `book`) and for the Book. Read the series-level files first with `read_project_file` (a long file comes in parts, so pass `start` to continue), and keep this Book's work consistent with them: what the series bible and the author's own files say outranks your defaults, and this work never changes the series level unless the author asks.
+3. **Save what you make in the Book.** `write_project_file` creates a file in this Book's folder (pass the same `book`), not the series'. It never touches the manuscript, never replaces an existing file unless you pass `mode: "replace"` (the previous version is kept), and can't leave the project folder. Use `edit_project_file` for a small exact change.
 4. **Manuscript chapters** are read with `list_files`, `list_chapters` and `read_chapter`. You cannot change them.
 
 If these tools aren't available, work in chat and give the finished blurb in a code block for the author to copy.
