@@ -33,6 +33,7 @@ export class StudioService {
 
   createProject = (o: { name: string; parentId?: string | null; kind?: string; workflowId?: string | null; stage?: string | null }) => this.studio.createProject(o);
   setStage = (id: string, stage: string) => this.studio.setStage(id, stage);
+  clearWorkflow = (id: string) => this.studio.clearWorkflow(id);
   updateProject = (id: string, change: { name?: string; kind?: string }) => this.studio.updateProject(id, change);
   moveProject = (id: string, parentId: string | null, index?: number) => this.studio.moveProject(id, parentId, index);
   archiveProject = (id: string, archived: boolean) => this.studio.archiveProject(id, archived);

@@ -115,7 +115,19 @@ So only Notes has anything to build on; the rest start from "everything", and Ph
 - Opening a project from Home or a dashboard row makes it the scope. Browsing the tree on the Projects page does not, so looking around never changes what Write shows.
 - No page filters by it yet, so the rail does not yet mark pages "project" or "all" (it would say something untrue).
 
-Not in Phase 1: Market, Write and Finance *use* `cadrelScope` (Phase 3), closing a Book (Phase 2, so "open Book" today means "not archived").
+Not in Phase 1: Market, Write and Finance *use* `cadrelScope` (Phase 3).
+
+**Phase 2 is built** (the model):
+- **Stage belongs to Books only.** A *Book* is a project directly under a top-level *Project*. A new Book gets the workflow that is the default "for subprojects" (the builder now calls it *default for new books*) in its first stage; a Project, or anything inside a Book, gets none, whatever is asked. Books made before workflows existed are still given the default once, and a Project is never given one.
+- **A Project from before keeps its stage** until the person removes it (*Remove it* on its Books card), as decided. When it is given its first Book, the Book starts in the Project's stage and the Project is left without one.
+- **Closed.** A Book is closed when its stage's category is *Done* (Published, or whatever the studio's workflow calls done). **Close book** moves it to the first Done stage its gates allow, and says what is in the way if none does; **Reopen** puts it into a chosen stage that is not a closing one. Archived Books are not "closed" (they are hidden for another reason).
+- **Closed Books leave the scope** unless *Show closed books* is on (on the Project page, and in the rail's menu when the Project has any). The choice is remembered per Studio. Records inside a closed Book are outside the scope with it (`inViewScope`). A closed Book that is chosen while shown is read-only: Phase 3 enforces that in each page.
+- **Standalone novels.** Making a project of kind *Standalone* makes its one Book too; the Book gets the manuscript folder and the stage. If the Book cannot be made, nothing is.
+- **Add first book.** Write's project folders are flat (each tree node links to its own folder; there are no nested series and book folders), so a Project's folder is its series-level material and a Book's folder is its own. *Add first book* therefore **moves the link, not files**: the Project's manuscript folder becomes the Book's, and nothing is copied or moved on disk. The Project can then be given a series folder of its own.
+- **Kind levels.** Every file kind says whether it lives at the series, the book, or either (`manuscript`, `outline`, `matter`, `brief`, `copy`, `export` are book; `premise`, `character`, `world`, `style`, `research`, `image`, `asset`, `reference` either). A studio's own kinds saved before this default to either. Nothing enforces it yet; Phase 3 uses it to place new files.
+- **A race fixed on the way.** The scope's changes now run one at a time, because a refresh that began before a choice could finish after it and put the old choice back (found by the end-to-end test, reproduced by a unit test that fails without the fix).
+
+Not in Phase 2: a separate "series" folder template (the shipped `series` and `novel` templates already differ and are the defaults for a Project and a Book), and the Planner still lists Projects (with no stage) beside Books until Phase 3.
 
 The plan:
 

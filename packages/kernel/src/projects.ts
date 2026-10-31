@@ -218,6 +218,15 @@ export function adoptWorkflow(t: ProjectTree, id: string, workflowId: string, st
 }
 
 /**
+ * Takes the workflow and stage off a project that should not have one (a Project above its Books: stages belong to Books). The one way a
+ * workflow leaves a project; `adoptWorkflow` can give it one again if it is later made a Book.
+ */
+export function clearWorkflow(t: ProjectTree, id: string, now?: string): ProjectTree {
+  need(t, id);
+  return { ...t, projects: t.projects.map((x) => (x.id === id ? touch(x, { workflowId: null, stage: null }, now) : x)) };
+}
+
+/**
  * Moves a project under another (or to the top level with `parentId` null), optionally to a position among its new
  * siblings. A project cannot go under itself or anything below it.
  */

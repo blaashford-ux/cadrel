@@ -89,6 +89,8 @@ export interface ManageApi {
   /** `workflowId` is chosen here, once: the project keeps it. Without one, the default for a project (or for a subproject, when it has a parent) is used. */
   create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }>;
   addManuscript(projectId: string, template: string): Promise<string>;
+  /** Gives a Project with no Books its first: the Project's manuscript folder becomes the Book's, and the Book starts in the Project's stage. */
+  addFirstBook(projectId: string, name?: string): Promise<{ id: string }>;
   rename(projectId: string, name: string): Promise<void>;
   archive(projectId: string, archived: boolean): Promise<void>;
   /** Deletes the project, its subprojects and notes, and moves their manuscript folders to the recycle bin. */
@@ -778,7 +780,7 @@ export interface ProjectStageView {
   workflowName: string;
   stage: { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold' } | null;
 }
-export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
+export interface StageMoveOption { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold'; allowed: boolean; reasons: string[] }
 
 /** Where projects are in their workflows, and the moves between stages. A move is checked against the workflow's gates and the person's roles. */
 export interface StagesApi {
@@ -787,6 +789,12 @@ export interface StagesApi {
   /** Where one project can go, and for each move whether it is open now and what is in the way. Null for a project with no workflow. */
   options(projectId: string): Promise<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null>;
   move(projectId: string, to: string): Promise<void>;
+  /** Closes a Book: moves it to the first Done stage open to this person from where it is. */
+  close(bookId: string): Promise<void>;
+  /** Reopens a closed Book into one of the stages open from its Done stage. */
+  reopen(bookId: string, to: string): Promise<void>;
+  /** Takes the stage off a Project above its Books (made before stages moved to Books). */
+  clear(projectId: string): Promise<void>;
 }
 
 /** The scope with the names to show for it, so a page or module view needs nothing else to label it. */

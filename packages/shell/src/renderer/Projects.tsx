@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  KIND_SUGGESTIONS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, queryNotes, subtreeIds, type Project, type ProjectTree
+  KIND_SUGGESTIONS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, queryNotes, subtreeIds, viewBooks, viewLevel, type Project, type ProjectTree
 } from '@cadrel/kernel';
 import type { NotesApi } from '@cadrel/ui';
 import { type ManuscriptMeta, type ManuscriptTemplate, type ModuleId, type Overview, type ProjectStageView, type StageMoveOption, type StudioState, type WorkflowState } from '../shared/api';
@@ -9,6 +9,7 @@ import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
 import { WorkCard } from './WorkCard';
+import { useScope } from './useScope';
 
 const api = window.cadrel.studio;
 const manage = window.cadrel.manage;
@@ -37,11 +38,11 @@ interface Props {
 
 type Dialog = { kind: 'new'; parentId: string | null } | { kind: 'rename'; id: string } | { kind: 'delete'; id: string } | null;
 
-function NameDialog({ title, initialName, initialKind, askKind, templates, defaultTemplate, workflows, workflowLevel, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; templates?: ManuscriptTemplate[]; defaultTemplate?: string | null; workflows?: WorkflowRecord[]; workflowLevel?: 'project' | 'subproject'; action: string; onSubmit(name: string, kind: string, template: string | null, workflowId: string | null): void; onCancel(): void }) {
+function NameDialog({ title, initialName, initialKind, askKind, templates, defaultTemplate, workflows, forBook, action, onSubmit, onCancel }: { title: string; initialName: string; initialKind: string; askKind: boolean; templates?: ManuscriptTemplate[]; defaultTemplate?: string | null; workflows?: WorkflowRecord[]; forBook?: boolean; action: string; onSubmit(name: string, kind: string, template: string | null, workflowId: string | null): void; onCancel(): void }) {
   const [name, setName] = useState(initialName);
   const [kind, setKind] = useState(initialKind);
   const [template, setTemplate] = useState<string>(defaultTemplate ?? '');
-  const [workflow, setWorkflow] = useState<string>(workflows?.find((w) => workflowLevel && w.defaultFor.includes(workflowLevel))?.id ?? workflows?.[0]?.id ?? '');
+  const [workflow, setWorkflow] = useState<string>(workflows?.find((w) => w.defaultFor.includes('subproject'))?.id ?? workflows?.[0]?.id ?? '');
   return (
     <div className="modal-backdrop" onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
       <form className="modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={(e) => (e.preventDefault(), onSubmit(name, kind, template || null, workflow || null))}>
@@ -55,16 +56,16 @@ function NameDialog({ title, initialName, initialKind, askKind, templates, defau
             <span className="field-label">Kind (optional)</span>
             <input list="project-kinds" value={kind} onChange={(e) => setKind(e.target.value)} maxLength={30} placeholder="Series, Book, Campaign…" />
             <datalist id="project-kinds">{KIND_SUGGESTIONS.map((k) => <option key={k} value={k} />)}</datalist>
-            <span className="field-hint">A label for you. A project can hold subprojects whatever it is called.</span>
+            <span className="field-hint">{kind.trim().toLowerCase() === 'standalone' ? 'A standalone novel is a project with one book: the book is made for you, with the folder and the stage.' : 'A label for you. A series holds its books; a project can hold subprojects whatever it is called.'}</span>
           </label>
         )}
-        {workflows && workflows.length > 0 && (
+        {forBook && workflows && workflows.length > 0 && (
           <label className="field">
             <span className="field-label">Workflow</span>
             <select value={workflow} onChange={(e) => setWorkflow(e.target.value)} aria-label="Workflow">
-              {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}{workflowLevel && w.defaultFor.includes(workflowLevel) ? ' (default)' : ''}</option>)}
+              {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}{w.defaultFor.includes('subproject') ? ' (default)' : ''}</option>)}
             </select>
-            <span className="field-hint">The stages this {workflowLevel === 'subproject' ? 'subproject' : 'project'} moves through. Chosen now, and it can’t be changed afterwards.</span>
+            <span className="field-hint">The stages this book moves through. Chosen now, and it can’t be changed afterwards.</span>
           </label>
         )}
         {templates && (
@@ -160,14 +161,17 @@ function StageCard({ p, studio, act }: { p: Project; studio: StudioState; act: P
     };
   }, [p.id, p.stage, p.workflowId, studio.notes, studio.tree]);
   if (info === undefined) return null;
-  if (!info) return <section className="card" aria-labelledby="pd-stage"><h3 id="pd-stage">Stage</h3><p className="muted">This project has no workflow.</p></section>;
+  if (!info) return <section className="card" aria-labelledby="pd-stage"><h3 id="pd-stage">Stage</h3><p className="muted">This book has no workflow.</p></section>;
   return (
     <section className="card" aria-labelledby="pd-stage">
-      <h3 id="pd-stage">Stage</h3>
+      <h3 id="pd-stage">Stage of this book</h3>
       <p className="row">
         {info.current ? <span className="stage-chip" style={{ borderColor: info.current.color, color: info.current.color }}>{info.current.name}</span> : <span className="muted">no stage</span>}
-        <span className="muted small">in the “{info.workflowName}” workflow, fixed when the project was made</span>
+        <span className="muted small">in the “{info.workflowName}” workflow, fixed when the book was made{info.current?.category === 'done' ? ' · closed' : ''}</span>
       </p>
+      {info.current?.category !== 'done' && info.options.some((o) => o.category === 'done') && (
+        <p><button type="button" onClick={() => void act(() => stagesApi.close(p.id))} title="Move it to its closing stage and hide it from the scope">Close book</button></p>
+      )}
       {info.options.length === 0 ? <p className="muted small">No moves are set up from here.</p> : (
         <ul className="plain stage-moves" aria-label="Move to">
           {info.options.map((o) => (
@@ -182,6 +186,89 @@ function StageCard({ p, studio, act }: { p: Project; studio: StudioState; act: P
   );
 }
 
+/** A Project's Books: each with its stage, closing and reopening, and the way to add the first one. A Project has no stage of its own. */
+function BooksCard({ p, studio, act, onSelect, openDialog }: { p: Project; studio: StudioState; act: Props['act']; onSelect: Props['onSelect']; openDialog: (d: Dialog) => void }) {
+  const scope = useScope();
+  const [stageOf, setStageOf] = useState<Record<string, ProjectStageView>>({});
+  const [firstName, setFirstName] = useState(p.name);
+  const [reopening, setReopening] = useState<{ id: string; options: StageMoveOption[] } | null>(null);
+  useEffect(() => setFirstName(p.name), [p.id, p.name]);
+  useEffect(() => {
+    let live = true;
+    void stagesApi.views().then((v) => live && setStageOf(v), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, [studio.tree]);
+  const books = viewBooks(studio.tree, p.id);
+  const closedIds = new Set(books.filter((b) => stageOf[b.id]?.stage?.category === 'done').map((b) => b.id));
+  const showClosed = scope?.project === p.id ? scope.showClosed : false;
+  const shown = books.filter((b) => showClosed || !closedIds.has(b.id));
+  const hasFolder = linksOf(studio.tree, p.id, 'write').length > 0;
+  const reopen = async (id: string) => {
+    const info = await stagesApi.options(id).catch(() => null);
+    setReopening(info ? { id, options: info.options.filter((o) => o.category !== 'done') } : null);
+  };
+  return (
+    <section className="card" aria-labelledby="pd-books">
+      <div className="card-head">
+        <h3 id="pd-books">Books</h3>
+        <span className="muted small">A project has no stage; each of its books does.</span>
+        {(closedIds.size > 0 || showClosed) && (
+          <label className="inline small muted"><input type="checkbox" checked={showClosed} onChange={(e) => void window.cadrel.scope.set({ project: p.id, showClosed: e.target.checked })} /> Show closed books</label>
+        )}
+      </div>
+      {books.length === 0 ? (
+        <div>
+          <p className="muted">No books yet. {hasFolder ? 'Add the first one: this project’s manuscript folder becomes the book’s, and nothing in it is moved or copied.' : 'Add the first one to start writing.'}</p>
+          <div className="row">
+            <input aria-label="Name of the first book" value={firstName} onChange={(e) => setFirstName(e.target.value)} maxLength={120} />
+            <button type="button" className="primary" disabled={!firstName.trim() || p.status === 'archived'} onClick={() => void act(() => manage.addFirstBook(p.id, firstName.trim()))}>Add first book</button>
+            <button type="button" disabled={p.status === 'archived'} onClick={() => openDialog({ kind: 'new', parentId: p.id })}>Add a book with a new folder…</button>
+          </div>
+          {p.workflowId && <p className="muted small">This project has a stage from before stages moved to books; the first book starts in it, and the project is left without one.</p>}
+        </div>
+      ) : (
+        <ul className="plain book-list">
+          {shown.map((b) => {
+            const st = stageOf[b.id]?.stage;
+            const closed = closedIds.has(b.id);
+            return (
+              <li key={b.id} className={`row${closed ? ' closed' : ''}`}>
+                <button type="button" className="link grow-text" onClick={() => onSelect(b.id)}>{b.name}</button>
+                {st && <span className="stage-chip" style={{ borderColor: st.color, color: st.color }}>{st.name}</span>}
+                {closed ? <span className="chip">closed</span> : null}
+                {b.status === 'archived' ? null : closed
+                  ? <button type="button" onClick={() => void reopen(b.id)}>Reopen…</button>
+                  : <button type="button" onClick={() => void act(() => stagesApi.close(b.id))} title="Move it to its closing stage and hide it from the scope">Close book</button>}
+              </li>
+            );
+          })}
+          {shown.length === 0 && <li className="muted small">Every book is closed. Turn on “Show closed books” to see them, or add a new one.</li>}
+        </ul>
+      )}
+      {reopening && (
+        <div className="row" role="group" aria-label="Reopen into">
+          <span className="muted small">Reopen “{nameOf(studio.tree, reopening.id)}” into:</span>
+          {reopening.options.length === 0 && <span className="muted small">no stage can be reached from here</span>}
+          {reopening.options.map((o) => (
+            <button key={o.key} type="button" disabled={!o.allowed} title={o.reasons.join(' · ') || undefined} onClick={() => void act(() => stagesApi.reopen(reopening.id, o.key)).then(() => setReopening(null))}>{o.name}</button>
+          ))}
+          <button type="button" className="quiet" onClick={() => setReopening(null)}>Cancel</button>
+        </div>
+      )}
+      {p.workflowId && books.length > 0 && (
+        <p className="row small">
+          <span className="muted">This project still has a stage from before stages moved to books.</span>
+          <button type="button" className="link" onClick={() => void act(() => stagesApi.clear(p.id))}>Remove it</button>
+        </p>
+      )}
+    </section>
+  );
+}
+
+const nameOf = (tree: ProjectTree, id: string): string => getProject(tree, id)?.name ?? '';
+
 function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: Project; studio: StudioState; overview: Overview | null; act: Props['act']; onGo: Props['onGo']; onSelect: Props['onSelect']; openDialog: (d: Dialog) => void }) {
   const tree = studio.tree;
   const [workTick, setWorkTick] = useState(0); // work changes what a stage gate sees
@@ -193,6 +280,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
   const ids = useMemo(() => subtreeIds(tree, p.id), [tree, p.id]);
   const notes = useMemo(() => queryNotes(studio.notes, { projectIds: ids, status: 'any' }), [studio.notes, ids]);
   const nameOf = (id: string) => getProject(tree, id)?.name ?? null;
+  const level = viewLevel(tree, p.id);
 
   const takenWrite = new Set(tree.links.filter((l) => l.module === 'write').map((l) => l.ref));
   const ownMarket = new Set(mine.filter((l) => l.module === 'market').map((l) => l.ref)); // a category can be in several projects; only this project's own are not offered again
@@ -224,7 +312,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
       </div>
 
       <div className="actions">
-        <button type="button" className="primary" disabled={p.status === 'archived'} onClick={() => openDialog({ kind: 'new', parentId: p.id })}>Add subproject</button>
+        <button type="button" className="primary" disabled={p.status === 'archived'} onClick={() => openDialog({ kind: 'new', parentId: p.id })}>{level === 'project' ? 'Add book' : 'Add subproject'}</button>
         <button type="button" onClick={() => openDialog({ kind: 'rename', id: p.id })}>Rename</button>
         <button type="button" onClick={() => void act(() => manage.duplicate(p.id))}>Duplicate</button>
         <label className="inline">
@@ -245,7 +333,8 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
         <button type="button" className="quiet" onClick={() => openDialog({ kind: 'delete', id: p.id })}>Delete…</button>
       </div>
 
-      <StageCard key={workTick} p={p} studio={studio} act={act} />
+      {level === 'project' && <BooksCard p={p} studio={studio} act={act} onSelect={onSelect} openDialog={openDialog} />}
+      {level === 'book' && <StageCard key={workTick} p={p} studio={studio} act={act} />}
 
       <WorkCard projectId={p.id} projectName={p.name} act={act} onChanged={() => setWorkTick((n) => n + 1)} />
 
@@ -385,7 +474,7 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
           <ul className="tree" role="tree">
             {rows.map(({ project: p, depth }) => (
               <li key={p.id} role="treeitem" aria-selected={active?.id === p.id} aria-level={depth + 1}>
-                <button type="button" className={`tree-row${active?.id === p.id ? ' active' : ''}${p.status === 'archived' ? ' archived' : ''}`} style={{ paddingLeft: 10 + depth * 18 }} onClick={() => onSelect(p.id)}>
+                <button type="button" className={`tree-row${active?.id === p.id ? ' active' : ''}${p.status === 'archived' ? ' archived' : ''}${stageOf[p.id]?.stage?.category === 'done' && viewLevel(studio.tree, p.id) === 'book' ? ' closed' : ''}`} style={{ paddingLeft: 10 + depth * 18 }} onClick={() => onSelect(p.id)}>
                   <span className="tree-name">{p.name}</span>
                   {stageOf[p.id]?.stage && <span className="stage-dot" title={stageOf[p.id]!.stage!.name} style={{ background: stageOf[p.id]!.stage!.color }} aria-label={`Stage: ${stageOf[p.id]!.stage!.name}`} />}
                   {studio.openByProject[p.id] ? <span className="count" title="Open notes">{studio.openByProject[p.id]}</span> : null}
@@ -421,14 +510,14 @@ export function Projects({ studio, overview, error, clearError, act, onGo, selec
       {dialog && dialog.kind !== 'delete' && (
         <NameDialog
           key={dialog.kind + (dialog.kind === 'rename' ? dialog.id : (dialog.parentId ?? ''))}
-          title={dialog.kind === 'rename' ? 'Rename project' : dialog.parentId ? `New subproject of ${getProject(studio.tree, dialog.parentId)?.name}` : 'New project'}
+          title={dialog.kind === 'rename' ? 'Rename project' : dialog.parentId ? `New ${viewLevel(studio.tree, dialog.parentId) === 'project' ? 'book' : 'subproject'} of ${getProject(studio.tree, dialog.parentId)?.name}` : 'New project'}
           initialName={dialog.kind === 'rename' ? getProject(studio.tree, dialog.id)?.name ?? '' : ''}
-          initialKind=""
+          initialKind={dialog.kind === 'new' && dialog.parentId && viewLevel(studio.tree, dialog.parentId) === 'project' ? 'Book' : ''}
           askKind={dialog.kind === 'new'}
           templates={dialog.kind === 'new' ? templates : undefined}
           defaultTemplate={dialog.kind === 'new' ? (dialog.parentId ? 'novel' : 'series') : null}
           workflows={dialog.kind === 'new' && wf?.available ? wf.workflows : undefined}
-          workflowLevel={dialog.kind === 'new' ? (dialog.parentId ? 'subproject' : 'project') : undefined}
+          forBook={dialog.kind === 'new' && !!dialog.parentId && viewLevel(studio.tree, dialog.parentId) === 'project'}
           action={dialog.kind === 'rename' ? 'Rename' : 'Create'}
           onSubmit={(n, k, t, w) => void submit(n, k, t, w)}
           onCancel={() => setDialog(null)}

@@ -8,6 +8,9 @@ Cadrel Reader is a new, separate app for beta readers (released under tags `read
 
 ## Unreleased (Cadrel)
 
+- **Stages belong to books.** A project (a series) no longer has a stage: its books do, each at its own. A new book starts in the first stage of the default book workflow; the Projects page shows a project's **Books** with their stages, **Close book** (to the first Done stage the gates allow) and **Reopen**. Closed books are hidden from what Cadrel shows unless you turn on **Show closed books**. A project made as a **Standalone** gets its one book automatically. A project from before keeps its stage until you remove it, and **Add first book** gives a project with a manuscript folder its first book: the folder becomes the book's (nothing is copied or moved) and the book starts in the project's stage. The workflow builder now speaks of "default for new books". File kinds say whether they belong to a series, a book or either.
+- **A project and book scope in the rail.** The rail shows which project (and book) Cadrel is showing and opens a menu to change it; Write, Market and Finance can read it. Nothing filters by it yet.
+
 - **Invitations for readers now send people to Cadrel Reader.** The invitation message a reader receives links to Cadrel Reader's release instead of the full app, and the invitation page offers **Open in Cadrel Reader**. Invitations to edit a manuscript with its author are unchanged and still point at Cadrel. Cadrel's updater and Reader's now each read only their own releases, so one cannot be offered the other's installer.
 
 ## 0.5.0

@@ -7,7 +7,7 @@
  * Nothing here touches Electron: Write is reached through `WriteFolders`, so this is tested with a fake.
  */
 import path from 'node:path';
-import { descendantsOf, getProject, linksOf } from '@cadrel/kernel';
+import { childrenOf, descendantsOf, getProject, linksOf, viewLevel } from '@cadrel/kernel';
 import { projectNameError, uniqueName } from '@cadrel/write/src/shared/projects';
 import type { StudioService } from './studio';
 import type { ProjectStages } from './stages';
@@ -58,6 +58,21 @@ export class ProjectManager {
    * made (a name Windows will not allow), the project is not created either.
    */
   async create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }> {
+    // A standalone novel is a Project that holds one Book (docs/UI-MODEL.md): the Project is made bare, and its Book gets the folder and the stage.
+    if (!o.parentId && o.kind?.trim().toLowerCase() === 'standalone') {
+      const project = await this.createOne({ name: o.name, kind: o.kind });
+      try {
+        const book = await this.createOne({ name: o.name, parentId: project.id, kind: 'Book', template: o.template, workflowId: o.workflowId });
+        return { id: project.id, folder: book.folder };
+      } catch (e) {
+        await this.studio.deleteProject(project.id, true).catch(() => undefined); // no half-made standalone
+        throw e;
+      }
+    }
+    return this.createOne(o);
+  }
+
+  private async createOne(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }> {
     const template = o.template ?? null;
     // the workflow is chosen here, once, before anything is made; a bad choice makes nothing
     const wf = this.stages ? await this.stages.forNewProject(o.parentId, o.workflowId) : { workflowId: null, stage: null };
@@ -76,6 +91,25 @@ export class ProjectManager {
       if (folder) await this.write.deleteProject(folder).catch(() => undefined);
       throw e;
     }
+  }
+
+  /**
+   * Gives a Project that has no Books its first one. The Project's manuscript folder, if it has one, becomes the Book's (the link moves; no
+   * file is copied or moved), and if the Project had a stage the Book starts in it and the Project is left without one. Returns the Book.
+   */
+  async addFirstBook(projectId: string, name?: string): Promise<{ id: string }> {
+    const tree = (await this.studio.studio.read()).tree;
+    const p = getProject(tree, projectId) ?? fail('There is no such project.');
+    if (viewLevel(tree, projectId) !== 'project') fail('Only a project can be given a first book.');
+    if (childrenOf(tree, projectId).some((c) => c.status !== 'archived')) fail('That project already has books.');
+    const folder = linksOf(tree, projectId, 'write')[0];
+    const book = await this.create({ name: (name ?? p.name).trim() || p.name, parentId: projectId, kind: 'Book', template: null, workflowId: p.workflowId });
+    if (folder) await this.studio.link(book.id, 'write', folder.ref); // a manuscript belongs to one project, so this moves it
+    if (p.workflowId && p.stage) {
+      await this.studio.setStage(book.id, p.stage).catch(() => undefined); // keeps where it was; if its workflow no longer has the stage it starts at the first
+      await this.studio.clearWorkflow(projectId);
+    }
+    return book;
   }
 
   /** Gives an existing project a manuscript folder. */

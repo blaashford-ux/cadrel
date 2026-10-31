@@ -183,3 +183,23 @@ describe('project tree', () => {
     expect(() => outline(t)).not.toThrow();
   });
 });
+
+import { adoptWorkflow, clearWorkflow } from '../src/projects';
+describe('taking a stage off a project', () => {
+  it('clears the workflow and stage, and leaves the rest alone', () => {
+    let t = emptyTree();
+    const r = createProject(t, { name: 'Dragon Rider', workflowId: 'wf1', stage: 'drafting' });
+    t = clearWorkflow(r.tree, r.project.id);
+    expect(t.projects[0]).toMatchObject({ name: 'Dragon Rider', workflowId: null, stage: null });
+  });
+  it('lets it be given one again (as when it later becomes a Book), but still only one', () => {
+    let t = emptyTree();
+    const r = createProject(t, { name: 'X', workflowId: 'wf1', stage: 'planning' });
+    expect(() => adoptWorkflow(r.tree, r.project.id, 'wf2', 'planning')).toThrow(/already has a workflow/);
+    t = adoptWorkflow(clearWorkflow(r.tree, r.project.id), r.project.id, 'wf2', 'planning');
+    expect(t.projects[0]).toMatchObject({ workflowId: 'wf2', stage: 'planning' });
+  });
+  it('refuses a project that is not there', () => {
+    expect(() => clearWorkflow(emptyTree(), 'gone')).toThrow(/no project/i);
+  });
+});

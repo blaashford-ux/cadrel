@@ -17,7 +17,8 @@ const toDraft = (w: WorkflowRecord): Draft => ({
   stages: w.stages.map((s) => ({ key: s.key, name: s.name, category: s.category, color: s.color, isNew: false })),
   moves: w.transitions.map((t) => ({ from: t.from, to: t.to, roleIds: [...t.roleIds], conditions: t.conditions.map((c) => ({ ...c })) }))
 });
-const defaultLabel = (levels: string[]) => (levels.length === 2 ? 'default' : `default for ${levels[0]}s`);
+/** Stages belong to Books (a Project has none), so only the "subproject" default is used: it is the default for new Books. */
+const defaultLabel = (levels: string[]) => (levels.includes('subproject') ? 'default for new books' : 'default for projects (not used: projects have no stage)');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Builds workflows: the stages a project moves through, which stage can move to which, and the gate on each move (who may make it and what must be true of the project). */
@@ -229,14 +230,14 @@ function Editor({ w, s, act, onPick }: { w: WorkflowRecord; s: Ready; act: Act; 
         <div className="row">
           <button type="button" className="primary" disabled={!dirty} onClick={save}>Save workflow</button>
           <button type="button" disabled={!dirty} onClick={() => setD(original)}>Discard changes</button>
-          {PROJECT_LEVELS.map((level) => !w.defaultFor.includes(level) && (
-            <button key={level} type="button" disabled={dirty} title={dirty ? 'Save first' : undefined} onClick={() => void act(() => api.setDefault(w.id, [level]), `“${w.name}” is now the default for new ${level === 'project' ? 'projects' : 'subprojects'}.`)}>Default for new {level === 'project' ? 'projects' : 'subprojects'}</button>
-          ))}
+          {!w.defaultFor.includes('subproject') && (
+            <button type="button" disabled={dirty} title={dirty ? 'Save first' : undefined} onClick={() => void act(() => api.setDefault(w.id, ['subproject']), `“${w.name}” is now the default for new books.`)}>Default for new books</button>
+          )}
           <button type="button" onClick={() => { const n = window.prompt('Name for the copy', `${w.name} (copy)`); if (n) void act(() => api.create({ name: n, copyFrom: w.id })).then((r) => r && onPick(r.id)); }}>Copy…</button>
           <button type="button" className="link" disabled={w.defaultFor.length > 0 || (s.usage[w.id]?.projects ?? 0) > 0} title={w.defaultFor.length ? 'Make another workflow the default first' : (s.usage[w.id]?.projects ?? 0) ? 'Projects still use this workflow' : undefined} onClick={() => { if (window.confirm(`Delete “${w.name}”?`)) void act(() => api.delete(w.id)).then(() => onPick(null)); }}>Delete</button>
         </div>
       )}
-      {w.defaultFor.length > 0 && <p className="muted small">This is the default for new {w.defaultFor.length === 2 ? 'projects and subprojects' : `${w.defaultFor[0]}s`}. {w.templateKey === 'mdedit' ? 'It is the one Cadrel ships, with the stages from MDEdit; edit it, or build another and make that the default.' : ''}</p>}
+      {w.defaultFor.length > 0 && <p className="muted small">This is the default for new books. Stages belong to books: a project (a series) has none. {w.templateKey === 'mdedit' ? 'It is the one Cadrel ships, with the stages from MDEdit; edit it, or build another and make that the default.' : ''}</p>}
     </div>
   );
 }

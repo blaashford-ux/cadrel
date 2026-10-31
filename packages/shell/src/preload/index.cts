@@ -44,7 +44,10 @@ const api: CadrelApi = {
   stages: {
     views: () => studioCall('shell:stages:views'),
     options: (projectId) => studioCall('shell:stages:options', projectId),
-    move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
+    move: (projectId, to) => studioCall('shell:stages:move', projectId, to),
+    close: (bookId) => studioCall('shell:stages:close', bookId),
+    reopen: (bookId, to) => studioCall('shell:stages:reopen', bookId, to),
+    clear: (projectId) => studioCall('shell:stages:clear', projectId)
   },
   vault: {
     state: () => studioCall('shell:vault:state'),
@@ -141,6 +144,7 @@ const api: CadrelApi = {
     templates: () => studioCall('shell:manage:templates'),
     create: (o) => studioCall('shell:manage:create', o),
     addManuscript: (id, template) => studioCall('shell:manage:addManuscript', id, template),
+    addFirstBook: (id, name) => studioCall('shell:manage:addFirstBook', id, name),
     rename: (id, name) => studioCall('shell:manage:rename', id, name),
     archive: (id, archived) => studioCall('shell:manage:archive', id, archived),
     remove: (id) => studioCall('shell:manage:remove', id),

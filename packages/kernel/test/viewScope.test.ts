@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createProject, emptyTree, setArchived, type ProjectTree } from '../src/projects';
-import { inViewScope, resolveViewScope, sameViewScope, viewBooks, viewProjects, viewScopeOf } from '../src/viewScope';
+import { inViewScope, resolveViewScope, sameViewScope, viewBooks, viewLevel, viewProjects, viewScopeOf } from '../src/viewScope';
 
 function studio() {
   let t: ProjectTree = emptyTree();
@@ -63,7 +63,7 @@ describe('resolving a scope', () => {
   });
 
   it('is empty in a studio with no Projects', () => {
-    expect(resolveViewScope(emptyTree(), { project: 'x', book: 'y' })).toEqual({ project: null, book: null, books: [], bookImplied: false });
+    expect(resolveViewScope(emptyTree(), { project: 'x', book: 'y' })).toEqual({ project: null, book: null, showClosed: false, books: [], closed: [], bookImplied: false });
   });
 
   it('is idempotent', () => {
@@ -113,5 +113,54 @@ describe('what is inside a scope', () => {
   it('a record of the studio itself, or no scope, is outside', () => {
     expect(inViewScope(s.t, all, null)).toBe(false);
     expect(inViewScope(s.t, { project: null, book: null }, s.dragon)).toBe(false);
+  });
+});
+
+describe('closed Books', () => {
+  it('are hidden from the scope unless closed Books are being shown', () => {
+    const s = studio();
+    const closed = new Set([s.b1]);
+    expect(resolveViewScope(s.t, { project: s.dragon }, closed)).toMatchObject({ books: [s.b2], closed: [s.b1], showClosed: false, book: s.b2, bookImplied: true });
+    expect(resolveViewScope(s.t, { project: s.dragon, showClosed: true }, closed)).toMatchObject({ books: [s.b1, s.b2], closed: [s.b1], showClosed: true, book: null, bookImplied: false });
+  });
+
+  it('a Book that becomes closed while chosen is dropped, unless closed Books are shown', () => {
+    const s = studio();
+    const closed = new Set([s.b2]);
+    expect(resolveViewScope(s.t, { project: s.dragon, book: s.b2 }, closed).book).toBe(s.b1); // only Book 1 is left open: implied
+    expect(resolveViewScope(s.t, { project: s.dragon, book: s.b2, showClosed: true }, closed).book).toBe(s.b2);
+  });
+
+  it('a Project whose Books are all closed offers none', () => {
+    const s = studio();
+    expect(resolveViewScope(s.t, { project: s.dragon }, new Set([s.b1, s.b2]))).toMatchObject({ books: [], closed: [s.b1, s.b2], book: null, bookImplied: false });
+  });
+
+  it('what is inside a closed Book is outside the scope, closed Books being hidden', () => {
+    const s = studio();
+    const hidden = resolveViewScope(s.t, { project: s.dragon }, new Set([s.b2]));
+    expect(inViewScope(s.t, hidden, s.sub)).toBe(false); // "Cover art" sits under the closed Book 2
+    expect(inViewScope(s.t, hidden, s.b2)).toBe(false);
+    expect(inViewScope(s.t, hidden, s.b1)).toBe(true);
+    expect(inViewScope(s.t, hidden, s.dragon)).toBe(true);
+    const shown = resolveViewScope(s.t, { project: s.dragon, showClosed: true }, new Set([s.b2]));
+    expect(inViewScope(s.t, shown, s.sub)).toBe(true);
+  });
+
+  it('a closed Book that is chosen (while shown) is inside its own scope', () => {
+    const s = studio();
+    const r = resolveViewScope(s.t, { project: s.dragon, book: s.b2, showClosed: true }, new Set([s.b2]));
+    expect(inViewScope(s.t, r, s.b2)).toBe(true);
+    expect(inViewScope(s.t, r, s.sub)).toBe(true);
+  });
+});
+
+describe('where a project sits for the UI', () => {
+  it('a Project, a Book, or something inside a Book', () => {
+    const s = studio();
+    expect(viewLevel(s.t, s.dragon)).toBe('project');
+    expect(viewLevel(s.t, s.b1)).toBe('book');
+    expect(viewLevel(s.t, s.sub)).toBe('inside');
+    expect(viewLevel(s.t, 'gone')).toBeNull();
   });
 });

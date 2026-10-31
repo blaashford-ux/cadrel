@@ -32,7 +32,7 @@ export interface ShellSettings {
   /** Colours the user changed; the rest stay as shipped. */
   themeCustom?: ThemeCustom;
   /** The Project and Book this Studio was last showing (a request: it is checked against the Studio's projects every time it is used). */
-  scope?: { project: string | null; book: string | null };
+  scope?: { project: string | null; book: string | null; showClosed?: boolean };
 }
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -49,10 +49,10 @@ export function sanitizeSettings(raw: unknown): ShellSettings {
   if (pm && typeof pm === 'object' && (pm.to === null || (typeof pm.to === 'string' && path.isAbsolute(pm.to)))) out.pendingCadrelMove = { to: pm.to };
   if (r.role === 'admin' || r.role === 'member') out.role = r.role;
   if (isThemeSource(r.theme) && r.theme !== 'system') out.theme = r.theme;
-  const sc = r.scope as { project?: unknown; book?: unknown } | undefined;
+  const sc = r.scope as { project?: unknown; book?: unknown; showClosed?: unknown } | undefined;
   if (sc && typeof sc === 'object') {
     const id = (v: unknown) => (typeof v === 'string' && v.length > 0 && v.length <= 80 ? v : null);
-    out.scope = { project: id(sc.project), book: id(sc.book) };
+    out.scope = { project: id(sc.project), book: id(sc.book), ...(sc.showClosed === true ? { showClosed: true } : {}) };
   }
   const custom = sanitizeThemeCustom(r.themeCustom);
   if (custom) out.themeCustom = custom;

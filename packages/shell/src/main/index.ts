@@ -866,6 +866,9 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  manageLike('stages:close', async (bookId: string) => stages.closeBook(String(bookId)));
+  manageLike('stages:reopen', async (bookId: string, to: string) => stages.reopenBook(String(bookId), String(to)));
+  manageLike('stages:clear', async (projectId: string) => stages.clearStage(String(projectId)));
   const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
   manageLike('vault:state', async () => vaultHost().state());
   manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
@@ -1039,6 +1042,7 @@ function registerShellIpc(): void {
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
   manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
+  manageOp('addFirstBook', (id: string, name?: string) => manager.addFirstBook(String(id), typeof name === 'string' ? name : undefined));
   manageOp('rename', (id: string, name: string) => manager.rename(id, name));
   manageOp('archive', (id: string, archived: boolean) => manager.archive(id, archived === true));
   manageOp('remove', (id: string) => manager.remove(id));
@@ -1066,14 +1070,14 @@ function registerShellIpc(): void {
     if (!fromShell(e)) throw new Error('not allowed');
     const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
     const id = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && v.length <= 80 ? v : undefined);
-    return scope.set({ ...(id(c.project) !== undefined ? { project: id(c.project) } : {}), ...(id(c.book) !== undefined ? { book: id(c.book) } : {}) } as Partial<ViewScope>);
+    return scope.set({ ...(id(c.project) !== undefined ? { project: id(c.project) } : {}), ...(id(c.book) !== undefined ? { book: id(c.book) } : {}), ...(typeof c.showClosed === 'boolean' ? { showClosed: c.showClosed } : {}) } as Partial<ViewScope>);
   });
   ipcMain.handle('shell:scope:menu', async (e, at: unknown) => {
     if (!fromShell(e) || !win || win.isDestroyed()) throw new Error('not allowed');
     const pos = (at && typeof at === 'object' ? at : {}) as { x?: unknown; y?: unknown };
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined);
     const items = scopeMenu((await studio.studio.read()).tree, await scope.get());
-    const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: 'radio' as const, checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
+    const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: (i.checkbox ? 'checkbox' : 'radio') as 'checkbox' | 'radio', checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
     menu.popup({ window: win, x: num(pos.x), y: num(pos.y) });
   });
   ipcMain.handle('scope:get', async (e) => {
@@ -1341,6 +1345,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     manager = new ProjectManager(studio, writeFolders(), stages);
     scope = new ScopeHost({
       tree: async () => (await studio.studio.read()).tree,
+      closed: () => stages.closedBooks(),
       remembered: () => studioSettings.get().scope,
       remember: (s) => studioSettings.update((x) => void (x.scope = s)),
       announce: (r) => {

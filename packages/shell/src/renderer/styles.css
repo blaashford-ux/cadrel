@@ -366,3 +366,6 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 .scope-project, .scope-book { max-width: 100%; font-size: 10.5px; text-align: center; overflow-wrap: anywhere; }
 .scope-project { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .scope-book { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Books on a Project's page, and closed Books in the tree. */
+.book-list .closed, .tree-row.closed { opacity: .65; }
