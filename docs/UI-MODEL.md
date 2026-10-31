@@ -153,7 +153,7 @@ Not in Phase 2: a separate "series" folder template (the shipped `series` and `n
 
 **Not done in Phase 5**
 - Reader invitations per Book: an invitation already shares one manuscript folder, which is a Book's, so there was nothing to change; the series folder can also be shared.
-- A carried timeline, and one shared ledger file per series.
+- A carried timeline, and one shared ledger file per series. *(Built. A series with a folder of its own keeps `Tracking/LitRPG Ledger.json` and `Tracking/Timeline Ledger.json` there, `{ series_ledger: 1, books: { <book id>: { name, ledger } } }`. Chapter numbers stay each Book's own; the Books before this one are read from the same file and put in front at "chapter 0", so a character starts a Book where the last one left them, the days continue and a Book that opens before the last ended is flagged. A Book that kept its own file before is read from it, and its next save moves it into the series file. A series with no folder of its own, or a book on its own, keeps one file per Book as before.)*
 - Tools to add a Book or close one from the assistant (it can still organise projects with the existing studio tools; closing is a gated workflow move that stays in the app).
 
 The plan:
@@ -166,7 +166,7 @@ The plan:
 5. **Skills and tools.** Book argument, rewritten skills, tests that they save at the right level; trackers on a series ledger.
 6. **Migration, Reader per Book, docs, tests throughout.** *(Done. Migration: nothing is moved or copied. A project with a stage keeps it until removed; **Add first book** hands the manuscript folder to the new Book as a link, and a Book made before workflows existed is given the default workflow in the stage it had (`stages.test.ts`). Reader: an invitation shares one Write manuscript folder, which belongs to a Book, so it is per Book already; the series folder can also be shared. Every phase added tests as it was built.)*
 
-**Where things stand.** Built: 1 scope engine, 2 model, 3 pages (Write, Market, Notes, Planner, Dashboard, My Books, Home), 4 Associations (Market categories and manuscripts), 5 skills and tools, 6 migration and docs. Not built: Finance and Files follow the scope, people and comps as associations, a carried timeline ledger (the LitRPG ledger carries across Books in memory only), and one shared ledger file per series.
+**Where things stand.** Built: 1 scope engine, 2 model, 3 pages (Write, Market, Notes, Planner, Dashboard, My Books, Home), 4 Associations (Market categories, manuscripts, comparable titles and people), 5 skills and tools, 6 migration and docs, and the series ledgers: one LitRPG file and one timeline file per series (in the series' own folder, each Book's ledger inside under its id), with the earlier Books carried in front when a Book is read or checked. Not built: Finance and Files following the scope (left out on purpose).
 
 Each phase ends in something a person can use, and none changes stored data except Phase 2 (stage rules) and *Add first book* (shown and confirmed first).
 

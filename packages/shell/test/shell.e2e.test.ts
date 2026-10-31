@@ -551,6 +551,18 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Attach', exact: true }).click();
     await shell.locator('.links li', { hasText: 'Dragon Rider 1' }).waitFor();
 
+    // Comparable titles and people are associated with the book too: a comp by its ASIN, and a role on this book only (which is how access is given).
+    await shell.getByLabel('ASIN of the comparable title').fill('B0ABC12345');
+    await shell.getByRole('button', { name: 'Add comp' }).click();
+    await shell.locator('.links li', { hasText: 'B0ABC12345' }).waitFor();
+    await shell.getByLabel('ASIN of the comparable title').fill('nope');
+    await shell.getByRole('button', { name: 'Add comp' }).click();
+    await shell.getByRole('alert').getByText(/not an ASIN/).waitFor();
+    await shell.getByLabel('Person or team').selectOption({ index: 1 });
+    await shell.getByLabel('Role on this project').selectOption({ label: 'Editor' });
+    await shell.getByRole('button', { name: 'Give role' }).click();
+    await shell.locator('.links li', { hasText: 'Editor' }).waitFor();
+
     // A note on the book appears on the series (its subprojects count) and on the Notes page.
     await shell.getByLabel('New note').fill('Check the dragon\'s age against book 2.');
     await shell.getByRole('button', { name: 'Add note' }).click();

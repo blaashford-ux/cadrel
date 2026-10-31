@@ -120,10 +120,12 @@ describe('the skills know the series level from the Book level', () => {
     }
   });
 
-  it('the trackers work on one Book at a time, and the LitRPG one carries the earlier Books forward', () => {
+  it('the trackers work on one Book at a time, carry the earlier Books forward, and keep one ledger file for a series', () => {
     for (const f of ['cadrel-litrpg-tracker', 'cadrel-timeline-tracker']) expect(read(f), f).toMatch(/pass `book` on every call/);
     expect(read('cadrel-litrpg-tracker')).toMatch(/earlier Books' ledgers in front/);
-    expect(read('cadrel-timeline-tracker')).toMatch(/Nothing is carried between Books automatically/);
+    expect(read('cadrel-timeline-tracker')).toMatch(/one story clock/);
+    expect(read('cadrel-timeline-tracker')).toMatch(/earlier Books' days in front/);
+    for (const f of ['cadrel-litrpg-tracker', 'cadrel-timeline-tracker']) expect(read(f), f).toMatch(/series' own folder/);
   });
 
   it('the editing passes review one Book and read the series material first', () => {

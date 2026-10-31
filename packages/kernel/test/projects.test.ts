@@ -203,3 +203,25 @@ describe('taking a stage off a project', () => {
     expect(() => clearWorkflow(emptyTree(), 'gone')).toThrow(/no project/i);
   });
 });
+
+describe('comparable titles as links', () => {
+  const base = () => {
+    const x = createProject(emptyTree(), { name: 'Dragon Rider' });
+    return createProject(x.tree, { name: 'Other' }).tree;
+  };
+  it('keeps a comp by its ASIN, upper-cased, and refuses what is not one', () => {
+    const t = base();
+    const a = t.projects[0]!.id;
+    const linked = linkRecord(t, a, 'comp', ' b0abc12345 ');
+    expect(linked.links).toEqual([{ projectId: a, module: 'comp', ref: 'B0ABC12345' }]);
+    expect(() => linkRecord(t, a, 'comp', 'not an asin')).toThrow(/not an ASIN/);
+  });
+  it('can be a comp for several projects at once, and leaves one without touching the other', () => {
+    const t = base();
+    const [a, b] = [t.projects[0]!.id, t.projects[1]!.id];
+    const both = linkRecord(linkRecord(t, a, 'comp', 'B0ABC12345'), b, 'comp', 'b0abc12345');
+    expect(both.links).toHaveLength(2);
+    expect(linkRecord(both, a, 'comp', 'B0ABC12345').links).toHaveLength(2); // linking again adds nothing
+    expect(unlinkRecord(both, 'comp', 'B0ABC12345', a).links).toEqual([{ projectId: b, module: 'comp', ref: 'B0ABC12345' }]);
+  });
+});

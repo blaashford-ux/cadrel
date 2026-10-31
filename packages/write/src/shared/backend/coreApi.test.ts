@@ -102,7 +102,7 @@ describe('files on the phone’s API', () => {
     const tree = await backend.api.scanFolder(path);
     const chapters = (tree.children.find((c) => c.name === 'Tracking') as { children: { name: string; html?: boolean; children?: { name: string; html?: boolean }[] }[] }).children[0];
     expect(chapters.children).toEqual([expect.objectContaining({ name: 'Chapter 1.html', html: true })]);
-    await expect(backend.api.writeFile(`${path}/Tracking/Chapters/Chapter 1.html`, 'y', undefined as never)).rejects.toThrow(/non-Markdown/);
+    await expect(backend.api.writeFile(`${path}/Tracking/Chapters/Chapter 1.html`, 'y')).rejects.toThrow(/non-Markdown/);
   });
 
   it('only opens folders inside the Root', async () => {

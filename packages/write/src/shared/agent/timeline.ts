@@ -295,6 +295,53 @@ export function mergeTimelineFlags(t: TimelineLedger, found: NewFlag[]): Timelin
   return added;
 }
 
+// ---- a series: what happened in earlier Books ------------------------------------------------
+
+const mergeLists = <T>(a: T[], b: T[], same: (x: T, y: T) => boolean): T[] => {
+  const out = [...a];
+  for (const x of b) if (!out.some((y) => same(x, y))) out.push(x);
+  return out;
+};
+
+/**
+ * This Book's timeline with the days of the Books before it in front. A series has one chronology: day numbers carry on from the last Book,
+ * and a day the earlier Book already has (the Books overlap, or a flashback revisits it) is joined, not repeated. Everything the earlier
+ * Books say sits at "chapter 0" of this one, so the checks see a Book that starts before the last one ended, a weekday that disagrees across
+ * the Books, or a jump with nothing to bridge it, while the chapters stay this Book's own. Nothing here is saved: it is for reading.
+ */
+export function carryTimeline(own: TimelineLedger, earlier: TimelineLedger[]): TimelineLedger {
+  const days: Record<string, DayEntry> = {};
+  const join = (key: string, d: DayEntry, carried: boolean) => {
+    const at = days[key];
+    const chapters: ChapterRef[] = carried ? (d.chapters.length ? [{ chapter: 0, mode: d.chapters[0]!.mode, ...(d.chapters.every((c) => c.flashback) ? { flashback: true } : {}) }] : []) : d.chapters;
+    const claim = <C extends { source_chapter: number }>(c: C): C => (carried ? { ...c, source_chapter: 0 } : c);
+    const elapsed = d.elapsed_time_claims.map(claim);
+    const calendar = d.calendar_claims.map(claim);
+    if (!at) {
+      days[key] = { ...d, chapters: [...chapters], elapsed_time_claims: elapsed, calendar_claims: calendar };
+      return;
+    }
+    at.chapters = mergeLists(at.chapters, chapters, (x, y) => x.chapter === y.chapter).sort((x, y) => x.chapter - y.chapter);
+    at.locations = union(at.locations, d.locations);
+    at.characters_present = union(at.characters_present, d.characters_present);
+    at.major_events = union(at.major_events, d.major_events);
+    at.daily_quests_completed = union(at.daily_quests_completed, d.daily_quests_completed);
+    at.time_of_day_markers = union(at.time_of_day_markers, d.time_of_day_markers);
+    at.elapsed_time_claims = mergeLists(at.elapsed_time_claims, elapsed, (x, y) => x.quote === y.quote && x.source_chapter === y.source_chapter);
+    at.calendar_claims = mergeLists(at.calendar_claims, calendar, (x, y) => x.quote === y.quote && x.source_chapter === y.source_chapter);
+    at.pov_character = d.pov_character ?? at.pov_character;
+    at.weekday = d.weekday ?? at.weekday;
+    at.day_type = d.day_type ?? at.day_type;
+    if (d.day_confidence === 'confirmed') {
+      at.day_confidence = 'confirmed';
+      at.day_range_if_uncertain = null;
+    }
+  };
+  for (const l of earlier) for (const [k, d] of Object.entries(l.days)) join(k, d, true);
+  for (const [k, d] of Object.entries(own.days)) join(k, d, false);
+  return { meta: { ...own.meta }, days, timeline_flags: own.timeline_flags.map((f) => ({ ...f })) };
+}
+
 // ---- day to chapter, and the cross-reference -------------------------------------------------
 
 /** The highest chapter narrated as of a day: every confirmed day up to and including it, flashbacks aside. */

@@ -218,9 +218,64 @@ describe('the LitRPG tracker across Books', () => {
     await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 2', characters: [{ name: 'Sean', events: [{ type: 'xp_award', chapter: 2, details: { amount: 50, running_total: null, xp_to_next_level: null } }] }] });
     const st = (await call('litrpg_state', { project: 'Dragon Rider', book: 'Book 2', character: 'Sean', as_of_chapter: 1 })).json();
     expect(st.characters[0].state.level).toBe(7); // Book 1's ending, before Book 2's chapter 2
-    const own = JSON.parse(await mem.readText('/books/Ash/Tracking/LitRPG Ledger.json'));
-    expect(own.characters.Sean.event_log).toHaveLength(1);
+    // One ledger file for the series, in the series' own folder; each Book's ledger is inside under its id and nothing was copied between them.
+    const file = JSON.parse(await mem.readText('/books/Dragon Bible/Tracking/LitRPG Ledger.json'));
+    expect(file.series_ledger).toBe(1);
+    expect(Object.keys(file.books).sort()).toEqual([ids['Book 1: Ember']!, ids['Book 2: Ash']!].sort());
+    expect(file.books[ids['Book 2: Ash']!].ledger.characters.Sean.event_log).toHaveLength(1);
+    expect(file.books[ids['Book 1: Ember']!].ledger.characters.Sean.event_log).toHaveLength(1);
+    await expect(mem.readText('/books/Ash/Tracking/LitRPG Ledger.json')).rejects.toThrow(); // none per Book
     const first = (await call('litrpg_state', { project: 'Dragon Rider', book: 'Book 1', character: 'Sean' })).json();
     expect(first.characters[0].state.level).toBe(7); // Book 1 carries nothing in
+  });
+});
+
+describe('one ledger file per series', () => {
+  const lvl = (chapter: number, level: number) => ({ type: 'level_up', chapter, details: { resulting_level: level } });
+  const sean = (events: unknown[]) => [{ name: 'Sean', events }];
+
+  it('adopts a Book’s own ledger from before the series file existed, and keeps reading the earlier Book’s', async () => {
+    const { call } = await connect();
+    // Book 1 kept its own file in its own folder, the way ledgers were kept before; Book 2 starts a series file.
+    mem.seed('/books/Ember/Tracking/LitRPG Ledger.json', JSON.stringify({ meta: { project: 'Ember', last_updated_chapter: 9, schema_version: '1.0' }, characters: { Sean: { current_state: {}, event_log: [{ id: 'e1', type: 'level_up', chapter: 9, details: { resulting_level: 12 } }] } }, consistency_flags: [] }));
+    await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 2', characters: sean([lvl(1, 13)]) });
+    const st = (await call('litrpg_state', { project: 'Dragon Rider', book: 'Book 2', character: 'Sean', as_of_chapter: 0 })).json();
+    expect(st.characters[0].state.level).toBe(12); // carried from the old per-Book file
+    // Book 1 is read as before, and logging to it (after reopening) moves it into the series file.
+    closedIds.clear();
+    await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 1', characters: sean([lvl(10, 13)]) });
+    const file = JSON.parse(await mem.readText('/books/Dragon Bible/Tracking/LitRPG Ledger.json'));
+    expect(file.books[ids['Book 1: Ember']!].ledger.characters.Sean.event_log.map((e: { chapter: number }) => e.chapter)).toEqual([9, 10]);
+  });
+
+  it('carries the timeline: a Book that starts before the last one ended is caught, and the days join', async () => {
+    const { call } = await connect();
+    closedIds.clear();
+    await call('timeline_log', { project: 'Dragon Rider', book: 'Book 1', days: [{ day: 1, chapters: [{ chapter: 1 }], locations: ['Hold'] }, { day: 30, chapters: [{ chapter: 9 }], weekday: 'Tuesday' }] });
+    const r = (await call('timeline_log', { project: 'Dragon Rider', book: 'Book 2', days: [{ day: 10, chapters: [{ chapter: 1 }] }, { day: 31, chapters: [{ chapter: 2 }], weekday: 'Wednesday' }] })).json();
+    expect(r.new_flags.some((f: { type: string }) => f.type === 'overlapping_days')).toBe(true); // Book 2 opens on day 10, Book 1 reached day 30
+    expect(r.new_flags.some((f: { type: string }) => f.type === 'day_of_week_contradiction')).toBe(false); // 30 Tue → 31 Wed agrees across the Books
+    const file = JSON.parse(await mem.readText('/books/Dragon Bible/Tracking/Timeline Ledger.json'));
+    expect(Object.keys(file.books)).toHaveLength(2);
+    expect(Object.keys(file.books[ids['Book 2: Ash']!].ledger.days).sort()).toEqual(['10', '31']); // not copied in
+    const view = (await call('build_tracker_view', { project: 'Dragon Rider', book: 'Book 2', view: 'timeline', return_html: true })).json();
+    expect(view.html).toContain('"key":"30"'); // drawn with the earlier Book's days in front
+  });
+
+  it('a series with no folder of its own keeps one file per Book, as before', async () => {
+    const { call } = await connect();
+    await studio.unlink('write', 'Dragon Bible'); // the series has no folder now
+    closedIds.clear();
+    await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 2', characters: sean([lvl(1, 2)]) });
+    expect(JSON.parse(await mem.readText('/books/Ash/Tracking/LitRPG Ledger.json')).series_ledger).toBeUndefined();
+  });
+
+  it('refuses to overwrite an ordinary single-book ledger sitting in the series folder', async () => {
+    const { call } = await connect();
+    closedIds.clear();
+    mem.seed('/books/Dragon Bible/Tracking/LitRPG Ledger.json', '{"meta":{"project":"x","last_updated_chapter":0,"schema_version":"1.0"},"characters":{},"consistency_flags":[]}');
+    const r = await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 2', characters: sean([lvl(1, 2)]) });
+    expect(r.isError).toBe(true);
+    expect(r.text).toMatch(/not the series ledger/);
   });
 });

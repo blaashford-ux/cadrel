@@ -23,7 +23,7 @@ import {
 } from '../src/shared/agent/tools';
 import { checkKeywords } from '../src/shared/agent/keywords';
 import { editProjectFile, listProjectFiles, readProjectFile, writeProjectFile } from '../src/shared/agent/projectFiles';
-import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type ViewTemplates } from '../src/shared/agent/trackers';
+import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type Earlier, type ViewTemplates } from '../src/shared/agent/trackers';
 import { EVENT_TYPES } from '../src/shared/agent/litrpg';
 import type { AiAccess } from '../src/shared/agent/access';
 import { SKILLS } from './skills.generated';
@@ -54,8 +54,11 @@ export interface ServerOptions {
    * tells it what to say instead ("which book?"). Without it `project` is simply a folder name.
    */
   resolve?: (ref: ProjectRef) => Promise<string>;
-  /** The folders of the Books that come before this Book's in its series, in order, so the trackers can carry what happened in them forward. */
-  earlier?: (folder: string) => Promise<string[]>;
+  /**
+   * Where this Book's tracker ledgers live and what came before it: a series that has a folder of its own keeps one ledger file for all its Books
+   * there; otherwise it is the folders of the Books before this one, in order. Either way the trackers carry what happened in them forward.
+   */
+  earlier?: (folder: string) => Promise<Earlier>;
 }
 
 /** What a tool call names, and what it needs of it. */

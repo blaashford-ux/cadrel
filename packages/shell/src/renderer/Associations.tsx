@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { childrenOf, getProject, viewLevel, type Project } from '@cadrel/kernel';
-import type { ModuleId, Overview, StudioState } from '../shared/api';
+import type { ModuleId, Overview, PeopleState, StudioState } from '../shared/api';
 import { formatWords } from './format';
 import { appliesTo } from './associationText';
 
 const api = window.cadrel.studio;
+const peopleApi = window.cadrel.people;
+type Ready = Extract<PeopleState, { available: true }>;
 
 interface Props {
   p: Project;
@@ -33,11 +35,33 @@ export function Associations({ p, studio, overview, act, onGo, onSelect }: Props
   const [target, setTarget] = useState(p.id);
   const [pick, setPick] = useState('');
   const [msManuscript, setMsManuscript] = useState('');
+  const [asin, setAsin] = useState('');
+  const [titles, setTitles] = useState<Record<string, string | null>>({});
+  const [people, setPeople] = useState<PeopleState | null>(null);
+  const [who, setWho] = useState({ subject: '', roleId: '', scope: p.id, until: '' });
   useEffect(() => {
     setTarget(p.id);
     setPick('');
     setMsManuscript('');
+    setAsin('');
+    setWho({ subject: '', roleId: '', scope: p.id, until: '' });
   }, [p.id]);
+  const loadPeople = () => peopleApi.state().then(setPeople, () => setPeople({ available: false, reason: 'People and roles could not be read.' }));
+  useEffect(() => {
+    void loadPeople();
+  }, [p.id, studio.tree]);
+  const comps = mine.filter((l) => l.module === 'comp');
+  const compKey = comps.map((l) => l.ref).sort().join(',');
+  useEffect(() => {
+    let live = true;
+    for (const ref of new Set(comps.map((l) => l.ref))) {
+      if (titles[ref] !== undefined) continue;
+      void window.cadrel.myBooks.book(ref).then((b) => live && setTitles((t) => ({ ...t, [ref]: b?.title ?? null })), () => live && setTitles((t) => ({ ...t, [ref]: null })));
+    }
+    return () => {
+      live = false;
+    };
+  }, [compKey]);
 
   const nameOfCat = (key: string) => overview?.market.categories.find((c) => c.key === key)?.name ?? key;
   const gone = (key: string) => !!overview?.market.ok && !!overview.market.libraryRoot && !overview.market.categories.some((c) => c.key === key);
@@ -126,6 +150,125 @@ export function Associations({ p, studio, overview, act, onGo, onSelect }: Props
         <button type="button" disabled={!msManuscript} onClick={attach}>Attach</button>
       </div>
       <p className="muted small">A manuscript belongs to one project or book: attaching it here moves it from wherever it was.</p>
+
+      <h4>Comparable titles</h4>
+      {comps.length === 0 && <p className="muted">No comps yet. A comp is a book readers of this {level === 'book' ? 'book' : 'project'} also buy; add it by its ASIN.</p>}
+      <ul className="links">
+        {comps.map((l) => (
+          <li key={`${l.projectId}:${l.ref}`}>
+            <span className="chip">Comp</span>
+            <strong>{titles[l.ref] ?? l.ref}</strong>
+            {titles[l.ref] && <span className="muted small">{l.ref}</span>}
+            <span className="muted small">for {appliesTo(tree, l.projectId, p.id)}</span>
+            <button type="button" className="quiet" onClick={() => void act(() => api.unlink('comp', l.ref, l.projectId))}>Remove</button>
+          </li>
+        ))}
+      </ul>
+      <div className="row">
+        <input aria-label="ASIN of the comparable title" placeholder="ASIN, such as B0ABC12345" value={asin} maxLength={10} onChange={(e) => setAsin(e.target.value)} />
+        {books.length > 0 && (
+          <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Where the comp applies">
+            <option value={p.id}>For the whole project</option>
+            {books.map((b) => <option key={b.id} value={b.id}>For {b.name} only</option>)}
+          </select>
+        )}
+        <button type="button" disabled={!asin.trim()} onClick={() => void act(() => api.link(target, 'comp', asin)).then((r) => r.ok && setAsin(''))}>Add comp</button>
+      </div>
+      <p className="muted small">A comp can be a comp for several projects. Its title shows when Market has captured the book.</p>
+
+      <PeopleAssociation p={p} books={books} here={here} people={people} who={who} setWho={setWho} act={act} reload={loadPeople} parentName={parent?.name} onSelect={onSelect} />
     </section>
+  );
+}
+
+interface PeopleProps {
+  p: Project;
+  books: Project[];
+  here: Set<string>;
+  people: PeopleState | null;
+  who: { subject: string; roleId: string; scope: string; until: string };
+  setWho: (w: PeopleProps['who']) => void;
+  act: Props['act'];
+  reload: () => Promise<unknown>;
+  parentName?: string;
+  onSelect: Props['onSelect'];
+}
+
+/**
+ * Who works on this Project, and with what role: the assignments scoped to it. This is how access is controlled: a role given here applies
+ * to the Project and everything under it (a role given on one Book applies to that Book only), and the same permission check that
+ * enforces it everywhere is the one that refuses a change someone may not make.
+ */
+function PeopleAssociation({ p, books, here, people, who, setWho, act, reload, parentName, onSelect }: PeopleProps) {
+  if (!people) return <><h4>People</h4><p className="muted">Loading…</p></>;
+  if (!people.available) return <><h4>People</h4><p className="muted">{people.reason}</p></>;
+  const s: Ready = people;
+  const parentId = p.parentId;
+  const nameOfSubject = (a: Ready['assignments'][number]) => (a.subject.kind === 'person' ? [...s.people, ...s.deactivated].find((x) => x.id === a.subject.id)?.name : s.teams.find((x) => x.id === a.subject.id)?.name) ?? a.subject.id;
+  const roleName = (id: string) => s.roles.find((r) => r.id === id)?.name ?? id;
+  const mine = s.assignments.filter((a) => a.scope.kind === 'project' && here.has(a.scope.id));
+  const inherited = parentId ? s.assignments.filter((a) => a.scope.kind === 'project' && a.scope.id === parentId) : [];
+  const studioWide = new Set(s.assignments.filter((a) => a.scope.kind === 'studio').map((a) => `${a.subject.kind}:${a.subject.id}`)).size;
+  const scopeName = (id: string) => (id === p.id ? (parentId ? 'this book' : 'the whole project') : books.find((b) => b.id === id)?.name ?? id);
+  const until = (a: Ready['assignments'][number]) => (a.expiresAt ? ` until ${a.expiresAt.slice(0, 10)}` : '');
+  const [subjectKind, subjectId] = who.subject.split(':');
+  const give = () =>
+    void act(() =>
+      peopleApi.grant({ subject: { kind: subjectKind === 'team' ? 'team' : 'person', id: subjectId ?? '' }, roleId: who.roleId, scope: { kind: 'project', id: who.scope }, expiresAt: who.until ? `${who.until}T23:59:59.000Z` : null })
+    ).then((r) => {
+      if (r.ok) setWho({ ...who, subject: '', roleId: '', until: '' });
+      return reload();
+    });
+  return (
+    <>
+      <h4>People</h4>
+      {mine.length === 0 && inherited.length === 0 && <p className="muted">Nobody is given a role on {p.name} itself yet.</p>}
+      <ul className="links">
+        {inherited.map((a) => (
+          <li key={`inh:${a.id}`}>
+            <span className="chip">{a.subject.kind === 'team' ? 'Team' : 'Person'}</span>
+            <strong>{nameOfSubject(a)}</strong>
+            <span>{roleName(a.roleId)}</span>
+            <span className="muted small">from {parentName ?? 'the project'}{until(a)}</span>
+            {parentId && <button type="button" className="link" onClick={() => onSelect(parentId)}>Change on the project</button>}
+          </li>
+        ))}
+        {mine.map((a) => (
+          <li key={a.id}>
+            <span className="chip">{a.subject.kind === 'team' ? 'Team' : 'Person'}</span>
+            <strong>{nameOfSubject(a)}</strong>
+            <span>{roleName(a.roleId)}</span>
+            <span className="muted small">for {scopeName(a.scope.id)}{until(a)}</span>
+            {s.may.roles && <button type="button" className="quiet" onClick={() => void act(() => peopleApi.revoke(a.id)).then(() => reload())}>Remove</button>}
+          </li>
+        ))}
+      </ul>
+      {s.may.roles ? (
+        <div className="row">
+          <select value={who.subject} onChange={(e) => setWho({ ...who, subject: e.target.value })} aria-label="Person or team">
+            <option value="">Give someone a role…</option>
+            <optgroup label="People">{s.people.map((x) => <option key={x.id} value={`person:${x.id}`}>{x.name}</option>)}</optgroup>
+            {s.teams.length > 0 && <optgroup label="Teams">{s.teams.map((x) => <option key={x.id} value={`team:${x.id}`}>{x.name}</option>)}</optgroup>}
+          </select>
+          <select value={who.roleId} onChange={(e) => setWho({ ...who, roleId: e.target.value })} aria-label="Role on this project">
+            <option value="">Role…</option>
+            {s.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          {books.length > 0 && (
+            <select value={who.scope} onChange={(e) => setWho({ ...who, scope: e.target.value })} aria-label="Where the role applies">
+              <option value={p.id}>On the whole project</option>
+              {books.map((b) => <option key={b.id} value={b.id}>On {b.name} only</option>)}
+            </select>
+          )}
+          <label className="inline small muted">until <input type="date" aria-label="Role ends on" value={who.until} onChange={(e) => setWho({ ...who, until: e.target.value })} /></label>
+          <button type="button" disabled={!who.subject || !who.roleId} onClick={give}>Give role</button>
+        </div>
+      ) : (
+        <p className="muted small">Only someone who can manage roles can change who has access here.</p>
+      )}
+      <p className="muted small">
+        A role given here applies to {p.name}{books.length ? ' and its books, or to one book if you choose' : ''}, and nothing else; it only ever grants. {studioWide > 0 ? `${studioWide} ${studioWide === 1 ? 'person or team has' : 'people or teams have'} a studio-wide role that reaches this too (see Admin).` : ''}
+      </p>
+    </>
   );
 }

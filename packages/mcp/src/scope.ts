@@ -6,6 +6,7 @@
 import { getProject, linksOf, pathOf, viewBooks, viewLevel, type Project, type ProjectTree } from '@cadrel/kernel';
 import type { Studio } from '@cadrel/studio';
 import { AgentError } from '@cadrel/write/src/shared/agent/tools';
+import type { Earlier } from '@cadrel/write/src/shared/agent/trackers';
 import type { ProjectRef } from '@cadrel/write/mcp/server';
 
 export interface ResolverOptions {
@@ -70,7 +71,7 @@ export function bookOf(t: ProjectTree, p: Project): Project | null {
 
 const folderOf = (t: ProjectTree, id: string): string | null => linksOf(t, id, 'write')[0]?.ref ?? null;
 
-export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectRef): Promise<string>; earlier(folder: string): Promise<string[]> } {
+export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectRef): Promise<string>; earlier(folder: string): Promise<Earlier> } {
   const tree = async () => (await o.studio.read()).tree;
   const closedSet = async () => (o.closed ? await o.closed() : new Set<string>());
 
@@ -109,20 +110,24 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     return folder;
   }
 
-  /** The folders of the Books before this one in its series, in order. Empty for anything that is not a Book. */
-  async function earlier(folder: string): Promise<string[]> {
+  /**
+   * Where the tracker ledgers of the Book in `folder` live, and what came before it. A series with a manuscript folder of its own keeps one
+   * ledger file for all its Books, there (each Book's ledger inside under its id); the Books before this one are read from it. A series with
+   * no folder of its own, or a book on its own, keeps one file per Book in its own folder, and this gives the folders of the Books before it.
+   * Every earlier Book counts, closed or not: it is where the story has been.
+   */
+  async function earlier(folder: string): Promise<Earlier> {
     const t = await tree();
     const link = t.links.find((l) => l.module === 'write' && l.ref === folder);
     const own = link ? getProject(t, link.projectId) : undefined;
     const book = own ? bookOf(t, own) : null;
-    if (!book?.parentId) return [];
+    if (!book?.parentId || !own || own.id !== book.id) return [];
     const parent = getProject(t, book.parentId);
     if (!parent) return [];
-    // every earlier Book counts, closed or not: it is where the story has been
-    return viewBooks(t, parent.id)
-      .filter((b) => b.order < book.order)
-      .map((b) => folderOf(t, b.id))
-      .filter((f): f is string => !!f);
+    const before = viewBooks(t, parent.id).filter((b) => b.order < book.order);
+    const seriesFolder = folderOf(t, parent.id);
+    if (seriesFolder) return { folder: seriesFolder, book: book.id, bookName: book.name, before: before.map((b) => ({ id: b.id, name: b.name, folder: folderOf(t, b.id) })) };
+    return before.map((b) => folderOf(t, b.id)).filter((f): f is string => !!f);
   }
 
   return { resolve, earlier };
