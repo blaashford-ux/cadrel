@@ -16,7 +16,7 @@ export const STUDIO_INSTRUCTIONS =
   'Name the Project, and the Book when it has more than one open (the tools say which to pick when you do not). studio_context shows one Project and Book whole: its series files to read first, its Book files, and where new work belongs. ' +
   'Everything else, manuscripts and market research included, is linked to a project. Start with studio_projects to see the tree and what is linked where. ' +
   'Notes are the same everywhere: studio_notes lists them across all modules (including the review notes in manuscripts), and studio_add_note leaves one on a project or on any record of a module. ' +
-  'studio_user says who you are acting for and lists the files they attached to their profile, which you may open with studio_user_file (only the files they have not hidden from you are listed). You can organise projects (create, rename, move, link, archive) but you cannot delete them. Never invent a project: ask the author if the right one is unclear.';
+  'studio_user says who you are acting for and lists the files they attached to their profile, which you may open with studio_user_file (only the files they have not hidden from you are listed). You can organise projects (create, rename, reorder, move, link manuscripts, Market categories and comparable titles, archive) but you cannot delete them; a new Book is given its starting stage, and moving or closing a Book is studio_stage. Never invent a project: ask the author if the right one is unclear.';
 
 export interface StudioToolOptions {
   studio: Studio;
@@ -31,6 +31,11 @@ export interface StudioToolOptions {
    * is told of no other project, and cannot name one. Absent where the Studio's people are not known: then nothing is limited.
    */
   view?: (tree: ProjectTree) => Promise<Pick<ProjectVisibility, 'all' | 'visible'> | null>;
+  /**
+   * The workflow and starting stage for a new Book (the default for new books), or null where there is none to give. Without it a Book is made
+   * with no stage, as in a Studio whose workflows are not known here.
+   */
+  stageForNewBook?: () => Promise<{ workflowId: string; stage: string } | null>;
 }
 
 const reply = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
@@ -214,13 +219,28 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
   server.registerTool(
     'studio_create_project',
     {
-      description: 'Create a project, or a subproject when `parent` is given. `kind` is a free label, usually "Series" for a project that holds books and "Book" for a book.',
-      inputSchema: { name: z.string(), parent: projectRef.optional(), kind: z.string().optional() }
+      description:
+        'Create a project. With no `parent` it is a top-level project: usually a Series (kind "Series") that will hold books, or, with `standalone` true, a standalone novel (a project that holds its one book, made together). With `parent` set to a project it is a Book under it (kind "Book"), and it starts in the first stage of the default workflow for new books; with `parent` set to a Book it is something inside that book. `kind` is a free label. A new project has no manuscript folder: the author adds one in Cadrel, or link an existing one with studio_link.',
+      inputSchema: { name: z.string(), parent: projectRef.optional(), kind: z.string().optional(), standalone: z.boolean().optional() }
     },
     (a) =>
       guarded(async () => {
-        const parentId = a.parent ? resolve((await seen()).tree, a.parent) : null;
-        const p = await o.studio.createProject({ name: a.name, parentId, kind: a.kind });
+        const t = (await seen()).tree;
+        const parentId = a.parent ? resolve(t, a.parent) : null;
+        if (a.standalone && parentId) throw new ProjectError('A standalone novel is a top-level project; leave out parent.');
+        const slot = (id: string | null) => !!id && viewLevel(t, id) === 'project';
+        const start = a.standalone || slot(parentId) ? ((await o.stageForNewBook?.()) ?? null) : null;
+        if (a.standalone) {
+          const proj = await o.studio.createProject({ name: a.name, parentId: null, kind: a.kind ?? 'Standalone' });
+          try {
+            await o.studio.createProject({ name: a.name, parentId: proj.id, kind: 'Book', ...(start ?? {}) });
+          } catch (e) {
+            await o.studio.deleteProject(proj.id, { cascade: true }).catch(() => undefined); // a standalone is made whole or not at all
+            throw e;
+          }
+          return row((await seen()).tree, proj.id, await closedSet());
+        }
+        const p = await o.studio.createProject({ name: a.name, parentId, kind: a.kind ?? (slot(parentId) ? 'Book' : undefined), ...(start ?? {}) });
         return row((await seen()).tree, p.id, await closedSet());
       })
   );
@@ -229,15 +249,18 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     'studio_update_project',
     {
       description:
-        'Rename a project, change its kind, move it under another project (`parent`; use "" for the top level), or archive or restore it. Archiving also archives its subprojects. This cannot delete a project.',
-      inputSchema: { project: projectRef, name: z.string().optional(), kind: z.string().optional(), parent: z.string().optional(), archived: z.boolean().optional() }
+        'Rename a project, change its kind, move it under another project (`parent`; use "" for the top level) or to a place among its siblings (`position`, counting from 1), or archive or restore it. Archiving also archives its subprojects. This cannot delete a project.',
+      inputSchema: { project: projectRef, name: z.string().optional(), kind: z.string().optional(), parent: z.string().optional(), position: z.number().int().min(1).optional(), archived: z.boolean().optional() }
     },
     (a) =>
       guarded(async () => {
         const t = (await seen()).tree;
         const id = resolve(t, a.project);
         if (a.name !== undefined || a.kind !== undefined) await o.studio.updateProject(id, { name: a.name, kind: a.kind });
-        if (a.parent !== undefined) await o.studio.moveProject(id, a.parent === '' ? null : resolve(t, a.parent));
+        if (a.parent !== undefined || a.position !== undefined) {
+          const parent = a.parent === undefined ? getProject(t, id)?.parentId ?? null : a.parent === '' ? null : resolve(t, a.parent);
+          await o.studio.moveProject(id, parent, a.position === undefined ? undefined : a.position - 1);
+        }
         if (a.archived !== undefined) await o.studio.archiveProject(id, a.archived);
         return row((await seen()).tree, id, await closedSet());
       })
@@ -247,8 +270,8 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     'studio_link',
     {
       description:
-        'Link a module\'s record to a project, or (with project omitted) unlink it. A manuscript (write) belongs to one project and linking it again moves it; a Market category can belong to several projects, so linking it adds it and keeps the others; to take it out of one project, give that project with unlink true, and with no project it leaves all of them. Records: module "write" with the manuscript folder name from list_projects, or module "market" with a category key.',
-      inputSchema: { module: z.enum(['write', 'market']), record: z.string(), project: projectRef.optional(), unlink: z.boolean().optional() }
+        'Link a module\'s record to a project, or (with project omitted) unlink it. A manuscript (write) belongs to one project and linking it again moves it; a Market category can belong to several projects, so linking it adds it and keeps the others; to take it out of one project, give that project with unlink true, and with no project it leaves all of them. Records: module "write" with the manuscript folder name from list_projects, module "market" with a category key, or module "comp" with the ASIN of a comparable title (it can be a comp for several projects).',
+      inputSchema: { module: z.enum(['write', 'market', 'comp']), record: z.string(), project: projectRef.optional(), unlink: z.boolean().optional() }
     },
     (a) =>
       guarded(async () => {

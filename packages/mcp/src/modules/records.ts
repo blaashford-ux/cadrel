@@ -11,7 +11,7 @@ export const RECORDS_INSTRUCTIONS =
   'Tasks and deadlines belong to a project or subproject (use studio_projects for names): work_tasks lists them, work_add_task and work_set_task add and finish them. ' +
   'A sign-off is an answer that named people give (work_request_approval asks for one; you cannot answer one, only the people asked can). Decisions are the author\'s own ledger: read them with work_decisions, but tell the author to record a decision themselves. ' +
   'books_list shows the catalogue (series, position, editions with their ASINs, and the project each book is made in). files_list shows the vault\'s files, who has each checked out, what each uses and where it is used. ' +
-  'You cannot approve or reject, move a project between stages, change the catalogue, check files in or out, or release anyone\'s lock: those are for the person to do in Cadrel. Never invent a project, task or person: look them up first, and ask when it is unclear.';
+  'You cannot approve or reject, change the catalogue, check files in or out, or release anyone\'s lock: those are for the person to do in Cadrel. Never invent a project, task or person: look them up first, and ask when it is unclear.';
 
 export interface RecordsToolOptions {
   service: StudioService;
