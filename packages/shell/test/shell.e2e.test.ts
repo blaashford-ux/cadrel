@@ -335,6 +335,50 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 150_000);
 
+  it('Market shows only the categories assigned to the Project in scope, with a switch to all, and says so when none are assigned', async () => {
+    const h = fs.mkdtempSync(path.join(tmp, 'mscope-home-'));
+    const ud = fs.mkdtempSync(path.join(tmp, 'mscope-data-'));
+    const lib = path.join(tmp, 'mscope-library');
+    fs.mkdirSync(lib);
+    fs.mkdirSync(path.join(ud, 'studios', 'local', 'market'), { recursive: true });
+    fs.writeFileSync(path.join(ud, 'studios', 'local', 'market', 'config.json'), JSON.stringify({ libraryRoot: lib, port: PORT + 3 }));
+    const fx = path.resolve(PKG, '../../fixtures/amazon-com');
+    const library = Library.open(lib);
+    library.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/11650864011', html: zlib.gunzipSync(fs.readFileSync(path.join(fx, 'bestsellers-kindle-humorous-fantasy.html.gz'))).toString('utf8'), capturedAt: '2026-10-17T00:00:00Z' } as never);
+    library.ingest({ kind: 'list', url: 'https://www.amazon.com/zgbs/digital-text/6190484011', html: fs.readFileSync(path.join(fx, 'bestsellers-kindle-cozy-fantasy.excerpt.html'), 'utf8'), capturedAt: '2026-10-18T00:00:00Z' } as never);
+    library.close();
+
+    const { app, shell } = await launch({ home: h, userData: ud });
+    const call = <T,>(fn: string, ...args: unknown[]) => shell.evaluate(([f, a]) => { const [ns, name] = (f as string).split('.'); return (window as any).cadrel[ns!][name!](...(a as unknown[])); }, [fn, args] as const) as Promise<T>;
+    const series = await call<{ id: string }>('manage.create', { name: 'Dragon Rider', kind: 'Series', template: null });
+    const lost = await call<{ id: string }>('manage.create', { name: 'The Lost King', kind: 'Series', template: null });
+    await call('studio.link', series.id, 'market', 'amazon.com:kindle:214873986011'); // Cozy
+    await call('scope.set', { project: series.id });
+
+    await shell.getByRole('button', { name: 'Market', exact: true }).click();
+    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
+    await market.getByRole('tab', { name: 'Queue' }).waitFor();
+    const options = () => market.getByLabel('Category').locator('option').allInnerTexts();
+    await waitFor(async () => JSON.stringify(await options()) === JSON.stringify(['All of this project’s categories', 'Cozy']), 'Market to offer only Dragon Rider’s category');
+    expect(await market.getByRole('group', { name: 'Which categories' }).innerText()).toContain('Dragon Rider');
+
+    // Library lists only that category's card, and All brings back both.
+    await market.getByRole('tab', { name: 'Library' }).click();
+    await waitFor(async () => (await market.locator('.card h3, .card h2, .card strong').allInnerTexts()).some((t) => /Cozy/.test(t)), 'the Cozy card');
+    expect((await market.locator('.grid3 .card').allInnerTexts()).join(' ')).not.toContain('Humorous');
+    await market.getByRole('button', { name: 'All', exact: true }).click();
+    await waitFor(async () => (await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'All to show every category');
+    await market.getByRole('button', { name: 'Dragon Rider', exact: true }).click();
+    await waitFor(async () => !(await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'the Project to narrow it again');
+
+    // A Project with nothing assigned says so, and offers the way out; the choice sticks across Projects.
+    await call('scope.set', { project: lost.id });
+    await market.getByRole('heading', { name: /No categories are assigned to The Lost King/ }).waitFor();
+    await market.getByRole('button', { name: 'Show all categories' }).click();
+    await waitFor(async () => (await market.locator('.grid3 .card').allInnerTexts()).join(' ').includes('Humorous'), 'all categories');
+    await app.close();
+  }, 150_000);
+
   it('Dashboard and Home show a project made in Write', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
