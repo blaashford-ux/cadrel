@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
   ProjectError, NoteError, UserError, STANDARD_TOPICS, ancestorsOf, childrenOf, getProject, kindLabel, linksOf, outline, pathOf, queryNotes, subtreeIds, viewBooks, viewLevel,
-  type Note, type NoteView, type ProjectTree
+  type Note, type NoteView, type ProjectTree, type ProjectVisibility, visibleTree
 } from '@cadrel/kernel';
 import { readWriteNotes, type Studio, type UserStore } from '@cadrel/studio';
 import type { FsPort } from '@cadrel/write/src/shared/fsPort';
@@ -26,6 +26,11 @@ export interface StudioToolOptions {
   write?: { fs: FsPort; root: string };
   /** The Books that are closed (in a Done stage). Absent where the workflows are not known: none is then shown as closed. */
   closed?: () => Promise<ReadonlySet<string>>;
+  /**
+   * Which projects the person the assistant acts for can see: only those they are assigned to (the Owner and an Admin see all). The assistant
+   * is told of no other project, and cannot name one. Absent where the Studio's people are not known: then nothing is limited.
+   */
+  view?: (tree: ProjectTree) => Promise<Pick<ProjectVisibility, 'all' | 'visible'> | null>;
 }
 
 const reply = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
@@ -88,6 +93,15 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
   const projectRef = z.string().describe('A project: its id, or its name or path such as "Dragon Rider / Book 1".');
   const closedSet = async () => (o.closed ? await o.closed() : new Set<string>());
+  /** The studio's data as the person the assistant acts for may see it: projects they are not assigned to, and the notes on them, are not there. */
+  const seen = async () => {
+    const d = await o.studio.read();
+    const v = await o.view?.(d.tree);
+    if (!v) return d;
+    const tree = visibleTree(d.tree, v);
+    const ids = new Set(tree.projects.map((p) => p.id));
+    return { ...d, tree, notes: d.notes.filter((n) => !n.projectId || ids.has(n.projectId)) };
+  };
 
   server.registerTool(
     'studio_user',
@@ -145,7 +159,7 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     },
     (a) =>
       guarded(async () => {
-        const { tree } = await o.studio.read();
+        const { tree } = await seen();
         const closed = await closedSet();
         const root = a.project ? resolve(tree, a.project) : null;
         const inside = root ? new Set(subtreeIds(tree, root)) : null;
@@ -166,7 +180,7 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     },
     (a) =>
       guarded(async () => {
-        const { tree } = await o.studio.read();
+        const { tree } = await seen();
         const closed = await closedSet();
         const found = findNode(tree, a.project);
         if (!found) throw new ProjectError(`There is no project "${a.project}". Use studio_projects to see the names.`);
@@ -205,9 +219,9 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     },
     (a) =>
       guarded(async () => {
-        const parentId = a.parent ? resolve((await o.studio.read()).tree, a.parent) : null;
+        const parentId = a.parent ? resolve((await seen()).tree, a.parent) : null;
         const p = await o.studio.createProject({ name: a.name, parentId, kind: a.kind });
-        return row((await o.studio.read()).tree, p.id, await closedSet());
+        return row((await seen()).tree, p.id, await closedSet());
       })
   );
 
@@ -220,12 +234,12 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     },
     (a) =>
       guarded(async () => {
-        const t = (await o.studio.read()).tree;
+        const t = (await seen()).tree;
         const id = resolve(t, a.project);
         if (a.name !== undefined || a.kind !== undefined) await o.studio.updateProject(id, { name: a.name, kind: a.kind });
         if (a.parent !== undefined) await o.studio.moveProject(id, a.parent === '' ? null : resolve(t, a.parent));
         if (a.archived !== undefined) await o.studio.archiveProject(id, a.archived);
-        return row((await o.studio.read()).tree, id, await closedSet());
+        return row((await seen()).tree, id, await closedSet());
       })
   );
 
@@ -243,13 +257,13 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
           return { unlinked: a.record };
         }
         if (a.unlink) {
-          const from = resolve((await o.studio.read()).tree, a.project);
+          const from = resolve((await seen()).tree, a.project);
           await o.studio.unlink(a.module, a.record, from);
-          return row((await o.studio.read()).tree, from);
+          return row((await seen()).tree, from);
         }
-        const id = resolve((await o.studio.read()).tree, a.project);
+        const id = resolve((await seen()).tree, a.project);
         await o.studio.link(id, a.module, a.record);
-        return row((await o.studio.read()).tree, id, await closedSet());
+        return row((await seen()).tree, id, await closedSet());
       })
   );
 
@@ -286,7 +300,7 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     },
     (a) =>
       guarded(async () => {
-        const { tree, notes } = await o.studio.read();
+        const { tree, notes } = await seen();
         const stored: NoteView[] = notes.map((n) => ({ ...n, source: 'studio' }));
         const moduleNotes = o.write && (!a.module || a.module === 'write') ? await readWriteNotes({ fs: o.write.fs, root: o.write.root, tree }) : [];
         const projectIds = a.project ? subtreeIds(tree, resolve(tree, a.project)) : undefined;
@@ -314,11 +328,11 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
     (a) =>
       guarded(async () => {
         if (!a.project && !a.record) throw new NoteError('Say which project the note is on, or which record (module, kind and record).');
-        const { tree } = await o.studio.read();
+        const { tree } = await seen();
         const target = a.record ? { module: a.module ?? '', kind: a.kind ?? 'record', id: a.record, label: a.label } : null;
         if (target && !target.module) throw new NoteError('A note on a record needs the module (for example "market").');
         const n = await o.studio.addNote({ body: a.body, projectId: a.project ? resolve(tree, a.project) : undefined, target, category: a.topic, origin: 'ai', author: who() });
-        return view((await o.studio.read()).tree, n);
+        return view((await seen()).tree, n);
       })
   );
 

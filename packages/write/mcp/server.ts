@@ -54,6 +54,8 @@ export interface ServerOptions {
    * tells it what to say instead ("which book?"). Without it `project` is simply a folder name.
    */
   resolve?: (ref: ProjectRef) => Promise<string>;
+  /** Manuscript folders that belong to projects the person cannot see: list_projects leaves them out. */
+  hidden?: () => Promise<ReadonlySet<string>>;
   /**
    * Where this Book's tracker ledgers live and what came before it: a series that has a folder of its own keeps one ledger file for all its Books
    * there; otherwise it is the folders of the Books before this one, in order. Either way the trackers carry what happened in them forward.
@@ -153,7 +155,8 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
   const ref = (a: { project: string; book?: string }, level: ProjectRef['level'], write = false): Promise<string> => (o.resolve ? o.resolve({ project: a.project, book: a.book, level, write }) : Promise.resolve(a.project));
 
   server.registerTool('list_projects', { description: 'List the book projects (with their status) that you can read and review.', inputSchema: {}, annotations: readOnly }, run(async (c) => {
-      const projects = await listProjects(c);
+      const hide = (await o.hidden?.()) ?? new Set<string>();
+      const projects = (await listProjects(c)).filter((p) => !hide.has(p.project));
       return projects.length ? projects : { projects, message: noProjects(o) };
     }));
 

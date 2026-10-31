@@ -206,9 +206,41 @@ function PersonDetail({ person, s, act, projects, where, roleName, until }: Comm
             <button type="button" onClick={() => void api.explainAccess(person.id, explain.cap, explain.scope === 'studio' ? null : explain.scope).then(setVerdict, (e) => setVerdict({ allowed: false, reason: clean(e) }))}>Explain</button>
           </div>
           {verdict && <div className={`banner ${verdict.allowed ? 'info' : ''}`} role="status"><strong>{verdict.allowed ? 'Allowed' : 'Not allowed'}</strong>: {verdict.reason}</div>}
+          <SeesProjects personId={person.id} projects={projects} assignments={s.assignments} />
         </>
       )}
     </div>
+  );
+}
+
+/** Which projects this person can see: the ones they are assigned to. Everyone else's projects are hidden from them. */
+function SeesProjects({ personId, projects, assignments }: { personId: string; projects: Common['projects']; assignments: AssignmentRecord[] }) {
+  const [seen, setSeen] = useState<{ all: boolean; assigned: string[]; context: string[] } | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setSeen(null);
+    setProblem(null);
+    void api.visibleProjects(personId).then((v) => live && setSeen(v), (e) => live && setProblem(clean(e)));
+    return () => {
+      live = false;
+    };
+  }, [personId, assignments]);
+  const name = (id: string) => projects.find((p) => p.id === id)?.name ?? id;
+  return (
+    <>
+      <h5>Projects they can see</h5>
+      {problem && <p className="muted small">{problem}</p>}
+      {!problem && !seen && <p className="muted small">Loading…</p>}
+      {seen?.all && <p className="muted small">Every project: the Owner and an Admin see all of them.</p>}
+      {seen && !seen.all && seen.assigned.length === 0 && <p className="muted small">None. Projects are hidden from people who are not assigned to them; give a role on a project (on its page, under People) to show it. A role at the whole studio does not.</p>}
+      {seen && !seen.all && seen.assigned.length + seen.context.length > 0 && (
+        <ul className="plain" aria-label="Projects they can see">
+          {seen.assigned.map((id) => <li key={id}>{name(id)}</li>)}
+          {seen.context.map((id) => <li key={id} className="muted">{name(id)} <span className="small">(holds a book they are on)</span></li>)}
+        </ul>
+      )}
+    </>
   );
 }
 

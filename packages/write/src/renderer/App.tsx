@@ -46,7 +46,7 @@ import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
 import { appName } from './appName';
 import { useShowAllManuscripts, useWriteScope } from './useWriteScope';
-import { folderInScope, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
+import { folderInScope, hiddenFolders, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
 import type { Anchor } from '../shared/review/comments';
@@ -189,7 +189,9 @@ export function App() {
   const locked = isReviewer || closedHere;
   /** Nothing in the tree can be changed (new, rename, delete, move): Cadrel Reader or a closed Book. */
   const noEdit = caps.reader === true || closedHere;
-  const scopedListing = useMemo(() => (listing && folders ? { ...listing, projects: inScope(listing.projects, folders), folders: [] } : listing), [listing, folders]);
+  const noSee = useMemo(() => hiddenFolders(wscope), [wscope]);
+  const seenListing = useMemo(() => (listing && noSee.size ? { ...listing, projects: listing.projects.filter((p) => !noSee.has(basename(p.path))) } : listing), [listing, noSee]);
+  const scopedListing = useMemo(() => (seenListing && folders ? { ...seenListing, projects: inScope(seenListing.projects, folders), folders: [] } : seenListing), [seenListing, folders]);
   const reviewFile = projectPath && activeTab ? activeTab.file.replace(/\\/g, '/').slice(projectPath.replace(/\\/g, '/').replace(/\/+$/, '').length + 1) : null;
   const review = useReview(
     window.cadrelWrite,
@@ -667,8 +669,8 @@ export function App() {
   };
   // If the Project or Book Cadrel is showing changes to one this manuscript is not part of, go back to the list instead of leaving it open.
   useEffect(() => {
-    if (folders && projectPath && !folderInScope(projectPath, folders)) void goHomeRef.current();
-  }, [folders, projectPath]);
+    if (projectPath && (noSee.has(basename(projectPath)) || (folders && !folderInScope(projectPath, folders)))) void goHomeRef.current();
+  }, [folders, projectPath, noSee]);
   const goHome = async () => {
     setShowQuick(false);
     if (await ws.closeProject()) void reloadListing();
@@ -714,7 +716,7 @@ export function App() {
   const homeProps = {
     config: pConfig,
     listing: scopedListing,
-    scope: wscope?.project ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders: folders ?? [], all: showAll, setAll: setShowAll, hidden: Math.max(0, (listing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
+    scope: wscope?.project ? { title: wscope.bookName ? `${wscope.projectName}: ${wscope.bookName}` : wscope.projectName ?? '', folders: folders ?? [], all: showAll, setAll: setShowAll, hidden: Math.max(0, (seenListing?.projects.length ?? 0) - (scopedListing?.projects.length ?? 0)) } : undefined,
     loading: listing_loading,
     onOpen: (p: string) => void openProject(p),
     shared,
@@ -1027,7 +1029,7 @@ export function App() {
         {started && !welcome && (showSharingHome && caps.review ? (
           <SharingHome
             config={pConfig}
-            listing={listing}
+            listing={seenListing}
             sync={syncStatus}
             onBack={() => setShowSharingHome(false)}
             onConnect={() => setShowSync(true)}

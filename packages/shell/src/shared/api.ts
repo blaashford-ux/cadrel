@@ -610,6 +610,8 @@ export interface PeopleApi {
   explainAccess(personId: string, capability: string, projectId?: string | null): Promise<{ allowed: boolean; reason: string }>;
   /** Every capability the person holds at the studio, or on one project when `projectId` is given (`*` means all). */
   effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
+  /** The projects a person can see: those they are assigned to (and the Projects above an assigned Book, shown as containers), or all of them. */
+  visibleProjects(personId: string): Promise<{ all: boolean; assigned: string[]; context: string[] }>;
 }
 
 /** The workflows an administrator builds: the stages a book moves through and the gates between them. */
@@ -804,6 +806,8 @@ export interface ScopeView extends ResolvedViewScope {
   bookName: string | null;
   /** Every module's records that are inside the scope (the Write folders and Market categories of this Project and Book). */
   links: ScopeLink[];
+  /** Records of projects the person cannot see: no view lists them, even when it shows everything. */
+  hidden: { module: string; ref: string }[];
 }
 
 /** The Project and Book the app is showing (docs/UI-MODEL.md). One scope for the whole app: the shell's pages and the module views follow it. */

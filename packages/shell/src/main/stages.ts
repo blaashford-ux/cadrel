@@ -74,7 +74,7 @@ export class ProjectStages {
   /** Where the project can go from its stage, and for each move whether it is open to this person now and what is in the way. */
   async options(projectId: string): Promise<{ workflow: WorkflowRecord; current: ProjectStageView['stage']; options: StageMoveOption[] } | null> {
     const wfs = this.need();
-    const p = getProject((await this.studio.studio.read()).tree, projectId) ?? fail('There is no such project.');
+    const p = getProject(await this.studio.tree(), projectId) ?? fail('There is no such project.');
     if (!p.workflowId) return null;
     const r = await wfs.stageOptions(p.workflowId, p.stage, await this.factsOf(projectId));
     const category = (key: string): StageCategory => r.workflow.stages.find((s) => s.key === key)?.category ?? 'active';
@@ -84,7 +84,7 @@ export class ProjectStages {
   /** Moves the project to another stage if the workflow and the person allow it. Throws with every reason if not. */
   async move(projectId: string, to: string): Promise<void> {
     const wfs = this.need();
-    const p = getProject((await this.studio.studio.read()).tree, projectId) ?? fail('There is no such project.');
+    const p = getProject(await this.studio.tree(), projectId) ?? fail('There is no such project.');
     if (!p.workflowId) fail(`“${p.name}” has no workflow yet.`);
     if (p.status === 'archived') fail('That project is archived. Restore it first.');
     await wfs.allowMove(p.workflowId!, p.stage, to, await this.factsOf(projectId));
@@ -118,7 +118,7 @@ export class ProjectStages {
 
   /** Closes a Book: moves it to the first Done stage its workflow lets this person reach from where it is, through the gates. */
   async closeBook(bookId: string): Promise<void> {
-    const tree = (await this.studio.studio.read()).tree;
+    const tree = await this.studio.tree();
     if (viewLevel(tree, bookId) !== 'book') fail('Only a book can be closed.');
     const info = (await this.options(bookId)) ?? fail('This book has no stages yet.');
     if (info.current?.category === 'done') fail('That book is already closed.');
@@ -139,7 +139,7 @@ export class ProjectStages {
 
   /** Takes the stage off a project that should not have one: a Project above its Books (made before stages moved to Books). */
   async clearStage(projectId: string): Promise<void> {
-    const tree = (await this.studio.studio.read()).tree;
+    const tree = await this.studio.tree();
     const p = getProject(tree, projectId) ?? fail('There is no such project.');
     if (viewLevel(tree, projectId) === 'book') fail('A book keeps its stage.');
     if (!p.workflowId) return;
@@ -198,6 +198,6 @@ export class ProjectStages {
 
   /** Ids of a project and everything under it (for the page's counts). */
   async subtree(projectId: string): Promise<string[]> {
-    return subtreeIds((await this.studio.studio.read()).tree, projectId);
+    return subtreeIds(await this.studio.tree(), projectId);
   }
 }

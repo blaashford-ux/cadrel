@@ -3,7 +3,7 @@
  * (docs/UI-MODEL.md). The assistant names a Project, and a Book when the Project has several; this finds the folder, and when it cannot it says
  * what to ask instead of guessing. The assistant is told the Project and Book explicitly: nothing here follows what the person has open.
  */
-import { getProject, linksOf, pathOf, viewBooks, viewLevel, type Project, type ProjectTree } from '@cadrel/kernel';
+import { getProject, linksOf, pathOf, viewBooks, viewLevel, visibleTree, type Project, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import type { Studio } from '@cadrel/studio';
 import { AgentError } from '@cadrel/write/src/shared/agent/tools';
 import type { Earlier } from '@cadrel/write/src/shared/agent/trackers';
@@ -13,6 +13,8 @@ export interface ResolverOptions {
   studio: Studio;
   /** The Books that are closed (in a Done stage). Absent where the workflows are not known: then none is treated as closed. */
   closed?: () => Promise<ReadonlySet<string>>;
+  /** Which projects the person the assistant acts for can see; what they cannot see is not found, whatever its name. */
+  view?: (tree: ProjectTree) => Promise<Pick<ProjectVisibility, 'all' | 'visible'> | null>;
 }
 
 const lower = (s: string) => s.trim().toLowerCase();
@@ -71,9 +73,20 @@ export function bookOf(t: ProjectTree, p: Project): Project | null {
 
 const folderOf = (t: ProjectTree, id: string): string | null => linksOf(t, id, 'write')[0]?.ref ?? null;
 
-export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectRef): Promise<string>; earlier(folder: string): Promise<Earlier> } {
-  const tree = async () => (await o.studio.read()).tree;
+export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectRef): Promise<string>; earlier(folder: string): Promise<Earlier>; hidden(): Promise<ReadonlySet<string>> } {
+  const tree = async () => {
+    const t = (await o.studio.read()).tree;
+    const v = await o.view?.(t);
+    return v ? visibleTree(t, v) : t;
+  };
   const closedSet = async () => (o.closed ? await o.closed() : new Set<string>());
+
+  /** The manuscript folders of projects the person cannot see. A folder can be named directly, so these must be refused by name too. */
+  async function hidden(): Promise<ReadonlySet<string>> {
+    const raw = (await o.studio.read()).tree;
+    const seen = new Set((await tree()).projects.map((p) => p.id));
+    return new Set(raw.links.filter((l) => l.module === 'write' && !seen.has(l.projectId)).map((l) => l.ref));
+  }
 
   async function resolve(ref: ProjectRef): Promise<string> {
     const t = await tree();
@@ -81,6 +94,7 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     if (!node) {
       // Not something in the project tree: a plain manuscript folder name from list_projects (or one not linked to a project yet).
       if (ref.book) throw new AgentError(`There is no project "${ref.project}" to take a book from. Use studio_projects to see the Projects and their Books.`);
+      if ((await hidden()).has(ref.project)) throw new AgentError(`There is no project "${ref.project}". Use list_projects or studio_projects to see the projects you can work on.`);
       return ref.project;
     }
     const closed = await closedSet();
@@ -130,5 +144,5 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     return before.map((b) => folderOf(t, b.id)).filter((f): f is string => !!f);
   }
 
-  return { resolve, earlier };
+  return { resolve, earlier, hidden };
 }

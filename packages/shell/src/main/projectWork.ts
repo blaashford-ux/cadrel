@@ -19,7 +19,7 @@ export class ProjectWork {
   constructor(private readonly studio: StudioService, private readonly people: PeopleHost, private readonly stages: ProjectStages | null = null) {}
 
   private async tree() {
-    return (await this.studio.studio.read()).tree;
+    return this.studio.tree();
   }
 
   /** What the project's page shows: its own work and its subprojects', each labelled with the project it is on. */

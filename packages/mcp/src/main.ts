@@ -76,11 +76,12 @@ const studio = new Studio(studioPath);
 /** The profile sits beside the studio file, in a folder of its own. */
 const user = new UserStore(path.join(path.dirname(studioPath), 'user'));
 type ClosedBooks = () => Promise<ReadonlySet<string>>;
-const studioFor = (w: Found<{ options: WriteOptions }>, closed?: ClosedBooks) => studioModule({ studio, user, ...(closed ? { closed } : {}), ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+type Viewer = NonNullable<Parameters<typeof makeProjectResolver>[0]['view']>;
+const studioFor = (w: Found<{ options: WriteOptions }>, closed?: ClosedBooks, view?: Viewer) => studioModule({ studio, user, ...(closed ? { closed } : {}), ...(view ? { view } : {}), ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 /** Write's options with the Project and Book resolution of the studio's tree (which folder a Project or Book means, what came before a Book). */
-const scoped = (o: WriteOptions, closed?: ClosedBooks): WriteOptions => {
-  const r = makeProjectResolver({ studio, closed });
-  return { ...o, resolve: r.resolve, earlier: r.earlier };
+const scoped = (o: WriteOptions, closed?: ClosedBooks, view?: Viewer): WriteOptions => {
+  const r = makeProjectResolver({ studio, closed, view });
+  return { ...o, resolve: r.resolve, earlier: r.earlier, hidden: r.hidden };
 };
 
 /**
@@ -88,7 +89,7 @@ const scoped = (o: WriteOptions, closed?: ClosedBooks): WriteOptions => {
  * (--records <file> --person <id> --studio-id <id>). Without all three these tools are left out. With `open: false` (the handshake) nothing is opened.
  * The assistant acts as that person under their role's permissions and needs `assistant.use`; it never migrates the file (the app does).
  */
-async function findRecords(open: boolean): Promise<Found<{ module: McpModule; close(): void; closedBooks?: ClosedBooks }>> {
+async function findRecords(open: boolean): Promise<Found<{ module: McpModule; close(): void; closedBooks?: ClosedBooks; view?: Viewer }>> {
   const file = flag('records');
   const person = flag('person');
   const studioId = flag('studio-id');
@@ -105,7 +106,7 @@ async function findRecords(open: boolean): Promise<Found<{ module: McpModule; cl
     const d = db;
     // The Books in a Done stage, by the acting person's reading of the workflows (the same rule the app uses to hide and lock them).
     const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));
-    return { ok: true, value: { module: recordsModule({ service, personId: person, studio, studioId, db }), close: () => d.close(), closedBooks } };
+    return { ok: true, value: { module: recordsModule({ service, personId: person, studio, studioId, db }), close: () => d.close(), closedBooks, view: (tree) => service.as(person).visibleProjects(tree) } };
   } catch (e) {
     db?.close();
     return { ok: false, reason: `the records could not be opened (${e instanceof Error ? e.message : String(e)})` };
@@ -214,7 +215,7 @@ async function main(): Promise<void> {
       ...write.value.options,
       token,
       port: Number(flag('port') ?? 47831),
-      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write, records.ok ? records.value.closedBooks : undefined), ...(records.ok ? [records.value.module] : []), writeModule(scoped(o, records.ok ? records.value.closedBooks : undefined)), ...(market?.ok ? [market.value.module] : [])] })
+      makeServer: (o) => createCadrelServer({ version: VERSION, modules: [studioFor(write, records.ok ? records.value.closedBooks : undefined, records.ok ? records.value.view : undefined), ...(records.ok ? [records.value.module] : []), writeModule(scoped(o, records.ok ? records.value.closedBooks : undefined, records.ok ? records.value.view : undefined)), ...(market?.ok ? [market.value.module] : [])] })
     });
     watchLifecycle({ retireFile: retireFile(), onStop: (why) => stopNow(why, () => { records.ok && records.value.close(); market?.ok && market.value.close(); }) });
     say(`Cadrel AI access ready on http://${http.host}:${http.port}  (MCP: /mcp, REST: /api, description: /openapi.json)`);
@@ -229,7 +230,8 @@ async function main(): Promise<void> {
   if (!records.ok && flag('records')) say(`Records tools left out: ${records.reason}.`);
   if (!market.ok) say(`Market tools left out: ${market.reason}.`);
   const closed = records.ok ? records.value.closedBooks : undefined;
-  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write, closed), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(scoped(write.value.options, closed))] : []), ...(market.ok ? [market.value.module] : [])] });
+  const view = records.ok ? records.value.view : undefined;
+  const server = createCadrelServer({ version: VERSION, modules: [studioFor(write, closed, view), ...(records.ok ? [records.value.module] : []), ...(write.ok ? [writeModule(scoped(write.value.options, closed, view))] : []), ...(market.ok ? [market.value.module] : [])] });
   await server.connect(new StdioServerTransport());
   const closeAll = () => {
     if (market.ok) market.value.close();

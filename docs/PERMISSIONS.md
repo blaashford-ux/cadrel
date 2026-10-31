@@ -29,6 +29,17 @@ Team ────┘                                              (set of names 
 - **Scope**: the studio, a **project** (which includes all its subprojects; a Series and a Book are both just projects), or a single folder or file. The narrower the scope, the narrower the access. Freelancers and guests normally get a role scoped to one book or file, with an expiry.
 - **Confidential**: any project can be marked confidential. Studio-wide assignments no longer reach it. Only people assigned at or below that node, plus holders of `confidential.access` (Owner by default), can see it. Its existence is hidden from everyone else, and the assistant (MCP) is disabled on it by default.
 
+### Which projects a person can see
+
+A project is for the people assigned to it. Someone who is not assigned to a project does not see it: not in the Projects tree, Home, the Dashboard, Notes or the Planner, not its manuscripts in Write, and not to the assistant, which is told of no project its person cannot see and cannot be pointed at one by naming its folder.
+
+- **Assigned** means holding any role on the Project, or on a Project above it. A role on a Project (a series) covers its Books; a role on one Book covers that Book only. A role at the whole studio does not assign anyone to a project, and neither does a role on a file.
+- **The Project above an assigned Book** is shown as a container so the Book has somewhere to sit; the series' other Books stay hidden.
+- **Who sees every project:** whoever holds `confidential.access` at the studio, which is the Owner and an Admin by default. Nobody else needs it to do their work; give it deliberately.
+- **Teams and expiry** work as everywhere: a role given to a team counts for its members, and an expired role stops showing the project.
+- **Where it is applied.** The rule is one pure function (`projectVisibility` in the kernel). The app applies it to what it shows and to every change to a project, and the assistant's tools apply it too. On this computer the person using the app is the Owner of a Studio they made, so they see everything; the rule bites for a person who is not an Owner or Admin, and for the People page's "Projects they can see" for any person. A Studio that was only joined has its people and roles on its server (M2), so nothing is limited here until the server applies the same rule: this is shaping the interface, not security, in the sense of principle 1.
+- **Market categories** are the library's, not a project's, and are not hidden.
+
 ### How a request is decided
 
 `can(actor, capability, resource)` is one pure function used by the Worker, the desktop app and the tests:

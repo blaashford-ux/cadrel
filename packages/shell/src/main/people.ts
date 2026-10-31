@@ -4,7 +4,7 @@
  *
  * A Studio this person only joined has its people and roles on its server (M2), so there is nothing here to manage and the page says so.
  */
-import { bootstrapStudio } from '@cadrel/kernel';
+import { bootstrapStudio, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
 import type { PeopleState, WorkflowState } from '../shared/api';
@@ -116,6 +116,22 @@ export class PeopleHost {
     if (!this.db || !this.svc) return null;
     const as = this.svc.as(this.meId);
     return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c) });
+  }
+
+  /**
+   * The projects the person using the app can see, or null where this computer holds no records for the Studio (a Studio only joined: its
+   * people and roles are on its server, so there is nothing here to limit by). The Owner and an Admin see every project.
+   */
+  async myVisibility(tree: ProjectTree): Promise<ProjectVisibility | null> {
+    return this.svc ? this.svc.as(this.meId).visibleProjects(tree) : null;
+  }
+
+  /** What another person can see, for the People page ("what would they see?"). Only for someone who may manage people. */
+  async visibilityOf(personId: string, tree: ProjectTree): Promise<{ all: boolean; assigned: string[]; context: string[] }> {
+    if (!this.svc) throw new Error(this.why);
+    if (!(await this.svc.as(this.meId).can('people.manage')) && !(await this.svc.as(this.meId).can('roles.manage'))) throw new Error('Only someone who manages people and roles can see what another person can see.');
+    const v = await this.svc.as(String(personId)).visibleProjects(tree);
+    return { all: v.all, assigned: v.all ? [] : [...v.assigned], context: [...v.context] };
   }
 
   /** Whether the person using the app holds a capability at the studio. */

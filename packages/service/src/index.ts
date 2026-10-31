@@ -11,11 +11,11 @@ import {
   acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
-  updatePerson, updateRole, defaultRoles,
+  updatePerson, updateRole, defaultRoles, projectVisibility,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
-  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage
+  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
 } from '@cadrel/kernel';
 
 export class PermissionDenied extends Error {
@@ -94,6 +94,11 @@ export class StudioAs {
   }
   private scopePath(scope: { kind: ScopeKind; id: string }): ScopeRef[] {
     return scope.kind === 'studio' ? this.studioPath() : [...this.studioPath(), { kind: scope.kind, id: scope.id }];
+  }
+
+  /** The projects this person can see: those they are assigned to (see `projectVisibility`), or all of them for the Owner and Admin. */
+  async visibleProjects(tree: ProjectTree): Promise<ProjectVisibility> {
+    return projectVisibility(tree, await this.context(), this.o.studioId);
   }
 
   /** Whether this person may do something, and why: the interface greys things out from this and "Explain access" shows the reason. */

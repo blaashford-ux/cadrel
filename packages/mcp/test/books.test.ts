@@ -22,6 +22,7 @@ const seed = (folder: string, files: Record<string, string> = {}) => {
 };
 
 beforeEach(async () => {
+  viewer = undefined;
   studio = new Studio(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-books-mcp-')), 'studio.json'));
   mem = new MemoryFs();
   closedIds = new Set();
@@ -50,12 +51,14 @@ beforeEach(async () => {
   closedIds.add(ids['Book 1: Ember']!);
 });
 
+let viewer: ((t: import('@cadrel/kernel').ProjectTree) => Promise<{ all: boolean; visible: Set<string> } | null>) | undefined;
+
 async function connect() {
   const user = new UserStore(path.join(path.dirname(studio.file), 'user'));
   const closed = async () => closedIds as ReadonlySet<string>;
-  const r = makeProjectResolver({ studio, closed });
+  const r = makeProjectResolver({ studio, closed, view: viewer });
   const server = createCadrelServer({
-    modules: [studioModule({ studio, user, closed, write: { fs: mem, root: '/books' } }), writeModule({ fs: mem, root: '/books', resolve: r.resolve, earlier: r.earlier, access: async () => ({ createFiles: false, editFiles: false, suggestKeywords: false }) })]
+    modules: [studioModule({ studio, user, closed, view: viewer, write: { fs: mem, root: '/books' } }), writeModule({ fs: mem, root: '/books', resolve: r.resolve, earlier: r.earlier, hidden: r.hidden, access: async () => ({ createFiles: false, editFiles: false, suggestKeywords: false }) })]
   });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'claude-ai', version: '1' });
@@ -277,5 +280,32 @@ describe('one ledger file per series', () => {
     const r = await call('litrpg_log', { project: 'Dragon Rider', book: 'Book 2', characters: sean([lvl(1, 2)]) });
     expect(r.isError).toBe(true);
     expect(r.text).toMatch(/not the series ledger/);
+  });
+});
+
+describe('projects the person is not assigned to are not there for the assistant', () => {
+  it('lists, resolves and writes only to what they can see', async () => {
+    // assigned to Book 2 only: Dragon Rider shows as its container, and Book 1, Book 3 and The Lost King are hidden
+    viewer = async (t) => ({ all: false, visible: new Set(t.projects.filter((p) => ['Dragon Rider', 'Book 2: Ash'].includes(p.name)).map((p) => p.id)) });
+    const { call } = await connect();
+    const rows = (await call('studio_projects')).json().projects as { name: string }[];
+    expect(rows.map((r) => r.name).sort()).toEqual(['Book 2: Ash', 'Dragon Rider']);
+    const own = await call('list_chapters', { project: 'Dragon Rider', book: 'Book 2', file: 'Manuscript/Book.md' });
+    expect(own.isError).toBe(false);
+    for (const [project, book] of [['Dragon Rider', 'Book 3'], ['The Lost King', undefined]] as const) {
+      const r = await call('list_chapters', { project, ...(book ? { book } : {}), file: 'Manuscript/Book.md' });
+      expect(r.isError, `${project} ${book ?? ''}`).toBe(true);
+    }
+    // a manuscript folder of a hidden project cannot be reached by naming the folder, and is not listed
+    const direct = await call('list_files', { project: 'Lost' });
+    expect(direct.isError).toBe(true);
+    expect(direct.text).toMatch(/There is no project/);
+    const listed = (await call('list_projects')).json() as { project: string }[] | { projects: { project: string }[] };
+    const names = (Array.isArray(listed) ? listed : listed.projects).map((p) => p.project);
+    expect(names).not.toContain('Lost');
+    expect(names).not.toContain('Cinder');
+    expect(names).toContain('Ash');
+    const note = await call('studio_add_note', { body: 'x', project: 'The Lost King' });
+    expect(note.isError).toBe(true);
   });
 });

@@ -563,6 +563,12 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Give role' }).click();
     await shell.locator('.links li', { hasText: 'Editor' }).waitFor();
 
+    // Projects are for the people assigned to them; the Owner sees every one, and the People page says so.
+    await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await shell.getByText('Every project: the Owner and an Admin see all of them.').waitFor();
+    await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
+
     // A note on the book appears on the series (its subprojects count) and on the Notes page.
     await shell.getByLabel('New note').fill('Check the dragon\'s age against book 2.');
     await shell.getByRole('button', { name: 'Add note' }).click();

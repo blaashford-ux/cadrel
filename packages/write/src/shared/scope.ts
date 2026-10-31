@@ -24,6 +24,8 @@ export interface WriteScope {
   bookName: string | null;
   showClosed: boolean;
   links: ScopeLink[];
+  /** Records of projects the person using Cadrel cannot see: Write lists none of them, even when it shows every manuscript. */
+  hidden?: { module: string; ref: string }[];
 }
 
 /** One manuscript folder that is in scope, and how to label it. */
@@ -67,3 +69,6 @@ export const folderInScope = (path: string, folders: ScopedFolder[] | null): boo
 
 /** The scope's entry for a project folder (by path), if it is in scope. */
 export const scopedFolderOf = (path: string, folders: ScopedFolder[] | null): ScopedFolder | undefined => folders?.find((f) => f.folder === basename(path));
+
+/** The manuscript folders that belong to projects the person cannot see. */
+export const hiddenFolders = (scope: WriteScope | null | undefined): Set<string> => new Set((scope?.hidden ?? []).filter((h) => h.module === 'write').map((h) => h.ref));

@@ -12,6 +12,8 @@ export interface ScopeHostOptions {
   remember(scope: ViewScope): void;
   /** Tells every window and module view that the scope changed. */
   announce(scope: ScopeView): void;
+  /** The module records that belong to projects the person using the app cannot see, which no view may list. */
+  hidden?(): Promise<{ module: string; ref: string }[]>;
 }
 
 /**
@@ -39,7 +41,7 @@ export class ScopeHost {
   async get(): Promise<ScopeView> {
     const tree = await this.o.tree();
     const r = resolveViewScope(tree, this.want, await this.o.closed());
-    return { ...r, projectName: r.project ? getProject(tree, r.project)?.name ?? null : null, bookName: r.book && !r.bookImplied ? getProject(tree, r.book)?.name ?? null : null, links: viewScopeLinks(tree, r) };
+    return { ...r, projectName: r.project ? getProject(tree, r.project)?.name ?? null : null, bookName: r.book && !r.bookImplied ? getProject(tree, r.book)?.name ?? null : null, links: viewScopeLinks(tree, r), hidden: (await this.o.hidden?.()) ?? [] };
   }
 
   /**
@@ -70,7 +72,7 @@ export class ScopeHost {
     const chosen = { project: r.project, book: r.bookImplied ? null : r.book, showClosed: r.showClosed };
     this.want = chosen;
     this.o.remember(chosen);
-    if (!this.shown || !sameViewScope(this.shown, r) || this.shown.books.join() !== r.books.join() || this.shown.closed.join() !== r.closed.join() || this.shown.projectName !== r.projectName || this.shown.bookName !== r.bookName || JSON.stringify(this.shown.links) !== JSON.stringify(r.links)) {
+    if (!this.shown || !sameViewScope(this.shown, r) || this.shown.books.join() !== r.books.join() || this.shown.closed.join() !== r.closed.join() || this.shown.projectName !== r.projectName || this.shown.bookName !== r.bookName || JSON.stringify(this.shown.links) !== JSON.stringify(r.links) || JSON.stringify(this.shown.hidden) !== JSON.stringify(r.hidden)) {
       this.shown = r;
       this.o.announce(r);
     }

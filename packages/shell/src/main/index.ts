@@ -651,7 +651,7 @@ function createWindow(): void {
 
 /** The stage (name and colour) of the Cadrel project each Write folder belongs to, looked up by folder name. */
 async function stageByFolder(): Promise<{ (folder: string): { name: string; color: string } | null; all(): Map<string, NonNullable<ProjectStageView['stage']>> }> {
-  const tree = (await studio.studio.read()).tree;
+  const tree = await studio.tree();
   const views = await stages.views();
   const byFolder = new Map<string, NonNullable<ProjectStageView['stage']>>();
   for (const l of tree.links) {
@@ -674,7 +674,9 @@ async function overview(): Promise<Overview> {
       }
     })().catch(marketUnavailable)
   ]);
-  return { write: w, market: m };
+  // A manuscript folder that belongs to a project this person cannot see is not listed, nor is its words counted.
+  const hidden = new Set((await studio.hiddenLinks().catch(() => [])).filter((l) => l.module === 'write').map((l) => l.ref));
+  return { write: hidden.size ? { ...w, projects: w.projects.filter((p) => !hidden.has(p.name)) } : w, market: m };
 }
 
 function registerShellIpc(): void {
@@ -896,6 +898,7 @@ function registerShellIpc(): void {
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
+  manageLike('people:visible', async (personId: string) => peopleHost.visibilityOf(String(personId), (await studio.studio.read()).tree));
   manageLike('people:explain', async (personId: string, capability: string, projectId?: string | null) => peopleHost.explain(String(personId), String(capability), projectId));
   // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
   const roleKey = () => {
@@ -908,12 +911,12 @@ function registerShellIpc(): void {
     return v;
   };
   const catalogueSources = async (): Promise<Sources> => ({
-    people: peopleHost, tree: (await studio.studio.read()).tree, stages: await stages.views(),
+    people: peopleHost, tree: await studio.tree(), stages: await stages.views(),
     write: await write.listProjects().then((l) => summariseWrite(l).projects, () => []), market: market.service, financeVisible: financeSeen()
   });
   manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
   manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
-  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, await studio.tree(), String(name), args));
   manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
@@ -1053,7 +1056,7 @@ function registerShellIpc(): void {
   manageOp('open', async (id: string) => {
     // Write shows only the Project and Book Cadrel is showing, so opening a manuscript from elsewhere first makes it the scope (and shows
     // closed Books when that is what was asked for), or Write would send it straight back to the list.
-    const want = viewScopeOf((await studio.studio.read()).tree, id);
+    const want = viewScopeOf(await studio.tree(), id);
     if (want) await scope.set({ ...want, ...(want.book && (await stages.closedBooks()).has(want.book) ? { showClosed: true } : {}) });
     await manager.open(id);
     showPage('write');
@@ -1080,7 +1083,7 @@ function registerShellIpc(): void {
     if (!fromShell(e) || !win || win.isDestroyed()) throw new Error('not allowed');
     const pos = (at && typeof at === 'object' ? at : {}) as { x?: unknown; y?: unknown };
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined);
-    const items = scopeMenu((await studio.studio.read()).tree, await scope.get());
+    const items = scopeMenu(await studio.tree(), await scope.get());
     const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: (i.checkbox ? 'checkbox' : 'radio') as 'checkbox' | 'radio', checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
     menu.popup({ window: win, x: num(pos.x), y: num(pos.y) });
   });
@@ -1343,12 +1346,14 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         const l = await write.listProjects();
         return l.exists ? l.root : null;
       },
-      fs: nodeFs
+      fs: nodeFs,
+      viewer: (tree) => peopleHost.myVisibility(tree)
     });
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
     scope = new ScopeHost({
-      tree: async () => (await studio.studio.read()).tree,
+      tree: () => studio.tree(),
+      hidden: () => studio.hiddenLinks(),
       closed: () => stages.closedBooks(),
       remembered: () => studioSettings.get().scope,
       remember: (s) => studioSettings.update((x) => void (x.scope = s)),
@@ -1378,7 +1383,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {
-      const link = linksOf((await studio.studio.read()).tree, projectId, 'write')[0];
+      const link = linksOf(await studio.tree(), projectId, 'write')[0];
       if (!link) return null;
       try {
         return (JSON.parse(await fsp.readFile(path.join(write.projectsRoot(), link.ref, '.cadrel', 'project.json'), 'utf8')) as { status?: unknown }).status as string | null;

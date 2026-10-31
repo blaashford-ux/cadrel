@@ -109,7 +109,8 @@ const api: CadrelApi = {
     revoke: (id) => studioCall('shell:people:call', 'revoke', id),
     setExpiry: (id, expiresAt) => studioCall('shell:people:call', 'setExpiry', id, expiresAt),
     explainAccess: (personId, capability, projectId) => studioCall('shell:people:explain', personId, capability, projectId),
-    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
+    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId),
+    visibleProjects: (personId) => studioCall('shell:people:visible', personId)
   },
   myBooks: {
     catalogue: () => studioCall('shell:mybooks:catalogue'),
