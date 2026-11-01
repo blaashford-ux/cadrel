@@ -2,11 +2,15 @@
  * The studio's people and roles on this computer: the Studio's records file, the permission-checked service over it, and the one person using
  * the app (the Studio's Owner, in a Studio this person owns). Electron-free; tested in test/people.test.ts.
  *
- * A Studio this person only joined has its people and roles on its server (M2), so there is nothing here to manage and the page says so.
+ * A Studio whose records are on its server (every Studio this person joined, and an owned one that was moved there) is the same service sent
+ * over the wire: nothing else in the app needs to know. A joined Studio that cannot be reached says so until it can.
  */
 import { bootstrapStudio, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
+import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
+import { StudioOfflineError, type StudioClient } from './studioClient';
+import path from 'node:path';
 import type { PeopleState, WorkflowState } from '../shared/api';
 
 /** The operations the page may ask for: the service's `people` methods that change things, by the page's names. Nothing else is reachable. */
@@ -30,6 +34,9 @@ export class PeopleHost {
   private studioId = '';
   private why = 'The people and roles of this Studio are managed by its owner.';
   private penScope: string[] | null = null;
+  /** Set when the Studio's records are on its server: this computer's way to it. */
+  private remote: StudioClient | null = null;
+  private remoteVault: { vault: LocalVault; store: OfflineAwareStore; key: string } | null = null;
   private projects: (() => Promise<ProjectTree | null>) | null = null;
 
   /** Tells the records where the Studio's project tree is, so tasks and sign-offs follow who is assigned to what. */
@@ -58,6 +65,36 @@ export class PeopleHost {
   }
 
   /**
+   * Opens the Studio whose records are on its server. Who this person is comes from the server (the one the key belongs to). If the server cannot
+   * be reached the Studio stays closed, saying so; call again to retry.
+   */
+  async openRemote(o: { client: StudioClient; studioId: string }): Promise<{ ok: boolean }> {
+    await this.close();
+    this.studioId = o.studioId;
+    try {
+      const me = await o.client.me();
+      this.meId = me.personId;
+    } catch (e) {
+      this.why = e instanceof StudioOfflineError ? 'This Studio cannot be reached right now. Check your internet connection; it will be tried again.' : e instanceof Error ? e.message : 'This Studio could not be opened.';
+      return { ok: false };
+    }
+    this.remote = o.client;
+    this.svc = remoteService(o.client);
+    await this.refreshPenNames().catch(() => undefined);
+    return { ok: true };
+  }
+
+  /** The records are on the Studio's server, not in a file here. */
+  get isRemote(): boolean {
+    return !!this.remote;
+  }
+
+  /** The last request to the Studio's server found it unreachable (the Files page says it is showing what it last knew). */
+  get offline(): boolean {
+    return this.remoteVault?.store.offline ?? false;
+  }
+
+  /**
    * The pen names this Studio publishes under, for limiting what Market imports and shows. Null where this computer holds no records for the
    * Studio (nothing to limit by); an empty list where it does but no pen name has been added yet.
    */
@@ -66,13 +103,16 @@ export class PeopleHost {
   }
 
   private async refreshPenNames(): Promise<void> {
-    this.penScope = this.db ? (await this.db.all<{ n: string }>('SELECT display_name AS n FROM pen_name WHERE studio_id = ? ORDER BY lower(display_name)', [this.studioId])).map((r) => r.n) : null;
+    if (this.remote && this.svc) this.penScope = (await this.svc.as(this.meId).people.penNames()).map((n) => n.displayName);
+    else this.penScope = this.db ? (await this.db.all<{ n: string }>('SELECT display_name AS n FROM pen_name WHERE studio_id = ? ORDER BY lower(display_name)', [this.studioId])).map((r) => r.n) : null;
   }
 
   async close(): Promise<void> {
     this.db?.close();
     this.db = null;
     this.svc = null;
+    this.remote = null;
+    this.remoteVault = null;
     this.meId = '';
     this.penScope = null;
   }
@@ -95,14 +135,14 @@ export class PeopleHost {
   }
   /** What the AI server needs to open the Studio's records as this person: the file, who, and which Studio. Empty where this computer holds none. */
   mcpArgs(file: string): string[] {
-    return this.svc && this.meId ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId] : [];
+    return this.svc && this.meId && !this.remote ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId] : [];
   }
   get me(): string {
     return this.meId;
   }
 
   async state(): Promise<PeopleState> {
-    if (!this.svc || !this.db) return { available: false, reason: this.why };
+    if (!this.svc || (!this.db && !this.remote)) return { available: false, reason: this.why };
     const p = this.svc.as(this.meId);
     const [people, deactivated, teams, penNames, roles, assignments] = await Promise.all([p.people.list(), p.people.list({ deactivated: true }), p.people.teams(), p.people.penNames(), p.people.roles(), p.people.assignments()]);
     const may = { people: await p.can('people.manage'), teams: await p.can('teams.manage'), roles: await p.can('roles.manage') };
@@ -119,6 +159,16 @@ export class PeopleHost {
    * Every operation is checked against what the person using the app may do with that kind of file. Null where this computer holds no records.
    */
   vault(o: { dir: string; blobsDir: string; machine: string }): LocalVault | null {
+    if (this.remote && this.svc) {
+      // on the server the rules are enforced there; the list already holds only what this person may read
+      const key = `${o.dir}|${o.blobsDir}|${o.machine}`;
+      if (this.remoteVault?.key !== key) {
+        const store = new OfflineAwareStore(new RemoteVaultStore(this.remote), path.join(path.dirname(o.blobsDir), 'vault-list.json'));
+        const vault = new LocalVault({ store, blobs: new RemoteBlobs(this.remote, new DirBlobs(o.blobsDir)), dir: o.dir, personId: this.meId, machine: o.machine });
+        this.remoteVault = { vault, store, key };
+      }
+      return this.remoteVault.vault;
+    }
     if (!this.db || !this.svc) return null;
     const as = this.svc.as(this.meId);
     return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c) });

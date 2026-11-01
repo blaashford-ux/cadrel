@@ -24,6 +24,11 @@ async function setMeta(db: Db, key: string, value: string): Promise<void> {
 
 const ready = new WeakMap<object, Promise<string>>();
 
+/** Forget that the records were checked, so the next request checks again (after they were replaced). */
+export async function forgetRecords(env: RecordsEnv): Promise<void> {
+  ready.delete(env.DB);
+}
+
 /**
  * Makes sure the Studio has its records (the twelve default roles, the default workflows and the owner as a person with the Owner role) and
  * says who the owner is. Safe to call on every request.

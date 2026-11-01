@@ -7,6 +7,7 @@ import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, verifyRe
 import { ensureSchema } from './schema';
 import { admitMember, personIdFor, readTree } from './records';
 import { d1Db } from './d1';
+import { importRecords, type ImportRequest } from './import';
 import { isServerRoute, serverRoutes } from './server';
 
 export interface StudioEnv {
@@ -52,7 +53,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
-  const isRoute = isServerRoute(path) || path === '/v1/info' || path === '/v1/invites' || path === '/v1/join' || path === '/v1/members' || path === '/v1/me' || /^\/v1\/(members|invites)\/[\w-]+$/.test(path);
+  const isRoute = isServerRoute(path) || path === '/v1/records/import' || path === '/v1/info' || path === '/v1/invites' || path === '/v1/join' || path === '/v1/members' || path === '/v1/me' || /^\/v1\/(members|invites)\/[\w-]+$/.test(path);
   if (!isRoute) return null;
 
   const schemaVersion = await ensureSchema(env.DB);
@@ -105,6 +106,13 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   }
 
   if (!auth.who) return fail(403, 'This computer is not a member of the Studio.');
+
+  if (path === '/v1/records/import') {
+    if (auth.who.kind !== 'owner') return fail(403, 'Only the Studio’s owner can do that.');
+    if (method !== 'POST') return fail(405, 'That is not something the Studio does.');
+    const r = await importRecords(env, data as unknown as ImportRequest);
+    return r.ok ? json(r) : fail(400, r.error);
+  }
 
   if (isServerRoute(path)) return serverRoutes(request, env, auth.who, await personIdFor(env, auth.who, now), body, now);
 

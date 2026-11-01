@@ -18,8 +18,8 @@ export class StudioClient {
     const headers = { ...(await signRequest({ method, path, body, key: this.o.key })), ...(body.length ? { 'content-type': contentType } : {}) };
     try {
       return await this.o.fetchFn(`${this.o.url}${path}`, { method, headers, ...(body.length ? { body: body as BodyInit } : {}) });
-    } catch {
-      throw new StudioOfflineError('Could not reach the Studio. Check your internet connection.');
+    } catch (e) {
+      throw new StudioOfflineError('Could not reach the Studio. Check your internet connection.', { cause: e });
     }
   }
 

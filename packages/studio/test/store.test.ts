@@ -57,6 +57,29 @@ describe('Studio store', () => {
     expect(later.projectId).toBe(b.id);
   });
 
+  it('refuses a change to the project tree while the tree is locked, still takes notes, and takes the server’s tree without being refused', async () => {
+    const mine = await s.createProject({ name: 'Mine' });
+    const seen: number[] = [];
+    s.onTreeChange = (t) => seen.push(t.projects.length);
+    s.treeLock = () => 'The projects of this Studio are kept by its owner.';
+    await expect(s.createProject({ name: 'Nope' })).rejects.toThrow(/kept by its owner/);
+    await expect(s.updateProject(mine.id, { name: 'Renamed' })).rejects.toThrow(/kept by its owner/);
+    expect((await s.read()).tree.projects.map((p) => p.name)).toEqual(['Mine']);
+    await s.addNote({ body: 'A note is fine.', author: 'A', projectId: mine.id });
+    expect((await s.read()).notes).toHaveLength(1);
+    expect(seen).toEqual([]);
+    // what the server holds replaces the local tree, and is not announced back as a local change
+    const served = { projects: [{ id: 'p_srv', name: 'From server', parentId: null, kind: '', status: 'active' as const, order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] };
+    expect(await s.replaceTree(served)).toBe(true);
+    expect(await s.replaceTree(served)).toBe(false);
+    expect((await s.read()).tree.projects.map((p) => p.name)).toEqual(['From server']);
+    expect(seen).toEqual([]);
+    // unlocked, a change is announced
+    s.treeLock = null;
+    await s.createProject({ name: 'Later' });
+    expect(seen).toEqual([2]);
+  });
+
   it('queries a project’s notes including its subprojects', async () => {
     const series = await s.createProject({ name: 'S' });
     const b1 = await s.createProject({ name: 'B1', parentId: series.id });

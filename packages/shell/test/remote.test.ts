@@ -10,6 +10,8 @@ import { ACCOUNT, TOKEN, fakeCloudflare } from './fakeCloudflare';
 import { buildStudio } from '../src/main/cloudflare';
 import { joinStudio, StudioClient } from '../src/main/studioClient';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from '../src/main/remote';
+import { moveRecordsToServer } from '../src/main/moveRecords';
+import { PeopleHost } from '../src/main/people';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -149,5 +151,62 @@ describe('a Studio whose records are on its server', () => {
     s.setOnline(true);
     expect((await ann.vault.checkIn('ch1.md', 'Train')).version).toBe(2);
     expect(ann.store.offline).toBe(false);
+  });
+});
+
+describe('moving a Studio’s records to its server', () => {
+  it('brings the people, the catalogue, the work, the vault with its files and the projects across, and a member joining afterwards sees them', async () => {
+    const s = await studio();
+    const dir = await tmp();
+    // the owner's computer, before: a records file with a book, a task and a file in the vault
+    const host = new PeopleHost();
+    await host.open({ file: path.join(dir, 'records.db'), studioId: 'local', owned: true, ownerName: 'Olive Owner' });
+    const svc = host.service!.as(host.me);
+    const bo = await svc.people.create({ name: 'Bo Lin', kind: 'contractor' });
+    const book = await svc.catalogue.createBook({ title: 'Lead Me', penName: 'Mara' });
+    await svc.catalogue.addEdition(book.id, { format: 'ebook', asin: 'B0AAAAAAA1' });
+    await svc.work.createTask({ projectId: 'pB1', title: 'Write the blurb', assigneeId: bo.id });
+    const vault = host.vault({ dir: path.join(dir, 'work'), blobsDir: path.join(dir, 'blobs'), machine: 'olive-pc' })!;
+    await (await import('node:fs/promises')).mkdir(path.join(dir, 'work'), { recursive: true });
+    await writeFile(path.join(dir, 'work', 'ch1.md'), 'Chapter one.');
+    await vault.add('ch1.md');
+    await host.snapshot(path.join(dir, 'copy.db'));
+    const tree = { projects: [{ id: 'pB1', name: 'Book 1', parentId: null, kind: 'Book', status: 'active' as const, order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] };
+
+    const steps: string[] = [];
+    const moved = await moveRecordsToServer({ client: s.owner, recordsCopy: path.join(dir, 'copy.db'), ownerPersonId: host.me, blobsDir: path.join(dir, 'blobs'), tree, step: (t) => steps.push(t) });
+    expect(moved.files).toBe(1);
+    expect(moved.missing).toEqual([]);
+    expect(moved.rows).toBeGreaterThan(20);
+    expect(steps).toEqual(expect.arrayContaining([expect.stringMatching(/projects/)]));
+
+    // the owner, now through the server, is the same person with the same records
+    expect((await s.owner.me()).personId).toBe(host.me);
+    const ownerSvc = remoteService(s.owner).as('x');
+    expect((await ownerSvc.people.list()).map((p) => p.name).sort()).toEqual(['Bo Lin', 'Olive Owner']);
+    expect((await ownerSvc.catalogue.books()).map((b) => [b.title, b.editions[0]!.asin])).toEqual([['Lead Me', 'B0AAAAAAA1']]);
+    expect((await ownerSvc.work.tasks({ projectId: 'pB1' })).map((t) => t.title)).toEqual(['Write the blurb']);
+    const remote = await computer(s.owner, 'olive-pc-2');
+    expect((await remote.vault.getLatest(undefined, { fetchMissing: true })).updated).toEqual(['ch1.md']);
+    expect(await remote.read('ch1.md')).toBe('Chapter one.');
+    expect((await s.owner.tree()).projects.map((p) => p.name)).toEqual(['Book 1']);
+
+    // a person who joins afterwards is a person here, with the role invited, and sees the vault
+    const ed = await computer(await s.person('editor', 'Ed Editor'), 'ed-pc');
+    expect((await ed.vault.list()).map((e) => e.path)).toEqual(['ch1.md']);
+    expect((await remoteService(s.owner).as('x').people.list()).map((p) => p.name)).toContain('Ed Editor');
+    // running it again starts over and ends the same
+    const again = await moveRecordsToServer({ client: s.owner, recordsCopy: path.join(dir, 'copy.db'), ownerPersonId: host.me, blobsDir: path.join(dir, 'blobs'), tree });
+    expect(again.rows).toBe(moved.rows);
+    expect((await ownerSvc.catalogue.books()).map((b) => b.title)).toEqual(['Lead Me']);
+    await host.close();
+  });
+
+  it('is refused for anyone but the owner, and for a table the server does not have', async () => {
+    const s = await studio();
+    const ann = await s.person('author', 'Ann');
+    await expect(ann.request('POST', '/v1/records/import', { phase: 'start' })).rejects.toThrow(/Only the Studio’s owner/);
+    await expect(s.owner.request('POST', '/v1/records/import', { phase: 'rows', table: 'member', rows: [{ id: 'x' }] })).rejects.toThrow(/not a table/);
+    await expect(s.owner.request('POST', '/v1/records/import', { phase: 'rows', table: 'person', rows: [{ 'id; DROP TABLE person': 'x' }] })).rejects.toThrow(/columns/);
   });
 });

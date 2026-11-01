@@ -668,6 +668,8 @@ export type VaultState =
   | { available: false; reason: string }
   | {
       available: true;
+      /** The Studio's server cannot be reached: the list is what was last known, and anything that changes the vault has to wait. */
+      offline?: boolean;
       dir: string;
       machine: string;
       me: string;
