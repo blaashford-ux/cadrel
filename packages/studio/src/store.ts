@@ -8,7 +8,7 @@ import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  NOTES_VERSION, PROJECT_TREE_VERSION, adoptWorkflow, clearWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, renameTopic, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
+  NOTES_VERSION, PROJECT_TREE_VERSION, ProjectError, adoptWorkflow, clearWorkflow, setProjectStage, createNote, createProject, deleteNote, deleteProject, editNote, renameTopic, emptyTree, linkRecord, moveProject, projectsFor, relinkRecord,
   replyToNote, sanitizeNotes, sanitizeTree, setArchived, setNoteStatus, unlinkRecord, updateProject,
   type NewNote, type Note, type NoteStatus, type Project, type ProjectTree
 } from '@cadrel/kernel';
@@ -42,6 +42,13 @@ export function studioFile(argv: string[] = [], env: NodeJS.ProcessEnv = process
 
 export class Studio {
   private queue: Promise<unknown> = Promise.resolve();
+  /**
+   * When it returns a sentence, the project tree cannot be changed here and a change to it is refused with that sentence (the Studio's projects
+   * are kept by its owner on its server; notes are not part of the tree and are unaffected).
+   */
+  treeLock: (() => string | null) | null = null;
+  /** Called after a change that altered the project tree, with the new tree. */
+  onTreeChange: ((tree: ProjectTree) => void) | null = null;
 
   constructor(readonly file: string) {}
 
@@ -55,13 +62,20 @@ export class Studio {
   }
 
   /** Changes the data under this process's queue, then writes it. `fn` returns the new data and whatever the caller wants back. */
-  private change<T>(fn: (d: StudioData) => { data: StudioData; result: T }): Promise<T> {
+  private change<T>(fn: (d: StudioData) => { data: StudioData; result: T }, o: { fromServer?: boolean } = {}): Promise<T> {
     const run = async () => {
-      const { data, result } = fn(await this.read());
+      const before = await this.read();
+      const { data, result } = fn(before);
+      const treeChanged = JSON.stringify(data.tree) !== JSON.stringify(before.tree);
+      if (treeChanged && !o.fromServer) {
+        const why = this.treeLock?.();
+        if (why) throw new ProjectError(why);
+      }
       await fsp.mkdir(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.${process.pid}.${Date.now()}.tmp`;
       await fsp.writeFile(tmp, JSON.stringify(data, null, 2));
       await fsp.rename(tmp, this.file);
+      if (treeChanged && !o.fromServer) this.onTreeChange?.(data.tree);
       return result;
     };
     const next = this.queue.then(run, run);
@@ -70,6 +84,17 @@ export class Studio {
   }
 
   // ---- projects -------------------------------------------------------------------------------
+
+  /** The tree the Studio's server holds becomes this one (not refused by the lock, not announced as a local change). Returns whether it differed. */
+  replaceTree(tree: ProjectTree): Promise<boolean> {
+    let differed = false;
+    return this.change((d) => {
+      const next = sanitizeTree(tree);
+      differed = JSON.stringify(next) !== JSON.stringify(d.tree);
+      return { data: { ...d, tree: next }, result: undefined };
+    }, { fromServer: true }).then(() => differed);
+  }
+
 
   createProject(o: { name: string; parentId?: string | null; kind?: string; workflowId?: string | null; stage?: string | null }): Promise<Project> {
     return this.change((d) => {

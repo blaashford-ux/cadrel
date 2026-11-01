@@ -4,6 +4,7 @@
  * test/projectWork.test.ts.
  */
 import { ancestorsOf, getProject, kindLabel, subtreeIds } from '@cadrel/kernel';
+import { PermissionDenied } from '@cadrel/service';
 import type { MineState, PlanState, WorkState } from '../shared/api';
 import type { PeopleHost } from './people';
 import type { ProjectStages } from './stages';
@@ -24,6 +25,15 @@ export class ProjectWork {
 
   /** What the project's page shows: its own work and its subprojects', each labelled with the project it is on. */
   async state(projectId: string): Promise<WorkState> {
+    try {
+      return await this.stateOf(projectId);
+    } catch (e) {
+      if (e instanceof PermissionDenied) return { available: false, reason: 'Your role does not let you see the tasks and sign-offs of this project.' };
+      throw e;
+    }
+  }
+
+  private async stateOf(projectId: string): Promise<WorkState> {
     const work = this.people.work;
     if (!work) return { available: false, reason: 'Tasks and sign-offs for this Studio are managed by its owner.' };
     const tree = await this.tree();
@@ -44,6 +54,15 @@ export class ProjectWork {
 
   /** The pipeline and the calendar: every live project with its stage, and every task and deadline (finished ones too, so the calendar shows what was done). */
   async plan(): Promise<PlanState> {
+    try {
+      return await this.planOf();
+    } catch (e) {
+      if (e instanceof PermissionDenied) return { available: false, reason: 'Your role does not let you see the Studio’s planning.' };
+      throw e;
+    }
+  }
+
+  private async planOf(): Promise<PlanState> {
     const work = this.people.work;
     if (!work) return { available: false, reason: 'Planning for this Studio is managed by its owner.' };
     const tree = await this.tree();
@@ -72,6 +91,15 @@ export class ProjectWork {
 
   /** Work that waits on the person using the app, across every project: their open tasks, and the sign-offs they are asked for. */
   async mine(): Promise<MineState> {
+    try {
+      return await this.mineOf();
+    } catch (e) {
+      if (e instanceof PermissionDenied) return { available: false, tasks: [], approvals: [] };
+      throw e;
+    }
+  }
+
+  private async mineOf(): Promise<MineState> {
     const work = this.people.work;
     if (!work) return { available: false, tasks: [], approvals: [] };
     const tree = await this.tree();

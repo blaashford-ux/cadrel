@@ -18,11 +18,9 @@ import {
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
 } from '@cadrel/kernel';
 
-export class PermissionDenied extends Error {
-  constructor(readonly capability: string, readonly reason: string) {
-    super(`You are not allowed to do that (${capability}): ${reason}.`);
-  }
-}
+import { PermissionDenied } from './errors';
+export { PermissionDenied };
+export { VaultAs } from './vault';
 
 /** What the service needs to know about who may do what. Read on every call, so a role change takes effect at once. */
 export interface Access {
@@ -161,7 +159,26 @@ export class StudioAs {
       };
     },
     teams: async (): Promise<Team[]> => (await this.need('people.read'), listTeams(this.o.db, this.ctx())),
+    /**
+     * Who is in the Studio, by name only, for showing who a task, sign-off or lock belongs to. Anyone who holds a role anywhere may see it; the
+     * rest of a person's record (email, kind, roles) needs people.read.
+     */
+    directory: async (): Promise<{ id: string; name: string }[]> => {
+      const some = ['people.read', 'task.read', 'catalogue.read', 'manuscript.read', 'asset.read', 'market.read', 'royalties.read'];
+      let ok = false;
+      for (const c of some) if (await this.canAt(c, null) || await this.canOn(c, null)) { ok = true; break; }
+      if (!ok) throw new PermissionDenied('task.read', 'no active role grants it here');
+      return (await listPeople(this.o.db, this.ctx())).map((p) => ({ id: p.id, name: p.name }));
+    },
     penNames: async (): Promise<PenName[]> => (await this.need('people.read'), listPenNames(this.o.db, this.ctx())),
+    /**
+     * Only the names of the pen names the Studio publishes under, for limiting what Market imports and shows. Anyone who works with books or
+     * money needs these, whether or not they may see the people.
+     */
+    penNameNames: async (): Promise<string[]> => {
+      if (!(await this.can('people.read')) && !(await this.can('catalogue.read')) && !(await this.can('royalties.read'))) throw new PermissionDenied('catalogue.read', 'no active role grants it here');
+      return (await listPenNames(this.o.db, this.ctx())).map((n) => n.displayName);
+    },
     roles: async (): Promise<RoleRecord[]> => (await this.need('people.read'), listRoles(this.o.db, this.ctx())),
     assignments: async (o?: { subjectId?: string; roleId?: string }): Promise<AssignmentRecord[]> => (await this.need('people.read'), listAssignments(this.o.db, this.ctx(), o)),
 
@@ -330,6 +347,13 @@ export class StudioAs {
       if (e instanceof PermissionDenied) return false;
       throw e;
     }
+  }
+
+  /** Whether this person holds a capability at the studio (no project) or on one project (a role given there or above it counts). Without a project tree it is the studio. */
+  async canAt(capability: string, projectId?: string | null): Promise<boolean> {
+    const tree = projectId ? await this.o.projects?.() : null;
+    const path = tree && projectId ? this.projectPath(tree, projectId) : this.studioPath();
+    return explain(await this.context(), capability, { path }).allowed;
   }
 
   /** The path to a project in the permission check: the studio, the projects above it, and it. */
@@ -530,3 +554,4 @@ export class StudioAs {
     }
   };
 }
+export { decodeError, decodeValue, encodeError, encodeValue, type WireError } from './wire';

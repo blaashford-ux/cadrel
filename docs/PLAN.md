@@ -2,7 +2,7 @@
 
 > **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
 
-Status: plan, no product code yet. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
+Status (1 November 2026, against `dev` 0.6.1; the latest stable release is 0.5.0): **M0 and M1 are built and released** (as 0.2.0 and 0.3.0). M2 is built and tested against the real Studio server code (not yet against a Cloudflare account): the Studio's records and vault live on its server and every check is made there, with a few listed gaps. M3 onward are not started. Releases 0.4.0 to 0.6.1 and Cadrel Reader are work outside the milestone list, so **version numbers no longer match milestone numbers** (see section 3). Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
 
 ## 1. What Cadrel is
 
@@ -54,12 +54,24 @@ The suite is a shell with **Home** (my work) and **Dashboard** (the studio), wit
 
 ## 3. Milestones
 
-Each milestone ends in a release (a Minor under [VERSIONING.md](VERSIONING.md)) with a stated exit test, and is delivered as a series of PRs into `dev`. Stage gates are the exit criteria; dates are deliberately not given until M0 shows the real cost of merging the codebases.
+Each milestone has a stated exit test and is delivered as a series of PRs into `dev`. Stage gates are the exit criteria. **Version numbers are not tied to milestones.** A release is the next Minor under [VERSIONING.md](VERSIONING.md) whatever it contains; the numbers once written next to M2 to M8 (0.4.0 to 1.0.0) were used by other work and are dropped, so M2 to M8 carry no version until they ship, and then the heading says which one. Dates are not given.
 
-### M0: One app (0.2.0)
+### Where we are
+
+| | Milestone | Status |
+|---|---|---|
+| M0 | One app | Built and released as 0.2.0. |
+| M1 | Shared records | Built and released as 0.3.0. The manual exit test (`docs/M1-EXIT-TEST.md`, on a real Windows build) has no recorded run. |
+| M2 | The team vault on Cloudflare | Built, in development (`dev`, not yet released): records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records. Not done: a code-signed installer (needs a certificate), updates from R2, replicating the file store, the security policy page, separate role dashboards, any run against a real Cloudflare account. |
+| M3 | Editorial | Not started as specified. |
+| M4 | Canon and continuity | Not started as specified. |
+| M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
+| not in the plan | Releases 0.4.0 to 0.6.1 and Cadrel Reader | Built; see "Released outside the milestones" after M1. |
+
+### M0: One app (shipped as 0.2.0)
 Merge and harmonise. No new features; behaviour of both apps is unchanged and their tests are the proof.
 
-**Status: built and verified on Linux; the Windows installer is built by CI and not yet seen.**
+**Status: built and released.** Verified on Linux when it was written; since then every dev build has been built, installed-layout smoke-tested and published for Windows by CI.
 
 Done:
 - Both repos imported at pinned commits (`docs/PROVENANCE.md`); every original suite passes in Cadrel with the same counts (MDEdit 564, BookScout 506 plus its own skips).
@@ -72,14 +84,16 @@ Done:
 - Cloudflare: resources created (`cadrel-*`, `cadrel-dev-*`), Worker with `/v1/health` and vault migration, deploy step in the release workflow (not yet run on GitHub).
 
 Not done or not yet verified (carry into M1):
-- **Windows**: the NSIS installer, the installed layout and the Windows window chrome have never run. The first dev merge is the real test. Existing MDEdit and BookScout users are meant to find their settings (the shell keeps their data folders) but that is unproven on a real profile.
-- **GitHub workflows** and the Worker deploy have not run yet.
+- **Windows**: the installer builds and passes its headless smoke test in CI on every release, and the Windows window chrome has had fixes since. Existing MDEdit and BookScout users finding their settings (the shell keeps their data folders) is still unproven on a real profile.
+- The GitHub workflows run on every merge. The release workflow no longer deploys a Worker: a Studio's server is built from the app (see M2).
 - Tests that skip themselves where their environment is missing still skip in this sandbox: the capture-extension browser tests (7) and the Market walkthrough (4) need Chromium via `playwright install`, which CI does; 2 library performance tests are opt-in.
 - `@cadrel/ui` (a shared design system) is deferred: the shell's CSS is its own until a second shell-owned surface needs it. The split of MDEdit into `manuscript` and `export` packages is also deferred; nothing needs it yet.
 - Market's tray and "keep running when the window closes" are not carried into the shell; its About page is not reachable; 
 - Code signing; the installer is unsigned.
 
-### M1: Shared records (0.3.0)
+### M1: Shared records (shipped as 0.3.0)
+
+**Status: built and released.** What came after the progress notes below, in dev builds before 0.4.0: a Studio's **pen names** now limit what KDP imports bring in and what My Books, the catalogue's add-from-Market banner, Finance and the assistant show (a payment report is split by working out the Studio's share of each month from its own sales, as an estimate); a book added by mistake can be **deleted** from the catalogue, Market and Finance with nothing left behind; a Market category can belong to **several projects**; the assistant server and the update installer shut down cleanly so an install is not blocked; a fix for the Windows window buttons not responding to clicks (not yet confirmed on a real build). Not built: reminders, task templates, dragging in the Planner, read-only file states, transition actions, tasks on a book's page, Write's manuscripts living in the vault. The exit test below has been covered by automated tests, but its Windows walkthrough has no recorded run.
 **Progress on the shared-records list below.** Built: the `store` (file-backed async `Db`, the Worker's migrations applied in order, newer files refused), the `catalogue` records (IP, series, books at positions, editions with ASIN and ISBN; unique names, positions, ASINs and ISBNs enforced by the database; archive with cascade; every change and its audit row in one transaction; one studio cannot reach another's), and the `service` (every catalogue call checked with `can` for a named person; the one-person Studio runs as its Owner). The role matrix is tested against each operation. People and roles are built: records (migration 0004), the permission-checked service with the guardrails (a randomized test of hundreds of role-manager actions checks nobody gains a governance power the granter lacked) and the role editor in Admin (People, Teams, Roles, Explain access, capability review). Not built there: invitations and sign-in mapping onto people (M2, with the server), "View as", the security policy screen, and default roles receiving new capabilities automatically (a newer capability goes to the review list instead). Stages and gates are built: workflows as data (migrations 0005 and 0006), with MDEdit's stages (Planning, Drafting, Revising, Editing, Published, On hold) as the shipped default; several workflows, a default for projects and another for subprojects, chosen once when a project is created and never changed; stages live on projects and subprojects and move only through gate-checked moves (roles and conditions such as a linked manuscript or finished subprojects); Write has no statuses of its own and shows Cadrel's; a workflow builder in Admin. My Books is now on the catalogue records (series, position, editions, project link, stage and progress on a book, joined to Market and Finance by ASIN). Not yet: gate conditions that depend on manuscript progress, transition actions, and read-only states. Tasks, deadlines, approvals and decisions are built (migration 0007): tasks with dependencies, sign-offs by named people that gates can require, an append-only decision ledger, a Work section on each project's page and a "Waiting on you" card on Home; a Planner page with the pipeline and the calendar (month view) is built, and Home and the Dashboard read the records (work, pipeline, sign-offs, decisions, books and royalties); reminders, task templates and dragging are not. The credit / contribution / rights / revenue-share tables are built (no screens). No Catalogue screens and no separate adopt step are planned (My Books and Import project cover them); My Books still lists Market's own-books list and moves onto the catalogue (the ASIN join) once the app opens the store.
 
 Three additions are in scope before any M1 code: **Backup and Import**, a **Finance** module split out of Market, and **My Books**. Their design is in "M1 additions" below; the build order puts them first because they are restructuring and safety work that the shared records then sit on.
@@ -127,8 +141,18 @@ The portal for everything about a **published** book, so a person does not hunt 
 **Build order inside M1:** (1) docs and this plan; (2) Backup and Import, because it protects every later migration and the existing users' data; (3) Finance split, a behaviour-preserving move; (4) My Books on top of the split; (5) the shared-records work listed above, with Catalogue giving My Books its list. The shell's page list becomes: Home, **My Books**, Dashboard, Projects, Notes, Write, Market, **Finance**, Assistants, Admin, Profile, Settings.
 
 
-### M2: The team vault on Cloudflare (0.4.0)
+### Released outside the milestones (0.4.0 to 0.6.1, Cadrel Reader)
+
+These were not in the milestone list. They shipped as Minor releases, which is why version numbers no longer match milestones. Detail is in [CHANGELOG.md](../CHANGELOG.md).
+- **0.4.0 and 0.5.0**: renaming Market categories, assistant tools for tags and note topics, Market's queue filter for new additions, **six authoring skills** in the AI Kit and the MCP server (Series Developer, Premise to Outline, Outline to Blurb, Outline to Keywords, Timeline Tracker, LitRPG Tracker, beside the three editing passes) with project-file tools, and a **development build that installs beside the stable one** on the same data (Cadrel Dev).
+- **0.6.0 and 0.6.1** (so far dev builds): the **project and book scope** (the rail shows one project and book and Write, Market, Notes, Planner, Dashboard, My Books and Home follow it); stages belong to books, with Close book and a first book for a standalone; **projects hidden from people not assigned to them**, with tasks, sign-offs and decisions following who is assigned; associations on the project page (Market categories for a whole project or one book, comparable titles, people with roles); one ledger file per series with a carried timeline and a permanent HTML page per chapter; the assistant can create and manage projects and books, give a project its manuscript folder and link books; Market captures can be copied across Studios.
+- **Cadrel Reader 0.9.0**: a separate app for beta readers (read an invited manuscript, comment and suggest; reaches the author through Google Drive). Its own installer, data folder and update feed. This is the beta-reader side of the sharing decision above, not the editorial module.
+
+### M2: The team vault on Cloudflare
 Where it becomes a studio tool.
+
+**Status: built in development, with the gaps below.** From 0.2.0: independent **Studios** with their own folders and a wall between them ([STUDIOS.md](STUDIOS.md)); the **Studio Manager**, which builds a Studio's Worker, D1 database and R2 bucket in the owner's own Cloudflare account; key-signed **invitations**. New: the server holds the **records** (the same service the app runs in-process, with every check made there) and the **vault** (check-out locking, versions, force release keeping the holder's work, references and data cards), with file contents in R2 by hash; a joined Studio opens through its server and an owner moves a Studio there once; an invitation can limit a role to **one project for a number of days** (a guest sees one book and nothing else, and the grant lapses); the owner's project tree reaches everyone as their own part of it; the Files page works **offline** (last list, checked-out files editable, check-in when back); **shared captures** through the file store; **backup and restore of the server's records**. The exit test is an automated test with real files in two working folders against the Worker code. Not done: the **code-signed installer** (the release workflow signs when it is given a certificate; there is none), **updates from R2** (updates come from GitHub releases), replicating the file store, the **security policy** page, separate **Author, Editor and Director dashboards**, the assistant's record tools for a server Studio, members changing the project tree or moving a project between stages, and live updates. Everything is tested against a stand-in for Cloudflare that runs the real Worker; it has not been run against a Cloudflare account.
+
 - Worker API with D1 (records, versions, locks, workflow state, audit) and R2 (file contents); migrations shared with the desktop cache.
 - Cloud vault in the app: Create studio with a setup code (you become Owner), sign-in, invitations, security policy, teams, guests with narrow expiring grants, confidential projects; all permission checks enforced in the Worker.
 - **Check-out locking, check-in versions, undo check-out, get latest, and admin force** with data-loss confirmation, orphaned-copy handling, audit and notification.
@@ -138,7 +162,10 @@ Where it becomes a studio tool.
 - Backups (D1 export, R2 replication), schema-version compatibility check, update feed from R2, **code-signed installer**.
 - **Exit:** author and editor on two machines; the author checks a chapter out, the editor sees the lock and who holds it, the author checks in, the editor gets the new version; an admin force-releases a lock and the holder's changes are kept as an orphan copy; a freelance guest sees exactly one book and nothing else.
 
-### M3: Editorial (0.5.0)
+### M3: Editorial
+
+**Status: not started as specified.** Related things exist: the three editing skills (developmental, line, copy) leave their notes in Write, and Cadrel Reader lets beta readers comment. Neither has briefs, passes tied to a version, anchored queries with responses, side-by-side compare or revision verification.
+
 - Creative briefs (manuscript and edit).
 - Passes (developmental, line, copy, proof), each with brief, editor, state and the exact version it covers.
 - Comments and queries anchored to passages; author responses; accept / reject / defer with reasons.
@@ -146,32 +173,35 @@ Where it becomes a studio tool.
 - Approval and decision ledger wired into stage gates (an approved pass unlocks the next stage).
 - **Exit:** one real book goes through a full edit inside Cadrel.
 
-### M4: Canon and continuity (0.6.0)
+### M4: Canon and continuity
+
+**Status: not started as specified.** Related: the LitRPG and timeline trackers keep a ledger per series with a carried timeline and flag contradictions, and the Series Developer skill writes a series bible as files. There is no versioned bible with anchored facts, change proposals or continuity checker.
+
 - Series bible with versioned entries; facts anchored to the manuscript passage that establishes them.
 - Change proposals reviewed by the series lead; author assignments get the approved canon, open threads and brief.
 - Continuity checker: findings cite exact passages, with severity and confidence; the author controls what becomes canon. Uses `text` and embeddings; checks a new book against series canon.
 - **Exit:** Book 4's manuscript is checked against Books 1–3 and the findings are specific and checkable.
 
-### M5: Art, assets and Preflight (0.7.0)
+### M5: Art, assets and Preflight
 - Asset register with versions, approval state, licence and rights, and **usage tracking** ("which listing, ad and banner use the old cover?"); replacement is proposed, never automatic.
 - Cover and campaign briefs; concepts against a brief; feedback pinned to the design; file linking and previews for Photoshop sources.
 - Preflight: EPUB validity and navigation, front and back matter, name and series consistency, cover dimensions and resolution, retailer metadata requirements; results graded error / warning / suggestion.
 - **Exit:** a cover goes brief → concepts → approval → used in Preflight and visible to Launch.
 
-### M6: Launch and market (0.8.0)
+### M6: Launch and market
 - Release plans from templates, worked backwards from the date; dependencies and outstanding assets.
 - Marketing briefs from Market comps; ARC recruitment, distribution and review tracking; campaign asset requests to Art; post-launch review.
 - Market (research only since M1) becomes studio-facing: shared comps, category reports and cover/blurb comparisons tied to briefs; decision history (change cover, blurb, keywords, price → outcome).
 - **Exit:** a release is planned, executed and reviewed from one record.
 
-### M7: Business (0.9.0)
+### M7: Business
 - Agreements, credits, contributions and rights as the four separate concepts, with restricted access.
 - Production costs and ad spend per book and series; budgets; unit economics and break-even.
 - Royalty reconciliation and revenue allocation generalised from the Finance module's payments and splits (moved out of Market in M1) to all contributors; actual vs estimated vs forecast clearly separated.
 - Backlist health, series sell-through (only where the data allows; labelled measured vs estimated), marketing ROI, capacity planning.
 - **Exit:** a studio director can answer "which series earn the best margin" and "how much money is committed to unreleased books" from real records.
 
-### M8: Coordinator (1.0.0)
+### M8: Coordinator
 Cross-module assistant on top of the MCP tools already shipped by earlier modules: at-risk projects, missing launch assets, unresolved revisions, cross-book continuity reports; a proposals inbox where people accept or reject what it suggests.
 - **Exit:** the five example questions in the discussion are answered with cited evidence and no unreviewed changes.
 
@@ -215,9 +245,10 @@ I have assumed a default for each so work is not blocked; tell me where you disa
 Read-only look through the connector:
 - Existing: three D1 databases (`eidolon-db`, `storyforge-db`, `author_portal_db`), seven R2 buckets and seven Workers for your other projects. Cadrel gets its own `cadrel-*` and `cadrel-dev-*` resources and touches none of them.
 - The connected tool is the old Workers Bindings server, which Cloudflare marks deprecated. It can create and query D1 and R2 but **cannot deploy a Worker**, and this sandbox cannot reach `api.cloudflare.com`.
-- So Workers are deployed from **GitHub Actions** on merge (dev and main), which needs two repository secrets in `blaashford-ux/cadrel`: a Cloudflare API token scoped to Workers, D1 and R2 on this account, and the account id. Add them in GitHub (Settings → Secrets and variables → Actions); do not paste them in chat.
+- **Update (0.2.0):** the Studio server is now built from the app by the Studio Manager, in the owner's own Cloudflare account, and the release workflow no longer deploys a Worker. What follows is the original plan for deploying from GitHub Actions.
+- So Workers were to be deployed from **GitHub Actions** on merge (dev and main), which needs two repository secrets in `blaashford-ux/cadrel`: a Cloudflare API token scoped to Workers, D1 and R2 on this account, and the account id. Add them in GitHub (Settings → Secrets and variables → Actions); do not paste them in chat.
 - Limits from the docs, relevant to the design: a Worker request body is capped at 100 MB on Free and Pro and 200 MB on Business (hence file transfers go straight to R2 by signed URL, and R2 multipart handles anything large); since 1 September 2026 D1 queries on the Workers **Free** plan fail once the daily row-read or row-write limit is reached, so confirm which plan the account is on before the studio relies on it.
 
 ## 7. Next step
 
-Start M0 on a branch off `dev`: skeleton and CI first (workspaces, shared toolchain, a shell that opens), then import `manuscript` / `export` (pure, most tested), then `market` / `sales`, then the two UIs as modules, then Home and Dashboard. Raise `VERSION` to 0.2.0 on the `dev` → `main` PR.
+M0 and M1 are released, and M2 is built in `dev` as 0.7.0 (in development). Before M3 the open items are, in the order I would take them: (1) **run M2 against a real Cloudflare account**: build a Studio, move a Studio's records to it, join from a second computer and walk the exit test by hand, because everything so far is tested against a stand-in; (2) run the M1 walkthrough ([M1-EXIT-TEST.md](M1-EXIT-TEST.md)) on a real Windows build; (3) give the release workflow a code-signing certificate; (4) decide whether 0.6.0 and 0.7.0 are released as stable versions. Then **M3: Editorial**. Which comes first is a call for the owner.

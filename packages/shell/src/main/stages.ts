@@ -95,7 +95,7 @@ export class ProjectStages {
   async views(): Promise<Record<string, ProjectStageView>> {
     const wfs = this.workflows();
     if (!wfs) return {};
-    const list = await wfs.list();
+    const list = await wfs.list().catch(() => []); // a role that may not read the workflows sees no stages, not an error
     const out: Record<string, ProjectStageView> = {};
     for (const p of (await this.studio.studio.read()).tree.projects) {
       const wf = p.workflowId ? list.find((w) => w.id === p.workflowId) : undefined;

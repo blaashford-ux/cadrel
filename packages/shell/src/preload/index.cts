@@ -32,6 +32,9 @@ const api: CadrelApi = {
     forgetToken: (id) => studioCall('shell:studios:forgetToken', id),
     people: (id) => studioCall('shell:studios:people', id),
     createInvite: (id, invite) => studioCall('shell:studios:createInvite', id, invite),
+    moveRecords: (id) => studioCall('shell:studios:moveRecords', id),
+    backupServer: (id) => studioCall('shell:studios:backupServer', id),
+    restoreServer: (id) => studioCall('shell:studios:restoreServer', id),
     revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
     removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
     join: (link, details) => studioCall('shell:studios:join', link, details),
@@ -197,7 +200,8 @@ const api: CadrelApi = {
     reset: (which) => studioCall('shell:prefs:reset', which),
     restart: () => studioCall('shell:prefs:restart'),
     marketStudios: () => studioCall('shell:prefs:marketStudios'),
-    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id)
+    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id),
+    shareCaptures: () => studioCall('shell:prefs:shareCaptures')
   },
   admin: {
     get: () => studioCall('shell:admin:get'),

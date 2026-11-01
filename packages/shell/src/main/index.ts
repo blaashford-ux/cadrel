@@ -49,6 +49,8 @@ import { StudioRegistry, LOCAL_ID } from './studios';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
+import { syncCaptures } from './sharedCaptures';
+import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +98,9 @@ let updater: Updater;
 let installerToRun: string | null = null;
 let manager: ProjectManager;
 let stages: ProjectStages;
+/** Set when the active Studio's records are on its server: the way to it, and whether this person owns it. */
+let serverLink: { client: StudioClient; owner: boolean; studioId: string } | null = null;
+let syncTimer: ReturnType<typeof setInterval> | null = null;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -323,6 +328,47 @@ async function moveMarket(dest: string): Promise<void> {
   await market.service.moveTo(dest);
 }
 
+/**
+ * Keeps the project tree and the server's the same. The owner's tree is the Studio's: it is published when it changes here (and when the
+ * AI server changed the file), and everyone else's is replaced by what the server shows them and cannot be edited here. A Studio that could
+ * not be reached when the app started is tried again.
+ */
+function startServerSync(link: NonNullable<typeof serverLink>): void {
+  let lastPublished = '';
+  let publishing: ReturnType<typeof setTimeout> | null = null;
+  const publish = async () => {
+    const tree = (await studio.studio.read()).tree;
+    const text = JSON.stringify(tree);
+    if (text === lastPublished) return;
+    await link.client.publishTree(tree);
+    lastPublished = text;
+  };
+  if (link.owner) {
+    studio.studio.onTreeChange = () => {
+      if (publishing) clearTimeout(publishing);
+      publishing = setTimeout(() => void publish().catch(() => undefined), 400);
+    };
+  } else {
+    studio.studio.treeLock = () => 'The projects of this Studio are kept by its owner.';
+  }
+  const tick = async () => {
+    try {
+      if (!peopleHost.isRemote) {
+        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId });
+        if (!opened.ok) return;
+        if (win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      }
+      if (link.owner) await publish();
+      else if (await studio.studio.replaceTree(await link.client.tree()) && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+    } catch {
+      /* away: tried again at the next tick */
+    }
+  };
+  void tick();
+  if (syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(() => void tick(), 60_000);
+}
+
 /** Moving anything out from under the editor with changes unsaved would lose them. */
 function mustBeIdle(): void {
   if (write.hasUnsaved()) throw new Error('Save your changes in Write first, then continue.');
@@ -420,6 +466,12 @@ async function ensureFolders(): Promise<void> {
 const cipher = { available: () => safeStorage.isEncryptionAvailable(), encrypt: (p: string) => safeStorage.encryptString(p), decrypt: (b: Buffer) => safeStorage.decryptString(b) };
 /** A Studio's secrets (its key for this computer, and the Cloudflare token if kept) live in its own data folder. Under test a marked plain file stands in for the operating system's store. */
 const secretsFor = (id: string) => new Secrets(path.join(userData, 'studios', id, 'secrets'), cipher, TEST);
+/** The way to a Studio's server from this computer (the key it was built or joined with), or null if this Studio has none. */
+async function serverClient(e: { id: string; url: string | null }): Promise<StudioClient | null> {
+  const key = await studioKey(e.id);
+  return key && e.url ? new StudioClient({ url: e.url, key, fetchFn: fetch }) : null;
+}
+
 async function studioKey(id: string): Promise<KeyPair | null> {
   try {
     const k = JSON.parse((await secretsFor(id).get('studio-key')) ?? 'null') as KeyPair | null;
@@ -820,10 +872,59 @@ function registerShellIpc(): void {
       return { reachable: false, error: (e as Error).message, members: [], invites: [] };
     }
   });
-  manageLike('studios:createInvite', async (id: string, i: { role: string; label: string }) => {
+  manageLike('studios:createInvite', async (id: string, i: { role: string; label: string; projectId?: string | null; days?: number | null }) => {
     adminOnly();
     const { e, client } = await clientFor(String(id));
-    return client.invite(String(i?.role), String(i?.label ?? ''), e.name);
+    return client.invite(String(i?.role), String(i?.label ?? ''), e.name, { projectId: typeof i?.projectId === 'string' && i.projectId ? i.projectId : null, days: typeof i?.days === 'number' && i.days > 0 ? i.days : null });
+  });
+  // The records on a Studio's server, backed up to a file the owner keeps, and put back from one.
+  manageLike('studios:backupServer', async (id: string) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer; use Settings → Backup and import.');
+    let file = picked('CADREL_TEST_BACKUP_TO');
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, { title: 'Back up this Studio’s records', defaultPath: path.join(app.getPath('documents'), `${e.name} records ${stamp()}.json`), filters: [{ name: 'Studio records', extensions: ['json'] }] });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    return { file, ...(await backupServerRecords({ client, file, studio: { id: e.id, name: e.name } })) };
+  });
+  manageLike('studios:restoreServer', async (id: string) => {
+    adminOnly();
+    mustBeIdle();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer.');
+    let file = picked('CADREL_TEST_RESTORE_FROM');
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Put back the Studio’s records', filters: [{ name: 'Studio records', extensions: ['json'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    const done = await restoreServerRecords({ client, file });
+    setTimeout(() => void restartApp(), 50);
+    return done;
+  });
+  // Moving the Studio on this computer to its server: from then on everyone, the owner too, uses the records there.
+  manageLike('studios:moveRecords', async (id: string) => {
+    adminOnly();
+    mustBeIdle();
+    const e = studios.get(String(id));
+    if (e.id !== studios.view().activeId) throw new Error('Open this Studio first: its records are on this computer only while it is the one in use.');
+    if (e.role !== 'owner' || e.status !== 'ready') throw new Error('Only the owner of a built Studio can move its records to its server.');
+    if (e.recordsOnServer) throw new Error('This Studio’s records are already on its server.');
+    if (!peopleHost.me || peopleHost.isRemote) throw new Error('This Studio has no records on this computer to move.');
+    const { client } = await clientFor(e.id);
+    const copy = path.join(os.tmpdir(), `cadrel-records-${Date.now()}.db`);
+    if (!(await peopleHost.snapshot(copy))) throw new Error('This Studio has no records on this computer to move.');
+    try {
+      const moved = await moveRecordsToServer({ client, recordsCopy: copy, ownerPersonId: peopleHost.me, blobsDir: path.join(studioDir, 'vault-blobs'), tree: (await studio.studio.read()).tree });
+      studios.update(e.id, { recordsOnServer: true, note: moved.missing.length ? `${moved.missing.length} file version${moved.missing.length === 1 ? ' was' : 's were'} not found on this computer and could not be sent.` : null });
+      setTimeout(() => void restartApp(), 50); // reopen the Studio through its server
+      return { ...moved, view: studiosChanged(studios.view()) };
+    } finally {
+      await fsp.rm(copy, { force: true });
+    }
   });
   manageLike('studios:revokeInvite', async (id: string, inviteId: string) => {
     adminOnly();
@@ -890,7 +991,8 @@ function registerShellIpc(): void {
     if (!plan.available || !work) return buildPulse({ plan, approvals: [], decisions: [], catalogue: { available: false, marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] } });
     const nameOf = new Map(plan.projects.map((x) => [x.id, x.name]));
     const label = <T extends { projectId: string | null }>(r: T) => ({ ...r, projectName: (r.projectId && nameOf.get(r.projectId)) || '' });
-    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }), work.decisions({ current: true }), catalogueList(await catalogueSources())]);
+    // a role that may not see approvals or decisions has none on its Dashboard; it is not an error
+    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }).catch(() => [] as Awaited<ReturnType<typeof work.approvals>>), work.decisions({ current: true }).catch(() => [] as Awaited<ReturnType<typeof work.decisions>>), catalogueList(await catalogueSources())]);
     return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
   });
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
@@ -1211,6 +1313,14 @@ function registerShellIpc(): void {
     }
     return out;
   }));
+  // Captures shared through the Studio's server: what this computer has is sent, what it lacks is fetched and read in.
+  ipcMain.handle('shell:prefs:shareCaptures', guard(async () => {
+    if (!serverLink) return null;
+    const root = market.service.status().libraryRoot;
+    if (!root) throw new Error('Choose a Market library first.');
+    const r = await syncCaptures({ client: serverLink.client, root, importPack: (file) => market.service.importData(file) });
+    return { sent: r.sent, fetched: r.fetched, added: r.imported?.added ?? 0, alreadyHad: r.imported?.alreadyHad ?? 0, skipped: r.imported?.skipped ?? 0 };
+  }));
   ipcMain.handle('shell:prefs:marketFromStudio', guard(async (id: unknown) => {
     if (typeof id !== 'string' || id === studios.active().id) throw new Error('Choose another Studio.');
     const e = studios.get(id);
@@ -1352,7 +1462,14 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     // The Studio's people and roles: a Studio this person owns starts with its default roles and them as Owner.
     {
       const here = studios.active();
-      await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+      const client = here.recordsOnServer ? await serverClient(here) : null;
+      if (client) {
+        // the records are on the Studio's server: this computer asks for them there, as the person the key belongs to
+        serverLink = { client, owner: here.role === 'owner', studioId: here.id };
+        await peopleHost.openRemote({ client, studioId: here.id });
+      } else {
+        await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+      }
     }
     // The name used to be a setting; it belongs to the profile now.
     const legacy = settings.get().author?.trim();
@@ -1374,6 +1491,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       viewer: (tree) => peopleHost.myVisibility(tree)
     });
     peopleHost.setProjects(async () => (await studio.studio.read()).tree);
+    if (serverLink) startServerSync(serverLink);
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
     scope = new ScopeHost({

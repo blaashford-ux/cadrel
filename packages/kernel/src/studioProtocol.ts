@@ -13,7 +13,7 @@
 /** Changes when the requests or answers change in a way an older app could not follow. */
 export const STUDIO_API_VERSION = 1;
 /** Changes when the Studio's database changes. Only ever added to: an older app must keep working on a newer database. */
-export const STUDIO_SCHEMA_VERSION = 10;
+export const STUDIO_SCHEMA_VERSION = 11;
 
 export const SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
 
@@ -80,13 +80,13 @@ export async function fingerprint(publicKey: string): Promise<string> {
 }
 
 /** The exact text that is signed. A change to any part of the request changes it. */
-export async function signedText(method: string, path: string, ts: string, body: string): Promise<string> {
+export async function signedText(method: string, path: string, ts: string, body: string | Uint8Array): Promise<string> {
   return `${method.toUpperCase()}\n${path}\n${ts}\n${hex(await sha256(body))}`;
 }
 
 export type SignedHeaders = { 'x-cadrel-key': string; 'x-cadrel-ts': string; 'x-cadrel-sig': string };
 
-export async function signRequest(o: { method: string; path: string; body?: string; key: KeyPair; now?: number }): Promise<SignedHeaders> {
+export async function signRequest(o: { method: string; path: string; body?: string | Uint8Array; key: KeyPair; now?: number }): Promise<SignedHeaders> {
   const ts = String(o.now ?? Date.now());
   const text = await signedText(o.method, o.path, ts, o.body ?? '');
   const k = await importKey('pkcs8', fromB64u(o.key.privateKey), 'sign');
@@ -97,7 +97,7 @@ export async function signRequest(o: { method: string; path: string; body?: stri
 export type Verified = { ok: true; publicKey: string; signature: string } | { ok: false; reason: string };
 
 /** Checks a request's signature and that it is recent. Who the key belongs to is the caller's business. */
-export async function verifyRequest(o: { method: string; path: string; body: string; headers: (name: string) => string | null; now?: number }): Promise<Verified> {
+export async function verifyRequest(o: { method: string; path: string; body: string | Uint8Array; headers: (name: string) => string | null; now?: number }): Promise<Verified> {
   const key = o.headers('x-cadrel-key');
   const ts = o.headers('x-cadrel-ts');
   const sig = o.headers('x-cadrel-sig');
