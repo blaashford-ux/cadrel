@@ -9,7 +9,8 @@
     "dev": "wrangler dev"
   },
   "dependencies": {
-    "@cadrel/kernel": "*"
+    "@cadrel/kernel": "*",
+    "@cadrel/service": "*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",

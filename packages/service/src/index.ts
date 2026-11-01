@@ -18,11 +18,9 @@ import {
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
 } from '@cadrel/kernel';
 
-export class PermissionDenied extends Error {
-  constructor(readonly capability: string, readonly reason: string) {
-    super(`You are not allowed to do that (${capability}): ${reason}.`);
-  }
-}
+import { PermissionDenied } from './errors';
+export { PermissionDenied };
+export { VaultAs } from './vault';
 
 /** What the service needs to know about who may do what. Read on every call, so a role change takes effect at once. */
 export interface Access {
@@ -332,6 +330,13 @@ export class StudioAs {
     }
   }
 
+  /** Whether this person holds a capability at the studio (no project) or on one project (a role given there or above it counts). Without a project tree it is the studio. */
+  async canAt(capability: string, projectId?: string | null): Promise<boolean> {
+    const tree = projectId ? await this.o.projects?.() : null;
+    const path = tree && projectId ? this.projectPath(tree, projectId) : this.studioPath();
+    return explain(await this.context(), capability, { path }).allowed;
+  }
+
   /** The path to a project in the permission check: the studio, the projects above it, and it. */
   private projectPath(tree: ProjectTree, projectId: string): ScopeRef[] {
     return [...this.studioPath(), ...ancestorsOf(tree, projectId).map((p) => ({ kind: 'project' as const, id: p.id })), { kind: 'project', id: projectId }];
@@ -530,3 +535,4 @@ export class StudioAs {
     }
   };
 }
+export { decodeError, decodeValue, encodeError, encodeValue, type WireError } from './wire';
