@@ -548,6 +548,20 @@ describe('AppService', () => {
       await other.stop();
     }, 60000);
 
+    it('brings the captures of another Studio\'s library into this one, and leaves that library as it was', async () => {
+      await prep(48156);
+      const other = new AppService({ userData: path.join(tmp, 'user3'), openExternal: () => {}, revealInFolder: () => {} });
+      await other.setLibrary(path.join(tmp, 'lib3'));
+      expect(other.books()).toHaveLength(0);
+      expect(await other.importFromLibrary(libRoot)).toMatchObject({ added: 1, skipped: 0 });
+      expect(other.books()).toHaveLength(1);
+      expect(svc.books()).toHaveLength(1); // the library it came from is untouched
+      expect(await other.importFromLibrary(libRoot)).toMatchObject({ added: 0, skipped: 0 }); // again adds nothing
+      await expect(other.importFromLibrary(path.join(tmp, 'lib3'))).rejects.toThrow(/own library/);
+      await expect(other.importFromLibrary(path.join(tmp, 'nowhere'))).rejects.toThrow(/no Market library/);
+      await other.stop();
+    }, 60000);
+
     it('a failed move changes nothing', async () => {
       await prep(48154);
       fs.mkdirSync(path.join(tmp, 'occupied'));

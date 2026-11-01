@@ -1194,6 +1194,30 @@ function registerShellIpc(): void {
     return img.isEmpty() ? null : img.resize({ width: 128, quality: 'best' }).toDataURL();
   });
   ipcMain.handle('shell:prefs:folders', guard(() => folders()));
+  /** Where another Studio on this computer keeps its Market library: the one it was pointed at, else its default place, if a library is there. */
+  const libraryOfStudio = async (e: { id: string; folderName: string }): Promise<string | null> => {
+    const has = (dir: string) => fsp.stat(path.join(dir, 'scout.db')).then((st) => st.isFile(), () => false);
+    const chosen = await fsp.readFile(path.join(userData, 'studios', e.id, 'market', 'config.json'), 'utf8').then((t) => (JSON.parse(t) as { libraryRoot?: unknown }).libraryRoot, () => null);
+    if (typeof chosen === 'string' && (await has(chosen))) return chosen;
+    const dflt = path.join(cadrelFolder(), e.folderName, 'Market');
+    return (await has(dflt)) ? dflt : null;
+  };
+  ipcMain.handle('shell:prefs:marketStudios', guard(async () => {
+    const out: { id: string; name: string; library: string }[] = [];
+    for (const e of studios.view().studios) {
+      if (e.id === studios.active().id) continue;
+      const library = await libraryOfStudio(e);
+      if (library && !sameDir(library, market.service.status().libraryRoot ?? '')) out.push({ id: e.id, name: e.name, library });
+    }
+    return out;
+  }));
+  ipcMain.handle('shell:prefs:marketFromStudio', guard(async (id: unknown) => {
+    if (typeof id !== 'string' || id === studios.active().id) throw new Error('Choose another Studio.');
+    const e = studios.get(id);
+    const library = await libraryOfStudio(e);
+    if (!library) throw new Error(`${e.name} has no Market library on this computer.`);
+    return market.service.importFromLibrary(library);
+  }));
   const isKey = (k: unknown): k is FolderKey => k === 'cadrel' || k === 'projects' || k === 'write' || k === 'market';
   const TITLES: Record<FolderKey, string> = { cadrel: 'Choose where the Cadrel folder goes', projects: 'Choose where your project folders go', write: 'Choose Write’s own folder', market: 'Choose where Market’s library goes' };
   const CURRENT = (k: FolderKey) => (k === 'cadrel' ? cadrelFolder() : k === 'projects' ? projectsFolder() : k === 'write' ? writeFolder() : market.service.status().libraryRoot ?? marketDefault());

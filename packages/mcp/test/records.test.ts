@@ -9,19 +9,22 @@ import { addReference, addVaultFile, bootstrapStudio, checkIn, checkOut, default
 import { StudioService, dbAccess } from '@cadrel/service';
 import { memoryStudioDb, type StudioDb } from '@cadrel/store';
 import { Studio } from '@cadrel/studio';
+import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { createCadrelServer, projectsModule, recordsModule, studioModule } from '../src/index.js';
 
 const S = 'studio1';
 const NOW = () => new Date('2026-11-10T10:00:00.000Z');
-const NAMES = ['books_list', 'files_list', 'work_add_task', 'work_approvals', 'work_decisions', 'work_people', 'work_project_status', 'work_request_approval', 'work_set_task', 'work_tasks'];
+const NAMES = ['books_link_project', 'books_list', 'files_list', 'work_add_task', 'work_approvals', 'work_decisions', 'work_people', 'work_project_status', 'work_request_approval', 'work_set_task', 'work_tasks'];
 
 let db: StudioDb, svc: StudioService, studio: Studio, ana: ReturnType<StudioService['as']>;
+let mem: MemoryFs;
 beforeEach(async () => {
   db = memoryStudioDb();
   await bootstrapStudio(db, { studioId: S, actor: 'ana', now: NOW().toISOString() } as Ctx, { id: 'ana', name: 'Ana' });
   svc = new StudioService({ db, studioId: S, access: dbAccess(db, S), now: NOW });
   ana = svc.as('ana');
   studio = new Studio(path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cadrel-rec-mcp-')), 'studio.json'));
+  mem = new MemoryFs();
 });
 
 async function connect(personId = 'ana') {
@@ -30,7 +33,7 @@ async function connect(personId = 'ana') {
     const wf = await svc.as(personId).workflows.defaultFor('subproject').catch(() => null);
     return wf ? { workflowId: wf.id, stage: wf.stages[0]!.key } : null;
   };
-  const server = createCadrelServer({ modules: [studioModule({ studio, view, stageForNewBook }), recordsModule({ service: svc, personId, studio, studioId: S, db }), projectsModule({ service: svc, personId, studio, db, view })] });
+  const server = createCadrelServer({ modules: [studioModule({ studio, view, stageForNewBook, write: { fs: mem, root: '/books' } }), recordsModule({ service: svc, personId, studio, studioId: S, db }), projectsModule({ service: svc, personId, studio, db, view })] });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'claude-ai', version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);
@@ -297,5 +300,48 @@ describe('managing projects from the assistant', () => {
     expect((await call('studio_assign', { project: 'Book 1', person: 'Nobody', role: 'Editor' })).isError).toBe(true);
     expect((await call('studio_assign', { project: 'Book 1', role: 'Editor' })).isError).toBe(true);
     expect((await call('studio_unassign', { assignment: 'zzz' })).isError).toBe(true);
+  });
+});
+
+describe('a new project can be given its folder, and linked to what belongs to it', () => {
+  it('makes the manuscript folder from a template, links it, and refuses a second one', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Dragon Rider', kind: 'Series' });
+    await call('studio_create_project', { name: 'Book 1: Ember', parent: 'Dragon Rider' });
+
+    const series = (await call('studio_add_folder', { project: 'Dragon Rider' })).json();
+    expect(series).toMatchObject({ folder: 'Dragon Rider', template: 'Series', manuscript_folder: 'Dragon Rider' });
+    expect((await mem.stat('/books/Dragon Rider/.cadrel/project.json'))).toBeTruthy();
+    expect((await mem.stat('/books/Dragon Rider/Series Bible/Series Bible.md'))).toBeTruthy();
+
+    // a book's name can hold characters a folder cannot ("Book 1: Ember"); they are taken out, and a name can be given
+    const book = (await call('studio_add_folder', { project: 'Book 1: Ember' })).json();
+    expect(book).toMatchObject({ folder: 'Book 1 Ember', template: 'Novel' });
+    expect((await mem.stat('/books/Book 1 Ember/Manuscript/Draft.md'))).toBeTruthy();
+
+    const again = await call('studio_add_folder', { project: 'Book 1: Ember', name: 'Other' });
+    expect(again.isError).toBe(true);
+    expect(again.text).toMatch(/already has a manuscript folder/);
+    await call('studio_create_project', { name: 'Solo' });
+    expect((await call('studio_add_folder', { project: 'Solo', template: 'Nonesuch' })).isError).toBe(true);
+    expect((await call('studio_add_folder', { project: 'Solo', name: 'CON' })).isError).toBe(true);
+    const blank = (await call('studio_add_folder', { project: 'Solo', template: 'blank', name: 'Solo Notes' })).json();
+    expect(blank).toMatchObject({ folder: 'Solo Notes', template: 'Blank' });
+    expect((await call('studio_add_folder', { project: 'Dragon Rider', name: 'Solo Notes' })).isError).toBe(true); // has a folder already
+
+  });
+
+  it('links a catalogue book to a project and unlinks it, and sees only projects the person is assigned to', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Dragon Rider' });
+    const ser = await ana.catalogue.createSeries({ name: 'Dragon Rider' });
+    const book = await ana.catalogue.createBook({ title: 'Ember', seriesId: ser.id });
+    await ana.catalogue.addEdition(book.id, { format: 'ebook', asin: 'B0ABC12345' });
+    const done = (await call('books_link_project', { book: 'B0ABC12345', project: 'Dragon Rider' })).json();
+    expect(done).toEqual({ book: 'Ember', project: 'Dragon Rider' });
+    expect((await call('books_list')).json().books[0].project).toBe('Dragon Rider');
+    expect((await call('books_link_project', { book: 'Ember' })).json()).toEqual({ book: 'Ember', project: null });
+    expect((await call('books_link_project', { book: 'Nope' })).isError).toBe(true);
+    expect((await call('books_link_project', { book: 'Ember', project: 'Nope' })).isError).toBe(true);
   });
 });
