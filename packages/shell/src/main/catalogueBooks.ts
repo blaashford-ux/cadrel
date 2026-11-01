@@ -7,6 +7,7 @@
  * Books Market knows of (your own books, from KDP reports) that the catalogue does not have yet are listed apart, to be added in one go.
  */
 import { getProject, linksOf, type BookWithEditions, type ProjectTree } from '@cadrel/kernel';
+import { PermissionDenied } from '@cadrel/service';
 import type { CatalogueBookRow, CatalogueDetail, CatalogueList, MyBookRow, ProjectStageView } from '../shared/api';
 import { listBooks as marketRows, type BookService } from './mybooks';
 import type { PeopleHost } from './people';
@@ -45,6 +46,15 @@ function projectOf(src: Sources, projectId: string | undefined) {
 }
 
 export async function catalogueList(src: Sources): Promise<CatalogueList> {
+  try {
+    return await catalogueListOf(src);
+  } catch (e) {
+    if (!(e instanceof PermissionDenied)) throw e;
+    return { available: false, reason: 'Your role does not let you see the Studio’s books.', marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] };
+  }
+}
+
+async function catalogueListOf(src: Sources): Promise<CatalogueList> {
   const svc = src.people.service?.as(src.people.me);
   const base = { marketAvailable: !!src.market?.status().libraryRoot, financeVisible: src.financeVisible };
   if (!svc) return { available: false, reason: 'This Studio’s books are managed by its owner.', ...base, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] };

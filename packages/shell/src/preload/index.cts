@@ -200,7 +200,8 @@ const api: CadrelApi = {
     reset: (which) => studioCall('shell:prefs:reset', which),
     restart: () => studioCall('shell:prefs:restart'),
     marketStudios: () => studioCall('shell:prefs:marketStudios'),
-    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id)
+    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id),
+    shareCaptures: () => studioCall('shell:prefs:shareCaptures')
   },
   admin: {
     get: () => studioCall('shell:admin:get'),

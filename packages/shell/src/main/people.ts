@@ -214,7 +214,7 @@ export class PeopleHost {
 
   /** The active people, for naming an assignee or an approver. */
   async peopleList(): Promise<{ id: string; name: string }[]> {
-    return this.svc ? (await this.svc.as(this.meId).people.list()).map((p) => ({ id: p.id, name: p.name })) : [];
+    return this.svc ? this.svc.as(this.meId).people.directory() : [];
   }
 
   /** Runs one change as the person using the app. A refusal carries its reason; anything else is the service's own error text. */

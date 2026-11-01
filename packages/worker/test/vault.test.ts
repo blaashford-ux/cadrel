@@ -83,6 +83,17 @@ describe('the Studio server: records', () => {
     expect((await s.call(author.key, ['catalogue', 'books'])).body.result.map((b: { title: string }) => b.title)).toEqual(['Lead Me']);
   });
 
+  it('shows who is in the Studio by name to anyone who holds a role, even one given a single project, and the rest of a person’s record to those who may see people', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    const guest = await s.join('guest', 'Gus Guest', { projectId: 'pB1' });
+    const names = (await s.call(guest.key, ['people', 'directory'])).body.result as { id: string; name: string }[];
+    expect(names.map((n) => n.name).sort()).toEqual(['Gus Guest', 'Owner']);
+    expect(Object.keys(names[0]!).sort()).toEqual(['id', 'name']);
+    expect((await s.call(guest.key, ['people', 'list'])).status).toBe(403);
+    expect((await s.call(s.owner, ['people', 'list'])).status).toBe(200);
+  });
+
   it('refuses names that are not the service’s calls, and signed-in strangers', async () => {
     const s = await server();
     const stranger = await generateKeyPair();

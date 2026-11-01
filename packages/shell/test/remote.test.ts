@@ -10,6 +10,9 @@ import { ACCOUNT, TOKEN, fakeCloudflare } from './fakeCloudflare';
 import { buildStudio } from '../src/main/cloudflare';
 import { joinStudio, StudioClient } from '../src/main/studioClient';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from '../src/main/remote';
+import { unzipSync } from 'fflate';
+import { readPackManifest } from '@cadrel/market-library';
+import { syncCaptures } from '../src/main/sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from '../src/main/moveRecords';
 import { PeopleHost } from '../src/main/people';
 
@@ -296,5 +299,65 @@ describe('backing up and restoring a server Studio’s records', () => {
     await expect(restoreServerRecords({ client: s.owner, file: path.join(dir, 'new.json') })).rejects.toThrow(/newer Cadrel/);
     const ann = await s.person('author', 'Ann');
     await expect(backupServerRecords({ client: ann, file: path.join(dir, 'y.json'), studio: { id: 'x', name: 'x' } })).rejects.toThrow(/Only the Studio’s owner/);
+  });
+});
+
+describe('sharing Market captures through the Studio', () => {
+  const put = async (root: string, rel: string, text: string) => {
+    const f = path.join(root, ...rel.split('/'));
+    await (await import('node:fs/promises')).mkdir(path.dirname(f), { recursive: true });
+    await writeFile(f, text);
+  };
+  const BOOK = 'books/B0AAAAAAA1/snapshots/20261101T100000Z';
+  const LIST = 'lists/kindle/fantasy/page-1/20261101T110000Z';
+
+  it('each computer sends what the others lack and fetches what it lacks, in the shape Market’s import reads; nothing is sent twice', async () => {
+    const s = await studio();
+    const analyst = await s.person('analyst', 'Ana Lyst');
+    const author = await s.person('marketing', 'Mark Eting');
+    const a = await tmp();
+    const b = await tmp();
+    await put(a, `${BOOK}/capture.json`, '{"kind":"detail"}');
+    await put(a, `${BOOK}/page.html.gz`, 'gz-book');
+    await put(a, 'books/B0AAAAAAA1/covers/0123456789abcdef.jpg', 'jpeg');
+    await put(a, 'books/B0AAAAAAA1/notes.txt', 'not a capture file'); // left alone
+    await put(b, `${LIST}/capture.json`, '{"kind":"list"}');
+    await put(b, `${LIST}/page.html.gz`, 'gz-list');
+
+    const packs: { names: string[]; id: string }[] = [];
+    const importInto = (root: string) => async (file: string) => {
+      const m = readPackManifest(file); // Market would refuse this if it were not a pack it knows
+      const files = unzipSync(new Uint8Array(await readFile(file)));
+      packs.push({ names: Object.keys(files).filter((n) => n !== 'manifest.json').sort(), id: m.id });
+      for (const [n, bytes] of Object.entries(files)) if (n !== 'manifest.json') await put(root, n, Buffer.from(bytes).toString());
+      return { added: Object.keys(files).length - 1, alreadyHad: 0, skipped: 0 };
+    };
+
+    const first = await syncCaptures({ client: analyst, root: a, importPack: importInto(a) });
+    expect(first).toEqual({ sent: 3, fetched: 0, imported: null });
+    const second = await syncCaptures({ client: author, root: b, importPack: importInto(b) });
+    expect(second).toMatchObject({ sent: 2, fetched: 3, imported: { added: 3 } });
+    expect(packs[0]!.names).toEqual(['books/B0AAAAAAA1/covers/0123456789abcdef.jpg', `${BOOK}/capture.json`, `${BOOK}/page.html.gz`]);
+    expect(await readFile(path.join(b, ...`${BOOK}/page.html.gz`.split('/')), 'utf8')).toBe('gz-book');
+    // the first computer now gets the list page; and a second run sends and fetches nothing
+    const third = await syncCaptures({ client: analyst, root: a, importPack: importInto(a) });
+    expect(third).toMatchObject({ sent: 0, fetched: 2 });
+    expect(await syncCaptures({ client: analyst, root: a, importPack: importInto(a) })).toEqual({ sent: 0, fetched: 0, imported: null });
+    expect(await syncCaptures({ client: author, root: b, importPack: importInto(b) })).toEqual({ sent: 0, fetched: 0, imported: null });
+  });
+
+  it('only people who may capture send, and only people who may see market research fetch; captures are never replaced and only capture files are accepted', async () => {
+    const s = await studio();
+    const guest = await s.person('guest', 'Gus');
+    const analyst = await s.person('analyst', 'Ana');
+    await expect(guest.putCapture(`${BOOK}/capture.json`, new TextEncoder().encode('x'))).rejects.toThrow(/not allowed/);
+    await analyst.putCapture(`${BOOK}/capture.json`, new TextEncoder().encode('first'));
+    await analyst.putCapture(`${BOOK}/capture.json`, new TextEncoder().encode('second'));
+    expect(new TextDecoder().decode((await analyst.getCapture(`${BOOK}/capture.json`))!)).toBe('first');
+    await expect(analyst.putCapture('books/..%2F..%2Fx/capture.json', new Uint8Array([1]))).rejects.toThrow(/not a capture file/);
+    await expect(analyst.putCapture('books/B0AAAAAAA1/notes.txt', new Uint8Array([1]))).rejects.toThrow(/not a capture file/);
+    await expect(guest.getCapture(`${BOOK}/capture.json`)).rejects.toThrow(/not allowed/);
+    await expect(guest.captures()).rejects.toThrow(/not allowed/);
+    expect(await analyst.getCapture(`${LIST}/capture.json`)).toBeNull();
   });
 });

@@ -72,6 +72,37 @@ function CapturesFromStudios() {
   );
 }
 
+/** Where the Studio has a server, the people in it share the captures Market saves, so each does not have to capture the same pages. */
+function SharedCaptures() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    void api.studios.get().then((v) => setOn(!!v.studios.find((s) => s.id === v.activeId)?.recordsOnServer), () => setOn(false));
+  }, []);
+  if (!on) return null;
+  const run = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.prefs.shareCaptures();
+      setNote(r ? `Sent ${r.sent.toLocaleString()} file${r.sent === 1 ? '' : 's'}; fetched ${r.fetched.toLocaleString()}${r.fetched ? ` and read in ${r.added.toLocaleString()} new item${r.added === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped.toLocaleString()} could not be read` : ''}` : ''}.` : 'This Studio has no server to share through.');
+    } catch (e) {
+      setNote(String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" aria-labelledby="s-share">
+      <h3 id="s-share">Captures shared with this Studio</h3>
+      <p className="muted small">The pages Market saves are public page source, so the people in this Studio share them through its server: yours go up, theirs come down and are read into your own library. Nothing is changed or removed on either side. You need to be allowed to capture to send, and to see market research to fetch.</p>
+      <div className="row"><button type="button" disabled={busy} onClick={() => void run()}>{busy ? 'Sharing…' : 'Share captures now'}</button></div>
+      {note && <p role="status" className="muted">{note}</p>}
+    </section>
+  );
+}
+
 /** Looks for a newer version of Cadrel and installs it. A development build follows development releases only. */
 function UpdateCard({ info }: { info: ShellInfo | null }) {
   const [st, setSt] = useState<UpdateStatus | null>(null);
@@ -261,6 +292,7 @@ export function Settings() {
       </section>
 
       <CapturesFromStudios />
+      <SharedCaptures />
 
       <McpCard />
 

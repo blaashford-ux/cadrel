@@ -63,7 +63,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     return json({ studioId: env.STUDIO_ID, ownerFingerprint: await fingerprint(env.OWNER_KEY), apiVersion: STUDIO_API_VERSION, schemaVersion });
   }
 
-  const binary = method === 'PUT' && /^\/v1\/blobs\//.test(path);
+  const binary = method === 'PUT' && /^\/v1\/(blobs|captures)\//.test(path);
   const body: string | Uint8Array = method === 'GET' || method === 'DELETE' ? '' : binary ? new Uint8Array(await request.arrayBuffer()) : await request.text();
   const auth = await authenticate(request, body, env, now);
   if (auth instanceof Response) return auth;

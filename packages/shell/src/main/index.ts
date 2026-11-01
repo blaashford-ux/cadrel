@@ -49,6 +49,7 @@ import { StudioRegistry, LOCAL_ID } from './studios';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
+import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
@@ -990,7 +991,8 @@ function registerShellIpc(): void {
     if (!plan.available || !work) return buildPulse({ plan, approvals: [], decisions: [], catalogue: { available: false, marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] } });
     const nameOf = new Map(plan.projects.map((x) => [x.id, x.name]));
     const label = <T extends { projectId: string | null }>(r: T) => ({ ...r, projectName: (r.projectId && nameOf.get(r.projectId)) || '' });
-    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }), work.decisions({ current: true }), catalogueList(await catalogueSources())]);
+    // a role that may not see approvals or decisions has none on its Dashboard; it is not an error
+    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }).catch(() => [] as Awaited<ReturnType<typeof work.approvals>>), work.decisions({ current: true }).catch(() => [] as Awaited<ReturnType<typeof work.decisions>>), catalogueList(await catalogueSources())]);
     return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
   });
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
@@ -1310,6 +1312,14 @@ function registerShellIpc(): void {
       if (library && !sameDir(library, market.service.status().libraryRoot ?? '')) out.push({ id: e.id, name: e.name, library });
     }
     return out;
+  }));
+  // Captures shared through the Studio's server: what this computer has is sent, what it lacks is fetched and read in.
+  ipcMain.handle('shell:prefs:shareCaptures', guard(async () => {
+    if (!serverLink) return null;
+    const root = market.service.status().libraryRoot;
+    if (!root) throw new Error('Choose a Market library first.');
+    const r = await syncCaptures({ client: serverLink.client, root, importPack: (file) => market.service.importData(file) });
+    return { sent: r.sent, fetched: r.fetched, added: r.imported?.added ?? 0, alreadyHad: r.imported?.alreadyHad ?? 0, skipped: r.imported?.skipped ?? 0 };
   }));
   ipcMain.handle('shell:prefs:marketFromStudio', guard(async (id: unknown) => {
     if (typeof id !== 'string' || id === studios.active().id) throw new Error('Choose another Studio.');

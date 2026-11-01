@@ -62,6 +62,20 @@ export class StudioClient {
     if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`);
     return new Uint8Array(await res.arrayBuffer());
   }
+  /** The names of the captures the Studio holds, a page at a time (`next` is null on the last). */
+  captures(cursor?: string): Promise<{ files: { path: string; size: number }[]; next: string | null }> {
+    return this.request('GET', `/v1/captures${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+  }
+  async putCapture(rel: string, bytes: Uint8Array): Promise<void> {
+    const res = await this.send('PUT', `/v1/captures/${rel}`, bytes, 'application/octet-stream');
+    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`);
+  }
+  async getCapture(rel: string): Promise<Uint8Array | null> {
+    const res = await this.send('GET', `/v1/captures/${rel}`, '', 'application/json');
+    if (res.status === 404) return null;
+    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`);
+    return new Uint8Array(await res.arrayBuffer());
+  }
   /** The project tree as this person may see it. */
   tree(): Promise<ProjectTree> {
     return this.wire<ProjectTree>('/v1/tree', undefined, 'GET');

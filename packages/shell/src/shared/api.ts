@@ -869,6 +869,8 @@ export interface CadrelApi {
     marketStudios(): Promise<{ id: string; name: string; library: string }[]>;
     /** Copies another Studio's Market captures into this Studio's library (pages already here are kept; the other library is not changed). */
     marketFromStudio(id: string): Promise<{ added: number; alreadyHad: number; skipped: number }>;
+    /** Sends this Studio's Market captures to its server and fetches the ones other people sent. Null where the Studio has no server for it. */
+    shareCaptures(): Promise<{ sent: number; fetched: number; added: number; alreadyHad: number; skipped: number } | null>;
   };
   admin: AdminApi;
   assistants: AssistantsApi;

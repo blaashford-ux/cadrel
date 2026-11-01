@@ -12,6 +12,7 @@
 import { sanitizeTree, sha256, hex, visibleTree, VAULT_STORE_METHODS } from '@cadrel/kernel';
 import { VaultAs, decodeValue, encodeError, encodeValue } from '@cadrel/service';
 import { readTree, serviceFor, writeTree, type RecordsEnv } from './records';
+import { captureRoutes, isCaptureRoute } from './captures';
 
 export interface ServerEnv extends RecordsEnv {
   FILES?: R2Bucket;
@@ -31,7 +32,7 @@ const failed = (e: unknown) => {
   return w ? respond(JSON.stringify(w), w.kind === 'PermissionDenied' ? 403 : 422) : fail(500, 'The Studio could not do that.');
 };
 
-export const isServerRoute = (path: string): boolean => path === '/v1/call' || path === '/v1/vault' || path === '/v1/tree' || /^\/v1\/blobs\/[0-9a-f]{64}$/.test(path);
+export const isServerRoute = (path: string): boolean => isCaptureRoute(path) || path === '/v1/call' || path === '/v1/vault' || path === '/v1/tree' || /^\/v1\/blobs\/[0-9a-f]{64}$/.test(path);
 
 const blobKey = (hash: string) => `blobs/${hash.slice(0, 2)}/${hash}`;
 
@@ -40,6 +41,8 @@ export async function serverRoutes(request: Request, env: ServerEnv, who: { kind
   const method = request.method;
   const { service, db } = serviceFor(env, now);
   const as = service.as(personId);
+
+  if (isCaptureRoute(path)) return captureRoutes(request, env.FILES, as, body);
 
   if (path === '/v1/tree') {
     if (method === 'GET') {
