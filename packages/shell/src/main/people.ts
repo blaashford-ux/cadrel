@@ -103,7 +103,7 @@ export class PeopleHost {
   }
 
   private async refreshPenNames(): Promise<void> {
-    if (this.remote && this.svc) this.penScope = (await this.svc.as(this.meId).people.penNames()).map((n) => n.displayName);
+    if (this.remote && this.svc) this.penScope = await this.svc.as(this.meId).people.penNameNames();
     else this.penScope = this.db ? (await this.db.all<{ n: string }>('SELECT display_name AS n FROM pen_name WHERE studio_id = ? ORDER BY lower(display_name)', [this.studioId])).map((r) => r.n) : null;
   }
 
@@ -144,6 +144,7 @@ export class PeopleHost {
   async state(): Promise<PeopleState> {
     if (!this.svc || (!this.db && !this.remote)) return { available: false, reason: this.why };
     const p = this.svc.as(this.meId);
+    if (!(await p.can('people.read'))) return { available: false, reason: 'Your role does not let you see the people and roles of this Studio.' };
     const [people, deactivated, teams, penNames, roles, assignments] = await Promise.all([p.people.list(), p.people.list({ deactivated: true }), p.people.teams(), p.people.penNames(), p.people.roles(), p.people.assignments()]);
     const may = { people: await p.can('people.manage'), teams: await p.can('teams.manage'), roles: await p.can('roles.manage') };
     return { available: true, me: this.meId, studioId: this.studioId, people, deactivated, teams, penNames, roles, assignments, review: may.roles ? await p.people.capabilityReview() : [], may };

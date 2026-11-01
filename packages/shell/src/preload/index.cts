@@ -32,6 +32,7 @@ const api: CadrelApi = {
     forgetToken: (id) => studioCall('shell:studios:forgetToken', id),
     people: (id) => studioCall('shell:studios:people', id),
     createInvite: (id, invite) => studioCall('shell:studios:createInvite', id, invite),
+    moveRecords: (id) => studioCall('shell:studios:moveRecords', id),
     revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
     removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
     join: (link, details) => studioCall('shell:studios:join', link, details),

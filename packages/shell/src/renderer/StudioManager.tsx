@@ -87,7 +87,7 @@ export function StudioManager() {
   );
 }
 
-function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; studios: StudiosView; act: <T>(job: () => Promise<T>, after?: (r: T) => void) => Promise<void>; setNote(n: string | null): void; onGone(): void }) {
+function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: StudioEntry; studios: StudiosView; act: <T>(job: () => Promise<T>, after?: (r: T) => void) => Promise<void>; setNote(n: string | null): void; onGone(): void }) {
   const [account, setAccount] = useState('');
   const [token, setToken] = useState('');
   const [keep, setKeep] = useState(false);
@@ -95,6 +95,11 @@ function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; s
   const [role, setRole] = useState<string>('author');
   const [label, setLabel] = useState('');
   const [link, setLink] = useState<string | null>(null);
+  const [project, setProject] = useState('');
+  const [days, setDays] = useState('');
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [confirmMove, setConfirmMove] = useState(false);
+  const [moving, setMoving] = useState(false);
   const [people, setPeople] = useState<StudioPeople | null>(null);
   const [upToken, setUpToken] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -106,8 +111,13 @@ function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; s
   useEffect(() => {
     setPeople(null);
     setLink(null);
+    setProject('');
+    setConfirmMove(false);
     if (ready) loadPeople();
-  }, [studio.id, ready]);
+    // the projects an invitation can be limited to: this Studio's own, which are known only while it is the one in use
+    if (ready && studio.recordsOnServer && studios.activeId === studio.id) void window.cadrel.studio.state().then((st) => setProjects(st.tree.projects.filter((p) => p.status === 'active').map((p) => ({ id: p.id, name: p.name }))), () => undefined);
+    else setProjects([]);
+  }, [studio.id, ready, studio.recordsOnServer]);
 
   return (
     <div className="studio-detail" role="region" aria-label={`${studio.name} settings`}>
@@ -144,7 +154,14 @@ function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; s
               {INVITE_ROLES.map((k) => <option key={k} value={k}>{defaultRole(k).name}</option>)}
             </select>
             <input aria-label="Who the invitation is for" placeholder="Who is it for? (a label only you see)" value={label} onChange={(e) => setLabel(e.target.value)} />
-            <button type="button" onClick={() => void act(() => api.createInvite(studio.id, { role, label }), (r) => (setLink(r.link), setLabel(''), loadPeople()))}>Create invitation</button>
+            {projects.length > 0 && (
+              <select aria-label="Where the role applies" value={project} onChange={(e) => setProject(e.target.value)}>
+                <option value="">Across the whole Studio</option>
+                {projects.map((p) => <option key={p.id} value={p.id}>Only {p.name}</option>)}
+              </select>
+            )}
+            {studio.recordsOnServer && <input aria-label="Days the access lasts" type="number" min={1} max={3650} placeholder="Ends after (days)" value={days} onChange={(e) => setDays(e.target.value)} style={{ width: '9rem' }} />}
+            <button type="button" onClick={() => void act(() => api.createInvite(studio.id, { role, label, projectId: project || null, days: days ? Number(days) : null }), (r) => (setLink(r.link), setLabel(''), setDays(''), loadPeople()))}>Create invitation</button>
           </div>
           {link && (
             <div className="banner info" role="status">
@@ -169,6 +186,26 @@ function StudioDetail({ studio, act, setNote, onGone }: { studio: StudioEntry; s
                 </li>
               ))}
             </ul>
+          )}
+
+          <h5>Where the Studio’s records are</h5>
+          {studio.recordsOnServer ? (
+            <p className="muted small">The people, roles, books, work and files of this Studio are kept on its server. Everyone, you included, uses them there, and what a role may do is decided there.</p>
+          ) : (
+            <>
+              <p className="muted small">The people, roles, books, work and files of this Studio are on this computer only. Move them to the Studio’s server so the people you invite can work in the same records and the same files, with check-out locking decided by the server. Nothing is deleted here: the file on this computer is kept as a copy.</p>
+              {studios.activeId !== studio.id ? (
+                <p className="muted small">Open this Studio first (Studio menu on Home); its records are on this computer only while it is the one in use.</p>
+              ) : !confirmMove ? (
+                <button type="button" onClick={() => setConfirmMove(true)}>Move this Studio’s records to its server…</button>
+              ) : (
+                <div className="banner warn" role="alert">
+                  This sends everything in this Studio (its people, roles, books, work, vault files and projects) to its server, then restarts Cadrel into it. It can take a while for a large vault. The server’s own records are replaced.{' '}
+                  <button type="button" className="primary" disabled={moving} onClick={() => { setMoving(true); void act(() => api.moveRecords(studio.id), (r) => setNote(`Moved ${r.rows} records and ${r.files} files. Cadrel is restarting into the Studio’s server.`)).finally(() => setMoving(false)); }}>{moving ? 'Moving…' : 'Move them'}</button>{' '}
+                  <button type="button" disabled={moving} onClick={() => setConfirmMove(false)}>Cancel</button>
+                </div>
+              )}
+            </>
           )}
 
           <h5>Looking after it</h5>

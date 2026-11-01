@@ -308,6 +308,8 @@ export interface StudioEntry {
   resources: { worker: string; d1Id: string | null; d1Name: string; bucket: string } | null;
   /** The versions the Studio's server last reported, and the ones in this app; an upgrade is offered when the app's are newer. */
   server: { api: number; schema: number } | null;
+  /** The Studio's records (people, roles, catalogue, work, files) are on its server and this computer uses them there. Always so for a Studio the person joined. */
+  recordsOnServer: boolean;
 }
 
 /** One person in a Studio, as the owner sees them. */
@@ -364,7 +366,10 @@ export interface StudiosApi {
   forgetToken(id: string): Promise<StudiosView>;
   /** Who is in the Studio and what invitations are open (owner only; asks the Studio's server). */
   people(id: string): Promise<StudioPeople>;
-  createInvite(id: string, invite: { role: string; label: string }): Promise<{ link: string; expiresAt: string }>;
+  /** `projectId` gives the role on that one project only (a guest's one book); `days` ends it after that long. */
+  createInvite(id: string, invite: { role: string; label: string; projectId?: string | null; days?: number | null }): Promise<{ link: string; expiresAt: string }>;
+  /** Moves the Studio in use to its server: its records, the vault's files and its projects. Cadrel restarts into it. */
+  moveRecords(id: string): Promise<{ rows: number; files: number; missing: string[]; view: StudiosView }>;
   revokeInvite(id: string, inviteId: string): Promise<StudioPeople>;
   removeMember(id: string, memberId: string): Promise<StudioPeople>;
   /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */

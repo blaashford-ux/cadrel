@@ -210,3 +210,47 @@ describe('moving a Studio’s records to its server', () => {
     await expect(s.owner.request('POST', '/v1/records/import', { phase: 'rows', table: 'person', rows: [{ 'id; DROP TABLE person': 'x' }] })).rejects.toThrow(/columns/);
   });
 });
+
+describe('the app’s people host over a server Studio', () => {
+  it('opens a joined Studio through its server: the people and roles page, the vault, the pen names for imports; says so when it cannot be reached and opens when it can', async () => {
+    const s = await studio();
+    const key = await generateKeyPair();
+    // an owner has made a pen name; a member joins and opens the Studio on their computer
+    await remoteService(s.owner).as('x').people.createPenName({ displayName: 'Mara Quinn' });
+    const ann = await s.person('author', 'Ann Author');
+    const host = new PeopleHost();
+    s.setOnline(false);
+    const down = await host.openRemote({ client: ann, studioId: 'sabc123def4' });
+    expect(down.ok).toBe(false);
+    expect(await host.state()).toMatchObject({ available: false, reason: expect.stringMatching(/cannot be reached/) });
+    expect(host.isRemote).toBe(false);
+    s.setOnline(true);
+    expect((await host.openRemote({ client: ann, studioId: 'sabc123def4' })).ok).toBe(true);
+    expect(host.isRemote).toBe(true);
+    // an Author does not see the people and roles page; the owner does
+    expect(await host.state()).toMatchObject({ available: false, reason: expect.stringMatching(/does not let you see the people/) });
+    const boss = new PeopleHost();
+    await boss.openRemote({ client: s.owner, studioId: 'sabc123def4' });
+    const st = await boss.state();
+    expect(st).toMatchObject({ available: true, may: { people: true, teams: true, roles: true } });
+    if (st.available) expect(st.people.map((p) => p.name).sort()).toEqual(['Ann Author', 'Owner']);
+    await boss.close();
+    expect(host.penNameScope()).toEqual(['Mara Quinn']);
+    expect(host.mcpArgs('records.db')).toEqual([]); // the assistant's record tools open a records file; there is none here
+    expect(await host.snapshot('x')).toBe(false);
+    // a change the person's role does not allow comes back with its reason
+    await expect(host.call('createRole', { name: 'Sneaky', capabilities: [] })).rejects.toThrow(/not allowed/);
+    // the vault works through the server
+    const dir = await tmp();
+    const v = host.vault({ dir: path.join(dir, 'work'), blobsDir: path.join(dir, 'blobs'), machine: 'ann-pc' })!;
+    await (await import('node:fs/promises')).mkdir(path.join(dir, 'work'), { recursive: true });
+    await writeFile(path.join(dir, 'work', 'a.md'), 'hello');
+    expect((await v.add('a.md')).status).toBe('latest');
+    expect(host.vault({ dir: path.join(dir, 'work'), blobsDir: path.join(dir, 'blobs'), machine: 'ann-pc' })).toBe(v); // the same one, so its last list is kept
+    s.setOnline(false);
+    expect((await v.list()).map((e) => e.path)).toEqual(['a.md']);
+    expect(host.offline).toBe(true);
+    void key;
+    await host.close();
+  });
+});

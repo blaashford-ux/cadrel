@@ -160,6 +160,14 @@ export class StudioAs {
     },
     teams: async (): Promise<Team[]> => (await this.need('people.read'), listTeams(this.o.db, this.ctx())),
     penNames: async (): Promise<PenName[]> => (await this.need('people.read'), listPenNames(this.o.db, this.ctx())),
+    /**
+     * Only the names of the pen names the Studio publishes under, for limiting what Market imports and shows. Anyone who works with books or
+     * money needs these, whether or not they may see the people.
+     */
+    penNameNames: async (): Promise<string[]> => {
+      if (!(await this.can('people.read')) && !(await this.can('catalogue.read')) && !(await this.can('royalties.read'))) throw new PermissionDenied('catalogue.read', 'no active role grants it here');
+      return (await listPenNames(this.o.db, this.ctx())).map((n) => n.displayName);
+    },
     roles: async (): Promise<RoleRecord[]> => (await this.need('people.read'), listRoles(this.o.db, this.ctx())),
     assignments: async (o?: { subjectId?: string; roleId?: string }): Promise<AssignmentRecord[]> => (await this.need('people.read'), listAssignments(this.o.db, this.ctx(), o)),
 
