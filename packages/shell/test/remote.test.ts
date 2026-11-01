@@ -10,7 +10,7 @@ import { ACCOUNT, TOKEN, fakeCloudflare } from './fakeCloudflare';
 import { buildStudio } from '../src/main/cloudflare';
 import { joinStudio, StudioClient } from '../src/main/studioClient';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from '../src/main/remote';
-import { moveRecordsToServer } from '../src/main/moveRecords';
+import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from '../src/main/moveRecords';
 import { PeopleHost } from '../src/main/people';
 
 const dirs: string[] = [];
@@ -252,5 +252,49 @@ describe('the app’s people host over a server Studio', () => {
     expect(host.offline).toBe(true);
     void key;
     await host.close();
+  });
+});
+
+describe('backing up and restoring a server Studio’s records', () => {
+  it('saves every record, the owner and the projects to one file, and puts them back after they were lost', async () => {
+    const s = await studio();
+    const dir = await tmp();
+    const svc = remoteService(s.owner).as('x');
+    await s.owner.publishTree({ projects: [{ id: 'pB1', name: 'Book 1', parentId: null, kind: 'Book', status: 'active', order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] });
+    await svc.catalogue.createBook({ title: 'Lead Me' });
+    await svc.people.create({ name: 'Bo Lin', kind: 'contractor' });
+    const a = await computer(await s.person('author', 'Ann Author'), 'ann-pc');
+    await a.write('ch1.md', 'one');
+    await a.vault.add('ch1.md');
+
+    const file = path.join(dir, 'backup.json');
+    const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
+    expect(made.rows).toBeGreaterThan(20);
+    const saved = JSON.parse(await readFile(file, 'utf8'));
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 11 });
+    expect(saved.tables.book).toHaveLength(1);
+    expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
+
+    // the records are lost (the server is emptied), then put back
+    await s.owner.request('POST', '/v1/records/import', { phase: 'start' });
+    expect((await s.owner.request<{ result: unknown }>('GET', '/v1/me').catch(() => null)) !== undefined).toBe(true);
+    expect(await svc.catalogue.books()).toEqual([]);
+    const back = await restoreServerRecords({ client: s.owner, file });
+    expect(back.rows).toBe(made.rows);
+    expect((await svc.catalogue.books()).map((b) => b.title)).toEqual(['Lead Me']);
+    expect((await svc.people.list()).map((p) => p.name).sort()).toEqual(['Ann Author', 'Bo Lin', 'Owner']);
+    expect((await a.vault.list()).map((e) => e.path)).toEqual(['ch1.md']);
+    expect((await s.owner.tree()).projects.map((p) => p.name)).toEqual(['Book 1']);
+  });
+
+  it('refuses a file that is not a backup, one from a newer Cadrel, and anyone but the owner', async () => {
+    const s = await studio();
+    const dir = await tmp();
+    await writeFile(path.join(dir, 'x.json'), JSON.stringify({ hello: 'world' }));
+    await expect(restoreServerRecords({ client: s.owner, file: path.join(dir, 'x.json') })).rejects.toThrow(/not a backup/);
+    await writeFile(path.join(dir, 'new.json'), JSON.stringify({ format: 'cadrel-server-records', schema: 99, owner: 'p', tables: {} }));
+    await expect(restoreServerRecords({ client: s.owner, file: path.join(dir, 'new.json') })).rejects.toThrow(/newer Cadrel/);
+    const ann = await s.person('author', 'Ann');
+    await expect(backupServerRecords({ client: ann, file: path.join(dir, 'y.json'), studio: { id: 'x', name: 'x' } })).rejects.toThrow(/Only the Studio’s owner/);
   });
 });

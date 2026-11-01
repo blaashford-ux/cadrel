@@ -210,8 +210,11 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
 
           <h5>Looking after it</h5>
           <div className="row">
-            <button type="button" disabled title="Not available yet">Back up this Studio</button>
+            {studio.recordsOnServer
+              ? <button type="button" onClick={() => void act(() => api.backupServer(studio.id), (r) => r && setNote(`Saved ${r.rows} records to ${r.file}. The files’ contents stay in the Studio’s file store, where no version is ever deleted.`))}>Back up the server’s records</button>
+              : <button type="button" disabled title="Move the records to the server first, or use Settings → Backup and import">Back up the server’s records</button>}
             <button type="button" disabled={!behind || (!studio.tokenKept && !upToken.trim())} onClick={() => void act(() => api.upgrade(studio.id, studio.tokenKept ? undefined : upToken), () => (setUpToken(''), setNote('Upgraded.')))}>Upgrade the server{behind ? '' : ' (up to date)'}</button>
+            {studio.recordsOnServer && <button type="button" onClick={() => { if (window.confirm('Replace the records on the server with a saved copy? Anything done since that copy was made is lost. Cadrel restarts afterwards.')) void act(() => api.restoreServer(studio.id), (r) => r && setNote(`Put back ${r.rows} records. Cadrel is restarting.`)); }}>Put back from a backup…</button>}
             <button type="button" disabled title="Not available yet">Recovery code</button>
           </div>
           {behind && !studio.tokenKept && (

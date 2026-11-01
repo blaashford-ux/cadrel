@@ -5,7 +5,7 @@
  * A Studio whose records are on its server (every Studio this person joined, and an owned one that was moved there) is the same service sent
  * over the wire: nothing else in the app needs to know. A joined Studio that cannot be reached says so until it can.
  */
-import { bootstrapStudio, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
+import { bootstrapStudio, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
@@ -72,6 +72,12 @@ export class PeopleHost {
     await this.close();
     this.studioId = o.studioId;
     try {
+      // a Studio newer than this Cadrel is left alone: it may mean things this version would get wrong
+      const info = await o.client.info();
+      if ((info.apiVersion ?? 0) > STUDIO_API_VERSION || (info.schemaVersion ?? 0) > STUDIO_SCHEMA_VERSION) {
+        this.why = 'This Studio has been upgraded past this version of Cadrel. Update Cadrel to open it.';
+        return { ok: false };
+      }
       const me = await o.client.me();
       this.meId = me.personId;
     } catch (e) {

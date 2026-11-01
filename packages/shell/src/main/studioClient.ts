@@ -71,8 +71,14 @@ export class StudioClient {
     await this.wire<boolean>('/v1/tree', tree, 'PUT');
   }
 
-  info() {
-    return this.o.fetchFn(`${this.o.url}/v1/info`).then((r) => r.json() as Promise<{ studioId: string; ownerFingerprint: string; apiVersion: number; schemaVersion: number }>);
+  async info() {
+    let res: Response;
+    try {
+      res = await this.o.fetchFn(`${this.o.url}/v1/info`);
+    } catch (e) {
+      throw new StudioOfflineError('Could not reach the Studio. Check your internet connection.', { cause: e });
+    }
+    return (await res.json()) as { studioId: string; ownerFingerprint: string; apiVersion: number; schemaVersion: number };
   }
   me() {
     return this.request<{ kind: 'owner' | 'member'; role: string; name: string; studioId: string; personId: string }>('GET', '/v1/me');

@@ -368,6 +368,10 @@ export interface StudiosApi {
   people(id: string): Promise<StudioPeople>;
   /** `projectId` gives the role on that one project only (a guest's one book); `days` ends it after that long. */
   createInvite(id: string, invite: { role: string; label: string; projectId?: string | null; days?: number | null }): Promise<{ link: string; expiresAt: string }>;
+  /** Saves the Studio's records as they are on its server to a file the owner chooses (null if cancelled). */
+  backupServer(id: string): Promise<{ file: string; rows: number; bytes: number } | null>;
+  /** Replaces the server's records with a saved copy (null if cancelled). Cadrel restarts. */
+  restoreServer(id: string): Promise<{ rows: number } | null>;
   /** Moves the Studio in use to its server: its records, the vault's files and its projects. Cadrel restarts into it. */
   moveRecords(id: string): Promise<{ rows: number; files: number; missing: string[]; view: StudiosView }>;
   revokeInvite(id: string, inviteId: string): Promise<StudioPeople>;

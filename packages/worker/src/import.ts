@@ -59,3 +59,19 @@ export async function importRecords(env: RecordsEnv, req: ImportRequest): Promis
   }
   return { ok: false, error: 'That is not a step of the move.' };
 }
+
+const PAGE = 400;
+
+/** One page of one table, for the owner's backup. Who may sign in (members, invitations) is not part of it. */
+export async function exportRecords(env: RecordsEnv, req: { table: string; offset: number }): Promise<{ ok: true; rows: Record<string, unknown>[]; next: number | null } | { ok: false; error: string }> {
+  if (!(RECORD_TABLES as readonly string[]).includes(req.table)) return { ok: false, error: 'That is not a table of the Studio’s records.' };
+  const offset = Number.isInteger(req.offset) && req.offset >= 0 ? req.offset : 0;
+  const db = d1Db(env.DB);
+  const rows = await db.all<Record<string, unknown>>(`SELECT * FROM ${req.table} ORDER BY rowid LIMIT ? OFFSET ?`, [PAGE, offset]);
+  return { ok: true, rows, next: rows.length === PAGE ? offset + PAGE : null };
+}
+
+/** Who the owner is in the records, for a backup that can be put back. */
+export async function ownerOf(env: RecordsEnv): Promise<string | null> {
+  return (await d1Db(env.DB).first<{ value: string }>("SELECT value FROM studio_meta WHERE key = 'owner_person'"))?.value ?? null;
+}

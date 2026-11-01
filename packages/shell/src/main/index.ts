@@ -49,7 +49,7 @@ import { StudioRegistry, LOCAL_ID } from './studios';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
-import { moveRecordsToServer } from './moveRecords';
+import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -875,6 +875,34 @@ function registerShellIpc(): void {
     adminOnly();
     const { e, client } = await clientFor(String(id));
     return client.invite(String(i?.role), String(i?.label ?? ''), e.name, { projectId: typeof i?.projectId === 'string' && i.projectId ? i.projectId : null, days: typeof i?.days === 'number' && i.days > 0 ? i.days : null });
+  });
+  // The records on a Studio's server, backed up to a file the owner keeps, and put back from one.
+  manageLike('studios:backupServer', async (id: string) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer; use Settings → Backup and import.');
+    let file = picked('CADREL_TEST_BACKUP_TO');
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, { title: 'Back up this Studio’s records', defaultPath: path.join(app.getPath('documents'), `${e.name} records ${stamp()}.json`), filters: [{ name: 'Studio records', extensions: ['json'] }] });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    return { file, ...(await backupServerRecords({ client, file, studio: { id: e.id, name: e.name } })) };
+  });
+  manageLike('studios:restoreServer', async (id: string) => {
+    adminOnly();
+    mustBeIdle();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer.');
+    let file = picked('CADREL_TEST_RESTORE_FROM');
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Put back the Studio’s records', filters: [{ name: 'Studio records', extensions: ['json'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    const done = await restoreServerRecords({ client, file });
+    setTimeout(() => void restartApp(), 50);
+    return done;
   });
   // Moving the Studio on this computer to its server: from then on everyone, the owner too, uses the records there.
   manageLike('studios:moveRecords', async (id: string) => {
