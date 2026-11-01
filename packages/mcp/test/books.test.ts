@@ -309,3 +309,20 @@ describe('projects the person is not assigned to are not there for the assistant
     expect(note.isError).toBe(true);
   });
 });
+
+describe('a project made through the assistant can be written to', () => {
+  it('has no folder until studio_add_folder gives it one, and then the writing tools work in it', async () => {
+    const { call } = await connect();
+    await call('studio_create_project', { name: 'Moon Rider', kind: 'Series' });
+    const before = await call('write_project_file', { project: 'Moon Rider', file: 'Series Bible/Series Bible.md', content: '# Bible\n' });
+    expect(before.isError).toBe(true);
+    expect(before.text).toMatch(/no manuscript folder/);
+
+    await call('studio_add_folder', { project: 'Moon Rider' });
+    const saved = await call('write_project_file', { project: 'Moon Rider', file: 'Characters/Mira.md', content: '# Mira\n\nA rider.\n' });
+    expect(saved.isError).toBe(false); // a new subfolder is made on the way
+    expect(await mem.readText('/books/Moon Rider/Characters/Mira.md')).toContain('A rider');
+    const files = (await call('list_project_files', { project: 'Moon Rider' })).json();
+    expect(JSON.stringify(files)).toContain('Mira.md');
+  });
+});

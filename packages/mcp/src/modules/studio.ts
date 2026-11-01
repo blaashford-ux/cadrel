@@ -9,6 +9,8 @@ import type { FsPort } from '@cadrel/write/src/shared/fsPort';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import { listProjectFiles } from '@cadrel/write/src/shared/agent/projectFiles';
 import { bookOf, findBook, findNode } from '../scope.js';
+import { makeProjects } from '@cadrel/write/src/shared/backend/projects';
+import { defaultTemplates, projectNameError } from '@cadrel/write/src/shared/projects';
 import type { McpModule } from '../server.js';
 
 export const STUDIO_INSTRUCTIONS =
@@ -51,6 +53,9 @@ async function guarded<T>(job: () => Promise<T>) {
     throw e;
   }
 }
+
+/** What a new folder came with, for the assistant to see. */
+const flattenNote = (t: { folders: { name: string }[]; files: { path: string }[] }) => ({ folders: t.folders.map((f) => f.name), files: t.files.map((f) => f.path) });
 
 const row = (t: ProjectTree, id: string, closed: ReadonlySet<string> = new Set()) => {
   const p = getProject(t, id)!;
@@ -242,6 +247,36 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
         }
         const p = await o.studio.createProject({ name: a.name, parentId, kind: a.kind ?? (slot(parentId) ? 'Book' : undefined), ...(start ?? {}) });
         return row((await seen()).tree, p.id, await closedSet());
+      })
+  );
+
+  server.registerTool(
+    'studio_add_folder',
+    {
+      description:
+        'Give a project or book its manuscript folder, made from a template (Novel, Series, Short Story or Blank), and link it. A project made with studio_create_project has no folder, so none of the writing tools (list_files, create_file, write_project_file, the trackers) can work on it until it has one. The folder is made whole or not at all, inside the Projects folder, and the project owns it: a project has one folder, and a closed book cannot be given one. `name` defaults to the project\'s name with characters a folder cannot hold taken out; `template` defaults to Series for a series and Novel for a book. This is the folder only: add the files with create_file or write_project_file.',
+      inputSchema: { project: projectRef, name: z.string().optional(), template: z.string().optional().describe('"Novel", "Series", "Short Story" or "Blank".') }
+    },
+    (a) =>
+      guarded(async () => {
+        if (!o.write) throw new ProjectError('There is no Projects folder for the writing tools here, so a manuscript folder cannot be made. Choose one in Cadrel first.');
+        const t = (await seen()).tree;
+        const id = resolve(t, a.project);
+        const p = getProject(t, id)!;
+        if (p.status === 'archived') throw new ProjectError(`"${p.name}" is archived. Restore it first.`);
+        if (linksOf(t, id, 'write').length) throw new ProjectError(`"${p.name}" already has a manuscript folder ("${linksOf(t, id, 'write')[0]!.ref}"). A project has one; use create_file to add files to it.`);
+        if ((await closedSet()).has(id)) throw new ProjectError(`${p.name} is closed, so it is read-only. Reopen it first.`);
+        const level = viewLevel(t, id);
+        const want = (a.template ?? (level === 'project' ? 'series' : 'novel')).trim().toLowerCase();
+        const template = defaultTemplates().find((x) => x.id === want || x.name.toLowerCase() === want);
+        if (!template) throw new ProjectError(`There is no template "${a.template}". Use Novel, Series, Short Story or Blank.`);
+        const name = (a.name ?? p.name).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+        const bad = projectNameError(name);
+        if (bad) throw new ProjectError(a.name ? bad : `${bad} Give a name for the folder.`);
+        const made = await makeProjects(o.write.fs).createProject(o.write.root, name, template);
+        const folder = made.path.split(/[\\/]/).pop()!;
+        await o.studio.link(id, 'write', folder);
+        return { ...row((await seen()).tree, id, await closedSet()), folder, template: template.name, created: flattenNote(template) };
       })
   );
 

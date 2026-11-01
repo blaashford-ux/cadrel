@@ -276,6 +276,35 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
   );
 
   server.registerTool(
+    'books_link_project',
+    {
+      description:
+        'Link a published book in the catalogue to the project (or book) it is made in, or unlink it (leave `project` out). A book is made in one project and a project makes one book: linking moves it. This is how a project\'s stage and progress show on the book in My Books. Find the book with books_list. Needs permission to edit the catalogue.',
+      inputSchema: { book: z.string().describe('The book: its id, its exact title, or one of its ASINs (see books_list).'), project: projectRef.optional() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    (a) =>
+      guarded(async () => {
+        await allowed();
+        const { tree } = await o.studio.read();
+        const want = a.book.trim().toLowerCase();
+        const books = await as().catalogue.books();
+        const hits = books.filter((b) => b.id === a.book || b.title.toLowerCase() === want || b.editions.some((e) => e.asin?.toLowerCase() === want));
+        if (hits.length !== 1) throw new Error(hits.length ? `More than one book matches "${a.book}". Use its id from books_list.` : `No book "${a.book}" in the catalogue. Use books_list to see them.`);
+        const book = hits[0]!;
+        let projectId: string | null = null;
+        if (a.project) {
+          projectId = resolveProject(tree, a.project);
+          const v = await as().visibleProjects(tree);
+          if (!v.all && !v.assigned.has(projectId)) throw new Error(`There is no project "${a.project}". Use studio_projects to see the names.`);
+        }
+        await as().catalogue.linkProject(book.id, projectId);
+        await viaAssistant('books_link_project', book.id);
+        return { book: book.title, project: projectId ? pathOf(tree, projectId) : null };
+      })
+  );
+
+  server.registerTool(
     'files_list',
     {
       description: 'The vault\'s files: path, the newest version, who has each checked out (and since when), its state, what it uses and where it is used. Filter with `search` on the path. This lists files; it does not open them, and checking files in and out is done in Cadrel.',

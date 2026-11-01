@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { execFile } from 'node:child_process';
@@ -1304,6 +1305,32 @@ export class AppService {
       if (m.extra?.keywordSeeds) parts.push(n(m.extra.keywordSeeds, 'keyword search', 'keyword searches'));
       return { result: file, message: `Exported ${parts.slice(0, -1).join(', ')} and ${parts.at(-1)} to ${file}` };
     });
+  }
+
+  /**
+   * Brings the captures of another library (another Studio's) into this one: its pages are packed and unpacked here like any data pack, so pages
+   * already here are kept and nothing in the other library is changed. The other library must not be this one.
+   */
+  async importFromLibrary(root: string): Promise<{ added: number; alreadyHad: number; skipped: number }> {
+    const mine = this.need();
+    if (typeof root !== 'string' || !path.isAbsolute(root)) throw new Error('bad folder');
+    if (path.resolve(root) === path.resolve(mine.root)) throw new Error('That is this Studio’s own library.');
+    if (!fs.existsSync(path.join(root, 'scout.db'))) throw new Error('There is no Market library in that folder.');
+    const theirs = Library.open(root);
+    const file = path.join(os.tmpdir(), `cadrel-captures-${crypto.randomBytes(6).toString('hex')}.zip`);
+    try {
+      await exportPack(theirs, file, { categoryKeys: null });
+    } catch (e) {
+      theirs.close();
+      fs.rmSync(file, { force: true });
+      throw e;
+    }
+    theirs.close();
+    try {
+      return await this.importData(file);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
   }
 
   /** Add the contents of a data pack to the library. Pages already there are kept. */

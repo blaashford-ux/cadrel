@@ -19,7 +19,7 @@ The Studio's folder name is its name when it was made and does not change if it 
 1. **One Studio per run.** Cadrel opens one Studio's folders at start. Choosing another Studio from the Studio menu on Home restarts Cadrel into it, so no module, cache, sync, search index or AI server ever holds two Studios' data at once.
 2. **Separate everything.** Each Studio has its own data folder, its own working folders, its own profile and templates, its own database and file bucket.
 3. **The AI sees one Studio.** The server Claude or GPT launches is given `--root` (the Studio's Projects folder), `--studio` (its notes) and `--library` (its Market library), and with an explicit `--root` it does not fall back to any other place.
-4. **No Studio shows another's data.** A Studio that is not built or not connected shows an explanation on every page and hides Write's and Market's views.
+4. **No Studio shows another's data.** A Studio that is not built or not connected shows an explanation on every page and hides Write's and Market's views. The one thing a person can ask for across Studios is a copy of Market captures (Settings → *Market captures from another Studio*), which adds another Studio's captured pages to this Studio's library and changes nothing in the other.
 5. **Cadrel connects only to Studios you own or were invited to.** The list only grows by building a Studio here or by accepting an invitation, and each entry is pinned to the owner's key fingerprint.
 
 ## Building a Studio (Admin → Studio Manager)

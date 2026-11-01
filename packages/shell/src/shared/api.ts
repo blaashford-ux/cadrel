@@ -854,6 +854,10 @@ export interface CadrelApi {
     reset(which: FolderKey): Promise<AppFolders>;
     /** Restart Cadrel (to finish moving the Cadrel folder). */
     restart(): Promise<void>;
+    /** The other Studios on this computer that have a Market library, whose captures can be brought into this Studio's. */
+    marketStudios(): Promise<{ id: string; name: string; library: string }[]>;
+    /** Copies another Studio's Market captures into this Studio's library (pages already here are kept; the other library is not changed). */
+    marketFromStudio(id: string): Promise<{ added: number; alreadyHad: number; skipped: number }>;
   };
   admin: AdminApi;
   assistants: AssistantsApi;

@@ -195,7 +195,9 @@ const api: CadrelApi = {
     folders: () => ipcRenderer.invoke('shell:prefs:folders'),
     choose: (which) => studioCall('shell:prefs:choose', which),
     reset: (which) => studioCall('shell:prefs:reset', which),
-    restart: () => studioCall('shell:prefs:restart')
+    restart: () => studioCall('shell:prefs:restart'),
+    marketStudios: () => studioCall('shell:prefs:marketStudios'),
+    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id)
   },
   admin: {
     get: () => studioCall('shell:admin:get'),
