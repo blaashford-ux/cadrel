@@ -11,6 +11,9 @@ import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
 import { StudioOfflineError, type StudioClient } from './studioClient';
 import path from 'node:path';
+
+/** The first Studio schema whose server holds the records and the vault. */
+export const STUDIO_RECORDS_SCHEMA = 11;
 import type { PeopleState, WorkflowState } from '../shared/api';
 
 /** The operations the page may ask for: the service's `people` methods that change things, by the page's names. Nothing else is reachable. */
@@ -76,6 +79,11 @@ export class PeopleHost {
       const info = await o.client.info();
       if ((info.apiVersion ?? 0) > STUDIO_API_VERSION || (info.schemaVersion ?? 0) > STUDIO_SCHEMA_VERSION) {
         this.why = 'This Studio has been upgraded past this version of Cadrel. Update Cadrel to open it.';
+        return { ok: false };
+      }
+      // a server built before records moved there answers membership only: its owner upgrades it (Admin → Studio Manager)
+      if ((info.schemaVersion ?? 0) < STUDIO_RECORDS_SCHEMA) {
+        this.why = 'This Studio’s server has not been upgraded yet. Its owner does that in Admin → Studio Manager → Upgrade the server; then this Studio opens here.';
         return { ok: false };
       }
       const me = await o.client.me();

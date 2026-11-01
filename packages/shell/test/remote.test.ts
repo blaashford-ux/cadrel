@@ -214,6 +214,21 @@ describe('moving a Studio’s records to its server', () => {
   });
 });
 
+describe('a Studio whose server was built before records moved there', () => {
+  it('is not opened as a server Studio, says the owner must upgrade it, and the owner cannot move records to it', async () => {
+    const s = await studio();
+    const ann = await s.person('author', 'Ann Author');
+    // a server that answers as an older one did: membership only, schema 10
+    const old = new StudioClient({ url: 'https://old.test', key: await generateKeyPair(), fetchFn: (async (i: string | URL | Request) => (String(i).endsWith('/v1/info') ? Response.json({ studioId: 'x', ownerFingerprint: 'AAAA-AAAA-AAAA-AAAA', apiVersion: 1, schemaVersion: 10 }) : Response.json({ kind: 'member' }))) as typeof fetch });
+    const host = new PeopleHost();
+    expect(await host.openRemote({ client: old, studioId: 'x' })).toEqual({ ok: false });
+    expect(await host.state()).toMatchObject({ available: false, reason: expect.stringMatching(/not been upgraded yet/) });
+    const dir = await tmp();
+    await expect(moveRecordsToServer({ client: old, recordsCopy: path.join(dir, 'none.db'), ownerPersonId: 'p', blobsDir: dir, tree: { projects: [], links: [] } })).rejects.toThrow(/Upgrade the server first/);
+    expect((await new PeopleHost().openRemote({ client: ann, studioId: 'sabc123def4' })).ok).toBe(true); // an upgraded one opens
+  });
+});
+
 describe('the app’s people host over a server Studio', () => {
   it('opens a joined Studio through its server: the people and roles page, the vault, the pen names for imports; says so when it cannot be reached and opens when it can', async () => {
     const s = await studio();

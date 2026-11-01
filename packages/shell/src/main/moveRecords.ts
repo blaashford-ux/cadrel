@@ -37,6 +37,8 @@ export async function moveRecordsToServer(o: {
   step?: (text: string) => void;
 }): Promise<MoveResult> {
   const say = o.step ?? (() => undefined);
+  const info = await o.client.info();
+  if ((info.schemaVersion ?? 0) < 11) throw new Error('This Studio’s server was built before records could live there. Upgrade the server first (Admin → Studio Manager → Upgrade the server), then move the records.');
   await o.client.me(); // before anything is changed: the server must answer, and be the owner's
   const db = await openStudioDb(o.recordsCopy);
   try {

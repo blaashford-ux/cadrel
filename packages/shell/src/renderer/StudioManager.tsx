@@ -196,6 +196,8 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
               <p className="muted small">The people, roles, books, work and files of this Studio are on this computer only. Move them to the Studio’s server so the people you invite can work in the same records and the same files, with check-out locking decided by the server. Nothing is deleted here: the file on this computer is kept as a copy.</p>
               {studios.activeId !== studio.id ? (
                 <p className="muted small">Open this Studio first (Studio menu on Home); its records are on this computer only while it is the one in use.</p>
+              ) : behind ? (
+                <p className="warn-text small" role="status">This Studio’s server was built before records could live there. Upgrade the server first (below), then move the records.</p>
               ) : !confirmMove ? (
                 <button type="button" onClick={() => setConfirmMove(true)}>Move this Studio’s records to its server…</button>
               ) : (
