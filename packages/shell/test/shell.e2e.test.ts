@@ -875,9 +875,16 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Extensions', exact: true }).click();
     await shell.getByRole('tab', { name: 'Claude Code' }).click();
     const snippet = await shell.locator('pre.snippet').innerText();
-    expect(snippet).toContain(`--root ${mine}`);
-    expect(snippet).toContain(path.join(ud, 'studios', 'local', 'studio.json'));
-    expect(snippet).toContain(path.join(h, 'Cadrel', 'My Studio', 'Market'));
+    // The configuration names no Studio, only the file the app keeps for the active one; that file is what pins the server to this Studio.
+    const activeFile = path.join(ud, 'mcp-active.json');
+    expect(snippet).toContain(`--active ${activeFile}`);
+    expect(snippet).not.toContain('--root');
+    const active = JSON.parse(fs.readFileSync(activeFile, 'utf8')) as { studio: string; args: string[] };
+    expect(active.studio).toBe('My Studio');
+    const arg = (n: string) => active.args[active.args.indexOf(n) + 1];
+    expect(arg('--root')).toBe(mine);
+    expect(arg('--studio')).toBe(path.join(ud, 'studios', 'local', 'studio.json'));
+    expect(arg('--library')).toBe(path.join(h, 'Cadrel', 'My Studio', 'Market'));
     void rootCandidates; void nodeFs;
 
     // The Cadrel folder moves at the next start: it is only requested now, and nothing has moved yet.

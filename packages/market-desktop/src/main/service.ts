@@ -1475,7 +1475,8 @@ export class AppService {
   mcpConfig(): McpSnippets {
     const root = this.need().root;
     const base = this.opts.mcpLaunch?.() ?? { command: 'node', args: [path.resolve('packages/market-mcp/dist/main.mjs')], env: {} };
-    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
+    // A launch that follows the active Studio gets its library from that file; baking this one in would pin a configuration to a Studio.
+    return buildMcpSnippets({ ...base, args: base.follow ? base.args : [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
   }
 
   /**
