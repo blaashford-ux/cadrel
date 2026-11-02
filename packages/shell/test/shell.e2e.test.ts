@@ -501,7 +501,10 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const cfg = await market.evaluate(() => (window as any).cadrelMarket.mcpConfig());
     expect(JSON.parse(cfg.claudeDesktop).mcpServers).toHaveProperty('cadrel');
     expect(cfg.args[0]).toBe(server.args[0]);
-    expect(cfg.args).toContain('--library');
+    // like the kit, it names no Studio: the active-Studio file supplies the library (and the rest)
+    expect(cfg.args).toContain('--active');
+    expect(cfg.args).not.toContain('--library');
+    expect(cfg.args).not.toContain('--root');
     const built = await market.evaluate(() => (window as any).cadrelMarket.installClaudeExtension());
     expect(path.basename(built.file)).toBe('Cadrel.mcpb');
     expect(JSON.parse(strFromU8(unzipSync(fs.readFileSync(built.file))['manifest.json']!))).toMatchObject({ name: 'cadrel' });
