@@ -269,10 +269,15 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('heading', { level: 2, name: 'Old Project' }).waitFor();
     await shell.getByRole('button', { name: 'Add first book' }).click();
     await waitFor(async () => (await call<any>('studio.state')).tree.projects.some((p: any) => p.parentId === old.id), 'the first Book');
+    const firstId = ((await call<any>('studio.state')).tree.projects.find((p: any) => p.parentId === old.id)).id as string;
+    // Giving the first Book is three steps (the Book is made, then the folder is linked to it, then the stage moves), so wait for the folder to arrive
+    // rather than reading the tree the moment the Book appears; the packaged app, being slower, showed the gap.
+    await waitFor(async () => (await call<any>('studio.state')).tree.links.find((l: any) => l.module === 'write' && l.ref === before.ref)?.projectId === firstId, 'the folder to move to the first Book');
     const after = (await call<any>('studio.state')).tree;
-    const first = after.projects.find((p: any) => p.parentId === old.id);
+    const first = after.projects.find((p: any) => p.id === firstId);
     expect(first).toMatchObject({ name: 'Old Project', kind: 'Book' });
     expect(after.links.find((l: any) => l.module === 'write' && l.ref === before.ref).projectId).toBe(first.id); // the folder moved to the Book
+    await waitFor(async () => (await stageOf(first.id)) === 'Planning', 'the first Book to take the stage');
     expect(await stageOf(first.id)).toBe('Planning');
     await app.close();
   }, 150_000);
