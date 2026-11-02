@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fsp, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { promises as fsp, appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
@@ -181,12 +181,47 @@ const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI K
 /** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
 const penNameArgs = (): string[] => { const p = peopleHost.penNameScope(); return p ? ['--pen-names', JSON.stringify(p)] : []; };
 const mcpFile = () => path.join(here, 'mcp.mjs');
+/**
+ * Which Studio the AI server serves is not written into an AI app's configuration (that is written once, and Studios switch). The configuration says
+ * only `--active <this file>`, and the app keeps the file as the arguments of the Studio it is running: that Studio's projects, notes, records, pen names
+ * and library, nothing else. The Claude Desktop extension's launcher watches the file and starts the server again when it changes; a configuration made
+ * by hand picks the Studio up the next time the AI app starts the server. The file belongs to the whole app, not to a Studio.
+ */
+const activeFile = () => path.join(userData, 'mcp-active.json');
+const activeArgs = (): string[] => {
+  const library = market?.service.status().libraryRoot;
+  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(library ? ['--library', library] : [])];
+};
+/** Writes the active Studio's server arguments, if they are not what the file already says (so an unchanged Studio never restarts the AI server). */
+function publishActiveStudio(): void {
+  try {
+    const text = JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2);
+    if (readFileSync(activeFile(), 'utf8') === text) return;
+    writeActiveFile(text);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      try {
+        writeActiveFile(JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2));
+        return;
+      } catch (w) {
+        e = w;
+      }
+    }
+    updateLog(`could not write the active Studio file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function writeActiveFile(text: string): void {
+  mkdirSync(path.dirname(activeFile()), { recursive: true });
+  const tmp = `${activeFile()}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, activeFile()); // whole or not at all: the launcher never reads half a file
+}
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
-  // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
-  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
+  args: [mcpFile(), '--active', activeFile()],
+  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>,
+  follow: activeFile()
 });
 /**
  * The file inside the Claude Desktop extension: a small launcher that starts the server above with the installed app's runtime.
@@ -194,9 +229,11 @@ const mcpLaunch = () => ({
  * Arguments the extension's settings add (the projects folder) are passed on to the server.
  */
 async function kitLauncher(): Promise<Uint8Array> {
+  publishActiveStudio();
   const launch = mcpLaunch();
   const handshake = await readHandshake(launch);
-  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData(), 'logs', 'mcp-launcher.log') }), 'utf8');
+  // The log is beside the active file, not in a Studio's folder: the launcher outlives a switch.
+  return Buffer.from(launcherSource({ label: 'Cadrel', command: launch.command, args: launch.args, env: launch.env, handshake, logFile: path.join(userData, 'logs', 'mcp-launcher.log'), followFile: launch.follow }), 'utf8');
 }
 
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
@@ -1521,7 +1558,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
@@ -1553,6 +1590,9 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
+    // From here the AI server can be told which Studio this is, and kept told: the library may be chosen or moved while the app runs.
+    publishActiveStudio();
+    setInterval(publishActiveStudio, 15_000).unref();
     // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
     finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
     finance.start();

@@ -88,7 +88,7 @@ export interface ServiceOptions {
   openExternal: (url: string) => void | Promise<void>;
   revealInFolder: (p: string) => void;
   /** How an MCP client should launch the server. */
-  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
+  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string>; follow?: string };
   /** Builds the local neural embedder; defaults to the real one. Overridable in tests. */
   /** Test hook: stands in for OCR so tests need not run the real engine. */
   ocrFactory?: () => Promise<{ recognize(image: Buffer, crop?: { left: number; top: number; width: number; height: number }): Promise<{ text: string; confidence: number }>; close(): Promise<void> }>;
@@ -1490,7 +1490,8 @@ export class AppService {
     // answers it from what the server itself reports and hands over when the server is ready (see launcher.ts)
     const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : readHandshake(c));
     const brand = this.opts.mcpBrand ?? MARKET_BRAND;
-    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
+    const follow = this.opts.mcpLaunch?.().follow;
+    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log'), ...(follow ? { followFile: follow } : {}) });
     const manifest = {
       manifest_version: '0.2',
       name: brand.id,
