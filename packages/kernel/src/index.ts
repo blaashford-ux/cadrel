@@ -21,6 +21,8 @@ export * from './editPass';
 export * from './anchor';
 export * from './editQuery';
 export * from './editDecision';
+export * from './compare';
+export * from './editVerify';
 export * from './sql';
 export * from './viewScope';
 export * from './visibility';

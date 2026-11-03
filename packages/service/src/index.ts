@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  listVerification, verifyPass, type VerificationRecord,
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
   assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
@@ -630,6 +631,19 @@ export class StudioAs {
       const ok = new Set((await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id));
       const qs = new Map((await listQueries(this.o.db, this.ctx())).map((q) => [q.id, q.passId]));
       return all.filter((d) => ok.has(qs.get(d.queryId) ?? ''));
+    },
+    /**
+     * Checks the changes the author accepted against the text of a later version (the pass's editor, edit.run). The caller supplies that text;
+     * the records hold none. Replaces any earlier check against the same version.
+     */
+    verify: async (passId: string, input: { revisedVersion: number; revisedText: string }): Promise<VerificationRecord[]> => {
+      await this.editorOf(await this.passToRead(passId));
+      return verifyPass(this.o.db, this.ctx(), passId, input);
+    },
+    /** The last check of a pass (or of one revised version). */
+    verification: async (passId: string, revisedVersion?: number): Promise<VerificationRecord[]> => {
+      await this.passToRead(passId);
+      return listVerification(this.o.db, this.ctx(), { passId, revisedVersion });
     },
     answer: async (id: string, response: string): Promise<QueryRecord> => {
       const q = await this.queryToRead(id);

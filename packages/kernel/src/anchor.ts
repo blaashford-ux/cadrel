@@ -21,7 +21,8 @@ export function makeAnchor(text: string, start: number, end: number): TextAnchor
   };
 }
 
-const score = (text: string, a: TextAnchor, at: number, len: number): number =>
+/** 0, 1 or 2: how many of the text before and the text after still match around a quote found at `at`. */
+export const contextMatch = (text: string, a: TextAnchor, at: number, len: number = a.quote.length): number =>
   (text.slice(Math.max(0, at - a.prefix.length), at) === a.prefix ? 1 : 0) + (text.slice(at + len, at + len + a.suffix.length) === a.suffix ? 1 : 0);
 
 export type Located = { start: number; end: number; how: 'same-place' | 'moved' | 'reflowed' };
@@ -33,10 +34,10 @@ export type Located = { start: number; end: number; how: 'same-place' | 'moved' 
  */
 export function locateAnchor(text: string, a: TextAnchor): Located | null {
   if (!a.quote) return null;
-  if (text.startsWith(a.quote, a.start) && score(text, a, a.start, a.quote.length) === 2) return { start: a.start, end: a.start + a.quote.length, how: 'same-place' };
+  if (text.startsWith(a.quote, a.start) && contextMatch(text, a, a.start, a.quote.length) === 2) return { start: a.start, end: a.start + a.quote.length, how: 'same-place' };
   let best: { start: number; score: number; dist: number } | null = null;
   for (let i = text.indexOf(a.quote); i !== -1; i = text.indexOf(a.quote, i + 1)) {
-    const s = score(text, a, i, a.quote.length);
+    const s = contextMatch(text, a, i, a.quote.length);
     const dist = Math.abs(i - a.start);
     if (!best || s > best.score || (s === best.score && dist < best.dist)) best = { start: i, score: s, dist };
   }
