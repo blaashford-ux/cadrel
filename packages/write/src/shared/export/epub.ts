@@ -2,11 +2,23 @@ import { strToU8, unzipSync, zipSync, type Zippable } from 'fflate';
 import type { BookBuild, BuiltChapter } from './assemble';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { MatterPage } from './matter';
-import { bundledFont, embeddedFileName, FONT_FILES, fontFaceCss, fontStack } from './fonts';
+import { bundledFont, embeddedFileName, embeddedLicenceName, fontFaceCss, fontFiles, fontStack, headingFamily, LICENCE_FILE } from './fonts';
 import type { BodyAlign, ParagraphStyle } from './model';
 
-/** The files of a bundled font family, to embed. Keys are FONT_FILES names. */
-export type EpubFonts = Record<string, Uint8Array>;
+/** The files of a bundled font family, to embed. Keys are the family's file names, plus its OFL.txt. */
+export type EpubFamilyFiles = Record<string, Uint8Array>;
+/** The families to embed, keyed by lower-case family name: the body font and, when different, the heading font. */
+export type EpubFonts = Record<string, EpubFamilyFiles>;
+
+/** The bundled families an EPUB with these settings embeds, body first, each once. */
+export function epubFontFamilies(s: { font: string; headingFont?: string }): string[] {
+  const out: string[] = [];
+  for (const f of [s.font, headingFamily(s)]) {
+    const b = bundledFont(f);
+    if (b && !out.includes(b.family)) out.push(b.family);
+  }
+  return out;
+}
 
 export interface EpubCover {
   bytes: Uint8Array;
@@ -17,10 +29,17 @@ export interface EpubCover {
 const XHTML_NS = 'xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"';
 
 /** The skill's EPUB stylesheet, with the per-book options applied. */
-export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; bodyAlign?: BodyAlign; dropCaps: boolean; font?: string; embedFont?: boolean }): string {
+export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle; bodyAlign?: BodyAlign; dropCaps: boolean; font?: string; headingFont?: string; embedFont?: boolean }): string {
   const stack = fontStack(opts.font ?? 'EB Garamond');
-  const bundled = bundledFont(opts.font ?? 'EB Garamond');
-  const faces = opts.embedFont && bundled ? fontFaceCss(bundled, (f) => `fonts/${embeddedFileName(bundled, f)}`) + '\n' : '';
+  const headStack = fontStack(headingFamily({ font: opts.font ?? 'EB Garamond', headingFont: opts.headingFont }));
+  const faces = opts.embedFont
+    ? epubFontFamilies({ font: opts.font ?? 'EB Garamond', headingFont: opts.headingFont })
+        .map((fam) => {
+          const b = bundledFont(fam)!;
+          return fontFaceCss(b, (f) => `fonts/${embeddedFileName(b, f)}`);
+        })
+        .join('\n') + '\n'
+    : '';
   const al = opts.bodyAlign === 'left' ? 'left' : 'justify';
   const para =
     opts.paragraphStyle === 'blockGap'
@@ -29,13 +48,13 @@ export function epubCss(opts: { fontSize: number; paragraphStyle: ParagraphStyle
         ? `p { text-align: ${al}; text-indent: 0; margin: 0; }`
         : `p { text-align: ${al}; text-indent: 1.5em; margin: 0; }\np.first, p.al-center, p.al-right, p.center, p.right, p.scenebreak, p.booktitle, p.booksubtitle, p.bookauthor, p.crline, p.crpara, p.linkline { text-indent: 0; }`;
   return `${faces}h1 {
-  font-family: ${stack};
+  font-family: ${headStack};
   font-size: 1.6em;
   margin-top: 1em;
   margin-bottom: 2em;
   text-align: center;
 }
-h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: ${stack}; text-align: center; margin: 1.5em 0 1em 0; }
+h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: ${headStack}; text-align: center; margin: 1.5em 0 1em 0; }
 
 body, p { font-family: ${stack}; font-size: ${opts.fontSize}pt; }
 
@@ -52,7 +71,7 @@ blockquote { margin: 1em 2em; }
 pre { white-space: pre-wrap; font-size: 0.9em; }
 
 .titlepage { text-align: center; margin-top: 25%; }
-p.booktitle { text-align: center; font-size: 2.4em; font-weight: bold; margin: 0 0 0.4em 0; text-indent: 0; }
+p.booktitle { text-align: center; font-family: ${headStack}; font-size: 2.4em; font-weight: bold; margin: 0 0 0.4em 0; text-indent: 0; }
 p.booksubtitle { text-align: center; font-style: italic; font-size: 1.3em; margin: 0 0 2em 0; text-indent: 0; }
 p.bookauthor { text-align: center; font-weight: bold; font-size: 1.3em; margin: 2em 0 0 0; text-indent: 0; }
 
@@ -126,9 +145,16 @@ interface Item {
 export function buildEpub(book: BookBuild, cover?: EpubCover, fonts?: EpubFonts): Uint8Array {
   const s = book.settings;
   const m = book.meta;
-  const bundled = bundledFont(s.epub.font);
-  const embed = !!bundled && !!fonts && FONT_FILES.every((f) => fonts[f.file]);
-  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, bodyAlign: s.epub.bodyAlign, dropCaps: s.epub.dropCaps, font: s.epub.font, embedFont: embed });
+  // Embed only when every bundled family the book uses came with all its files and its licence.
+  const families = epubFontFamilies(s.epub).map((fam) => bundledFont(fam)!);
+  const embedded = fonts
+    ? families.filter((b) => {
+        const have = fonts[b.family.toLowerCase()];
+        return !!have && have[LICENCE_FILE] && fontFiles(b).every((f) => have[f.file]);
+      })
+    : [];
+  const embed = embedded.length > 0 && embedded.length === families.length;
+  const css = epubCss({ fontSize: s.epub.fontSize, paragraphStyle: s.epub.paragraphStyle, bodyAlign: s.epub.bodyAlign, dropCaps: s.epub.dropCaps, font: s.epub.font, headingFont: s.epub.headingFont, embedFont: embed });
   const lang = m.language;
   const files: Record<string, string> = {};
   const items: Item[] = [];
@@ -239,8 +265,12 @@ ${ncxPoints}
   meta.push(`<meta property="dcterms:modified">${esc(m.modified)}</meta>`);
   if (cover) meta.push('<meta name="cover" content="cover-image"/>');
 
-  if (embed && bundled) {
-    FONT_FILES.forEach((f, i) => items.push({ id: `font-${i + 1}`, href: `fonts/${embeddedFileName(bundled, f)}`, type: 'font/ttf' }));
+  if (embed) {
+    let n = 0;
+    for (const b of embedded) {
+      for (const f of fontFiles(b)) items.push({ id: `font-${++n}`, href: `fonts/${embeddedFileName(b, f)}`, type: 'font/ttf' });
+      items.push({ id: `font-${++n}`, href: `fonts/${embeddedLicenceName(b)}`, type: 'text/plain' });
+    }
   }
   const manifest = items
     .map((i) => `<item id="${i.id}" href="${i.href}" media-type="${i.type}"${i.properties ? ` properties="${i.properties}"` : ''}/>`)
@@ -271,7 +301,14 @@ ${spine.map((id) => `<itemref idref="${id}"/>`).join('\n')}
   const zip: Zippable = { mimetype: [strToU8('application/epub+zip'), { level: 0, mtime }] };
   for (const [name, text] of Object.entries(files)) zip[name] = [strToU8(text), { level: 6, mtime }];
   if (cover) zip[`OEBPS/images/cover.${cover.ext}`] = [cover.bytes, { level: 0, mtime }];
-  if (embed && bundled && fonts) for (const f of FONT_FILES) zip[`OEBPS/fonts/${embeddedFileName(bundled, f)}`] = [fonts[f.file], { level: 6, mtime }];
+  if (embed && fonts) {
+    for (const b of embedded) {
+      const have = fonts[b.family.toLowerCase()];
+      for (const f of fontFiles(b)) zip[`OEBPS/fonts/${embeddedFileName(b, f)}`] = [have[f.file], { level: 6, mtime }];
+      // The font's original copyright notice and OFL text travel with it (SIL OFL 1.1, condition 2).
+      zip[`OEBPS/fonts/${embeddedLicenceName(b)}`] = [have[LICENCE_FILE], { level: 6, mtime }];
+    }
+  }
   return zipSync(zip);
 }
 
