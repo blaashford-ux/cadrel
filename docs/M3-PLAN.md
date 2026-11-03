@@ -22,7 +22,7 @@ Branch: `ccr-7ecf360c-88oe1a`, cut from `dev` (0.6.1 at the time). Scope comes f
 10. **Exit test** (`docs/M3-EXIT-TEST.md` plus an automated two-client test): one book goes through developmental, line and copy passes; the author answers every query; compare shows the changes; verification flags a missed change; the gate opens only when all passes are closed.
 
 ## Order and dependencies
-A is standalone. B reuses the compare and scroll mapping from 5. 1 → 2 → 3 → 4 are sequential. 5 needs 3 and 4. 6 needs 2 and 4. 7 and 8 follow once the records are stable. 9 last.
+A (fonts) is standalone. B (Rewrite) reuses the compare and scroll mapping from 5. 1 → 2 → 3 → 4 are sequential. 5 needs 3 and 4. 6 needs 2 and 4. 7 and 8 follow once the records are stable. 10 (exit test) last.
 
 ## Decided
 - Proof passes only advise; they never block a stage gate (slice 6 leaves `pass_closed(proof)` out of the default gate).
