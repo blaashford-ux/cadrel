@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  editorialFacts, type EditorialFacts,
   listVerification, verifyPass, type VerificationRecord,
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
@@ -480,6 +481,12 @@ export class StudioAs {
       await this.needWork('task.read');
       const reach = await this.reach();
       return (await approvalsWaitingFor(this.o.db, this.ctx(), this.personId)).filter((a) => !reach || reach(a.projectId));
+    },
+    /** What a workflow gate sees of editorial passes on these projects (a project and its subprojects). Needs task.read, like the other gate facts. */
+    editorialFacts: async (projectIds: string[]): Promise<EditorialFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return editorialFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
     },
     approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
     requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {

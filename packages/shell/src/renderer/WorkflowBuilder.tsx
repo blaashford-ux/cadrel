@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CONDITION_KINDS, STAGE_CATEGORIES, PROJECT_LEVELS, newStageKey, type Condition, type ConditionKind, type WorkflowDraft, type WorkflowRecord } from '@cadrel/kernel';
+import { CONDITION_KINDS, GATE_PASS_KINDS, STAGE_CATEGORIES, PROJECT_LEVELS, newStageKey, type Condition, type ConditionKind, type WorkflowDraft, type WorkflowRecord } from '@cadrel/kernel';
 import type { WorkflowState } from '../shared/api';
 
 const api = window.cadrel.workflow;
@@ -256,7 +256,7 @@ function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: 
       </div>
       <p className="muted small">{m.roleIds.length ? 'Only people holding one of these roles (an Owner always may).' : 'No role chosen: anyone who may move projects.'}</p>
       <div><strong className="small">The project needs</strong></div>
-      {(Object.keys(CONDITION_KINDS) as ConditionKind[]).filter((k) => k !== 'approved').map((kind) => {
+      {(Object.keys(CONDITION_KINDS) as ConditionKind[]).filter((k) => k !== 'approved' && k !== 'pass_closed').map((kind) => {
         const c = has(kind);
         return (
           <div key={kind} className="row">
@@ -264,7 +264,32 @@ function Gate({ m, s, editable, onChange }: { m: DraftMove; s: Ready; editable: 
           </div>
         );
       })}
+      <PassGates m={m} editable={editable} onChange={onChange} />
       <SignOffs m={m} editable={editable} onChange={onChange} />
+    </div>
+  );
+}
+
+const PASS_NAMES = { developmental: 'developmental edit', line: 'line edit', copy: 'copy edit' } as const;
+/** Editorial gates: which kinds of pass must be closed before the move. A proofread only advises, so it is not offered. */
+function PassGates({ m, editable, onChange }: { m: DraftMove; editable: boolean; onChange: (patch: Partial<DraftMove>) => void }) {
+  const on = (k: (typeof GATE_PASS_KINDS)[number]) => m.conditions.some((c) => c.kind === 'pass_closed' && c.passKind === k);
+  return (
+    <div>
+      {GATE_PASS_KINDS.map((k) => (
+        <div key={k} className="row">
+          <label className="inline small">
+            <input
+              type="checkbox"
+              disabled={!editable}
+              checked={on(k)}
+              onChange={(e) => onChange({ conditions: e.target.checked ? [...m.conditions, { kind: 'pass_closed', passKind: k }] : m.conditions.filter((c) => !(c.kind === 'pass_closed' && c.passKind === k)) })}
+            />{' '}
+            The {PASS_NAMES[k]} is closed
+          </label>
+        </div>
+      ))}
+      <p className="muted small">A proofread only advises; it never holds a stage back.</p>
     </div>
   );
 }
