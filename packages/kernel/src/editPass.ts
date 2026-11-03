@@ -184,6 +184,10 @@ export async function movePass(db: Db, c: Ctx, passId: string, to: PassState): P
     const next = PASS_NEXT[p.state];
     fail('conflict', next.length ? `A pass that is ${p.state.replace('_', ' ')} can go to: ${next.map((s) => s.replace('_', ' ')).join(', ')}.` : `A pass that is ${p.state} cannot change.`);
   }
+  if (to === 'responded') {
+    const open = await db.first<{ n: number }>("SELECT COUNT(*) AS n FROM edit_query WHERE pass_id = ? AND kind = 'query' AND state = 'open'", [passId]);
+    if (open?.n) fail('conflict', `${open.n === 1 ? '1 query is' : `${open.n} queries are`} still unanswered. Answer ${open.n === 1 ? 'it' : 'them'} first.`);
+  }
   const sets = ['state = ?', 'updated_at = ?'];
   const params: unknown[] = [to, c.now];
   const stamp = STAMP[to];

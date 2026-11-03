@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
   assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
   briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
@@ -584,6 +585,63 @@ export class StudioAs {
     close: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'closed'),
     cancel: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'cancelled')
   };
+  /**
+   * Queries, comments and suggestions inside a pass. Reading needs edit.read. Raising, resolving and withdrawing are the pass's editor's (edit.run;
+   * someone with edit.assign may do it for them); the author's answer needs edit.respond. Only items of passes on projects this person can reach.
+   */
+  readonly queries = {
+    list: async (f: QueryFilter = {}): Promise<QueryRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const all = await listQueries(this.o.db, this.ctx(), f);
+      if (!reach) return all;
+      const ok = new Set((await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id));
+      return all.filter((q) => ok.has(q.passId));
+    },
+    counts: async (passIds: string[]): Promise<Record<string, QueryCounts>> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const ok = reach ? (await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id) : passIds;
+      return queryCounts(this.o.db, this.ctx(), passIds.filter((id) => ok.includes(id)));
+    },
+    raise: async (passId: string, items: NewQuery[]): Promise<QueryRecord[]> => {
+      await this.editorOf(await this.passToRead(passId));
+      return raiseQueries(this.o.db, this.ctx(), passId, items);
+    },
+    /** Cadrel Write's notes as items in this pass. Notes without a usable anchor are counted, not raised. */
+    importNotes: async (passId: string, notes: Parameters<typeof queriesFromNotes>[0]): Promise<{ raised: QueryRecord[]; skipped: number }> => {
+      await this.editorOf(await this.passToRead(passId));
+      const { items, skipped } = queriesFromNotes(notes);
+      return { raised: items.length ? await raiseQueries(this.o.db, this.ctx(), passId, items) : [], skipped };
+    },
+    answer: async (id: string, response: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.needWork('edit.respond', (await this.passToRead(q.passId)).projectId);
+      return answerQuery(this.o.db, this.ctx(), id, response);
+    },
+    resolve: async (id: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.editorOf(await this.passToRead(q.passId));
+      return resolveQuery(this.o.db, this.ctx(), id);
+    },
+    withdraw: async (id: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.editorOf(await this.passToRead(q.passId));
+      return withdrawQuery(this.o.db, this.ctx(), id);
+    }
+  };
+  /** The pass's own editor with edit.run, or anyone with edit.run and edit.assign. */
+  private async editorOf(p: PassRecord): Promise<void> {
+    await this.needWork('edit.run', p.projectId);
+    if (p.editorId !== this.personId) await this.needWork('edit.assign', p.projectId);
+  }
+  private async queryToRead(id: string): Promise<QueryRecord> {
+    await this.needWork('edit.read');
+    const q = await getQuery(this.o.db, this.ctx(), id);
+    if (!q) throw new Error('That item is not there.');
+    await this.passToRead(q.passId); // throws if its pass is not there for this person
+    return q;
+  }
   private async passToRead(id: string): Promise<PassRecord> {
     await this.needWork('edit.read');
     const p = await getPass(this.o.db, this.ctx(), id);
@@ -594,8 +652,7 @@ export class StudioAs {
   private async movePassAs(id: string, to: PassState): Promise<PassRecord> {
     const p = await this.passToRead(id);
     if (to === 'in_progress' || to === 'delivered') {
-      await this.needWork('edit.run', p.projectId);
-      if (p.editorId !== this.personId) await this.needWork('edit.assign', p.projectId);
+      await this.editorOf(p);
     } else await this.needWork(to === 'responded' ? 'edit.respond' : to === 'closed' ? 'edit.approve' : 'edit.assign', p.projectId);
     return movePass(this.o.db, this.ctx(), id, to);
   }

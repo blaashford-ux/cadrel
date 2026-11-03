@@ -248,3 +248,42 @@ describe('editorial passes behind the permission check', () => {
     expect(await denied(me.cancel(b.id)), 'cancel').toBe(!has('edit.read') || !has('edit.assign'));
   });
 });
+
+describe('queries behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: reads with edit.read, raises as the pass’s editor with edit.run, answers with edit.respond', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const other = await s.person('Eve', 'editor');
+    const me = s.svc.as(id);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const mine = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: id });
+    const theirs = await s.ana.passes.create({ projectId: 'p1', kind: 'copy', fileId: 'f1', editorId: other });
+    await s.ana.passes.start(mine.id);
+    await s.ana.passes.start(theirs.id);
+    const item = { kind: 'query' as const, body: 'Why?' };
+
+    expect(await denied(me.queries.list()), 'list').toBe(!has('edit.read'));
+    expect(await denied(me.queries.counts([mine.id])), 'counts').toBe(!has('edit.read'));
+    expect(await denied(me.queries.raise(mine.id, [item])), 'raise on my pass').toBe(!has('edit.read') || !has('edit.run'));
+    expect(await denied(me.queries.raise(theirs.id, [item])), "raise on someone else's").toBe(!has('edit.read') || !has('edit.run') || !has('edit.assign'));
+    expect(await denied(me.queries.importNotes(mine.id, [])), 'import notes').toBe(!has('edit.read') || !has('edit.run'));
+    const [q] = await s.ana.queries.raise(mine.id, [item]);
+    await s.ana.passes.deliver(mine.id);
+    expect(await denied(me.queries.answer(q!.id, 'Because')), 'answer').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.queries.resolve(q!.id)), 'resolve').toBe(!has('edit.read') || !has('edit.run'));
+  });
+
+  it('imports Write’s notes into a pass and says how many it could not place', async () => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: 'ana' });
+    await s.ana.passes.start(p.id);
+    const r = await s.ana.queries.importNotes(p.id, [{ kind: 'comment', body: 'Adverb.', anchor: { quote: 'slowly', prefix: '', suffix: '', start: 3 } }, { kind: 'comment', body: 'Loose' }]);
+    expect([r.raised.length, r.skipped]).toEqual([1, 1]);
+    expect(await s.ana.queries.list({ passId: p.id })).toHaveLength(1);
+  });
+});

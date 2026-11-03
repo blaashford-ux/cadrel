@@ -18,6 +18,8 @@ export * from './workflow';
 export * from './work';
 export * from './brief';
 export * from './editPass';
+export * from './anchor';
+export * from './editQuery';
 export * from './sql';
 export * from './viewScope';
 export * from './visibility';
