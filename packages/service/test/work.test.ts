@@ -287,3 +287,23 @@ describe('queries behind the permission check', () => {
     expect(await s.ana.queries.list({ passId: p.id })).toHaveLength(1);
   });
 });
+
+describe('decisions on pass items behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: decides with edit.respond; reads decisions with edit.read', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: 'ana' });
+    await s.ana.passes.start(p.id);
+    const [q] = await s.ana.queries.raise(p.id, [{ kind: 'suggestion', anchor: { quote: 'a', prefix: '', suffix: '', start: 0 }, replacement: 'b' }]);
+    await s.ana.passes.deliver(p.id);
+    const me = s.svc.as(id).queries;
+
+    expect(await denied(me.decide(q!.id, { outcome: 'accept' })), 'decide').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.decisions()), 'read').toBe(!has('edit.read'));
+    if (has('edit.read') && has('edit.respond')) expect((await s.ana.queries.decisions({ passId: p.id })).map((d) => d.outcome)).toEqual(['accept']);
+  });
+});

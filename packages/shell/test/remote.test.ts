@@ -276,13 +276,16 @@ describe('backing up and restoring a server Studio’s records', () => {
     const fileId = (await a.store.list())[0]!.id;
     const pass = await svc.passes.create({ projectId: 'pB1', kind: 'line', fileId, editorId: bo.id });
     await svc.passes.start(pass.id);
-    await svc.queries.raise(pass.id, [{ kind: 'query', body: 'Why cold?', anchor: { quote: 'one', prefix: '', suffix: '', start: 0 } }]);
+    await svc.queries.raise(pass.id, [{ kind: 'query', body: 'Why cold?', anchor: { quote: 'one', prefix: '', suffix: '', start: 0 } }, { kind: 'suggestion', replacement: '1', anchor: { quote: 'one', prefix: '', suffix: '', start: 0 } }]);
+    await svc.passes.deliver(pass.id);
+    const sug = (await svc.queries.list({ passId: pass.id })).find((q) => q.kind === 'suggestion')!;
+    const decided = await svc.queries.decide(sug.id, { outcome: 'defer', reason: 'Later.', revisit: '2026-12-01' });
 
     const file = path.join(dir, 'backup.json');
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 14 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 15 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 
@@ -294,8 +297,11 @@ describe('backing up and restoring a server Studio’s records', () => {
     expect(back.rows).toBe(made.rows);
     expect((await svc.catalogue.books()).map((b) => b.title)).toEqual(['Lead Me']);
     expect((await svc.briefs.versions(brief.id)).map((v) => v.n)).toEqual([1, 2]);
-    expect((await svc.queries.list({ passId: pass.id })).map((q) => [q.seq, q.body, q.anchor?.quote])).toEqual([[1, 'Why cold?', 'one']]);
-    expect((await svc.passes.get(pass.id))).toMatchObject({ kind: 'line', fileId, fileVersion: 1, state: 'in_progress' }); // a pass keeps the exact version it covers // briefs and every version come back
+    expect((await svc.queries.list({ passId: pass.id })).map((q) => [q.seq, q.body, q.anchor?.quote])).toEqual([[1, 'Why cold?', 'one'], [2, '', 'one']]);
+    expect((await svc.queries.decisions({ passId: pass.id })).map((d) => [d.id, d.outcome, d.revisit])).toEqual([[decided.id, 'defer', '2026-12-01']]); // with its ledger entry and revisit task
+    expect((await svc.work.decisions()).map((d) => d.id)).toContain(decided.ledgerId);
+    expect((await svc.work.task(decided.taskId!))?.due).toBe('2026-12-01');
+    expect((await svc.passes.get(pass.id))).toMatchObject({ kind: 'line', fileId, fileVersion: 1, state: 'delivered' }); // a pass keeps the exact version it covers // briefs and every version come back
     expect((await svc.people.list()).map((p) => p.name).sort()).toEqual(['Ann Author', 'Bo Lin', 'Owner']);
     expect((await a.vault.list()).map((e) => e.path)).toEqual(['ch1.md']);
     expect((await s.owner.tree()).projects.map((p) => p.name)).toEqual(['Book 1']);

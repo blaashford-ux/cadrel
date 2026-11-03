@@ -187,6 +187,11 @@ export async function movePass(db: Db, c: Ctx, passId: string, to: PassState): P
   if (to === 'responded') {
     const open = await db.first<{ n: number }>("SELECT COUNT(*) AS n FROM edit_query WHERE pass_id = ? AND kind = 'query' AND state = 'open'", [passId]);
     if (open?.n) fail('conflict', `${open.n === 1 ? '1 query is' : `${open.n} queries are`} still unanswered. Answer ${open.n === 1 ? 'it' : 'them'} first.`);
+    const undecided = await db.first<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM edit_query q WHERE q.pass_id = ? AND q.kind = 'suggestion' AND q.state = 'open' AND NOT EXISTS (SELECT 1 FROM edit_decision d WHERE d.query_id = q.id)",
+      [passId]
+    );
+    if (undecided?.n) fail('conflict', `${undecided.n === 1 ? '1 suggestion has' : `${undecided.n} suggestions have`} no decision yet. Accept, reject or defer ${undecided.n === 1 ? 'it' : 'them'} first.`);
   }
   const sets = ['state = ?', 'updated_at = ?'];
   const params: unknown[] = [to, c.now];

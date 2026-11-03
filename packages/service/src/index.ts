@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
   assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
   briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
@@ -613,6 +614,22 @@ export class StudioAs {
       await this.editorOf(await this.passToRead(passId));
       const { items, skipped } = queriesFromNotes(notes);
       return { raised: items.length ? await raiseQueries(this.o.db, this.ctx(), passId, items) : [], skipped };
+    },
+    /** The author accepts, rejects or defers an item (edit.respond). A deferral makes a task for the revisit and everything is entered in the decision ledger. */
+    decide: async (id: string, i: NewEditDecision): Promise<EditDecisionRecord> => {
+      const q = await this.queryToRead(id);
+      await this.needWork('edit.respond', (await this.passToRead(q.passId)).projectId);
+      return decideQuery(this.o.db, this.ctx(), id, i);
+    },
+    /** The decisions on a pass's items: the ones standing now, or with `history` every change of mind. */
+    decisions: async (f: EditDecisionFilter = {}): Promise<EditDecisionRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const all = await listEditDecisions(this.o.db, this.ctx(), f);
+      if (!reach) return all;
+      const ok = new Set((await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id));
+      const qs = new Map((await listQueries(this.o.db, this.ctx())).map((q) => [q.id, q.passId]));
+      return all.filter((d) => ok.has(qs.get(d.queryId) ?? ''));
     },
     answer: async (id: string, response: string): Promise<QueryRecord> => {
       const q = await this.queryToRead(id);
