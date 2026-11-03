@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
   briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
@@ -548,6 +549,57 @@ export class StudioAs {
       return reviseBrief(this.o.db, this.ctx(), id, i);
     }
   };
+  /**
+   * Editorial passes. Reading needs edit.read; planning a pass and choosing or changing its editor needs edit.assign (the editor must be
+   * assigned to the project); starting and delivering needs edit.run, and only the pass's own editor may unless the person also holds
+   * edit.assign; the author's answer needs edit.respond; closing a pass needs edit.approve; calling one off needs edit.assign.
+   */
+  readonly passes = {
+    list: async (f: PassFilter = {}): Promise<PassRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      return (await listPasses(this.o.db, this.ctx(), f)).filter((p) => !reach || reach(p.projectId));
+    },
+    get: async (id: string): Promise<PassRecord | null> => {
+      await this.needWork('edit.read');
+      const p = await getPass(this.o.db, this.ctx(), id);
+      const reach = await this.reach('edit.read');
+      return p && (!reach || reach(p.projectId)) ? p : null;
+    },
+    create: async (i: NewPass): Promise<PassRecord> => {
+      await this.mustReach(i?.projectId, 'edit.read');
+      await this.needWork('edit.assign', i.projectId);
+      await this.mustBeAssigned([i.editorId], i.projectId, 'an editorial pass');
+      return createPass(this.o.db, this.ctx(), i);
+    },
+    assign: async (id: string, editorId: string): Promise<PassRecord> => {
+      const p = await this.passToRead(id);
+      await this.needWork('edit.assign', p.projectId);
+      await this.mustBeAssigned([editorId], p.projectId, 'an editorial pass');
+      return assignEditor(this.o.db, this.ctx(), id, editorId);
+    },
+    start: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'in_progress'),
+    deliver: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'delivered'),
+    respond: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'responded'),
+    close: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'closed'),
+    cancel: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'cancelled')
+  };
+  private async passToRead(id: string): Promise<PassRecord> {
+    await this.needWork('edit.read');
+    const p = await getPass(this.o.db, this.ctx(), id);
+    const reach = await this.reach('edit.read');
+    if (!p || (reach && !reach(p.projectId))) throw new Error('That pass is not there.');
+    return p;
+  }
+  private async movePassAs(id: string, to: PassState): Promise<PassRecord> {
+    const p = await this.passToRead(id);
+    if (to === 'in_progress' || to === 'delivered') {
+      await this.needWork('edit.run', p.projectId);
+      if (p.editorId !== this.personId) await this.needWork('edit.assign', p.projectId);
+    } else await this.needWork(to === 'responded' ? 'edit.respond' : to === 'closed' ? 'edit.approve' : 'edit.assign', p.projectId);
+    return movePass(this.o.db, this.ctx(), id, to);
+  }
+
   private async mayReadBrief(b: BriefRecord): Promise<boolean> {
     try {
       await this.mustReach(b.projectId, BRIEF_READ[b.kind]);

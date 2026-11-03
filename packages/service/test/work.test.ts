@@ -18,7 +18,7 @@ async function studio() {
     await ana.people.grant({ subject: { kind: 'person', id: p.id }, roleId: `role_${roleKey}`, scope: STUDIO });
     return p.id;
   };
-  return { svc, ana, person };
+  return { svc, ana, person, db };
 }
 
 describe('tasks, approvals and decisions behind the permission check', () => {
@@ -214,5 +214,37 @@ describe('briefs behind the permission check', () => {
     if (has('edit.read') && has('edit.assign')) expect((await me.revise(e.id, { body: 'e2', basedOn: 1 })).current.n).toBe(2);
     if (has('edit.read') && !has('edit.assign')) expect(await denied(me.revise(e.id, { body: 'e2', basedOn: 1 }))).toBe(true);
     if (!has('edit.read')) await expect(me.versions(e.id)).rejects.toThrow('That brief is not there.');
+  });
+});
+
+describe('editorial passes behind the permission check', () => {
+  async function withFile() {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    return s;
+  }
+
+  it.each(ROLE_KEYS)('%s: reads with edit.read, plans with edit.assign, runs with edit.run, answers with edit.respond, closes with edit.approve', async (key) => {
+    const { svc, ana, person } = await withFile();
+    const editor = await person('Eve', 'editor');
+    const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
+    const me = svc.as(id).passes;
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const mk = async (kind: 'developmental' | 'line' | 'copy', editorId: string) => ana.passes.create({ projectId: 'p1', kind, fileId: 'f1', editorId });
+
+    expect(await denied(me.list()), 'list').toBe(!has('edit.read'));
+    const a = await mk('developmental', id); // the pass is this person's own
+    const b = await mk('line', editor); // someone else's
+    expect(await denied(me.get(a.id)), 'get').toBe(!has('edit.read'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'copy', fileId: 'f1', editorId: editor })), 'plan').toBe(!has('edit.assign'));
+    expect(await denied(me.assign(b.id, id)), 'assign').toBe(!has('edit.read') || !has('edit.assign'));
+    expect(await denied(me.start(a.id)), 'start own').toBe(!has('edit.read') || !has('edit.run'));
+    expect(await denied(me.start(b.id)), "start someone else's").toBe(!has('edit.read') || !has('edit.run') || !has('edit.assign'));
+    if (has('edit.read') && has('edit.run')) expect((await me.deliver(a.id)).state, 'deliver, once started').toBe('delivered');
+    expect(await denied(me.respond(b.id)), 'respond').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.close(b.id)), 'close').toBe(!has('edit.read') || !has('edit.approve'));
+    expect(await denied(me.cancel(b.id)), 'cancel').toBe(!has('edit.read') || !has('edit.assign'));
   });
 });

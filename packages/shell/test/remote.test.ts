@@ -272,11 +272,15 @@ describe('backing up and restoring a server Studio’s records', () => {
     await a.write('ch1.md', 'one');
     await a.vault.add('ch1.md');
 
+    const bo = (await svc.people.list()).find((p) => p.name === 'Owner')!; // holds every project, so may edit it
+    const fileId = (await a.store.list())[0]!.id;
+    const pass = await svc.passes.create({ projectId: 'pB1', kind: 'line', fileId, editorId: bo.id });
+
     const file = path.join(dir, 'backup.json');
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 12 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 13 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 
@@ -287,7 +291,8 @@ describe('backing up and restoring a server Studio’s records', () => {
     const back = await restoreServerRecords({ client: s.owner, file });
     expect(back.rows).toBe(made.rows);
     expect((await svc.catalogue.books()).map((b) => b.title)).toEqual(['Lead Me']);
-    expect((await svc.briefs.versions(brief.id)).map((v) => v.n)).toEqual([1, 2]); // briefs and every version come back
+    expect((await svc.briefs.versions(brief.id)).map((v) => v.n)).toEqual([1, 2]);
+    expect((await svc.passes.get(pass.id))).toMatchObject({ kind: 'line', fileId, fileVersion: 1, state: 'planned' }); // a pass keeps the exact version it covers // briefs and every version come back
     expect((await svc.people.list()).map((p) => p.name).sort()).toEqual(['Ann Author', 'Bo Lin', 'Owner']);
     expect((await a.vault.list()).map((e) => e.path)).toEqual(['ch1.md']);
     expect((await s.owner.tree()).projects.map((p) => p.name)).toEqual(['Book 1']);
