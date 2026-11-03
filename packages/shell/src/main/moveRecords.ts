@@ -13,7 +13,7 @@ import type { StudioClient } from './studioClient';
 const TABLES = [
   'person', 'pen_name', 'pen_name_person', 'team', 'team_member', 'role', 'role_capability', 'assignment', 'capability_seen',
   'workflow', 'workflow_stage', 'workflow_transition', 'workflow_transition_role',
-  'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision',
+  'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision', 'brief', 'brief_version',
   'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card',
   'contribution', 'credit', 'rights', 'revenue_share', 'audit'
 ];

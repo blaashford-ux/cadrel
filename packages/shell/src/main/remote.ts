@@ -11,7 +11,7 @@ import type { StudioService } from '@cadrel/service';
 import { sha256, VaultError, type BlobStore } from '@cadrel/store';
 import { StudioApiError, StudioOfflineError, type StudioClient } from './studioClient';
 
-const NAMESPACES = ['catalogue', 'people', 'business', 'work', 'workflows'];
+const NAMESPACES = ['catalogue', 'people', 'business', 'work', 'workflows', 'briefs'];
 const METHODS = ['can', 'canOn', 'canAt', 'explain', 'visibleProjects'];
 
 /** The Studio's service, with each call sent to the server. `as(person)` ignores the person: the server uses the one the key belongs to. */

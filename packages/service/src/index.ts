@@ -14,6 +14,7 @@ import {
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
 } from '@cadrel/kernel';
@@ -59,6 +60,9 @@ export interface ServiceOptions {
    */
   projects?: () => Promise<ProjectTree | null>;
 }
+
+const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read' };
+const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign' };
 
 export class StudioService {
   constructor(private readonly o: ServiceOptions) {}
@@ -511,6 +515,53 @@ export class StudioAs {
       return recordDecision(this.o.db, this.ctx(), i);
     }
   };
+
+  /**
+   * Briefs for a manuscript and for an edit. A manuscript brief is read with task.read and written with task.edit (the author and the people
+   * running the book); an edit brief is read with edit.read and written with edit.assign (whoever assigns the editors). Both only on projects
+   * this person can reach. A brief is never overwritten: a revision is a new version, and the one before stays readable.
+   */
+  readonly briefs = {
+    list: async (f: BriefFilter = {}): Promise<BriefRecord[]> => {
+      const all = await listBriefs(this.o.db, this.ctx(), f);
+      const out: BriefRecord[] = [];
+      for (const b of all) if (await this.mayReadBrief(b)) out.push(b);
+      return out;
+    },
+    get: async (id: string): Promise<BriefRecord | null> => {
+      const b = await getBrief(this.o.db, this.ctx(), id);
+      return b && (await this.mayReadBrief(b)) ? b : null;
+    },
+    versions: async (id: string): Promise<BriefVersion[]> => {
+      const b = await this.briefToRead(id);
+      return briefVersions(this.o.db, this.ctx(), b.id);
+    },
+    create: async (i: NewBrief): Promise<BriefRecord> => {
+      const cap = BRIEF_WRITE[i?.kind as BriefKind] ?? 'task.edit';
+      await this.mustReach(i?.projectId, BRIEF_READ[i?.kind as BriefKind] ?? 'task.read');
+      await this.needWork(cap, i.projectId);
+      return createBrief(this.o.db, this.ctx(), i);
+    },
+    revise: async (id: string, i: { body: string; note?: string; title?: string; basedOn: number }): Promise<BriefRecord> => {
+      const b = await this.briefToRead(id);
+      await this.needWork(BRIEF_WRITE[b.kind], b.projectId);
+      return reviseBrief(this.o.db, this.ctx(), id, i);
+    }
+  };
+  private async mayReadBrief(b: BriefRecord): Promise<boolean> {
+    try {
+      await this.mustReach(b.projectId, BRIEF_READ[b.kind]);
+      await this.needWork(BRIEF_READ[b.kind], b.projectId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private async briefToRead(id: string): Promise<BriefRecord> {
+    const b = await getBrief(this.o.db, this.ctx(), id);
+    if (!b || !(await this.mayReadBrief(b))) throw new Error('That brief is not there.');
+    return b;
+  }
 
   /** A task this person may change: any task for task.manage, else one assigned to them with task.edit. */
   private async mineToChange(id: string): Promise<TaskRecord> {

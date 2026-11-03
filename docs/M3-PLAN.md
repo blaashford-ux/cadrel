@@ -10,7 +10,7 @@ Branch: `ccr-7ecf360c-88oe1a`, cut from `dev` (0.6.1 at the time). Scope comes f
 
 ## Slices
 
-1. **Briefs** (`0012_brief.sql`). `brief(kind: manuscript | edit, project, body, version)`, versioned and append-only. Kernel type and service methods, `brief.write` for edit briefs held by editorial managers. Home screen: a Brief tab on a book.
+1. **Briefs** (`0012_brief.sql`). **Built (records, service, server, backup/move); the Brief tab on a book is not built yet.** Read with `task.read` / `edit.read`, written with `task.edit` / `edit.assign` by kind; each revision is a new numbered version and a revision made from a stale version is refused. `brief(kind: manuscript | edit, project, body, version)`, versioned and append-only. Kernel type and service methods, `brief.write` for edit briefs held by editorial managers. Home screen: a Brief tab on a book.
 2. **Edit passes** (`0013_edit_pass.sql`). `edit_pass(kind: developmental | line | copy | proof, project, brief, file, version, editor, state)`. The pass pins the exact `file_version` it covers. States: planned, in progress, delivered, responded, closed. Assign with `edit.assign`, run with `edit.run`. Audit log entries on every transition.
 3. **Anchored queries and comments.** `query(pass, anchor, text, author_response, state)`. An anchor is a version plus a text range with quoted context, so it survives re-opening a later version (re-anchored by quote; flagged when it cannot be). Cover Write's note format so existing editing-skill notes import as queries.
 4. **Decisions.** `change_decision(query | change, accept | reject | defer, reason)`. Reason required for reject and defer. Writes to the decision ledger; defer carries a revisit date as a task.
@@ -22,7 +22,7 @@ Branch: `ccr-7ecf360c-88oe1a`, cut from `dev` (0.6.1 at the time). Scope comes f
 10. **Exit test** (`docs/M3-EXIT-TEST.md` plus an automated two-client test): one book goes through developmental, line and copy passes; the author answers every query; compare shows the changes; verification flags a missed change; the gate opens only when all passes are closed.
 
 ## Order and dependencies
-A (fonts) is standalone. B (Rewrite) reuses the compare and scroll mapping from 5. 1 → 2 → 3 → 4 are sequential. 5 needs 3 and 4. 6 needs 2 and 4. 7 and 8 follow once the records are stable. 10 (exit test) last.
+A (fonts) is built (see PROVENANCE.md). A is standalone. B (Rewrite) reuses the compare and scroll mapping from 5. 1 → 2 → 3 → 4 are sequential. 5 needs 3 and 4. 6 needs 2 and 4. 7 and 8 follow once the records are stable. 10 (exit test) last.
 
 ## Decided
 - Proof passes only advise; they never block a stage gate (slice 6 leaves `pass_closed(proof)` out of the default gate).

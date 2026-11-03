@@ -195,3 +195,24 @@ describe('records follow who is assigned to the project', () => {
     expect(await svc.as(eve).work.tasks({ state: 'any' })).toHaveLength(1);
   });
 });
+
+describe('briefs behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: manuscript briefs read with task.read and written with task.edit; edit briefs read with edit.read and written with edit.assign', async (key) => {
+    const { svc, ana, person } = await studio();
+    const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
+    const me = svc.as(id).briefs;
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const m = await ana.briefs.create({ projectId: 'p1', kind: 'manuscript', title: 'M', body: 'm' });
+    const e = await ana.briefs.create({ projectId: 'p1', kind: 'edit', title: 'E', body: 'e' });
+
+    expect((await me.list()).map((b) => b.id).sort(), 'list shows only what this role may read').toEqual([...(has('task.read') ? [m.id] : []), ...(has('edit.read') ? [e.id] : [])].sort());
+    expect((await me.get(m.id)) !== null, 'get manuscript').toBe(has('task.read'));
+    expect((await me.get(e.id)) !== null, 'get edit').toBe(has('edit.read'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'manuscript', title: 'x', body: 'x' })), 'write manuscript').toBe(!has('task.edit'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'edit', title: 'x', body: 'x' })), 'write edit').toBe(!has('edit.assign'));
+    if (has('edit.read') && has('edit.assign')) expect((await me.revise(e.id, { body: 'e2', basedOn: 1 })).current.n).toBe(2);
+    if (has('edit.read') && !has('edit.assign')) expect(await denied(me.revise(e.id, { body: 'e2', basedOn: 1 }))).toBe(true);
+    if (!has('edit.read')) await expect(me.versions(e.id)).rejects.toThrow('That brief is not there.');
+  });
+});

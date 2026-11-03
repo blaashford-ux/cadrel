@@ -266,6 +266,8 @@ describe('backing up and restoring a server Studio’s records', () => {
     await s.owner.publishTree({ projects: [{ id: 'pB1', name: 'Book 1', parentId: null, kind: 'Book', status: 'active', order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] });
     await svc.catalogue.createBook({ title: 'Lead Me' });
     await svc.people.create({ name: 'Bo Lin', kind: 'contractor' });
+    const brief = await svc.briefs.create({ projectId: 'pB1', kind: 'edit', title: 'Line edit', body: 'Tighten dialogue.' });
+    await svc.briefs.revise(brief.id, { body: 'Tighten dialogue and cut filter words.', basedOn: 1 });
     const a = await computer(await s.person('author', 'Ann Author'), 'ann-pc');
     await a.write('ch1.md', 'one');
     await a.vault.add('ch1.md');
@@ -274,7 +276,7 @@ describe('backing up and restoring a server Studio’s records', () => {
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 11 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 12 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 
@@ -285,6 +287,7 @@ describe('backing up and restoring a server Studio’s records', () => {
     const back = await restoreServerRecords({ client: s.owner, file });
     expect(back.rows).toBe(made.rows);
     expect((await svc.catalogue.books()).map((b) => b.title)).toEqual(['Lead Me']);
+    expect((await svc.briefs.versions(brief.id)).map((v) => v.n)).toEqual([1, 2]); // briefs and every version come back
     expect((await svc.people.list()).map((p) => p.name).sort()).toEqual(['Ann Author', 'Bo Lin', 'Owner']);
     expect((await a.vault.list()).map((e) => e.path)).toEqual(['ch1.md']);
     expect((await s.owner.tree()).projects.map((p) => p.name)).toEqual(['Book 1']);
