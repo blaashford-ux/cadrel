@@ -237,6 +237,34 @@ describe.skipIf(!haveEnv)('print PDF (real Electron + Paged.js)', () => {
       expect(fonts.map((f) => f.name).join(' ')).not.toMatch(/EBGaramond/);
     }, 240_000);
 
+    // every family added for M3 is laid out by the real renderer and embedded in the PDF, as the body font
+    it.each(['Literata', 'Source Serif 4', 'Alegreya', 'Spectral', 'Merriweather', 'Lora', 'Gelasio', 'Cormorant Garamond', 'Playfair Display', 'Marcellus', 'Fraunces', 'Bodoni Moda'])(
+      'bundled font %s is used and embedded',
+      async (family) => {
+        const m = await render((d) => (d.export.pdf.font = family));
+        const fonts = pdfFonts(m.pdf);
+        if (!fonts) return; // poppler not installed
+        expect(fonts.every((f) => f.embedded)).toBe(true);
+        expect(fonts.map((f) => f.name).join(' ').toLowerCase()).toContain(family.replace(/\s+/g, '').toLowerCase());
+        expect(fonts.map((f) => f.name).join(' ')).not.toMatch(/EBGaramond/);
+      },
+      240_000
+    );
+
+    it('a separate chapter-heading font is embedded beside the body font', async () => {
+      const m = await render((d) => {
+        d.export.pdf.font = 'Literata';
+        d.export.pdf.headingFont = 'Marcellus';
+      });
+      const fonts = pdfFonts(m.pdf);
+      if (!fonts) return;
+      const names = fonts.map((f) => f.name).join(' ').toLowerCase();
+      expect(fonts.every((f) => f.embedded)).toBe(true);
+      expect(names).toContain('literata');
+      expect(names).toContain('marcellus');
+      expect(names).not.toContain('ebgaramond');
+    }, 240_000);
+
     it('an installed system font is used and embedded', async () => {
       if (spawnSync('fc-list', [':family=DejaVu Serif']).stdout?.toString().trim() === '') return; // not on this machine
       const m = await render((d) => (d.export.pdf.font = 'DejaVu Serif'));

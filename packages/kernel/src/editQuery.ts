@@ -179,12 +179,15 @@ async function load(db: Db, c: Ctx, id: string) {
   return { q, pass };
 }
 
+/** The author's answer as it would be kept, or a `WorkError` saying what is wrong with it. Pure, so an app can check it before it queues it. */
+export const checkAnswer = (response: unknown): string => clean(response, 'The answer', QUERY_BODY_MAX, true);
+
 /** The author's answer. The pass must have been delivered and not yet responded to; an answer can be rewritten until then. */
 export async function answerQuery(db: Db, c: Ctx, id: string, response: string): Promise<QueryRecord> {
   const { q, pass } = await load(db, c, id);
   if (pass.state !== 'delivered') fail('conflict', 'Answers are written after the editor has delivered the pass and before it is marked responded.');
   if (q.state !== 'open' && q.state !== 'answered') fail('conflict', `An item that is ${q.state} cannot be answered.`);
-  const text = clean(response, 'The answer', QUERY_BODY_MAX, true);
+  const text = checkAnswer(response);
   await db.batch([
     { sql: "UPDATE edit_query SET response = ?, responded_by = ?, responded_at = ?, state = 'answered' WHERE id = ? AND studio_id = ?", params: [text, c.actor, c.now, id, c.studioId] },
     audit(c, 'query.answer', id, { passId: q.passId, seq: q.seq })

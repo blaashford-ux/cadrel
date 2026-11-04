@@ -311,6 +311,8 @@ const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefa
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
 const recordsFile = () => path.join(studioDir, 'records.db');
+/** What this computer keeps of the Studio's editorial records for reading offline, and the answers waiting to be sent. */
+const editorialOfflineFile = () => path.join(studioDir, 'editorial-offline.json');
 /** What the person lets AI tools create or edit; the MCP server reads it on every change, so a switch applies at once. Missing means nothing is allowed. */
 const aiAccessFile = () => path.join(studioDir, AI_ACCESS_FILE);
 const accessNow = async (): Promise<AiAccess> => accessReader(nodeFs, aiAccessFile())();
@@ -392,7 +394,7 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
   const tick = async () => {
     try {
       if (!peopleHost.isRemote) {
-        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId });
+        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId, offlineFile: editorialOfflineFile() });
         if (!opened.ok) return;
         if (win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
       }
@@ -1512,7 +1514,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       if (client) {
         // the records are on the Studio's server: this computer asks for them there, as the person the key belongs to
         serverLink = { client, owner: here.role === 'owner', studioId: here.id };
-        await peopleHost.openRemote({ client, studioId: here.id });
+        await peopleHost.openRemote({ client, studioId: here.id, offlineFile: editorialOfflineFile() });
       } else {
         await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
       }

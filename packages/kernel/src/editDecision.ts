@@ -73,12 +73,8 @@ export interface NewEditDecision {
 
 const brief = (q: QueryRecord) => (q.anchor?.quote ?? q.body).replace(/\s+/g, ' ').slice(0, 60);
 
-export async function decideQuery(db: Db, c: Ctx, queryId: string, i: NewEditDecision): Promise<EditDecisionRecord> {
-  const q = await getQuery(db, c, queryId);
-  if (!q) return fail('not-found', 'That item is not there.');
-  const pass = (await getPass(db, c, q.passId))!;
-  if (pass.state !== 'delivered') fail('conflict', 'Decisions are made after the editor has delivered the pass and before it is marked responded.');
-  if (q.state === 'withdrawn') fail('conflict', 'That item was withdrawn.');
+/** A decision as it would be kept (trimmed, with the date checked), or a `WorkError` saying what is wrong with it. Pure, so an app can check it before it queues it. */
+export function checkDecision(i: NewEditDecision): { outcome: DecisionOutcome; reason: string; revisit: string | null } {
   if (!DECISION_OUTCOMES.includes(i?.outcome)) fail('invalid', 'A decision is to accept, reject or defer.');
   const reason = typeof i.reason === 'string' ? i.reason.replace(/\r\n/g, '\n').trim() : '';
   if (reason.length > REASON_MAX) fail('invalid', `The reason is too long (${REASON_MAX} characters at most).`);
@@ -86,6 +82,16 @@ export async function decideQuery(db: Db, c: Ctx, queryId: string, i: NewEditDec
   const revisit = i.outcome === 'defer' ? cleanDate(i.revisit, 'The revisit date') : null;
   if (i.outcome === 'defer' && !revisit) fail('invalid', 'A deferral needs a date to come back to.');
   if (i.outcome !== 'defer' && i.revisit) fail('invalid', 'Only a deferral has a revisit date.');
+  return { outcome: i.outcome, reason, revisit };
+}
+
+export async function decideQuery(db: Db, c: Ctx, queryId: string, i: NewEditDecision): Promise<EditDecisionRecord> {
+  const q = await getQuery(db, c, queryId);
+  if (!q) return fail('not-found', 'That item is not there.');
+  const pass = (await getPass(db, c, q.passId))!;
+  if (pass.state !== 'delivered') fail('conflict', 'Decisions are made after the editor has delivered the pass and before it is marked responded.');
+  if (q.state === 'withdrawn') fail('conflict', 'That item was withdrawn.');
+  const { reason, revisit } = checkDecision(i);
 
   const before = await db.first<EditDecisionRecord>(
     `SELECT ${COLS} FROM edit_decision d WHERE d.query_id = ? AND d.studio_id = ? AND NOT EXISTS (SELECT 1 FROM edit_decision n WHERE n.supersedes_id = d.id)`,

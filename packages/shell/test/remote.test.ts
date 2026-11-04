@@ -8,7 +8,8 @@ import { PermissionDenied } from '@cadrel/service';
 import { LocalVault, DirBlobs } from '@cadrel/store';
 import { ACCOUNT, TOKEN, fakeCloudflare } from './fakeCloudflare';
 import { buildStudio } from '../src/main/cloudflare';
-import { joinStudio, StudioClient } from '../src/main/studioClient';
+import { joinStudio, StudioClient, StudioOfflineError } from '../src/main/studioClient';
+import { EditorialOffline } from '../src/main/offlineEditorial';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from '../src/main/remote';
 import { unzipSync } from 'fflate';
 import { readPackManifest } from '@cadrel/market-library';
@@ -408,5 +409,176 @@ describe('what the app asks the Studio again', () => {
 
     await me.rpc(['catalogue', 'createIp'], [{ name: 'Starfall' }]); // its own change is seen at once
     expect(((await me.rpc(['catalogue', 'ips'], [])) as { name: string }[]).map((x) => x.name).sort()).toEqual(['Dragon Rider', 'Starfall']);
+  });
+});
+
+describe('editorial records when the Studio cannot be reached', () => {
+  /** An editor (the owner) who delivers a pass of three items, and an author on another computer who has the Studio but may lose it. */
+  async function setup() {
+    const s = await studio();
+    const dir = await tmp();
+    await s.owner.publishTree({ projects: [{ id: 'pB1', name: 'Book 1', parentId: null, kind: 'Book', status: 'active', order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] });
+    const editor = remoteService(s.owner).as('x');
+    const annClient = await s.person('author', 'Ann Author', { projectId: 'pB1', days: 30 });
+    const o = await computer(s.owner, 'owner-pc');
+    await o.write('ch1.md', 'one');
+    await o.vault.add('ch1.md');
+    const fileId = (await o.store.list())[0]!.id;
+    const pass = await editor.passes.create({ projectId: 'pB1', kind: 'line', fileId, editorId: (await s.owner.me()).personId });
+    await editor.passes.start(pass.id);
+    const [q1, q2, sug] = await editor.queries.raise(pass.id, [
+      { kind: 'query', body: 'Why cold?', anchor: { quote: 'one', prefix: '', suffix: '', start: 0 } },
+      { kind: 'query', body: 'Why now?' },
+      { kind: 'suggestion', replacement: '1', anchor: { quote: 'one', prefix: '', suffix: '', start: 0 } }
+    ]);
+    await editor.passes.deliver(pass.id);
+    const file = path.join(dir, 'editorial-offline.json');
+    const eo = new EditorialOffline(remoteService(annClient), { file });
+    return { s, editor, eo, me: eo.as('x'), pass, q1: q1!, q2: q2!, sug: sug!, file, annClient };
+  }
+  const offlineError = (p: Promise<unknown>) => p.then(() => null, (e: Error) => e);
+
+  it('reads a pass and its items from this computer when the server cannot be reached, if it was read before', async () => {
+    const { s, me, pass, q1 } = await setup();
+    const online = await me.queries.list({ passId: pass.id });
+    expect(online.map((q) => q.seq)).toEqual([1, 2, 3]);
+    await me.passes.get(pass.id);
+    s.setOnline(false);
+    expect((await me.queries.list({ passId: pass.id })).map((q) => q.id)).toContain(q1.id);
+    expect((await me.passes.get(pass.id))?.state).toBe('delivered');
+    expect(await offlineError(me.passes.get('never-opened'))).toBeInstanceOf(StudioOfflineError); // nothing kept for a call never made
+    expect(await offlineError(me.queries.list({ passId: 'another' }))).toBeInstanceOf(StudioOfflineError);
+    s.setOnline(true);
+    expect((await me.queries.list({ passId: pass.id })).length).toBe(3);
+  });
+
+  it('keeps the author’s answer and decision while away, shows them as made, and sends them in order when back', async () => {
+    const { s, editor, eo, me, pass, q1, sug } = await setup();
+    await me.queries.list({ passId: pass.id });
+    await me.queries.decisions({ passId: pass.id });
+    s.setOnline(false);
+
+    const answered = await me.queries.answer(q1.id, '  Because the river is a river.  ');
+    expect(answered).toMatchObject({ id: q1.id, state: 'answered', response: 'Because the river is a river.' });
+    const decided = await me.queries.decide(sug.id, { outcome: 'defer', reason: 'Wait for the beta readers.', revisit: '2026-12-01' });
+    expect(decided).toMatchObject({ queryId: sug.id, outcome: 'defer', revisit: '2026-12-01', taskId: null });
+    expect(decided.id).toMatch(/^queued:/);
+    expect(await eo.status()).toMatchObject({ offline: true, pending: 2, refused: [] });
+
+    // what the author sees while away includes their own waiting work
+    expect((await me.queries.list({ passId: pass.id })).find((q) => q.id === q1.id)).toMatchObject({ state: 'answered', response: 'Because the river is a river.' });
+    expect((await me.queries.decisions({ passId: pass.id })).map((d) => [d.queryId, d.outcome])).toEqual([[sug.id, 'defer']]);
+    // and the editor, online, has seen nothing yet (asked through a client of its own, so no answer of the editor's is kept)
+    s.setOnline(true);
+    const peek = remoteService(new StudioClient({ url: s.owner['o'].url, key: s.ownerKey, fetchFn: s.fetchFn })).as('x');
+    expect((await peek.queries.list({ passId: pass.id })).every((q) => q.state === 'open')).toBe(true);
+    s.setOnline(false);
+
+    s.setOnline(true);
+    expect(await eo.flush()).toEqual({ offline: false });
+    expect(await eo.status()).toMatchObject({ pending: 0, refused: [] });
+    const now = await editor.queries.list({ passId: pass.id });
+    expect(now.find((q) => q.id === q1.id)).toMatchObject({ state: 'answered', response: 'Because the river is a river.' });
+    const theirs = await editor.queries.decisions({ passId: pass.id });
+    expect(theirs).toHaveLength(1);
+    expect(theirs[0]).toMatchObject({ queryId: sug.id, outcome: 'defer', revisit: '2026-12-01' });
+    expect(theirs[0]!.taskId).toBeTruthy(); // the revisit task was made when it was sent
+  });
+
+  it('checks what was written at once, so a mistake is told now and not when the Studio is next reached', async () => {
+    const { s, me, pass, q1, sug } = await setup();
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    await expect(me.queries.answer(q1.id, '   ')).rejects.toMatchObject({ code: 'invalid' });
+    await expect(me.queries.decide(sug.id, { outcome: 'reject' })).rejects.toMatchObject({ code: 'invalid' });
+    await expect(me.queries.decide(sug.id, { outcome: 'defer', reason: 'x', revisit: '2026-02-30' })).rejects.toMatchObject({ code: 'invalid' });
+  });
+
+  it('will not keep an answer to an item this computer has never seen', async () => {
+    const { s, eo, me } = await setup();
+    s.setOnline(false);
+    const e = await offlineError(me.queries.answer('never-seen', 'Hello'));
+    expect(e).toBeInstanceOf(StudioOfflineError);
+    expect(e!.message).toContain('not saved on this computer');
+    expect((await eo.status()).pending).toBe(0);
+  });
+
+  it('a second answer to the same item replaces the one still waiting', async () => {
+    const { s, editor, eo, me, pass, q1 } = await setup();
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    await me.queries.answer(q1.id, 'First thought.');
+    await me.queries.answer(q1.id, 'Second thought.');
+    expect((await eo.status()).pending).toBe(1);
+    s.setOnline(true);
+    await eo.flush();
+    expect((await editor.queries.list({ passId: pass.id })).find((q) => q.id === q1.id)!.response).toBe('Second thought.');
+  });
+
+  it('sends what is waiting before it reads, so the author never reads an old copy of their own work', async () => {
+    const { s, me, pass, q1 } = await setup();
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    await me.queries.answer(q1.id, 'Because.');
+    s.setOnline(true);
+    const list = await me.queries.list({ passId: pass.id });
+    expect(list.find((q) => q.id === q1.id)).toMatchObject({ state: 'answered', respondedBy: expect.not.stringMatching(/^queued/) });
+    expect((await me.queries.list({ passId: pass.id })).find((q) => q.id === q1.id)!.respondedAt).not.toBeNull();
+  });
+
+  it('an answer the server turns down when it is sent is kept aside with the reason and the author’s words, and is not retried', async () => {
+    const { s, editor, eo, me, pass, q2 } = await setup();
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    await me.queries.answer(q2.id, 'A careful answer that took a while to write.');
+    s.setOnline(true);
+    await editor.passes.cancel(pass.id); // called off while the author was away
+    expect(await eo.flush()).toEqual({ offline: false });
+    const st = await eo.status();
+    expect(st.pending).toBe(0);
+    expect(st.refused).toHaveLength(1);
+    expect(st.refused[0]).toMatchObject({ call: 'answer', queryId: q2.id, response: 'A careful answer that took a while to write.' });
+    expect(st.refused[0]!.error).toMatch(/delivered/);
+    await eo.dismiss(st.refused[0]!.id);
+    expect((await eo.status()).refused).toEqual([]);
+  });
+
+  it('survives the app being closed: the copy and the waiting answers are read back from the file', async () => {
+    const { s, annClient, file, me, pass, q1 } = await setup();
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    await me.queries.answer(q1.id, 'Kept on disk.');
+    const again = new EditorialOffline(remoteService(annClient), { file });
+    expect(await again.status()).toMatchObject({ pending: 1 });
+    expect((await again.as('x').queries.list({ passId: pass.id })).find((q) => q.id === q1.id)).toMatchObject({ state: 'answered', response: 'Kept on disk.' });
+    s.setOnline(true);
+    await again.flush();
+    expect((await again.status()).pending).toBe(0);
+  });
+
+  it('passes every other call straight through, and the things only the server can do still need it', async () => {
+    const { s, me, pass } = await setup();
+    expect(await me.work.tasks()).toEqual([]); // not an editorial call: straight through
+    await me.queries.list({ passId: pass.id });
+    s.setOnline(false);
+    expect(await offlineError(me.passes.respond(pass.id))).toBeInstanceOf(StudioOfflineError); // marking a pass responded changes what the editor sees
+    expect(await offlineError(me.work.tasks())).toBeInstanceOf(StudioOfflineError); // nothing is kept for it
+  });
+
+  it('the app’s Studio host keeps the editorial copy when it is given a file, and behaves as before when it is not', async () => {
+    const s = await studio();
+    const dir = await tmp();
+    const on = new PeopleHost();
+    await on.openRemote({ client: s.owner, studioId: 'sabc123def4', offlineFile: path.join(dir, 'e.json') });
+    expect(on.editorialOffline).not.toBeNull();
+    expect(await on.service!.as(on.me).passes.list()).toEqual([]);
+    s.setOnline(false);
+    expect(await on.service!.as(on.me).passes.list()).toEqual([]); // still answered with no server, from what was kept
+    s.setOnline(true);
+    const off = new PeopleHost();
+    await off.openRemote({ client: s.owner, studioId: 'sabc123def4' });
+    expect(off.editorialOffline).toBeNull();
+    await on.close();
+    expect(on.editorialOffline).toBeNull();
   });
 });
