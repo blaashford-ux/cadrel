@@ -1,5 +1,6 @@
 import { defaultAppDefaults, type AppDefaults } from './appDefaults';
 import { clampLevel } from './chapters';
+import { sanitizeRewriteLinks, type RewriteLink } from './rewrite';
 import { applyOverrides, diffOverrides, overridesFromLegacyBook, projectLayer, sanitizeOverrides, type Overrides } from './export/layers';
 import { sanitizeBookDetails, type BookDetails } from './export/model';
 import { isDate, sanitizeGoal, type Goal } from './progress';
@@ -218,6 +219,8 @@ export interface ProjectMeta {
   excludedFolders: string[];
   /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's stage. */
   editedChapters: Record<string, string[]>;
+  /** Rewrite mode: each original manuscript and the file its rewrite is written in (see rewrite.ts). */
+  rewriteLinks: RewriteLink[];
   overrides: ProjectOverrides;
 }
 
@@ -246,6 +249,7 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     manuscriptGoals: {},
     excludedFolders: uncountedFolders(t.folders),
     editedChapters: {},
+    rewriteLinks: [],
     overrides: { chapterLevel: t.chapterLevel, book: t.book ? templateOverrides(t.book, opts.app ?? defaultAppDefaults(), opts.now) : {} }
   };
 }
@@ -270,6 +274,7 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
       ? r.excludedFolders.filter((x): x is string => typeof x === 'string' && safeRelPath(x.replace(/\\/g, '/'))).map((x) => x.replace(/\\/g, '/')).slice(0, 200)
       : [],
     editedChapters: sanitizeEditedChapters(r.editedChapters),
+    rewriteLinks: sanitizeRewriteLinks(r.rewriteLinks, safeRelPath),
     overrides: {
       chapterLevel: o.chapterLevel === null || o.chapterLevel === undefined ? null : clampLevel(o.chapterLevel),
       // projects saved before layering held a whole book (or null for "use the app's")
