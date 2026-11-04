@@ -17,6 +17,7 @@ import { Rail } from './Rail';
 import { Settings } from './Settings';
 import { MyBooks } from './MyBooks';
 import { useStudio } from './useStudio';
+import { SLOW_REFRESH_MS } from '../shared/refresh';
 import { useScope } from './useScope';
 import { viewScopeOf } from '@cadrel/kernel';
 
@@ -103,7 +104,7 @@ export function App() {
   useEffect(() => {
     if (!NEEDS_OVERVIEW.has(page)) return;
     refresh();
-    const timer = setInterval(() => { if (!document.hidden) refresh(); }, 15_000); // nobody is looking while the window is hidden
+    const timer = setInterval(() => { if (!document.hidden) refresh(); }, SLOW_REFRESH_MS); // on demand otherwise; nobody is looking while the window is hidden
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);

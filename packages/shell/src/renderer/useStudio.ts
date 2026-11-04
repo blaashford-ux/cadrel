@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { StudioState } from '../shared/api';
+import { SLOW_REFRESH_MS } from '../shared/refresh';
 
 const api = window.cadrel.studio;
 
@@ -13,7 +14,7 @@ export function useStudio(active: boolean) {
   useEffect(() => {
     if (!active) return;
     void refresh();
-    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 10_000); // nobody is looking while the window is hidden
+    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, SLOW_REFRESH_MS); // on demand otherwise; nobody is looking while the window is hidden
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);

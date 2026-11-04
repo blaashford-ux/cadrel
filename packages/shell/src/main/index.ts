@@ -47,6 +47,7 @@ import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
 import { StudioRegistry, LOCAL_ID } from './studios';
+import { SLOW_REFRESH_MS, MIN_REFRESH_GAP_MS } from '../shared/refresh';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
@@ -102,6 +103,7 @@ let stages: ProjectStages;
 /** Set when the active Studio's records are on its server: the way to it, and whether this person owns it. */
 let serverLink: { client: StudioClient; owner: boolean; studioId: string } | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+let syncFocus: (() => void) | null = null;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -375,6 +377,7 @@ async function moveMarket(dest: string): Promise<void> {
  */
 function startServerSync(link: NonNullable<typeof serverLink>): void {
   let lastPublished = '';
+  let lastTick = 0;
   let treeSeen: string | null = null;
   let publishing: ReturnType<typeof setTimeout> | null = null;
   const publish = async () => {
@@ -393,6 +396,7 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
     studio.studio.treeLock = () => 'The projects of this Studio are kept by its owner.';
   }
   const tick = async () => {
+    lastTick = Date.now();
     try {
       if (!peopleHost.isRemote) {
         const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId, offlineFile: editorialOfflineFile() });
@@ -414,8 +418,13 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
     }
   };
   void tick();
+  // Not a short timer (every one is a database read on the Studio's server): slowly while the window is up, and when it gets focus again.
+  const looking = () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   if (syncTimer) clearInterval(syncTimer);
-  syncTimer = setInterval(() => void tick(), 60_000);
+  syncTimer = setInterval(() => { if (looking()) void tick(); }, SLOW_REFRESH_MS);
+  if (syncFocus) app.off('browser-window-focus', syncFocus);
+  syncFocus = () => { if (Date.now() - lastTick >= MIN_REFRESH_GAP_MS) void tick(); };
+  app.on('browser-window-focus', syncFocus);
 }
 
 /** Moving anything out from under the editor with changes unsaved would lose them. */
