@@ -56,7 +56,7 @@ export function App() {
       return null;
     }
   });
-  const studio = useStudio(NEEDS_STUDIO.has(page));
+  const studio = useStudio(NEEDS_STUDIO.has(page), page);
   const studios = useStudios();
   const [isAdmin, setIsAdmin] = useState(false);
   const [update, setUpdate] = useState<UpdateStatus | null>(null);

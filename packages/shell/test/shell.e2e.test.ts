@@ -265,6 +265,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(before).toBeTruthy();
     await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), old.id);
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    // the project was made behind the page's back (an API call, not the page): the page asks again when its window gets focus, as it does for a change made elsewhere
+    await shell.evaluate(() => window.dispatchEvent(new Event('focus')));
     await shell.locator('.tree-row', { hasText: 'Old Project' }).click();
     await shell.getByRole('heading', { level: 2, name: 'Old Project' }).waitFor();
     await shell.getByRole('button', { name: 'Add first book' }).click();
