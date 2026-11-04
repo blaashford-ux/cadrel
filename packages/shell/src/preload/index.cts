@@ -98,7 +98,18 @@ const api: CadrelApi = {
     resolve: (id) => studioCall('shell:editing:call', 'resolve', id),
     withdraw: (id) => studioCall('shell:editing:call', 'withdraw', id),
     sendWaiting: () => studioCall('shell:editing:send'),
-    dismissRefused: (id) => studioCall('shell:editing:dismiss', id)
+    dismissRefused: (id) => studioCall('shell:editing:dismiss', id),
+    planning: (projectId) => studioCall('shell:editing:planning', projectId),
+    plan: (input) => studioCall('shell:editing:plan', input),
+    text: (id) => studioCall('shell:editing:text', id),
+    raise: (id, items) => studioCall('shell:editing:raise', id, items),
+    laterVersions: (id) => studioCall('shell:editing:later', id),
+    compare: (id, version) => studioCall('shell:editing:compare', id, version),
+    verify: (id, version) => studioCall('shell:editing:verify', id, version),
+    briefs: (projectId) => studioCall('shell:editing:briefs', projectId),
+    briefVersions: (id) => studioCall('shell:editing:briefVersions', id),
+    createBrief: (input) => studioCall('shell:editing:createBrief', input),
+    reviseBrief: (id, input) => studioCall('shell:editing:reviseBrief', id, input)
   },
   workflow: {
     state: () => studioCall('shell:workflow:state'),

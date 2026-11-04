@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { EditingItem, EditingPassRow, EditingPassState, EditingState, StudioState } from '../shared/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { EditingCompare, EditingItem, EditingLaterVersion, EditingPassRow, EditingPassState, EditingPlanning, EditingState, EditingText, StudioState } from '../shared/api';
 
 const api = window.cadrel.editing;
 type Ready = Extract<EditingState, { available: true }>;
@@ -23,6 +23,7 @@ export function Editing({ studio, onProject }: Props) {
   const [state, setState] = useState<EditingState | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [planning, setPlanning] = useState(false);
   const reload = useCallback(() => api.state().then((s) => (setState(s), setError(null)), (e) => setError(message(e))), []);
   useEffect(() => {
     void reload();
@@ -40,6 +41,7 @@ export function Editing({ studio, onProject }: Props) {
     <div className="editing">
       {error && <div className="banner error" role="alert">{error}</div>}
       <Waiting s={state} onDone={reload} onError={setError} />
+      {state.may.assign && (planning ? <PlanForm onDone={(id) => (setPlanning(false), void reload(), id && setOpen(id))} onError={setError} /> : <p><button type="button" className="primary" onClick={() => setPlanning(true)}>Plan a pass…</button></p>)}
       {state.passes.length === 0 && <section className="card"><p className="muted">No editorial passes yet. An editor plans one on a manuscript in the vault; it will show here.</p></section>}
       <Group title="Waiting for you" rows={waiting} onOpen={setOpen} onProject={onProject} showNext />
       <Group title="Under way" rows={under} onOpen={setOpen} onProject={onProject} />
@@ -144,6 +146,8 @@ function PassView({ id, onBack, onProject }: { id: string; onBack: () => void; o
           <p className="muted small">{[p.unanswered > 0 && `${p.unanswered} ${p.unanswered === 1 ? 'query' : 'queries'} to answer`, p.undecided > 0 && `${p.undecided} ${p.undecided === 1 ? 'suggestion' : 'suggestions'} to decide`].filter(Boolean).join(' and ')} before it can be marked as responded.</p>
         )}
       </section>
+      <TextPanel pass={p} canRaise={p.state === 'in_progress' && runs} onRaised={reload} onError={setError} />
+      <RevisionPanel pass={p} canCheck={runs && (p.state === 'responded' || p.state === 'closed')} onChecked={reload} onError={setError} />
       {s.items.length === 0 ? <section className="card"><p className="muted">{p.state === 'in_progress' ? 'Nothing raised yet.' : 'No queries, comments or suggestions in this pass.'}</p></section> : s.items.map((i) => <Item key={i.id} item={i} s={s} run={run} />)}
     </div>
   );
@@ -211,5 +215,256 @@ function Item({ item: i, s, run }: { item: EditingItem; s: PassReady; run: (job:
         </div>
       )}
     </section>
+  );
+}
+
+const KINDS: { value: EditingPassRow['kind']; label: string }[] = [
+  { value: 'developmental', label: 'Developmental edit' },
+  { value: 'line', label: 'Line edit' },
+  { value: 'copy', label: 'Copy edit' },
+  { value: 'proof', label: 'Proofread' }
+];
+
+/** Plans a pass: which book, which manuscript, what kind, who edits it, and (if the book has one) which edit brief it follows. */
+function PlanForm({ onDone, onError }: { onDone: (newId?: string) => void; onError: (m: string | null) => void }) {
+  const [plan, setPlan] = useState<EditingPlanning | null>(null);
+  const [projectId, setProjectId] = useState('');
+  const [fileId, setFileId] = useState('');
+  const [fileVersion, setFileVersion] = useState<number | null>(null); // null: the newest
+  const [kind, setKind] = useState<EditingPassRow['kind']>('line');
+  const [editorId, setEditorId] = useState('');
+  const [briefId, setBriefId] = useState('');
+  const [title, setTitle] = useState('');
+  useEffect(() => {
+    let live = true;
+    void api.planning(projectId || undefined).then(
+      (p) => {
+        if (!live) return;
+        setPlan(p);
+        if (!p.available) return;
+        if (!projectId && p.projects[0]) setProjectId(p.projects[0].id);
+        setFileId((f) => (p.files.some((x) => x.fileId === f) ? f : p.files[0]?.fileId ?? ''));
+        setEditorId((e) => (p.editors.some((x) => x.id === e) ? e : p.editors[0]?.id ?? ''));
+        setBriefId((b) => (p.briefs.some((x) => x.id === b) ? b : ''));
+      },
+      (e) => onError(message(e))
+    );
+    return () => {
+      live = false;
+    };
+  }, [projectId, onError]);
+  if (!plan) return <p className="muted">Loading…</p>;
+  if (!plan.available) return <section className="card"><p className="muted">{plan.reason}</p><button type="button" className="quiet" onClick={() => onDone()}>Close</button></section>;
+  const file = plan.files.find((f) => f.fileId === fileId);
+  return (
+    <section className="card" aria-label="Plan a pass">
+      <h3>Plan a pass</h3>
+      <form
+        className="brief-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void api.plan({ projectId, kind, fileId, editorId, fileVersion: fileVersion ?? undefined, briefId: briefId || null, title: title.trim() || undefined }).then((r) => onDone(r.id), (er) => onError(message(er)));
+        }}
+      >
+        <label>
+          Book or project
+          <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            {plan.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        <label>
+          Manuscript
+          <select value={fileId} onChange={(e) => (setFileId(e.target.value), setFileVersion(null))}>
+            {plan.files.map((f) => <option key={f.fileId} value={f.fileId}>{f.path} (version {f.version})</option>)}
+          </select>
+        </label>
+        {file && file.version > 1 && (
+          <label>
+            Version to cover
+            <select value={fileVersion ?? file.version} onChange={(e) => setFileVersion(Number(e.target.value) === file.version ? null : Number(e.target.value))}>
+              {Array.from({ length: file.version }, (_, i) => file.version - i).map((n) => <option key={n} value={n}>{n === file.version ? `Version ${n} (the newest)` : `Version ${n}`}</option>)}
+            </select>
+          </label>
+        )}
+        <label>
+          Kind of pass
+          <select value={kind} onChange={(e) => setKind(e.target.value as EditingPassRow['kind'])}>
+            {KINDS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+          </select>
+        </label>
+        <label>
+          Editor
+          <select value={editorId} onChange={(e) => setEditorId(e.target.value)}>
+            {plan.editors.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </label>
+        {plan.briefs.length > 0 && (
+          <label>
+            Edit brief
+            <select value={briefId} onChange={(e) => setBriefId(e.target.value)}>
+              <option value="">None</option>
+              {plan.briefs.map((b) => <option key={b.id} value={b.id}>{b.title} (version {b.version})</option>)}
+            </select>
+          </label>
+        )}
+        <label>Title (optional)<input value={title} maxLength={200} placeholder={KINDS.find((k) => k.value === kind)!.label} onChange={(e) => setTitle(e.target.value)} /></label>
+        {file && <p className="muted small">The pass covers version {fileVersion ?? file.version} of {file.path}. Later changes to the manuscript do not move what the editor was shown.</p>}
+        {plan.files.length === 0 && <p className="muted small">There is no manuscript in the vault yet. Add one on the Files page first.</p>}
+        {plan.editors.length === 0 && projectId && <p className="muted small">Nobody is assigned to this project yet. Give the editor a role on it first (on its page, under People).</p>}
+        <button type="submit" className="primary" disabled={!projectId || !fileId || !editorId}>Plan the pass</button>{' '}
+        <button type="button" className="quiet" onClick={() => onDone()}>Cancel</button>
+      </form>
+    </section>
+  );
+}
+
+/** The text of the version the pass covers. The editor selects a passage in it to raise a query, comment or suggestion about exactly that. */
+function TextPanel({ pass, canRaise, onRaised, onError }: { pass: EditingPassRow; canRaise: boolean; onRaised: () => void; onError: (m: string | null) => void }) {
+  const [open, setOpen] = useState(false);
+  const [t, setT] = useState<EditingText | null>(null);
+  const pre = useRef<HTMLPreElement>(null);
+  const [picked, setPicked] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [kind, setKind] = useState<EditingItem['kind']>('query');
+  const [body, setBody] = useState('');
+  const [replacement, setReplacement] = useState('');
+  const [category, setCategory] = useState('');
+  const [whole, setWhole] = useState(false);
+  useEffect(() => {
+    if (open && !t) void api.text(pass.id).then(setT, (e) => onError(message(e)));
+  }, [open, t, pass.id, onError]);
+  /** Where the selection is in the text: counted from the start of the text, so it is the same place the version has. */
+  const select = () => {
+    const sel = window.getSelection();
+    const el = pre.current;
+    if (!sel || !el || sel.rangeCount === 0 || sel.isCollapsed) return setPicked(null);
+    const r = sel.getRangeAt(0);
+    if (!el.contains(r.startContainer) || !el.contains(r.endContainer)) return setPicked(null);
+    const before = document.createRange();
+    before.selectNodeContents(el);
+    before.setEnd(r.startContainer, r.startOffset);
+    const start = before.toString().length;
+    setPicked({ start, end: start + r.toString().length, text: r.toString() });
+  };
+  const reset = () => (setBody(''), setReplacement(''), setCategory(''), setPicked(null));
+  return (
+    <section className="card" aria-labelledby="ed-text">
+      <div className="card-head">
+        <h3 id="ed-text">The manuscript, version {pass.fileVersion}</h3>
+        <button type="button" className="link" onClick={() => setOpen((o) => !o)}>{open ? 'Hide the text' : canRaise ? 'Read it and raise items' : 'Read it'}</button>
+      </div>
+      {open && !t && <p className="muted">Loading…</p>}
+      {open && t && (
+        <>
+          <pre ref={pre} className="ed-text" tabIndex={0} aria-label="Manuscript text" onMouseUp={select} onKeyUp={select}>{t.text}</pre>
+          {canRaise && (
+            <form
+              className="brief-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void api
+                  .raise(pass.id, [{ kind, ...(whole ? {} : { start: picked!.start, end: picked!.end }), body, ...(kind === 'suggestion' ? { replacement } : {}), category: category || undefined }])
+                  .then(() => (reset(), onRaised()), (er) => onError(message(er)));
+              }}
+            >
+              <p className="small">{whole ? 'A point about the whole pass.' : picked ? <>Selected: <q>{picked.text.length > 120 ? picked.text.slice(0, 120) + '…' : picked.text}</q></> : 'Select a passage in the text above.'}</p>
+              <label className="inline small"><input type="checkbox" checked={whole} onChange={(e) => setWhole(e.target.checked)} /> About the whole pass, not a passage</label>
+              <label>
+                What to raise
+                <select value={kind} onChange={(e) => setKind(e.target.value as EditingItem['kind'])}>
+                  <option value="query">A query: needs the author’s answer</option>
+                  <option value="comment">A comment: needs no answer</option>
+                  <option value="suggestion">A suggestion: replacement text</option>
+                </select>
+              </label>
+              <label>Text<textarea value={body} rows={3} maxLength={4000} onChange={(e) => setBody(e.target.value)} /></label>
+              {kind === 'suggestion' && <label>Replace the passage with<input value={replacement} maxLength={2000} onChange={(e) => setReplacement(e.target.value)} /></label>}
+              <label>About (optional)<input value={category} maxLength={40} placeholder="pacing, dialogue, clarity…" onChange={(e) => setCategory(e.target.value)} /></label>
+              <button type="submit" className="primary" disabled={(!whole && !picked) || (kind !== 'suggestion' && !body.trim()) || (kind === 'suggestion' && whole)}>Add to the pass</button>
+            </form>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** What changed since the version the pass covers, side by side, and whether the changes the author accepted were made. */
+function RevisionPanel({ pass, canCheck, onChecked, onError }: { pass: EditingPassRow; canCheck: boolean; onChecked: () => void; onError: (m: string | null) => void }) {
+  const [versions, setVersions] = useState<EditingLaterVersion[] | null>(null);
+  const [version, setVersion] = useState<number | null>(null);
+  const [cmp, setCmp] = useState<EditingCompare | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void api.laterVersions(pass.id).then(
+      (v) => live && (setVersions(v), setVersion((cur) => cur ?? v[0]?.n ?? null)),
+      () => live && setVersions([]) // no vault here: nothing to compare with
+    );
+    return () => {
+      live = false;
+    };
+  }, [pass.id]);
+  if (!versions || versions.length === 0) return null;
+  const go = async <T,>(job: () => Promise<T>, then: (r: T) => void) => {
+    setBusy(true);
+    try {
+      then(await job());
+      onError(null);
+    } catch (e) {
+      onError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" aria-labelledby="ed-rev">
+      <h3 id="ed-rev">The revision</h3>
+      <div className="row">
+        <label className="inline">
+          A later version{' '}
+          <select value={version ?? ''} onChange={(e) => (setVersion(Number(e.target.value)), setCmp(null))}>
+            {versions.map((v) => <option key={v.n} value={v.n}>Version {v.n} · {v.author}, {v.createdAt.slice(0, 10)}{v.comment ? ` · ${v.comment}` : ''}</option>)}
+          </select>
+        </label>
+        <button type="button" disabled={busy || version === null} onClick={() => void go(() => api.compare(pass.id, version!), setCmp)}>Compare with version {pass.fileVersion}</button>
+        {canCheck && <button type="button" className="primary" disabled={busy || version === null} onClick={() => void go(() => api.verify(pass.id, version!), () => onChecked())}>Check the accepted changes</button>}
+      </div>
+      {canCheck && <p className="muted small">Checking looks for each change the author accepted in that version: made, changed some other way, or missed. The result shows on each item.</p>}
+      {cmp && <Compare c={cmp} />}
+    </section>
+  );
+}
+
+function Compare({ c }: { c: EditingCompare }) {
+  const st = c.stats;
+  const words = (ops: { op: 'same' | 'del' | 'ins'; text: string }[], side: 'del' | 'ins') =>
+    ops.filter((o) => o.op === 'same' || o.op === side).map((o, i) => (o.op === 'del' ? <del key={i}>{o.text}</del> : o.op === 'ins' ? <ins key={i}>{o.text}</ins> : <span key={i}>{o.text}</span>));
+  return (
+    <div className="ed-compare">
+      <p className="small">
+        {st.changed} changed, {st.added} added, {st.removed} removed · +{st.wordsAdded} words, −{st.wordsRemoved} words
+        {st.changed + st.added + st.removed === 0 && ' · the two versions read the same'}
+      </p>
+      <table>
+        <thead>
+          <tr><th scope="col">Version {c.from}</th><th scope="col">Version {c.to}</th></tr>
+        </thead>
+        <tbody>
+          {c.rows.map((r, i) =>
+            r.kind === 'skip' ? (
+              <tr key={i} className="skip"><td colSpan={2}>{r.count} unchanged {r.count === 1 ? 'paragraph' : 'paragraphs'}</td></tr>
+            ) : r.kind === 'same' ? (
+              <tr key={i}><td>{r.a.text}</td><td>{r.b.text}</td></tr>
+            ) : r.kind === 'removed' ? (
+              <tr key={i} className="removed"><td><del>{r.a.text}</del></td><td /></tr>
+            ) : r.kind === 'added' ? (
+              <tr key={i} className="added"><td /><td><ins>{r.b.text}</ins></td></tr>
+            ) : (
+              <tr key={i} className="changed"><td>{words(r.words, 'del')}</td><td>{words(r.words, 'ins')}</td></tr>
+            )
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }

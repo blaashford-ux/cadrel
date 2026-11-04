@@ -1,4 +1,4 @@
-import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -698,6 +698,60 @@ export interface EditingItem extends QueryRecord {
 export type EditingPassState =
   | { available: false; reason: string }
   | { available: true; pass: EditingPassRow; items: EditingItem[]; may: { run: boolean; assign: boolean; respond: boolean; approve: boolean }; me: string; people: { id: string; name: string }[] };
+/** What planning a pass can choose from: the projects the person may plan in, the manuscripts in the vault, and (once a project is chosen) who can edit it and the edit briefs it has. */
+export type EditingPlanning =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      projects: { id: string; name: string }[];
+      files: { fileId: string; path: string; version: number }[];
+      editors: { id: string; name: string }[];
+      briefs: { id: string; title: string; version: number }[];
+    };
+export interface NewEditingPass {
+  projectId: string;
+  kind: PassRecord['kind'];
+  fileId: string;
+  editorId: string;
+  /** The version to cover; the newest when left out. */
+  fileVersion?: number;
+  briefId?: string | null;
+  title?: string;
+}
+/** An item the editor raises by selecting text: `start` and `end` are character offsets into the version's text. Without them it is a point about the whole pass. */
+export interface NewEditingItem {
+  kind: QueryRecord['kind'];
+  start?: number;
+  end?: number;
+  body?: string;
+  replacement?: string;
+  category?: string;
+}
+/** The text of the version a pass covers, for reading it and for selecting passages. */
+export interface EditingText {
+  file: string | null;
+  version: number;
+  text: string;
+}
+/** A later version of the manuscript: what a pass can be compared with and checked against. */
+export interface EditingLaterVersion {
+  n: number;
+  author: string;
+  createdAt: string;
+  comment: string;
+}
+/** Two versions side by side. Long runs of unchanged paragraphs are one `skip` row, with a paragraph of context kept either side of a change. */
+export type EditingCompareRow = CompareRow | { kind: 'skip'; count: number };
+export interface EditingCompare {
+  from: number;
+  to: number;
+  rows: EditingCompareRow[];
+  stats: { same: number; added: number; removed: number; changed: number; wordsAdded: number; wordsRemoved: number };
+}
+/** A book's briefs: the manuscript brief and the edit briefs, each with its newest text. */
+export type EditingBriefs =
+  | { available: false; reason: string }
+  | { available: true; may: { manuscript: boolean; edit: boolean }; briefs: BriefRecord[]; people: { id: string; name: string }[] };
 /** The changes the Editing page may ask for, by name. */
 export type EditingCall = 'start' | 'deliver' | 'respond' | 'close' | 'cancel' | 'answer' | 'decide' | 'resolve' | 'withdraw';
 /** What waits on the person using the app, across projects. */
@@ -823,6 +877,22 @@ export interface EditingApi {
   /** Sends the answers waiting for the Studio's server now. */
   sendWaiting(): Promise<void>;
   dismissRefused(id: string): Promise<void>;
+  /** What planning a pass can choose from; pass the project to get its editors and edit briefs. */
+  planning(projectId?: string): Promise<EditingPlanning>;
+  plan(input: NewEditingPass): Promise<{ id: string }>;
+  /** The exact text of the version a pass covers. */
+  text(passId: string): Promise<EditingText>;
+  /** Raises queries, comments and suggestions in a pass that is in progress, from passages selected in `text`. */
+  raise(passId: string, items: NewEditingItem[]): Promise<void>;
+  /** The versions of the manuscript after the one the pass covers, newest first. */
+  laterVersions(passId: string): Promise<EditingLaterVersion[]>;
+  compare(passId: string, version: number): Promise<EditingCompare>;
+  /** Checks the changes the author accepted against a later version, and keeps the result with the pass. */
+  verify(passId: string, version: number): Promise<void>;
+  briefs(projectId: string): Promise<EditingBriefs>;
+  briefVersions(briefId: string): Promise<BriefVersion[]>;
+  createBrief(input: { projectId: string; kind: BriefKind; title: string; body: string }): Promise<BriefRecord>;
+  reviseBrief(briefId: string, input: { body: string; note?: string; title?: string; basedOn: number }): Promise<BriefRecord>;
 }
 export interface WorkApi {
   pulse(): Promise<Pulse>;
