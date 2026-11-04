@@ -63,7 +63,13 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   const isRoute = isServerRoute(path) || path === '/v1/records/import' || path === '/v1/records/export' || path === '/v1/info' || path === '/v1/invites' || path === '/v1/join' || path === '/v1/members' || path === '/v1/me' || path === '/v1/version' || /^\/v1\/(members|invites)\/[\w-]+$/.test(path);
   if (!isRoute) return null;
 
-  const schemaVersion = await ensureSchema(env.DB);
+  let schemaVersion: number;
+  try {
+    schemaVersion = await ensureSchema(env.DB);
+  } catch (e) {
+    // Say what failed instead of a bare 500, so an upgrade that stops here tells the person why.
+    return fail(503, `The Studio's database could not be brought up to date: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500));
+  }
 
   // Public: what a person joining needs to check they are at the Studio they were told about.
   if (method === 'GET' && path === '/v1/info') {
