@@ -63,7 +63,7 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 | M0 | One app | Built and released as 0.2.0. |
 | M1 | Shared records | Built and released as 0.3.0. The manual exit test (`docs/M1-EXIT-TEST.md`, on a real Windows build) has no recorded run. |
 | M2 | The team vault on Cloudflare | Built, in development (`dev`, not yet released): records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records. Not done: a code-signed installer (needs a certificate), updates from R2, replicating the file store, the security policy page, separate role dashboards, any run against a real Cloudflare account. |
-| M3 | Editorial | Not started as specified. |
+| M3 | Editorial | Built, in development (`dev`, not yet released): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Tested end to end (`m3Exit.test.ts`) against the real Worker code; the manual walk-through on Windows is [M3-EXIT-TEST.md](M3-EXIT-TEST.md) and has no recorded run. See [M3-PLAN.md](M3-PLAN.md) for what is not built. |
 | M4 | Canon and continuity | Not started as specified. |
 | M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
 | not in the plan | Releases 0.4.0 to 0.6.1 and Cadrel Reader | Built; see "Released outside the milestones" after M1. |
@@ -164,7 +164,7 @@ Where it becomes a studio tool.
 
 ### M3: Editorial
 
-**Status: not started as specified.** Related things exist: the three editing skills (developmental, line, copy) leave their notes in Write, and Cadrel Reader lets beta readers comment. Neither has briefs, passes tied to a version, anchored queries with responses, side-by-side compare or revision verification.
+**Status: built in development; the plan and what is left are in [M3-PLAN.md](M3-PLAN.md).** What the list below said was missing now exists. It started from: the three editing skills (developmental, line, copy) leave their notes in Write, and Cadrel Reader lets beta readers comment. Neither has briefs, passes tied to a version, anchored queries with responses, side-by-side compare or revision verification.
 
 - Creative briefs (manuscript and edit).
 - Passes (developmental, line, copy, proof), each with brief, editor, state and the exact version it covers.

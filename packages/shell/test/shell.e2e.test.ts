@@ -88,7 +88,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'Admin', 'Profile', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Editing', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'Admin', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -265,6 +265,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(before).toBeTruthy();
     await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), old.id);
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    // the project was made behind the page's back (an API call, not the page): the page asks again when its window gets focus, as it does for a change made elsewhere
+    await shell.evaluate(() => window.dispatchEvent(new Event('focus')));
     await shell.locator('.tree-row', { hasText: 'Old Project' }).click();
     await shell.getByRole('heading', { level: 2, name: 'Old Project' }).waitFor();
     await shell.getByRole('button', { name: 'Add first book' }).click();

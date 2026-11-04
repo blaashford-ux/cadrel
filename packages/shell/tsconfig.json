@@ -27,6 +27,7 @@
   "exclude": [
     "test/provisioning.test.ts",
     "test/remote.test.ts",
+    "test/m3Exit.test.ts",
     "test/fakeCloudflare.ts",
     "test/shell.e2e.test.ts"
   ]

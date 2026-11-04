@@ -8,6 +8,7 @@
 import { bootstrapStudio, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
+import { EditorialOffline } from './offlineEditorial';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
 import { StudioOfflineError, type StudioClient } from './studioClient';
 import path from 'node:path';
@@ -36,6 +37,7 @@ export class PeopleHost {
   private penScope: string[] | null = null;
   /** Set when the Studio's records are on its server: this computer's way to it. */
   private remote: StudioClient | null = null;
+  private editorial: EditorialOffline | null = null;
   private remoteVault: { vault: LocalVault; store: OfflineAwareStore; key: string } | null = null;
   private projects: (() => Promise<ProjectTree | null>) | null = null;
 
@@ -68,7 +70,7 @@ export class PeopleHost {
    * Opens the Studio whose records are on its server. Who this person is comes from the server (the one the key belongs to). If the server cannot
    * be reached the Studio stays closed, saying so; call again to retry.
    */
-  async openRemote(o: { client: StudioClient; studioId: string }): Promise<{ ok: boolean }> {
+  async openRemote(o: { client: StudioClient; studioId: string; offlineFile?: string }): Promise<{ ok: boolean }> {
     await this.close();
     this.studioId = o.studioId;
     try {
@@ -85,9 +87,16 @@ export class PeopleHost {
       return { ok: false };
     }
     this.remote = o.client;
-    this.svc = remoteService(o.client);
+    // where a file is given, the editorial records are kept for reading offline and the author's answers wait there for the server
+    this.editorial = o.offlineFile ? new EditorialOffline(remoteService(o.client), { file: o.offlineFile }) : null;
+    this.svc = this.editorial ? this.editorial.service() : remoteService(o.client);
     await this.refreshPenNames().catch(() => undefined);
     return { ok: true };
+  }
+
+  /** Editorial answers waiting for the server, and what it turned down; null where the records are not on a server or no file was given. */
+  get editorialOffline(): EditorialOffline | null {
+    return this.editorial;
   }
 
   /** The records are on the Studio's server, not in a file here. */
@@ -118,6 +127,7 @@ export class PeopleHost {
     this.db = null;
     this.svc = null;
     this.remote = null;
+    this.editorial = null;
     this.remoteVault = null;
     this.meId = '';
     this.penScope = null;
@@ -140,8 +150,8 @@ export class PeopleHost {
     return this.svc;
   }
   /** What the AI server needs to open the Studio's records as this person: the file, who, and which Studio. Empty where this computer holds none. */
-  mcpArgs(file: string): string[] {
-    return this.svc && this.meId && !this.remote ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId] : [];
+  mcpArgs(file: string, vaultBlobs?: string): string[] {
+    return this.svc && this.meId && !this.remote ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId, ...(vaultBlobs ? ['--vault-blobs', vaultBlobs] : [])] : [];
   }
   get me(): string {
     return this.meId;

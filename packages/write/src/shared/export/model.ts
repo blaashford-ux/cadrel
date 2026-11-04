@@ -69,6 +69,8 @@ export interface ExportSettings {
     fontSize: number;
     /** Font family. A bundled family is embedded in the EPUB; any other is only named. */
     font: string;
+    /** Font family for chapter headings and titles. Empty = the same as `font`. */
+    headingFont: string;
   };
   pdf: {
     trim: string;
@@ -87,6 +89,8 @@ export interface ExportSettings {
     bodyAlign: BodyAlign;
     /** Font family: bundled, or any font installed on this computer. Embedded in the PDF either way. */
     font: string;
+    /** Font family for chapter headings and titles. Empty = the same as `font`. */
+    headingFont: string;
   };
   docx: {
     trim: string;
@@ -124,7 +128,7 @@ export function defaultExportSettings(): ExportSettings {
     chapterHeading: 'verbatim',
     smartQuotes: 'auto',
     sceneBreak: '•  •  •',
-    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', bodyAlign: 'justify', fontSize: 11, font: DEFAULT_FONT },
+    epub: { language: 'en', description: '', coverImage: '', dropCaps: true, paragraphStyle: 'blockGap', bodyAlign: 'justify', fontSize: 11, font: DEFAULT_FONT, headingFont: '' },
     pdf: {
       trim: DEFAULT_TRIM,
       gutter: 'auto',
@@ -138,7 +142,8 @@ export function defaultExportSettings(): ExportSettings {
       fontSize: 11,
       paragraphStyle: 'blockNoGap',
       bodyAlign: 'justify',
-      font: DEFAULT_FONT
+      font: DEFAULT_FONT,
+      headingFont: ''
     },
     docx: { trim: DEFAULT_TRIM, paragraphStyle: 'blockGap', bodyAlign: 'justify', fontSize: 11 }
   };
@@ -275,7 +280,8 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         paragraphStyle: oneOf(ep.paragraphStyle, PSTYLES, e.epub.paragraphStyle),
         bodyAlign: oneOf(ep.bodyAlign, BODY_ALIGNS, e.epub.bodyAlign),
         fontSize: num(ep.fontSize, e.epub.fontSize, 8, 20),
-        font: cleanFamily(ep.font, e.epub.font)
+        font: cleanFamily(ep.font, e.epub.font),
+        headingFont: cleanFamily(ep.headingFont, '')
       },
       pdf: {
         trim: str(pd.trim, e.pdf.trim, 20) || e.pdf.trim,
@@ -290,7 +296,8 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         fontSize: num(pd.fontSize, e.pdf.fontSize, 8, 16),
         paragraphStyle: oneOf(pd.paragraphStyle, PSTYLES, e.pdf.paragraphStyle),
         bodyAlign: oneOf(pd.bodyAlign, BODY_ALIGNS, e.pdf.bodyAlign),
-        font: cleanFamily(pd.font, e.pdf.font)
+        font: cleanFamily(pd.font, e.pdf.font),
+        headingFont: cleanFamily(pd.headingFont, '')
       },
       docx: {
         trim: str(dx.trim, e.docx.trim, 20) || e.docx.trim,

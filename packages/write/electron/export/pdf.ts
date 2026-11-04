@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { BookBuild } from '../../src/shared/export/assemble';
-import { bundledFont, FONT_FILES, fontFaceCss } from '../../src/shared/export/fonts';
+import { bundledFont, fontFaceCss, fontFiles, headingFamily } from '../../src/shared/export/fonts';
 import { layoutWithGutter } from '../../src/shared/export/gutter';
 import { buildPrintHtml, postLayoutConfig, type PrintLayout } from '../../src/shared/export/printHtml';
 import { estimatePages, KDP_MAX_PAGES, KDP_MIN_PAGES, trimByKey } from '../../src/shared/export/trim';
@@ -39,8 +39,15 @@ export async function loadFontCss(fontsDir: string, family: string): Promise<str
   const bundled = bundledFont(family);
   if (!bundled) return '';
   const data = new Map<string, string>();
-  for (const f of FONT_FILES) data.set(f.file, (await fs.readFile(path.join(fontsDir, bundled.slug, f.file))).toString('base64'));
+  for (const f of fontFiles(bundled)) data.set(f.file, (await fs.readFile(path.join(fontsDir, bundled.slug, f.file))).toString('base64'));
   return fontFaceCss(bundled, (f) => `data:font/ttf;base64,${data.get(f.file)}`);
+}
+
+/** Face rules for the body font and, when it is a different bundled family, the heading font. */
+export async function loadBookFontCss(fontsDir: string, s: { font: string; headingFont?: string }): Promise<string> {
+  const families = [...new Set([s.font, headingFamily(s)].map((f) => f.toLowerCase()))];
+  const parts = await Promise.all(families.map((f) => loadFontCss(fontsDir, f)));
+  return parts.filter(Boolean).join('\n');
 }
 
 interface Rendered {
@@ -120,7 +127,7 @@ export async function buildPrintPdf(
   const s = book.settings.pdf;
   const trim = trimByKey(s.trim);
   onProgress({ stage: 'preparing' });
-  const [fontCss, paged] = await Promise.all([loadFontCss(resources.fontsDir, s.font), fs.readFile(resources.pagedJsPath, 'utf8')]);
+  const [fontCss, paged] = await Promise.all([loadBookFontCss(resources.fontsDir, s), fs.readFile(resources.pagedJsPath, 'utf8')]);
   const scripts = `<script>window.PagedConfig = { auto: false };</script>\n<script>${paged.replace(/<\/script/gi, '<\\/script')}</script>`;
 
   const estimate = estimatePages({

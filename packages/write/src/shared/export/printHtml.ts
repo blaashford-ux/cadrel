@@ -1,5 +1,5 @@
 import type { BookBuild } from './assemble';
-import { fontStack } from './fonts';
+import { fontStack, headingFamily } from './fonts';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { ParagraphStyle } from './model';
 import { trimByKey } from './trim';
@@ -60,6 +60,7 @@ export function printCss(book: BookBuild, layout: PrintLayout): string {
   const s = book.settings.pdf;
   const breakBefore = s.rectoStarts ? 'right' : 'page';
   const stack = fontStack(s.font);
+  const headStack = fontStack(headingFamily(s));
   return `${pageCss(book, layout)}
 
 html { font-family: ${stack}; font-size: ${s.fontSize}pt; }
@@ -71,7 +72,7 @@ p.al-center, p.al-right { text-indent: 0; }
 em { font-style: italic; } strong { font-weight: 700; }
 blockquote { margin: 1em 1.5em; }
 pre { white-space: pre-wrap; font-size: 0.9em; }
-h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { text-align: center; margin: 1.5em 0 1em; font-weight: 700; break-after: avoid; }
+h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: ${headStack}; text-align: center; margin: 1.5em 0 1em; font-weight: 700; break-after: avoid; }
 
 section.front { page: front; }
 section.titlepage { break-before: page; text-align: center; padding-top: 28%; }
@@ -81,7 +82,7 @@ section.toc { break-before: ${breakBefore}; }
 section.body { break-before: ${breakBefore}; }
 section.backpage { break-before: ${breakBefore}; }
 
-p.booktitle { text-align: center; font-size: 2.4em; font-weight: 700; margin: 0 0 0.4em; text-indent: 0; line-height: 1.1; }
+p.booktitle { text-align: center; font-family: ${headStack}; font-size: 2.4em; font-weight: 700; margin: 0 0 0.4em; text-indent: 0; line-height: 1.1; }
 p.booksubtitle { text-align: center; font-style: italic; font-size: 1.3em; margin: 0 0 2em; text-indent: 0; }
 p.bookauthor { text-align: center; font-weight: 700; font-size: 1.3em; margin: 2em 0 0; text-indent: 0; }
 .copyright p { text-align: left; text-indent: 0; }
@@ -94,7 +95,7 @@ p.linkline { text-align: left; text-indent: 0; margin: 0 0 0.6em; overflow-wrap:
 .backpage p.linkline, .backpage p.crline { margin: 0 0 1.25em; }
 p.scenebreak { text-align: center; margin: 1.2em 0; text-indent: 0; }
 
-h1 { text-align: center; font-weight: 700; }
+h1 { font-family: ${headStack}; text-align: center; font-weight: 700; }
 h1.chapter { font-size: 1.6em; margin: 0 0 2em; padding-top: ${fmt(s.chapterSink)}in; break-after: avoid; }
 h1.matter { font-size: 1.4em; margin: 0 0 1.5em; padding-top: 0.5in; break-after: avoid; }
 h1.toc-title { font-size: 1.4em; margin: 0 0 1.5em; padding-top: 0.5in; }

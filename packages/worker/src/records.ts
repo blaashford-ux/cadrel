@@ -5,7 +5,8 @@
  */
 import { bootstrapStudio, grantRole, createPerson, hex, sanitizeTree, type Db, type ProjectTree, type Ctx } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
-import { d1Db } from './d1';
+import { d1Db, type Versions } from './d1';
+import { cachedAccess, requestVersions } from './access';
 
 export interface RecordsEnv {
   DB: D1Database;
@@ -89,9 +90,12 @@ export async function writeTree(db: Db, tree: ProjectTree): Promise<void> {
   await setMeta(db, 'tree', JSON.stringify(tree));
 }
 
-/** The Studio's service on its server: the records in D1, access from the records themselves, and the project tree the owner published. */
-export function serviceFor(env: RecordsEnv, now = Date.now()): { service: StudioService; db: Db } {
+/**
+ * The Studio's service on its server: the records in D1, access from the records themselves (kept until they change), and the project tree the
+ * owner published. `versions` is the request's one read of the change counters, which a caller that needs them too can pass in.
+ */
+export function serviceFor(env: RecordsEnv, now = Date.now(), versions: () => Promise<Versions> = requestVersions(env.DB)): { service: StudioService; db: Db; versions: () => Promise<Versions> } {
   const db = d1Db(env.DB);
-  return { db, service: new StudioService({ db, studioId: env.STUDIO_ID, access: dbAccess(db, env.STUDIO_ID), now: () => new Date(now), projects: () => readTree(db) }) };
+  const access = dbAccess(db, env.STUDIO_ID, cachedAccess(env.DB, db, env.STUDIO_ID, versions));
+  return { db, versions, service: new StudioService({ db, studioId: env.STUDIO_ID, access, now: () => new Date(now), projects: () => readTree(db) }) };
 }
-

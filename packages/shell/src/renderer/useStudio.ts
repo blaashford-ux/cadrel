@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { StudioState } from '../shared/api';
+import { SLOW_REFRESH_MS } from '../shared/refresh';
 
 const api = window.cadrel.studio;
 
 /** The studio's projects and notes, kept fresh while a page that shows them is open. `act` runs a change and reports a refused one as text. */
-export function useStudio(active: boolean) {
+/** `page` changes when the person moves to another page: arriving at one asks again, so what was made elsewhere (in Write, in Market) is there. */
+export function useStudio(active: boolean, page?: string) {
   const [state, setState] = useState<StudioState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,13 +15,13 @@ export function useStudio(active: boolean) {
   useEffect(() => {
     if (!active) return;
     void refresh();
-    const timer = setInterval(() => void refresh(), 10_000);
+    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, SLOW_REFRESH_MS); // on demand otherwise; nobody is looking while the window is hidden
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);
       window.removeEventListener('focus', refresh);
     };
-  }, [active, refresh]);
+  }, [active, page, refresh]);
 
   /** Runs a change; true when it went through. A refusal ("already exists") is shown, not thrown. */
   const act = useCallback(
