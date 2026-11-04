@@ -32,7 +32,10 @@ async function migrate(db: D1Database): Promise<number> {
     } catch (e) {
       // Another instance got there first: if the step is now recorded, carry on.
       const now = await db.prepare('SELECT MAX(n) AS n FROM schema_version').first<{ n: number | null }>();
-      if ((now?.n ?? 0) <= i) throw e;
+      if ((now?.n ?? 0) <= i) {
+        const why = (e instanceof Error ? e.message : String(e)).slice(0, 300);
+        throw new Error(`database step ${i + 1} of ${MIGRATIONS.length} failed: ${why}`);
+      }
     }
     at = i + 1;
   }

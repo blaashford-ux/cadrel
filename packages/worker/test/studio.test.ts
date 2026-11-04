@@ -28,6 +28,15 @@ describe('the Studio server', () => {
     ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql', '0007_work.sql', '0008_book_project.sql', '0009_file_links.sql', '0010_business.sql', '0011_server.sql', '0012_brief.sql', '0013_edit_pass.sql', '0014_edit_query.sql', '0015_edit_decision.sql', '0016_edit_verification.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
   });
 
+  it('says which database step failed instead of a bare 500', async () => {
+    const { env } = await studio();
+    const real = env.DB;
+    env.DB = { ...real, prepare: (q: string) => real.prepare(q), batch: async () => { throw new Error('D1_ERROR: no such table: nope'); } } as unknown as D1Database;
+    const r = await worker.fetch(new Request('https://studio.test/v1/info'), env);
+    expect(r.status).toBe(503);
+    expect(((await r.json()) as { error: string }).error).toMatch(/database step 1 of 16 failed: D1_ERROR: no such table: nope/);
+  });
+
   it('reports a schema version equal to the number of migrations', () => {
     expect(MIGRATIONS.length).toBe(STUDIO_SCHEMA_VERSION);
   });
