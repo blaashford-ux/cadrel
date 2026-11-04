@@ -43,12 +43,18 @@ export function ownerAccess(personId: string, studioId: string): Access {
   return { assignments: () => assignments, roles: () => roles };
 }
 
-/** Reads who holds what from the Studio's own records, on every call, so a change takes effect at once. This is what the app and the Worker use. */
-export function dbAccess(db: Db, studioId: string): Access {
+/** Who holds what, as the permission checks read it. */
+export type AccessSnapshot = Awaited<ReturnType<typeof loadAccess>>;
+
+/**
+ * Reads who holds what from the Studio's own records, on every call, so a change takes effect at once. This is what the app uses, where the
+ * records are a local file. A server, where every row read is billed, passes `load` to hand back what it already holds until the records change.
+ */
+export function dbAccess(db: Db, studioId: string, load: () => Promise<AccessSnapshot> = () => loadAccess(db, { studioId })): Access {
   return {
-    assignments: async () => (await loadAccess(db, { studioId })).assignments,
-    roles: async () => (await loadAccess(db, { studioId })).roles,
-    teams: async (personId) => (await loadAccess(db, { studioId })).teamsOf(personId)
+    assignments: async () => (await load()).assignments,
+    roles: async () => (await load()).roles,
+    teams: async (personId) => (await load()).teamsOf(personId)
   };
 }
 

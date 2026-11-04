@@ -372,6 +372,7 @@ async function moveMarket(dest: string): Promise<void> {
  */
 function startServerSync(link: NonNullable<typeof serverLink>): void {
   let lastPublished = '';
+  let treeSeen: string | null = null;
   let publishing: ReturnType<typeof setTimeout> | null = null;
   const publish = async () => {
     const tree = (await studio.studio.read()).tree;
@@ -396,7 +397,15 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
         if (win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
       }
       if (link.owner) await publish();
-      else if (await studio.studio.replaceTree(await link.client.tree()) && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      else {
+        // Ask whether anything changed (two rows on the server) before fetching the tree again (which makes it work out what this person may see).
+        // The counter is read before the tree, so a change in between is simply fetched on the next tick. A Studio without counters is fetched every time.
+        const v = await link.client.version().catch(() => null);
+        if (v && v.data === treeSeen) return;
+        const replaced = await studio.studio.replaceTree(await link.client.tree());
+        treeSeen = v?.data ?? null;
+        if (replaced && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      }
     } catch {
       /* away: tried again at the next tick */
     }

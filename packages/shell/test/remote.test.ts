@@ -378,3 +378,35 @@ describe('sharing Market captures through the Studio', () => {
     expect(await analyst.getCapture(`${LIST}/capture.json`)).toBeNull();
   });
 });
+
+describe('what the app asks the Studio again', () => {
+  it('keeps answers to reads until the Studio says something changed, and never keeps a change', async () => {
+    const s = await studio();
+    let calls = 0;
+    const counting = (async (i: string | URL | Request, init?: RequestInit) => ((String(i instanceof Request ? i.url : i).endsWith('/v1/call') && calls++), s.fetchFn(i, init))) as typeof fetch;
+    let clock = 1_000_000;
+    const me = new StudioClient({ url: s.owner['o'].url, key: s.ownerKey, fetchFn: counting, now: () => clock });
+    const other = new StudioClient({ url: s.owner['o'].url, key: s.ownerKey, fetchFn: s.fetchFn });
+
+    await other.rpc(['catalogue', 'ips'], []); // the Studio's first request sets up its records, which is a change
+    clock += 10_000;
+    expect(await me.rpc<unknown[]>(['catalogue', 'ips'], [])).toEqual([]);
+    expect(calls).toBe(1);
+    for (let i = 0; i < 5; i++) await me.rpc(['catalogue', 'ips'], []);
+    expect(calls).toBe(1); // asked once; the other five were answered here
+
+    clock += 10_000; // later, nothing changed on the Studio: still no need to ask for the answer again
+    await me.rpc(['catalogue', 'ips'], []);
+    expect(calls).toBe(1);
+
+    await other.rpc(['catalogue', 'createIp'], [{ name: 'Dragon Rider' }]); // someone else changes it
+    await me.rpc(['catalogue', 'ips'], []);
+    expect(calls).toBe(1); // within the few seconds the counter is trusted for
+    clock += 10_000;
+    expect(((await me.rpc(['catalogue', 'ips'], [])) as { name: string }[]).map((x) => x.name)).toEqual(['Dragon Rider']);
+    expect(calls).toBe(2);
+
+    await me.rpc(['catalogue', 'createIp'], [{ name: 'Starfall' }]); // its own change is seen at once
+    expect(((await me.rpc(['catalogue', 'ips'], [])) as { name: string }[]).map((x) => x.name).sort()).toEqual(['Dragon Rider', 'Starfall']);
+  });
+});

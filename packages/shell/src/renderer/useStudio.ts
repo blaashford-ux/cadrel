@@ -13,7 +13,7 @@ export function useStudio(active: boolean) {
   useEffect(() => {
     if (!active) return;
     void refresh();
-    const timer = setInterval(() => void refresh(), 10_000);
+    const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 10_000); // nobody is looking while the window is hidden
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);

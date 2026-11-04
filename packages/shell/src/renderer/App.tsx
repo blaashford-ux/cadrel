@@ -102,7 +102,7 @@ export function App() {
   useEffect(() => {
     if (!NEEDS_OVERVIEW.has(page)) return;
     refresh();
-    const timer = setInterval(refresh, 15_000);
+    const timer = setInterval(() => { if (!document.hidden) refresh(); }, 15_000); // nobody is looking while the window is hidden
     window.addEventListener('focus', refresh);
     return () => {
       clearInterval(timer);
