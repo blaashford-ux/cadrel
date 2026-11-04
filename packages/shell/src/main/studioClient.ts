@@ -83,6 +83,7 @@ export class StudioClient {
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await this.send(method, path, body === undefined ? '' : JSON.stringify(body), 'application/json');
     const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status === 404 && data.error === 'not found') throw new StudioApiError('The Studio’s server does not know this request: it is running an older version of Cadrel. Use “Upgrade the server” and try again.');
     if (!res.ok) throw new StudioApiError(data.error ?? `The Studio answered with status ${res.status}.`);
     return data as T;
   }
