@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  WorkError, answerQuery, createPass, createPerson, getQuery, listQueries, makeAnchor, movePass, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type Ctx
+  WorkError, answerQuery, createPass, createPerson, getQuery, listQueries, makeAnchor, movePass, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type Ctx, type QueryRecord
 } from '../src/index';
 import type { Db } from '../src/vault';
 import { memoryDb } from './sqlite';
@@ -25,11 +25,11 @@ beforeEach(async () => {
 
 describe('queries in a pass', () => {
   it('raises numbered items in an in-progress pass, anchored to the version’s text', async () => {
-    const [q, c, s] = await raiseQueries(db, at(), pass, [
+    const [q, c, s] = (await raiseQueries(db, at(), pass, [
       { kind: 'query', body: 'Cold how? Name the temperature.', anchor: anchor('ran cold'), category: ' Clarity ' },
       { kind: 'comment', body: 'Nice rhythm.' },
       { kind: 'suggestion', anchor: anchor('walked slowly'), replacement: 'crept' }
-    ]);
+    ])) as [QueryRecord, QueryRecord, QueryRecord];
     expect([q.seq, c.seq, s.seq]).toEqual([1, 2, 3]);
     expect(q).toMatchObject({ kind: 'query', state: 'open', category: 'clarity', raisedBy: 'bo', anchor: { quote: 'ran cold', start: TEXT.indexOf('ran cold') } });
     expect(c.anchor).toBeNull();
@@ -68,7 +68,7 @@ describe('queries in a pass', () => {
     const [q, c] = await raiseQueries(db, at(), pass, [{ kind: 'query', body: 'Why?' }, { kind: 'comment', body: 'FYI' }]);
     expect(await code(answerQuery(db, at('ana'), q!.id, 'Because.'))).toBe('conflict'); // not delivered yet
     await to('delivered');
-    const err = await to('responded').catch((e) => e as WorkError);
+    const err = (await to('responded').catch((e) => e)) as WorkError;
     expect(err).toMatchObject({ code: 'conflict' });
     expect(err.message).toContain('1 query is still unanswered');
     const a = await answerQuery(db, at('ana', '2026-11-05T10:00:00.000Z'), q!.id, ' Because the river is a river. ');

@@ -91,7 +91,7 @@ describe('decisions on items in a pass', () => {
   it('a pass cannot be marked responded while a suggestion has no decision', async () => {
     await deliver();
     await answerQuery(db, at(ana), qry.id, 'Freezing.');
-    const err = await movePass(db, at(ana), pass, 'responded').catch((e) => e as WorkError);
+    const err = (await movePass(db, at(ana), pass, 'responded').catch((e) => e)) as WorkError;
     expect(err).toMatchObject({ code: 'conflict' });
     expect(err.message).toContain('1 suggestion has no decision');
     await decideQuery(db, at(ana), sug.id, { outcome: 'defer', reason: 'Later.', revisit: '2026-12-01' });

@@ -79,7 +79,7 @@ describe('editorial passes', () => {
 
   it('refuses a move the path does not have, and names where the pass can go', async () => {
     const p = await createPass(db, at(), { projectId: 'p1', kind: 'line', fileId: fileA, editorId: bo });
-    const err = await movePass(db, at(), p.id, 'closed').catch((e) => e as WorkError);
+    const err = (await movePass(db, at(), p.id, 'closed').catch((e) => e)) as WorkError;
     expect(err).toMatchObject({ code: 'conflict' });
     expect(err.message).toContain('in progress, cancelled');
     expect(await code(movePass(db, at(), p.id, 'delivered'))).toBe('conflict');
