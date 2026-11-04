@@ -36,6 +36,7 @@ import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
+import { Editorial } from './editorial';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
@@ -190,7 +191,7 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 const activeFile = () => path.join(userData, 'mcp-active.json');
 const activeArgs = (): string[] => {
   const library = market?.service.status().libraryRoot;
-  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(library ? ['--library', library] : [])];
+  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile(), path.join(studioDir, 'vault-blobs')), ...penNameArgs(), ...(library ? ['--library', library] : [])];
 };
 /** Writes the active Studio's server arguments, if they are not what the file already says (so an unchanged Studio never restarts the AI server). */
 function publishActiveStudio(): void {
@@ -653,7 +654,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
@@ -1043,6 +1044,11 @@ function registerShellIpc(): void {
     const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }).catch(() => [] as Awaited<ReturnType<typeof work.approvals>>), work.decisions({ current: true }).catch(() => [] as Awaited<ReturnType<typeof work.decisions>>), catalogueList(await catalogueSources())]);
     return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
   });
+  manageLike('editing:state', async () => new Editorial(studio, peopleHost).state());
+  manageLike('editing:pass', async (passId: string) => new Editorial(studio, peopleHost).pass(String(passId)));
+  manageLike('editing:call', async (name: string, ...args: unknown[]) => new Editorial(studio, peopleHost).call(String(name), args));
+  manageLike('editing:send', async () => new Editorial(studio, peopleHost).sendWaiting());
+  manageLike('editing:dismiss', async (id: string) => new Editorial(studio, peopleHost).dismissRefused(String(id)));
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
   manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());

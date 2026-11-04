@@ -1,4 +1,4 @@
-import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -666,6 +666,40 @@ export type WorkState =
       /** The sign-off labels the project stands approved under now. */
       approved: string[];
     };
+/** One editorial pass as the Editing page lists it. */
+export interface EditingPassRow extends PassRecord {
+  projectName: string;
+  editorName: string;
+  /** Items of each state in the pass. */
+  counts: QueryCounts;
+  /** Queries the author has not answered yet. */
+  unanswered: number;
+  /** Suggestions that have no decision yet. */
+  undecided: number;
+  /** What this person can do next on it, or null when nothing waits on them. */
+  next: 'start' | 'deliver' | 'answer' | 'respond' | 'close' | null;
+}
+export type EditingState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** What this person may do on editorial passes anywhere (a role given on one book counts). */
+      may: { run: boolean; assign: boolean; respond: boolean; approve: boolean };
+      passes: EditingPassRow[];
+      /** When the records are on the Studio's server: answers waiting to be sent, ones it turned down, and whether it could not be reached. */
+      offline: { away: boolean; pending: number; refused: { id: string; call: 'answer' | 'decide'; queryId: string; error: string; response?: string; queuedAt: string }[] } | null;
+    };
+/** An item in a pass with the author's decision on it and what the check of the revision found. */
+export interface EditingItem extends QueryRecord {
+  decision: EditDecisionRecord | null;
+  verified: VerificationRecord | null;
+}
+export type EditingPassState =
+  | { available: false; reason: string }
+  | { available: true; pass: EditingPassRow; items: EditingItem[]; may: { run: boolean; assign: boolean; respond: boolean; approve: boolean }; me: string; people: { id: string; name: string }[] };
+/** The changes the Editing page may ask for, by name. */
+export type EditingCall = 'start' | 'deliver' | 'respond' | 'close' | 'cancel' | 'answer' | 'decide' | 'resolve' | 'withdraw';
 /** What waits on the person using the app, across projects. */
 export interface MineState {
   available: boolean;
@@ -771,6 +805,25 @@ export type Pulse =
       people: { id: string; name: string }[];
     };
 export interface PulseTask { id: string; title: string; kind: string; due: string | null; projectId: string; projectName: string; assigneeId: string | null }
+/** Editorial passes: what waits on the person, one pass with its items, and the changes the page makes. A refusal comes back as the service gave it. */
+export interface EditingApi {
+  state(): Promise<EditingState>;
+  pass(passId: string): Promise<EditingPassState>;
+  start(passId: string): Promise<void>;
+  deliver(passId: string): Promise<void>;
+  /** The author has answered everything: the editor can see it and the pass can be closed. */
+  respond(passId: string): Promise<void>;
+  close(passId: string): Promise<void>;
+  cancel(passId: string): Promise<void>;
+  answer(queryId: string, response: string): Promise<void>;
+  /** Accept, reject or defer an item. Rejecting or deferring needs a reason, and deferring a date. */
+  decide(queryId: string, input: { outcome: 'accept' | 'reject' | 'defer'; reason?: string; revisit?: string }): Promise<void>;
+  resolve(queryId: string): Promise<void>;
+  withdraw(queryId: string): Promise<void>;
+  /** Sends the answers waiting for the Studio's server now. */
+  sendWaiting(): Promise<void>;
+  dismissRefused(id: string): Promise<void>;
+}
 export interface WorkApi {
   pulse(): Promise<Pulse>;
   plan(): Promise<PlanState>;
@@ -840,6 +893,7 @@ export interface CadrelApi {
   stages: StagesApi;
   workflow: WorkflowApi;
   work: WorkApi;
+  editing: EditingApi;
   vault: VaultApi;
   people: PeopleApi;
   myBooks: MyBooksApi;

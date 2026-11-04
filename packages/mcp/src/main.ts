@@ -28,6 +28,7 @@ import path from 'node:path';
 import { Studio, studioFile, UserStore } from '@cadrel/studio';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { openStudioDb, type StudioDb } from '@cadrel/store';
+import { EDITORIAL_INSTRUCTIONS } from './modules/editorial.js';
 import { RECORDS_INSTRUCTIONS } from './modules/records.js';
 import { watchLifecycle } from './lifecycle.js';
 import { expandActive } from './active.js';
@@ -103,11 +104,12 @@ async function findRecords(open: boolean, write?: Found<{ options: WriteOptions 
   const person = flag('person');
   const studioId = flag('studio-id');
   if (!file || !person || !studioId) return { ok: false, reason: 'no records file given (Cadrel passes --records, --person and --studio-id)' };
-  const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: `${RECORDS_INSTRUCTIONS} ${PROJECTS_INSTRUCTIONS}`, register: () => undefined };
+  const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: `${RECORDS_INSTRUCTIONS} ${EDITORIAL_INSTRUCTIONS} ${PROJECTS_INSTRUCTIONS}`, register: () => undefined };
   if (!open) return { ok: true, value: { module: stub, close: () => undefined } };
   let db: StudioDb | undefined;
   try {
     const { recordsModule } = await import('./modules/records.js');
+    const { editorialModule } = await import('./modules/editorial.js');
     const { access } = await import('node:fs/promises');
     await access(file);
     db = await openStudioDb(file);
@@ -121,7 +123,8 @@ async function findRecords(open: boolean, write?: Found<{ options: WriteOptions 
       return wf ? { workflowId: wf.id, stage: initialStage(wf) } : null;
     };
     const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));
-    return { ok: true, value: { module: both(recordsModule({ service, personId: person, studio, studioId, db }), projectsModule({ service, personId: person, studio, db, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })), close: () => d.close(), closedBooks, view, stageForNewBook } };
+    const blobsDir = flag('vault-blobs');
+    return { ok: true, value: { module: both(both(recordsModule({ service, personId: person, studio, studioId, db }), editorialModule({ service, personId: person, studio, db, ...(blobsDir ? { blobsDir } : {}) })), projectsModule({ service, personId: person, studio, db, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })), close: () => d.close(), closedBooks, view, stageForNewBook } };
   } catch (e) {
     db?.close();
     return { ok: false, reason: `the records could not be opened (${e instanceof Error ? e.message : String(e)})` };

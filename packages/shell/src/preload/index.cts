@@ -85,6 +85,21 @@ const api: CadrelApi = {
     withdraw: (id) => studioCall('shell:work:call', 'withdraw', id),
     recordDecision: (i) => studioCall('shell:work:call', 'record', i)
   },
+  editing: {
+    state: () => studioCall('shell:editing:state'),
+    pass: (id) => studioCall('shell:editing:pass', id),
+    start: (id) => studioCall('shell:editing:call', 'start', id),
+    deliver: (id) => studioCall('shell:editing:call', 'deliver', id),
+    respond: (id) => studioCall('shell:editing:call', 'respond', id),
+    close: (id) => studioCall('shell:editing:call', 'close', id),
+    cancel: (id) => studioCall('shell:editing:call', 'cancel', id),
+    answer: (id, response) => studioCall('shell:editing:call', 'answer', id, response),
+    decide: (id, input) => studioCall('shell:editing:call', 'decide', id, input),
+    resolve: (id) => studioCall('shell:editing:call', 'resolve', id),
+    withdraw: (id) => studioCall('shell:editing:call', 'withdraw', id),
+    sendWaiting: () => studioCall('shell:editing:send'),
+    dismissRefused: (id) => studioCall('shell:editing:dismiss', id)
+  },
   workflow: {
     state: () => studioCall('shell:workflow:state'),
     create: (i) => studioCall('shell:workflow:call', 'create', i),

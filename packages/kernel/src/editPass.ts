@@ -33,6 +33,8 @@ export interface PassRecord {
   kind: PassKind;
   title: string;
   fileId: string;
+  /** The file's path in the vault now (null if it is no longer there). */
+  filePath: string | null;
   /** The exact version of the file this pass covers. */
   fileVersion: number;
   briefId: string | null;
@@ -49,7 +51,7 @@ export interface PassRecord {
   updatedAt: string;
 }
 const COLS =
-  'id, project_id AS projectId, kind, title, file_id AS fileId, file_version AS fileVersion, brief_id AS briefId, brief_version AS briefVersion, editor_id AS editorId, state, created_at AS createdAt, created_by AS createdBy, started_at AS startedAt, delivered_at AS deliveredAt, responded_at AS respondedAt, closed_at AS closedAt, closed_by AS closedBy, updated_at AS updatedAt';
+  "id, project_id AS projectId, kind, title, file_id AS fileId, (SELECT path FROM vault_file f WHERE f.id = file_id) AS filePath, file_version AS fileVersion, brief_id AS briefId, brief_version AS briefVersion, editor_id AS editorId, state, created_at AS createdAt, created_by AS createdBy, started_at AS startedAt, delivered_at AS deliveredAt, responded_at AS respondedAt, closed_at AS closedAt, closed_by AS closedBy, updated_at AS updatedAt";
 
 const fail = (code: ConstructorParameters<typeof WorkError>[0], m: string): never => {
   throw new WorkError(code, m);

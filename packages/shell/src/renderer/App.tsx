@@ -5,6 +5,7 @@ import { Admin } from './Admin';
 import { NotConnected } from './NotConnected';
 import { useStudios } from './useStudios';
 import { Assistants } from './Assistants';
+import { Editing } from './Editing';
 import { Planner } from './Planner';
 import { Files } from './Files';
 import { Dashboard } from './Dashboard';
@@ -20,12 +21,12 @@ import { useScope } from './useScope';
 import { viewScopeOf } from '@cadrel/kernel';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
-const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'files', 'assistants', 'admin', 'profile', 'settings']);
-const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files', 'assistants', 'admin', 'profile', 'settings']);
+const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
-const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'files']);
+const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files']);
 
 /** Puts the app's colours on this page: the shipped ones with the user's changes on top, for both schemes. */
 function usePaint() {
@@ -137,6 +138,7 @@ export function App() {
           {!blocked && page === 'notes' && <Notes studio={studio.state} error={studio.error} act={studio.act} onGo={go} />}
           {!blocked && page === 'dashboard' && <Dashboard overview={overview} studio={studio.state} onGo={go} onProject={openProject} onRefresh={refresh} />}
           {!blocked && page === 'planner' && <Planner studio={studio.state} onProject={openProject} />}
+          {!blocked && page === 'editing' && <Editing studio={studio.state} onProject={openProject} />}
           {!blocked && page === 'files' && <Files />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}
