@@ -6,7 +6,7 @@
 import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, verifyRequest } from '@cadrel/kernel';
 import { ensureSchema } from './schema';
 import { admitMember, personIdFor, readTree } from './records';
-import { d1Db } from './d1';
+import { d1Db, readVersions } from './d1';
 import { exportRecords, importRecords, ownerOf, type ImportRequest } from './import';
 import { isServerRoute, serverRoutes } from './server';
 
@@ -22,7 +22,9 @@ export interface StudioEnv {
 
 const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const NONCE_KEEP_MS = 10 * 60 * 1000;
-const NONCE_CLEAN_ODDS = 1 / 20;
+/** Old signatures are swept at most this often by a running Worker: the table has no index on its time, so a sweep reads all of it. */
+const NONCE_SWEEP_EVERY_MS = 60 * 1000;
+let lastSweep = 0;
 const MEMBER_ROLES = ROLE_KEYS.filter((k) => k !== 'owner') as string[];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -38,8 +40,11 @@ async function authenticate(request: Request, body: string | Uint8Array, env: St
   const v = await verifyRequest({ method: request.method, path, body, headers: (n) => request.headers.get(n), now });
   if (!v.ok) return fail(401, v.reason === 'stale' ? 'The request is too old or your computer’s clock is wrong.' : 'The request was not signed correctly.');
   const nonce = hex(await sha256(v.signature));
-  // Old nonces only need clearing now and then: they are looked up by id, and one past the window is refused as stale before it gets here.
-  if (Math.random() < NONCE_CLEAN_ODDS) await env.DB.prepare('DELETE FROM request_nonce WHERE at < ?').bind(now - NONCE_KEEP_MS).run();
+  // An old signature is refused as stale before it is looked up, so one that outlives its ten minutes here does no harm.
+  if (now - lastSweep >= NONCE_SWEEP_EVERY_MS || now < lastSweep) {
+    lastSweep = now;
+    await env.DB.prepare('DELETE FROM request_nonce WHERE at < ?').bind(now - NONCE_KEEP_MS).run();
+  }
   try {
     await env.DB.prepare('INSERT INTO request_nonce (id, at) VALUES (?, ?)').bind(nonce, now).run();
   } catch {
@@ -55,10 +60,16 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
-  const isRoute = isServerRoute(path) || path === '/v1/records/import' || path === '/v1/records/export' || path === '/v1/info' || path === '/v1/invites' || path === '/v1/join' || path === '/v1/members' || path === '/v1/me' || /^\/v1\/(members|invites)\/[\w-]+$/.test(path);
+  const isRoute = isServerRoute(path) || path === '/v1/records/import' || path === '/v1/records/export' || path === '/v1/info' || path === '/v1/invites' || path === '/v1/join' || path === '/v1/members' || path === '/v1/me' || path === '/v1/version' || /^\/v1\/(members|invites)\/[\w-]+$/.test(path);
   if (!isRoute) return null;
 
-  const schemaVersion = await ensureSchema(env.DB);
+  let schemaVersion: number;
+  try {
+    schemaVersion = await ensureSchema(env.DB);
+  } catch (e) {
+    // Say what failed instead of a bare 500, so an upgrade that stops here tells the person why.
+    return fail(503, `The Studio's database could not be brought up to date: ${e instanceof Error ? e.message : String(e)}`.slice(0, 500));
+  }
 
   // Public: what a person joining needs to check they are at the Studio they were told about.
   if (method === 'GET' && path === '/v1/info') {
@@ -125,6 +136,9 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   }
 
   if (isServerRoute(path)) return serverRoutes(request, env, auth.who, await personIdFor(env, auth.who, now), body, now);
+
+  // What the app asks, instead of fetching everything again on a timer: has anything changed since the counters it holds? (two rows read)
+  if (method === 'GET' && path === '/v1/version') return json(await readVersions(env.DB));
 
   if (method === 'GET' && path === '/v1/me') return json({ kind: auth.who.kind, role: auth.who.role, name: auth.who.name, studioId: env.STUDIO_ID, personId: await personIdFor(env, auth.who, now) });
 

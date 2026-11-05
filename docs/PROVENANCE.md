@@ -49,3 +49,29 @@ Beyond the mechanical import, these are the places where Cadrel's copy of MDEdit
 **Names.** Cadrel has no existing users or data, so nothing carries the old names. The apps are **Cadrel Write** (from MDEdit) and **Cadrel Market** (from BookScout) everywhere: what a person reads; the data folders (everything lives under `%APPDATA%\Cadrel`, with `write` and `market` inside it, beside the studio and the user); the hidden per-project folder (`.cadrel`, not `.mdedit`); the bridges (`window.cadrelWrite`, `window.cadrelMarket`); environment variables (`CADREL_WRITE_ROOT`, `CADREL_MARKET_LIBRARY`, `CADREL_TEST`…); the editing skills (`cadrel-line-edit`, `cadrel-copy-edit`, `cadrel-developmental-edit`); the Google Drive folders (`Cadrel`, `Cadrel Reviews`); the AI Kit and extension files; the installer and release names; package, app and bundle ids (`com.blaashford.cadrel.write`, `com.blaashford.cadrel.market`); and the repository and join-page links (`blaashford-ux/cadrel`). The phone app's source (`src/mobile`) uses the same names. **Migration** of anyone's MDEdit or BookScout data (the `.mdedit` project folders, the old data folders) is deliberately not built; it is designed in `docs/FILES.md` §8 for when it is wanted. **Not yet true:** the join page and releases at the new links do not exist until the beta-reader flow is rebuilt on Cadrel's own pages.
 
 **Added by Cadrel, not from either:** `@cadrel/kernel`, `@cadrel/studio`, `@cadrel/ui`, `@cadrel/mcp`, `@cadrel/shell`, `@cadrel/worker`.
+
+## Bundled fonts (SIL Open Font License 1.1)
+
+The fonts in `packages/write/assets/fonts/` come from the `ofl/` folder of [github.com/google/fonts](https://github.com/google/fonts) (checked out 3 November 2026), except EB Garamond, Crimson Pro and Libre Baskerville, which were bundled earlier. Each family folder carries its upstream `OFL.txt` unchanged, and the first line of that file is the copyright notice. The licence file is installed with the app, copied into every EPUB that embeds the font, and checked by `src/shared/export/fonts.test.ts` (a family without its licence, or with a licence that is not the OFL 1.1, fails the build).
+
+Conditions the app keeps: the copyright notice and licence travel with every copy of the font; the fonts are never sold on their own, only distributed inside the app and the books it exports; a family whose licence names a Reserved Font Name is shipped byte for byte as upstream made it, never as a modified or renamed copy.
+
+| Family (folder) | Used for | How it ships | Reserved Font Name |
+|---|---|---|---|
+| EB Garamond (`eb-garamond`) | body (default) | four static faces, as before | none |
+| Crimson Pro (`crimson-pro`) | body, heading | four static faces, as before | none |
+| Libre Baskerville (`libre-baskerville`) | body | four static faces, as before | none |
+| Literata (`literata`) | body | four static instances cut from upstream's variable fonts | none |
+| Source Serif 4 (`source-serif-4`) | body | four static instances | none |
+| Alegreya (`alegreya`) | body, heading | four static instances | none |
+| Spectral (`spectral`) | body, heading | upstream's four static files, unchanged | none |
+| Gelasio (`gelasio`) | body | four static instances | none |
+| Cormorant Garamond (`cormorant-garamond`) | heading | four static instances | none |
+| Fraunces (`fraunces`) | heading | four static instances (optical size 72; SOFT and WONK at default) | none |
+| Bodoni Moda (`bodoni-moda`) | heading | four static instances (optical size 28) | none |
+| Lora (`lora`) | body | upstream's two variable fonts, unmodified | "Lora" |
+| Merriweather (`merriweather`) | body | upstream's two variable fonts, unmodified | "Merriweather" |
+| Playfair Display (`playfair-display`) | heading | upstream's two variable fonts, unmodified | "Playfair Display" |
+| Marcellus (`marcellus`) | heading | upstream's single Regular file, unmodified | "Marcellus" |
+
+Static instances are made by `packages/write/scripts/build-fonts.py` (fontTools; weights 400 and 700, other axes pinned). Cutting an instance from a variable font is a modification under the OFL, which is allowed for families without a Reserved Font Name and the reason the four families above that do name one are not cut.

@@ -53,6 +53,7 @@ import type { Anchor } from '../shared/review/comments';
 import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
+import { useRewriteScroll } from './useRewriteScroll';
 import { Tree } from './Tree';
 import { buildRows, chapterKey, chapterLabel, type Row } from './treeRows';
 import { useWorkspace } from './useWorkspace';
@@ -189,6 +190,18 @@ export function App() {
   const locked = isReviewer || closedHere;
   /** Nothing in the tree can be changed (new, rename, delete, move): Cadrel Reader or a closed Book. */
   const noEdit = caps.reader === true || closedHere;
+  // Rewrite mode (desktop only): an original and its rewrite, side by side, scrolling together.
+  const rewriteOk = !!s.project && caps.windowChrome === true && caps.reader !== true;
+  const [rwLinked, setRwLinked] = useState(true);
+  const rwPair = rewriteOk && !zone ? ws.rewritePair() : null;
+  const rwShown = !!rwPair && !!activeTab && (activeTab.file === rwPair.original || activeTab.file === rwPair.rewrite) && s.tabs.some((t) => t.file === rwPair.original) && s.tabs.some((t) => t.file === rwPair.rewrite);
+  useRewriteScroll({ on: rwShown && rwLinked, left: rwPair?.original ?? null, right: rwPair?.rewrite ?? null, watch: s.tabs.map((t) => t.id).join('|') });
+  // reading another chapter in one pane brings the other pane to the same chapter
+  useEffect(() => {
+    if (!rwShown || !rwLinked || !rwPair || !activeTab) return;
+    void ws.followChapter(activeTab.file === rwPair.original ? rwPair.rewrite : rwPair.original, activeTab.chapter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rwShown, rwLinked, activeTab?.file, activeTab?.chapter]);
   const noSee = useMemo(() => hiddenFolders(wscope), [wscope]);
   const seenListing = useMemo(() => (listing && noSee.size ? { ...listing, projects: listing.projects.filter((p) => !noSee.has(basename(p.path))) } : listing), [listing, noSee]);
   const scopedListing = useMemo(() => (seenListing && folders ? { ...seenListing, projects: inScope(seenListing.projects, folders), folders: [] } : seenListing), [seenListing, folders]);
@@ -625,8 +638,24 @@ export function App() {
               : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) }
           ]
         : [];
+      const link = rewriteOk && !noEdit ? ws.rewriteLinkFor(row.path) : null;
+      const pairNow = ws.rewritePair();
+      const rewriteOn = !!pairNow && (pairNow.original === row.path || pairNow.rewrite === row.path);
+      const rewriteItems: MenuItem[] =
+        rewriteOk && !noEdit
+          ? link
+            ? [
+                { label: rewriteOn ? 'Rewrite Mode: Turn Off' : 'Rewrite Mode: Turn On', onClick: () => void ws.setRewriteMode(row.path, !rewriteOn) },
+                { label: 'Unlink Rewrite', onClick: () => void ws.unlinkRewrite(row.path) }
+              ]
+            : [
+                { label: 'Rewrite (Start From a Copy)', onClick: () => void ws.startRewrite(row.path, 'copy') },
+                { label: 'Rewrite (Start From a Blank Page)', onClick: () => void ws.startRewrite(row.path, 'blank') }
+              ]
+          : [];
       return [
         ...manuscriptItems,
+        ...rewriteItems,
         { label: 'Analyze Text', disabled: ws.isAnalyzing(row.path), onClick: () => void ws.analyzeFile(row.path) },
         ...(caps.export ? exportItems : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
@@ -1203,6 +1232,11 @@ export function App() {
             const chapter = doc?.chapters[tab.chapter];
             if (!doc || !chapter) return null;
             const active = tab.id === s.activeId && !page;
+            const inPair = rwShown && !page && !!rwPair && (tab.file === rwPair.original || tab.file === rwPair.rewrite);
+            const isOriginal = inPair && tab.file === rwPair!.original;
+            /** In rewrite mode the original is there to be read: it cannot be changed from its pane. */
+            const paneLocked = locked || isOriginal;
+            const rwLink = rewriteOk ? ws.rewriteLinkFor(tab.file) : null;
             const dirty = tab.draft !== null;
             const report = reportOf(doc);
             if (report && !rawReports.has(tab.id)) {
@@ -1213,7 +1247,7 @@ export function App() {
               );
             }
             return (
-              <section key={tab.id} className="pane" hidden={!active} aria-label={basename(tab.file)}>
+              <section key={tab.id} className={'pane' + (inPair ? (isOriginal ? ' rw-left' : ' rw-right') : '')} hidden={!active && !inPair} data-file={tab.file} aria-label={basename(tab.file) + (isOriginal ? ' (original, read only)' : inPair ? ' (rewrite)' : '')}>
                 {tab.conflict?.kind === 'changed' && (
                   <div className="banner warn" role="alert">
                     {basename(tab.file)} was changed on disk while you have unsaved edits.{' '}
@@ -1232,6 +1266,7 @@ export function App() {
                   <h2>
                     {chapterLabel(chapter)}
                     {dirty && <span className="dirty" title="Unsaved changes"> ●</span>}
+                    {inPair && <span className="chip rw-chip">{isOriginal ? 'Original, read only' : 'Rewrite'}</span>}
                   </h2>
                   {active && sceneMsg && (
                     <span className="scene-msg" role="status">
@@ -1243,7 +1278,7 @@ export function App() {
                       <Icon name="left" />
                     </button>
                     {tab.chapter >= doc.chapters.length - 1 ? (
-                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={locked} onClick={nextOrNewChapter}>
+                      <button aria-label="New chapter" title="This is the last chapter: add a new one after it (Ctrl+PgDn)" disabled={paneLocked} onClick={nextOrNewChapter}>
                         <Icon name="plus" />
                       </button>
                     ) : (
@@ -1277,7 +1312,7 @@ export function App() {
                         Notes{openNotes > 0 ? ` (${openNotes})` : ''}
                       </button>
                     )}
-                    {!locked && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
+                    {!paneLocked && !zone && tab.mode === 'visual' && caps.windowChrome && navs.current.get(tab.id)?.format && (
                       <span className="align-group" role="group" aria-label="Text alignment">
                         {([['left', 'alignLeft', 'Left'], ['center', 'alignCenter', 'Centre'], ['right', 'alignRight', 'Right'], ['justify', 'alignJustify', 'Justify']] as const).map(([a, icon, label]) => (
                           <button key={a} type="button" aria-label={`Align ${label.toLowerCase()}`} title={`Align ${label.toLowerCase()} (Ctrl+Shift+${a === 'left' ? 'L' : a === 'center' ? 'E' : a === 'right' ? 'R' : 'J'}); pick it again to remove`} onClick={() => navs.current.get(tab.id)?.format?.align(a)}>
@@ -1286,7 +1321,22 @@ export function App() {
                         ))}
                       </span>
                     )}
-                    {!locked && !zone && (
+                    {rwLink && !noEdit && !zone && (
+                      <button
+                        aria-label="Rewrite mode"
+                        aria-pressed={rwShown && inPair}
+                        title={inPair ? 'Rewrite mode is on: this file and its original or rewrite are side by side. Click to turn it off.' : 'Show this file side by side with its original or rewrite'}
+                        onClick={() => void ws.setRewriteMode(tab.file, !(rwShown && inPair))}
+                      >
+                        Rewrite
+                      </button>
+                    )}
+                    {inPair && (
+                      <button aria-label="Linked scrolling" aria-pressed={rwLinked} title="Scroll both together, and keep both on the same chapter" onClick={() => setRwLinked((v) => !v)}>
+                        Linked
+                      </button>
+                    )}
+                    {!paneLocked && !zone && (
                     <button
                       onClick={() => ws.setMode(tab.id, tab.mode === 'visual' ? 'source' : 'visual')}
                       title="Switch between formatted and raw Markdown (Ctrl+Shift+M)"
@@ -1323,15 +1373,15 @@ export function App() {
                   />
                 )}
                 </div>
-                {tab.mode === 'visual' ? (
+                {tab.mode === 'visual' || isOriginal ? (
                   <Editor
-                    key={`${tab.id}@${tab.reloadKey}@v`}
+                    key={`${tab.id}@${tab.reloadKey}@v${isOriginal ? 'ro' : ''}`}
                     initial={chapter.raw}
                     restore={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
                     saved={tab.saved}
                     onNav={(n) => registerNav(tab.id, n)}
-                    readOnly={locked}
+                    readOnly={paneLocked}
                     onContextMenu={
                       projectPath && caps.windowChrome
                         ? ({ x, y }) => {

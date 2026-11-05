@@ -157,7 +157,14 @@ export class Cloudflare {
           last = 'it answered, but as a different Studio';
           break;
         }
-        last = `it answered with status ${res.status}`;
+        let why = '';
+        try {
+          const b = (await res.json()) as { error?: string };
+          if (typeof b.error === 'string') why = `: ${b.error.slice(0, 400)}`;
+        } catch {
+          /* no readable reason */
+        }
+        last = `it answered with status ${res.status}${why}`;
       } catch {
         last = 'it could not be reached yet';
       }

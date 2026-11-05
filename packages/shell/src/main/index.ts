@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fsp, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { promises as fsp, appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
@@ -36,6 +36,7 @@ import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
+import { Editorial } from './editorial';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
@@ -46,6 +47,7 @@ import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
 import { StudioRegistry, LOCAL_ID } from './studios';
+import { SLOW_REFRESH_MS, MIN_REFRESH_GAP_MS } from '../shared/refresh';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
@@ -101,6 +103,7 @@ let stages: ProjectStages;
 /** Set when the active Studio's records are on its server: the way to it, and whether this person owns it. */
 let serverLink: { client: StudioClient; owner: boolean; studioId: string } | null = null;
 let syncTimer: ReturnType<typeof setInterval> | null = null;
+let syncFocus: (() => void) | null = null;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -181,12 +184,47 @@ const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI K
 /** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
 const penNameArgs = (): string[] => { const p = peopleHost.penNameScope(); return p ? ['--pen-names', JSON.stringify(p)] : []; };
 const mcpFile = () => path.join(here, 'mcp.mjs');
+/**
+ * Which Studio the AI server serves is not written into an AI app's configuration (that is written once, and Studios switch). The configuration says
+ * only `--active <this file>`, and the app keeps the file as the arguments of the Studio it is running: that Studio's projects, notes, records, pen names
+ * and library, nothing else. The Claude Desktop extension's launcher watches the file and starts the server again when it changes; a configuration made
+ * by hand picks the Studio up the next time the AI app starts the server. The file belongs to the whole app, not to a Studio.
+ */
+const activeFile = () => path.join(userData, 'mcp-active.json');
+const activeArgs = (): string[] => {
+  const library = market?.service.status().libraryRoot;
+  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile(), path.join(studioDir, 'vault-blobs')), ...penNameArgs(), ...(library ? ['--library', library] : [])];
+};
+/** Writes the active Studio's server arguments, if they are not what the file already says (so an unchanged Studio never restarts the AI server). */
+function publishActiveStudio(): void {
+  try {
+    const text = JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2);
+    if (readFileSync(activeFile(), 'utf8') === text) return;
+    writeActiveFile(text);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      try {
+        writeActiveFile(JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2));
+        return;
+      } catch (w) {
+        e = w;
+      }
+    }
+    updateLog(`could not write the active Studio file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function writeActiveFile(text: string): void {
+  mkdirSync(path.dirname(activeFile()), { recursive: true });
+  const tmp = `${activeFile()}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, activeFile()); // whole or not at all: the launcher never reads half a file
+}
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
-  // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
-  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
+  args: [mcpFile(), '--active', activeFile()],
+  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>,
+  follow: activeFile()
 });
 /**
  * The file inside the Claude Desktop extension: a small launcher that starts the server above with the installed app's runtime.
@@ -194,9 +232,11 @@ const mcpLaunch = () => ({
  * Arguments the extension's settings add (the projects folder) are passed on to the server.
  */
 async function kitLauncher(): Promise<Uint8Array> {
+  publishActiveStudio();
   const launch = mcpLaunch();
   const handshake = await readHandshake(launch);
-  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData(), 'logs', 'mcp-launcher.log') }), 'utf8');
+  // The log is beside the active file, not in a Studio's folder: the launcher outlives a switch.
+  return Buffer.from(launcherSource({ label: 'Cadrel', command: launch.command, args: launch.args, env: launch.env, handshake, logFile: path.join(userData, 'logs', 'mcp-launcher.log'), followFile: launch.follow }), 'utf8');
 }
 
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
@@ -274,6 +314,8 @@ const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefa
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
 const recordsFile = () => path.join(studioDir, 'records.db');
+/** What this computer keeps of the Studio's editorial records for reading offline, and the answers waiting to be sent. */
+const editorialOfflineFile = () => path.join(studioDir, 'editorial-offline.json');
 /** What the person lets AI tools create or edit; the MCP server reads it on every change, so a switch applies at once. Missing means nothing is allowed. */
 const aiAccessFile = () => path.join(studioDir, AI_ACCESS_FILE);
 const accessNow = async (): Promise<AiAccess> => accessReader(nodeFs, aiAccessFile())();
@@ -335,6 +377,8 @@ async function moveMarket(dest: string): Promise<void> {
  */
 function startServerSync(link: NonNullable<typeof serverLink>): void {
   let lastPublished = '';
+  let lastTick = 0;
+  let treeSeen: string | null = null;
   let publishing: ReturnType<typeof setTimeout> | null = null;
   const publish = async () => {
     const tree = (await studio.studio.read()).tree;
@@ -352,21 +396,35 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
     studio.studio.treeLock = () => 'The projects of this Studio are kept by its owner.';
   }
   const tick = async () => {
+    lastTick = Date.now();
     try {
       if (!peopleHost.isRemote) {
-        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId });
+        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId, offlineFile: editorialOfflineFile() });
         if (!opened.ok) return;
         if (win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
       }
       if (link.owner) await publish();
-      else if (await studio.studio.replaceTree(await link.client.tree()) && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      else {
+        // Ask whether anything changed (two rows on the server) before fetching the tree again (which makes it work out what this person may see).
+        // The counter is read before the tree, so a change in between is simply fetched on the next tick. A Studio without counters is fetched every time.
+        const v = await link.client.version().catch(() => null);
+        if (v && v.data === treeSeen) return;
+        const replaced = await studio.studio.replaceTree(await link.client.tree());
+        treeSeen = v?.data ?? null;
+        if (replaced && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      }
     } catch {
       /* away: tried again at the next tick */
     }
   };
   void tick();
+  // Not a short timer (every one is a database read on the Studio's server): slowly while the window is up, and when it gets focus again.
+  const looking = () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
   if (syncTimer) clearInterval(syncTimer);
-  syncTimer = setInterval(() => void tick(), 60_000);
+  syncTimer = setInterval(() => { if (looking()) void tick(); }, SLOW_REFRESH_MS);
+  if (syncFocus) app.off('browser-window-focus', syncFocus);
+  syncFocus = () => { if (Date.now() - lastTick >= MIN_REFRESH_GAP_MS) void tick(); };
+  app.on('browser-window-focus', syncFocus);
 }
 
 /** Moving anything out from under the editor with changes unsaved would lose them. */
@@ -605,7 +663,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
@@ -995,6 +1053,24 @@ function registerShellIpc(): void {
     const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }).catch(() => [] as Awaited<ReturnType<typeof work.approvals>>), work.decisions({ current: true }).catch(() => [] as Awaited<ReturnType<typeof work.decisions>>), catalogueList(await catalogueSources())]);
     return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
   });
+  /** The Editing page's logic, with this Studio's vault for the manuscripts, their versions and their text. */
+  const editorial = () => new Editorial(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('editing:state', async () => editorial().state());
+  manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
+  manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));
+  manageLike('editing:send', async () => editorial().sendWaiting());
+  manageLike('editing:planning', async (projectId?: string) => editorial().planning(projectId ? String(projectId) : undefined));
+  manageLike('editing:plan', async (input: never) => editorial().plan(input));
+  manageLike('editing:text', async (passId: string) => editorial().text(String(passId)));
+  manageLike('editing:raise', async (passId: string, items: never) => editorial().raise(String(passId), items));
+  manageLike('editing:later', async (passId: string) => editorial().laterVersions(String(passId)));
+  manageLike('editing:compare', async (passId: string, version: number) => editorial().compare(String(passId), version));
+  manageLike('editing:verify', async (passId: string, version: number) => editorial().verify(String(passId), version));
+  manageLike('editing:briefs', async (projectId: string) => editorial().briefs(String(projectId)));
+  manageLike('editing:briefVersions', async (id: string) => editorial().briefVersions(String(id)));
+  manageLike('editing:createBrief', async (input: never) => editorial().createBrief(input));
+  manageLike('editing:reviseBrief', async (id: string, input: never) => editorial().reviseBrief(String(id), input));
+  manageLike('editing:dismiss', async (id: string) => editorial().dismissRefused(String(id)));
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
   manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());
@@ -1466,7 +1542,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       if (client) {
         // the records are on the Studio's server: this computer asks for them there, as the person the key belongs to
         serverLink = { client, owner: here.role === 'owner', studioId: here.id };
-        await peopleHost.openRemote({ client, studioId: here.id });
+        await peopleHost.openRemote({ client, studioId: here.id, offlineFile: editorialOfflineFile() });
       } else {
         await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
       }
@@ -1521,7 +1597,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
@@ -1553,6 +1629,9 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
+    // From here the AI server can be told which Studio this is, and kept told: the library may be chosen or moved while the app runs.
+    publishActiveStudio();
+    setInterval(publishActiveStudio, 15_000).unref();
     // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
     finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
     finance.start();

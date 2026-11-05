@@ -8,6 +8,7 @@ import type { WorkflowRecord } from '@cadrel/kernel';
 import { NotesPanel } from '@cadrel/ui';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
+import { BriefCard } from './BriefCard';
 import { WorkCard } from './WorkCard';
 import { Associations } from './Associations';
 import { useScope } from './useScope';
@@ -326,6 +327,7 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
       {level === 'book' && <StageCard key={workTick} p={p} studio={studio} act={act} />}
 
       <WorkCard projectId={p.id} projectName={p.name} act={act} onChanged={() => setWorkTick((n) => n + 1)} />
+      <BriefCard projectId={p.id} projectName={p.name} />
 
       <ManuscriptCard p={p} linked={mine.some((l) => l.module === 'write')} act={act} />
 

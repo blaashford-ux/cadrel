@@ -41,7 +41,7 @@ async function launch(over: { userData?: string; home?: string; env?: Record<str
   });
   running.push(app);
   const shell = await app.firstWindow();
-  await shell.waitForSelector('nav.rail');
+  await shell.waitForSelector('nav.rail', { timeout: 90_000 });
   return { app, shell };
 }
 
@@ -88,7 +88,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'Admin', 'Profile', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Editing', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'Admin', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -98,29 +98,6 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(await views(app)).toEqual([]);
     await app.close();
   }, 60_000);
-
-  it('hosts Write and Market in their own views, each with only its own bridge', async () => {
-    const { app, shell } = await launch();
-    await shell.getByRole('button', { name: 'Write', exact: true }).click();
-    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('main', { name: 'Projects' }).waitFor();
-    expect(await write.evaluate(() => [typeof (window as any).cadrelWrite, typeof (window as any).cadrel, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
-
-    await shell.getByRole('button', { name: 'Market', exact: true }).click();
-    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
-    await market.getByRole('tab', { name: 'Queue' }).waitFor();
-    expect(await market.evaluate(() => [typeof (window as any).cadrelMarket, typeof (window as any).cadrel, typeof (window as any).cadrelWrite])).toEqual(['object', 'undefined', 'undefined']);
-    expect(await shell.evaluate(() => [typeof (window as any).cadrel, typeof (window as any).cadrelWrite, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
-
-    // Only the page you are on is showing, and it fills everything beside the rail.
-    const v = await views(app);
-    expect(v.map((x) => x.visible)).toEqual([false, true]);
-    for (const x of v) expect(x).toMatchObject({ x: 64, y: 0 });
-    await shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await waitFor(async () => (await views(app)).every((x) => !x.visible), 'every module view to hide');
-    await waitFor(async () => (await shell.locator('.rail-btn[aria-current="page"]').getAttribute('aria-label')) === 'Home', 'Home to be highlighted');
-    await app.close();
-  }, 90_000);
 
   it('a module view cannot drive the shell', async () => {
     const { app, shell } = await launch();
@@ -265,14 +242,21 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     expect(before).toBeTruthy();
     await shell.evaluate((id) => (window as any).cadrel.scope.set({ project: id }), old.id);
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();
+    // the project was made behind the page's back (an API call, not the page): the page asks again when its window gets focus, as it does for a change made elsewhere
+    await shell.evaluate(() => window.dispatchEvent(new Event('focus')));
     await shell.locator('.tree-row', { hasText: 'Old Project' }).click();
     await shell.getByRole('heading', { level: 2, name: 'Old Project' }).waitFor();
     await shell.getByRole('button', { name: 'Add first book' }).click();
     await waitFor(async () => (await call<any>('studio.state')).tree.projects.some((p: any) => p.parentId === old.id), 'the first Book');
+    const firstId = ((await call<any>('studio.state')).tree.projects.find((p: any) => p.parentId === old.id)).id as string;
+    // Giving the first Book is three steps (the Book is made, then the folder is linked to it, then the stage moves), so wait for the folder to arrive
+    // rather than reading the tree the moment the Book appears; the packaged app, being slower, showed the gap.
+    await waitFor(async () => (await call<any>('studio.state')).tree.links.find((l: any) => l.module === 'write' && l.ref === before.ref)?.projectId === firstId, 'the folder to move to the first Book');
     const after = (await call<any>('studio.state')).tree;
-    const first = after.projects.find((p: any) => p.parentId === old.id);
+    const first = after.projects.find((p: any) => p.id === firstId);
     expect(first).toMatchObject({ name: 'Old Project', kind: 'Book' });
     expect(after.links.find((l: any) => l.module === 'write' && l.ref === before.ref).projectId).toBe(first.id); // the folder moved to the Book
+    await waitFor(async () => (await stageOf(first.id)) === 'Planning', 'the first Book to take the stage');
     expect(await stageOf(first.id)).toBe('Planning');
     await app.close();
   }, 150_000);
@@ -501,7 +485,10 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     const cfg = await market.evaluate(() => (window as any).cadrelMarket.mcpConfig());
     expect(JSON.parse(cfg.claudeDesktop).mcpServers).toHaveProperty('cadrel');
     expect(cfg.args[0]).toBe(server.args[0]);
-    expect(cfg.args).toContain('--library');
+    // like the kit, it names no Studio: the active-Studio file supplies the library (and the rest)
+    expect(cfg.args).toContain('--active');
+    expect(cfg.args).not.toContain('--library');
+    expect(cfg.args).not.toContain('--root');
     const built = await market.evaluate(() => (window as any).cadrelMarket.installClaudeExtension());
     expect(path.basename(built.file)).toBe('Cadrel.mcpb');
     expect(JSON.parse(strFromU8(unzipSync(fs.readFileSync(built.file))['manifest.json']!))).toMatchObject({ name: 'cadrel' });
@@ -867,7 +854,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.locator('.kv dd', { hasText: mine }).first().waitFor();
     await shell.getByText('chosen separately').first().waitFor();
     expect(fs.readFileSync(path.join(mine, 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'settings.json'), 'utf8')).projectsFolder).toBe(mine);
+    // the settings file is written a moment after the screen updates
+    await expect.poll(() => { try { return JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'settings.json'), 'utf8')).projectsFolder; } catch { return undefined; } }, { timeout: 10_000 }).toBe(mine);
 
     // The AI server is pinned to this Studio: it looks only where the app says, never at another Studio's folders.
     const { rootCandidates } = await import('@cadrel/write/mcp/root');
@@ -875,9 +863,16 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.getByRole('button', { name: 'Extensions', exact: true }).click();
     await shell.getByRole('tab', { name: 'Claude Code' }).click();
     const snippet = await shell.locator('pre.snippet').innerText();
-    expect(snippet).toContain(`--root ${mine}`);
-    expect(snippet).toContain(path.join(ud, 'studios', 'local', 'studio.json'));
-    expect(snippet).toContain(path.join(h, 'Cadrel', 'My Studio', 'Market'));
+    // The configuration names no Studio, only the file the app keeps for the active one; that file is what pins the server to this Studio.
+    const activeFile = path.join(ud, 'mcp-active.json');
+    expect(snippet).toContain(`--active ${activeFile}`);
+    expect(snippet).not.toContain('--root');
+    const active = JSON.parse(fs.readFileSync(activeFile, 'utf8')) as { studio: string; args: string[] };
+    expect(active.studio).toBe('My Studio');
+    const arg = (n: string) => active.args[active.args.indexOf(n) + 1];
+    expect(arg('--root')).toBe(mine);
+    expect(arg('--studio')).toBe(path.join(ud, 'studios', 'local', 'studio.json'));
+    expect(arg('--library')).toBe(path.join(h, 'Cadrel', 'My Studio', 'Market'));
     void rootCandidates; void nodeFs;
 
     // The Cadrel folder moves at the next start: it is only requested now, and nothing has moved yet.

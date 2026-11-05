@@ -135,6 +135,84 @@ describe('the extension launcher', () => {
     expect(await L.exited).toBe(0);
   });
 
+  it('follows a file: when it changes the server is started again, the client\'s handshake is replayed, and the connection carries on', async () => {
+    // a stand-in server that reports which Studio (from the file named in its arguments) it was started for
+    const follow = path.join(dir, 'active.json');
+    fs.writeFileSync(follow, JSON.stringify({ studio: 'Loric' }));
+    const server = path.join(dir, 'switching.cjs');
+    fs.writeFileSync(server, `
+      const fs = require('fs');
+      const studio = JSON.parse(fs.readFileSync(process.argv[2], 'utf8')).studio;
+      const send = (o) => process.stdout.write(JSON.stringify(o) + '\\n');
+      let buf = '';
+      process.stdin.on('data', (c) => {
+        buf += c; let i;
+        while ((i = buf.indexOf('\\n')) >= 0) {
+          const m = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
+          if (m.method === 'initialize') send({ jsonrpc: '2.0', id: m.id, result: { protocolVersion: m.params.protocolVersion, serverInfo: { name: 'real' } } });
+          else if (m.method === 'tools/list') send({ jsonrpc: '2.0', id: m.id, result: { studio } });
+          else if (m.method === 'slow') { /* never answers: in flight when the Studio changes */ }
+          else if (m.method === 'notifications/initialized') send({ jsonrpc: '2.0', method: 'x/saw-initialized', params: { studio } });
+        }
+      });
+      process.stdin.on('end', () => process.exit(0));
+    `);
+    for (const handshake of [HS, null]) {
+      const file = path.join(dir, 'launch.js');
+      fs.writeFileSync(file, launcherSource({ command: process.execPath, args: [server, follow], env: {}, handshake, logFile: null, followFile: follow }));
+      const p = spawn(process.execPath, [file], { stdio: ['pipe', 'pipe', 'pipe'] });
+      const out: any[] = [];
+      let buf = '';
+      p.stdout.on('data', (c) => { buf += c; let i; while ((i = buf.indexOf('\n')) >= 0) { out.push(JSON.parse(buf.slice(0, i))); buf = buf.slice(i + 1); } });
+      const send = (m: unknown) => p.stdin.write(JSON.stringify(m) + '\n');
+      const until = async (pred: () => boolean) => { const s = Date.now(); while (!pred()) { if (Date.now() - s > 10000) throw new Error('timed out; got ' + JSON.stringify(out)); await new Promise((r) => setTimeout(r, 20)); } };
+
+      fs.writeFileSync(follow, JSON.stringify({ studio: 'Loric' }));
+      send(init(0));
+      send({ jsonrpc: '2.0', method: 'notifications/initialized' });
+      send({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+      await until(() => out.some((o) => o.id === 1));
+      expect(out.find((o) => o.id === 1).result.studio).toBe('Loric');
+
+      send({ jsonrpc: '2.0', id: 2, method: 'slow' });
+      await new Promise((r) => setTimeout(r, 200));
+      fs.writeFileSync(follow, JSON.stringify({ studio: 'Black Cat Books' })); // Cadrel started in the other Studio
+
+      // the request in flight is answered, not left hanging
+      await until(() => out.some((o) => o.id === 2));
+      expect(out.find((o) => o.id === 2).error.message).toMatch(/switched Studio/);
+      // the client is told the tools may have changed, and is not shown a second answer to its initialize
+      await until(() => out.some((o) => o.method === 'notifications/tools/list_changed'));
+      expect(out.filter((o) => o.id === 0)).toHaveLength(1);
+      expect(out.filter((o) => typeof o.id === 'string'), JSON.stringify(out)).toEqual([]);
+      // the new server was told the client had initialized, and answers for the new Studio on the same connection
+      await until(() => out.some((o) => o.method === 'x/saw-initialized' && o.params.studio === 'Black Cat Books'));
+      send({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
+      await until(() => out.some((o) => o.id === 3));
+      expect(out.find((o) => o.id === 3).result.studio).toBe('Black Cat Books');
+
+      p.stdin.end();
+      await new Promise((r) => p.on('close', r));
+    }
+  });
+
+  it('does not start the server again when the followed file is rewritten with the same contents', async () => {
+    const follow = path.join(dir, 'active.json');
+    fs.writeFileSync(follow, 'one');
+    const counter = path.join(dir, 'starts.txt');
+    const server = path.join(dir, 'count.cjs');
+    fs.writeFileSync(server, `require('fs').appendFileSync(${JSON.stringify(counter)}, 'x'); process.stdin.resume(); process.stdin.on('end', () => process.exit(0));`);
+    const file = path.join(dir, 'launch.js');
+    fs.writeFileSync(file, launcherSource({ command: process.execPath, args: [server], env: {}, handshake: null, logFile: null, followFile: follow }));
+    const p = spawn(process.execPath, [file], { stdio: ['pipe', 'pipe', 'pipe'] });
+    await new Promise((r) => setTimeout(r, 500));
+    fs.writeFileSync(follow, 'one');
+    await new Promise((r) => setTimeout(r, 2500));
+    expect(fs.readFileSync(counter, 'utf8')).toBe('x');
+    p.stdin.end();
+    await new Promise((r) => p.on('close', r));
+  });
+
   it('closes the server\'s input when the client goes away, even before the server was ready', async () => {
     const L = start(fakeServer({ bootMs: 600 }));
     L.send(init(0));

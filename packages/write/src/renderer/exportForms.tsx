@@ -41,10 +41,19 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                         <Select label="Text alignment" value={e.epub.bodyAlign} options={BODY_ALIGN} path="export.epub.bodyAlign" onChange={(v) => edit((d) => void (d.export.epub.bodyAlign = v))} hint="Applies to body paragraphs. Use a ::: center fence in the text to align a part differently." />
                       </div>
                       <FontSelect
-                        label="Font"
+                        label="Body font"
+                        role="body"
                         value={e.epub.font}
                         path="export.epub.font" onChange={(v) => edit((d) => void (d.export.epub.font = v))}
-                        hint="The included fonts are embedded in the ebook so every reader shows them. A font installed on your computer is only named — e-readers use it only if they have it."
+                        hint="The included fonts are embedded in the ebook (with their licences) so every reader shows them. A font installed on your computer is only named — e-readers use it only if they have it."
+                      />
+                      <FontSelect
+                        label="Chapter heading font"
+                        role="heading"
+                        sameAs={{ label: 'Same as body font', family: e.epub.font }}
+                        value={e.epub.headingFont}
+                        path="export.epub.headingFont" onChange={(v) => edit((d) => void (d.export.epub.headingFont = v))}
+                        hint="Used for chapter headings, sub-headings and the title page."
                       />
                       <TextArea label="Description" rows={3} value={e.epub.description} path="export.epub.description" onChange={(v) => edit((d) => void (d.export.epub.description = v))} hint="Stored in the ebook’s metadata (KDP uses its own listing form for the store description)." />
                       <div className="row2">
@@ -91,10 +100,19 @@ export function OutputsForm({ details, edit, template }: ExportFormProps) {
                         <Select label="Text alignment" value={e.pdf.bodyAlign} options={BODY_ALIGN} path="export.pdf.bodyAlign" onChange={(v) => edit((d) => void (d.export.pdf.bodyAlign = v))} hint="Applies to body paragraphs. Use a ::: center fence in the text to align a part differently." />
                       </div>
                       <FontSelect
-                        label="Font"
+                        label="Body font"
+                        role="body"
                         value={e.pdf.font}
                         path="export.pdf.font" onChange={(v) => edit((d) => void (d.export.pdf.font = v))}
                         hint="Any font is embedded in the PDF. Check that your licence allows commercial printing."
+                      />
+                      <FontSelect
+                        label="Chapter heading font"
+                        role="heading"
+                        sameAs={{ label: 'Same as body font', family: e.pdf.font }}
+                        value={e.pdf.headingFont}
+                        path="export.pdf.headingFont" onChange={(v) => edit((d) => void (d.export.pdf.headingFont = v))}
+                        hint="Used for chapter headings, sub-headings and the title page."
                       />
                       <div className="row3">
                         <Select
