@@ -28,6 +28,8 @@ export interface Access {
   roles(): Role[] | Promise<Role[]>;
   /** The teams the actor is in. */
   teams?(personId: string): string[] | Promise<string[]>;
+  /** Everything above in one read, when the source can do that more cheaply than three (the database reads all of it at once). */
+  load?(personId: string): Promise<{ assignments: Assignment[]; roles: Role[]; teams: string[] }>;
 }
 
 /** The one-person Studio: the person is its Owner. The Studio on this computer, before there is a server, runs on this. */
@@ -42,7 +44,11 @@ export function dbAccess(db: Db, studioId: string): Access {
   return {
     assignments: async () => (await loadAccess(db, { studioId })).assignments,
     roles: async () => (await loadAccess(db, { studioId })).roles,
-    teams: async (personId) => (await loadAccess(db, { studioId })).teamsOf(personId)
+    teams: async (personId) => (await loadAccess(db, { studioId })).teamsOf(personId),
+    load: async (personId) => {
+      const a = await loadAccess(db, { studioId });
+      return { assignments: a.assignments, roles: a.roles, teams: a.teamsOf(personId) };
+    }
   };
 }
 
@@ -73,6 +79,10 @@ export class StudioAs {
   constructor(private readonly o: ServiceOptions, readonly personId: string) {}
 
   private async context(): Promise<PermissionContext> {
+    if (this.o.access.load) {
+      const a = await this.o.access.load(this.personId);
+      return { actor: { personId: this.personId, teamIds: a.teams }, assignments: a.assignments, roles: new Map(a.roles.map((r) => [r.id, r])), now: this.stamp() };
+    }
     const actor: Actor = { personId: this.personId, teamIds: (await this.o.access.teams?.(this.personId)) ?? [] };
     return { actor, assignments: await this.o.access.assignments(), roles: new Map((await this.o.access.roles()).map((r) => [r.id, r])), now: this.stamp() };
   }

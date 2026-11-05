@@ -22,6 +22,7 @@ export interface StudioEnv {
 
 const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const NONCE_KEEP_MS = 10 * 60 * 1000;
+const NONCE_CLEAN_ODDS = 1 / 20;
 const MEMBER_ROLES = ROLE_KEYS.filter((k) => k !== 'owner') as string[];
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
@@ -37,7 +38,8 @@ async function authenticate(request: Request, body: string | Uint8Array, env: St
   const v = await verifyRequest({ method: request.method, path, body, headers: (n) => request.headers.get(n), now });
   if (!v.ok) return fail(401, v.reason === 'stale' ? 'The request is too old or your computer’s clock is wrong.' : 'The request was not signed correctly.');
   const nonce = hex(await sha256(v.signature));
-  await env.DB.prepare('DELETE FROM request_nonce WHERE at < ?').bind(now - NONCE_KEEP_MS).run();
+  // Old nonces only need clearing now and then: they are looked up by id, and one past the window is refused as stale before it gets here.
+  if (Math.random() < NONCE_CLEAN_ODDS) await env.DB.prepare('DELETE FROM request_nonce WHERE at < ?').bind(now - NONCE_KEEP_MS).run();
   try {
     await env.DB.prepare('INSERT INTO request_nonce (id, at) VALUES (?, ?)').bind(nonce, now).run();
   } catch {
