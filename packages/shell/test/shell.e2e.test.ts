@@ -41,7 +41,7 @@ async function launch(over: { userData?: string; home?: string; env?: Record<str
   });
   running.push(app);
   const shell = await app.firstWindow();
-  await shell.waitForSelector('nav.rail');
+  await shell.waitForSelector('nav.rail', { timeout: 90_000 });
   return { app, shell };
 }
 

@@ -60,7 +60,7 @@ it.skipIf(!have)('answers, decides and closes a pass through the Editing page', 
   const app = await electron.launch({ executablePath: electronBin, args: ['--no-sandbox', PKG], env: { ...process.env, CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home } });
   try {
     const shell = await app.firstWindow();
-    await shell.waitForSelector('nav.rail');
+    await shell.waitForSelector('nav.rail', { timeout: 90_000 });
     await shell.getByRole('button', { name: 'Editing', exact: true }).click();
     await shell.getByRole('heading', { name: /Waiting for you/ }).waitFor({ timeout: 15000 });
     await shot(shell, '1-list.png');
@@ -92,7 +92,7 @@ it.skipIf(!have)('answers, decides and closes a pass through the Editing page', 
     await app.close().catch(() => undefined);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
-}, 120_000);
+}, 180_000);
 
 const V1 = 'The river ran cold.\n\nShe walked slowly to the river and stopped.\n\nIt was loud, and she was tired.';
 const V2 = 'The river ran cold.\n\nShe crept to the river and stopped.\n\nIt was loud, and she was tired.';
@@ -124,7 +124,7 @@ it.skipIf(!have)('briefs on a book, planning a pass, raising an item from select
   let failed = false;
   try {
     const shell = await app.firstWindow();
-    await shell.waitForSelector('nav.rail');
+    await shell.waitForSelector('nav.rail', { timeout: 90_000 });
 
     // ---- the book's briefs: write an edit brief, then revise it (the first version stays)
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();

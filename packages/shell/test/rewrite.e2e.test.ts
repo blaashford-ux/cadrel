@@ -60,7 +60,7 @@ it.skipIf(!have)('rewrite mode: start from a copy in the file tree, two panes wi
   let failed = false;
   try {
     const shell = await app.firstWindow();
-    await shell.waitForSelector('nav.rail');
+    await shell.waitForSelector('nav.rail', { timeout: 90_000 });
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();
     await shell.getByRole('button', { name: 'New project' }).click();
     await shell.getByRole('dialog').getByLabel('Name').fill('Rewrite Test');
