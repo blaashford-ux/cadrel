@@ -854,7 +854,8 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.locator('.kv dd', { hasText: mine }).first().waitFor();
     await shell.getByText('chosen separately').first().waitFor();
     expect(fs.readFileSync(path.join(mine, 'Moving Book', 'Draft.md'), 'utf8')).toBe('# One\n');
-    expect(JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'settings.json'), 'utf8')).projectsFolder).toBe(mine);
+    // the settings file is written a moment after the screen updates
+    await expect.poll(() => { try { return JSON.parse(fs.readFileSync(path.join(ud, 'studios', 'local', 'settings.json'), 'utf8')).projectsFolder; } catch { return undefined; } }, { timeout: 10_000 }).toBe(mine);
 
     // The AI server is pinned to this Studio: it looks only where the app says, never at another Studio's folders.
     const { rootCandidates } = await import('@cadrel/write/mcp/root');
