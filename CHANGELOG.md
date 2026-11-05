@@ -2,6 +2,11 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.7.1 (tweaks and fixes)
+
+- **A daily-target bar in Cadrel Write's status bar.** Next to the project total, a bar fills as today's words approach the day's target, and when you pass it the bar changes colour and the text says the target is beaten. The target is the Progress window's "Needed per day", worked out once and shared by both, so they always agree. Without a goal deadline there is no daily target and no bar.
+- **The Studio server uses less CPU per request.** A permission check used to read the roles, assignments and teams from the database three times; it now reads them once (still on every check, so a role change takes effect at once). Old request records are cleared on about one request in twenty rather than every request. A Studio picks this up when its server is updated from Admin → Studio Manager.
+
 ## 0.7.0 (M2: the team vault, in development)
 
 - **A Studio's records and vault can live on its server, for everyone.** Until now a built Studio's server knew only who was in it; a joined Studio showed "managed by its owner" and each computer had its own copy of everything. Now the server holds the records (people, roles, teams, catalogue, tasks, sign-offs, decisions, business records) and the vault, and **every permission check is made on the server**, by the same code the app ran in-process. A Studio you join is always used this way; a Studio you own is moved once with **Admin → Studio Manager → Move this Studio's records to its server** (records, vault file contents and projects; your file is kept as a copy; it can be run again). The server answers the service's calls as the person whose key signed the request, from a list of names (nothing else is reachable), and a refusal comes back as the same kind of error as before. An invitation can now say **which project the role applies to and for how many days**: a freelance guest is given one book for a while, sees that book's files and nothing else, and the grant lapses on its date. Tested against the real Worker code with SQLite behind D1 and a map behind R2, not against Cloudflare itself.
