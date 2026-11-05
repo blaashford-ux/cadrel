@@ -20,7 +20,7 @@ import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { ProgressDialog } from './ProgressDialog';
 import { QuickSwitcher } from './QuickSwitcher';
 import { WelcomeDialog } from './WelcomeDialog';
-import { localDate, requiredPerDay, writtenOn } from '../shared/progress';
+import { localDate, summarize, writtenOn } from '../shared/progress';
 import { goalFor, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
@@ -996,6 +996,10 @@ export function App() {
 
   const toolbarBusy = s.refreshing;
 
+  // The Progress window's figures, worked out once and shared with the status bar (so the daily target always matches).
+  const progressGoal = s.project ? goalFor(s.project.meta) : null;
+  const progressSummary = progressGoal && s.progress ? summarize(s.progress.progress, progressGoal, s.progress.total ?? 0, localDate(new Date())) : null;
+
   return (
     <div className={`frame${caps.windowChrome ? '' : ' mobile'}${drawer ? ' drawer-open' : ''}${zone ? ' zone' : ''}`}>
     {caps.windowChrome ? (zone ? null :
@@ -1384,14 +1388,7 @@ export function App() {
                     total: s.progress.total,
                     goal: goalFor(s.project.meta)?.targetWords ?? null,
                     today: writtenOn(s.progress.progress, localDate(new Date())),
-                    dailyTarget: (() => {
-                      const g = goalFor(s.project.meta);
-                      if (!g || s.progress.total === null) return null;
-                      const day = localDate(new Date());
-                      const wrote = writtenOn(s.progress.progress, day);
-                      // Fixed for the day: what was needed from this morning's total, so it doesn't shrink as you write.
-                      return requiredPerDay(g, s.progress.total - wrote, day);
-                    })()
+                    dailyTarget: s.progress.total === null || !progressSummary || progressSummary.done ? null : progressSummary.requiredPerDay
                   }
                 : null
             }
@@ -1546,6 +1543,7 @@ export function App() {
       <ProgressDialog
         project={s.project}
         progress={s.progress}
+        summary={progressSummary}
         onClose={() => setShowProgress(false)}
         onSetGoal={() => (setShowProgress(false), setProjectSettings(s.project!.path))}
       />
