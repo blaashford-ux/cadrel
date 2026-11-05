@@ -359,3 +359,36 @@ code.path { font-family: Consolas, 'Cascadia Mono', monospace; font-size: 12px; 
 .stage-strip li { border-left: 4px solid var(--muted); background: var(--raised); padding: 4px 10px; border-radius: 4px; }
 .stat { margin-right: 16px; }
 button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* The scope button at the top of the rail: which Project (and Book) the app is showing. The name wraps to two lines; the full text is in the tooltip. */
+.scope-btn { -webkit-app-region: no-drag; margin: 2px 6px 4px; padding: 5px 3px; width: calc(100% - 12px); display: flex; flex-direction: column; align-items: center; gap: 1px; background: var(--raised); color: var(--fg); border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 12px; line-height: 1.15; }
+.scope-btn:hover { background: var(--selected); }
+.scope-project, .scope-book { max-width: 100%; font-size: 10.5px; text-align: center; overflow-wrap: anywhere; }
+.scope-project { font-weight: 600; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.scope-book { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Books on a Project's page, and closed Books in the tree. */
+.book-list .closed, .tree-row.closed { opacity: .65; }
+
+/* The Project / everything switch on a page. */
+.seg { display: inline-flex; border: 1px solid color-mix(in srgb, var(--fg) 18%, transparent); border-radius: 10px; overflow: hidden; }
+.seg button { padding: 5px 12px; background: none; color: var(--fg); border: 0; border-radius: 0; }
+.seg button[aria-pressed='true'] { background: var(--selected); color: var(--accent); font-weight: 600; }
+.seg button:hover:not([aria-pressed='true']) { background: var(--raised); }
+.associations h4 { margin: 16px 0 4px; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--muted, inherit); }
+.associations .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+
+/* Editing: the manuscript text, the comparison of two versions, and the briefs. */
+.ed-text { max-height: 340px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: inherit; line-height: 1.5; background: var(--bg); border-radius: var(--radius); padding: 12px 14px; margin: 8px 0; user-select: text; }
+.ed-compare table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ed-compare th { text-align: left; font-size: 12px; color: var(--muted); padding: 4px 8px; }
+.ed-compare td { vertical-align: top; padding: 6px 8px; border-top: 1px solid var(--raised); white-space: pre-wrap; word-break: break-word; }
+.ed-compare tr.skip td { text-align: center; color: var(--muted); font-size: 12px; font-style: italic; }
+.ed-compare del { background: var(--error-bg); text-decoration: line-through; }
+.ed-compare ins { background: var(--info-bg); text-decoration: none; }
+.brief-form { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+.brief-form label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.brief-form label.inline { flex-direction: row; align-items: center; gap: 6px; }
+.brief-body { white-space: pre-wrap; }
+.brief { border-top: 1px solid var(--raised); padding-top: 8px; margin-top: 8px; }
+.brief-history { margin: 6px 0 0 18px; padding: 0; }

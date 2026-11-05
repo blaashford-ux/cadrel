@@ -79,6 +79,17 @@ describe('font settings', () => {
     expect(sanitizeBookDetails({ export: { pdf: { font: 7 } } }).export.pdf.font).toBe('EB Garamond');
     expect(sanitizeBookDetails({}).export.epub.font).toBe('EB Garamond');
   });
+  it('heading fonts default to empty (same as the body font), are kept when valid and cleaned when hostile', () => {
+    const d = defaultBookDetails({ title: 'x', author: 'y' });
+    expect(d.export.epub.headingFont).toBe('');
+    expect(d.export.pdf.headingFont).toBe('');
+    const s = sanitizeBookDetails({ export: { epub: { headingFont: 'Marcellus' }, pdf: { headingFont: 'Evil"</style>' } } });
+    expect(s.export.epub.headingFont).toBe('Marcellus');
+    expect(s.export.pdf.headingFont).toBe('Evil/style');
+    expect(sanitizeBookDetails({ export: { pdf: { headingFont: 7 } } }).export.pdf.headingFont).toBe('');
+    // settings saved before the heading font existed still load, with headings following the body
+    expect(sanitizeBookDetails({ export: { epub: { font: 'Lora' } } }).export.epub.headingFont).toBe('');
+  });
 });
 
 describe('content warning', () => {

@@ -27,7 +27,7 @@ Don't invent large numbers of names while brainstorming. Use placeholders ("the 
 
 You have Cadrel's project tools. A project is a folder of Markdown files.
 
-1. **Find the project.** `list_projects`; if it isn't clear which one, ask.
+1. **Find the project, and work at the series level.** In Cadrel a project is a series with Books under it. If `studio_context` is available, call it with the project: it shows the series whole, its folder, the files already there and its Books. Everything this work produces (the series premise, characters, worldbuilding, style sheet and series architecture) belongs to the **series**, so name the project and leave `book` out: it is saved in the series' own folder, not in one Book's. A Book's own material (its outline, blurb, keywords) is not made here. If `studio_context` is not there, a project is just a folder: use `list_projects`. If it isn't clear which project, ask.
 2. **See what exists before you create anything.** `list_project_files` shows every file with its kind (premise, outline, character, world, ...). `read_project_file` reads one; a long file comes in parts, so pass `start` to continue. What the author has already written outranks your defaults.
 3. **Save what a phase commits to.** `write_project_file` creates a file. It never touches the manuscript, never replaces an existing file unless you pass `mode: "replace"` (the previous version is kept), and can't leave the project folder. Use `edit_project_file` for a small change to a saved file instead of rewriting it.
 4. **Manuscript chapters** are read with `list_files`, `list_chapters` and `read_chapter`. You cannot change them.

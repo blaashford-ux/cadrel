@@ -24,9 +24,12 @@ export class VaultHost {
     const v = this.people.vault(this.where);
     if (!v) return { available: false, reason: 'The files of this Studio are kept by its owner.' };
     await fsp.mkdir(this.where.dir, { recursive: true });
-    const kept = await v.keepOrphansAside(); // a lock removed from under this person: their copy is put aside before anything else
-    const [entries, people, force, orphans] = await Promise.all([v.list(), this.people.peopleList(), this.people.may('vault.force'), v.orphans()]);
-    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, entries, kept, orphans };
+    const kept = await v.keepOrphansAside().catch(() => []); // a lock removed from under this person: their copy is put aside before anything else (needs the server)
+    const entries = await v.list(); // when the Studio's server cannot be reached this is what was last known, and `offline` says so
+    const away = () => this.people.offline;
+    // the rest also comes from the server: when it is away they are empty, not an error
+    const [people, force, orphans] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans()]);
+    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, entries, kept, orphans, ...(away() ? { offline: true } : {}) };
   }
 
   async call(name: string, args: unknown[]): Promise<unknown> {
@@ -38,6 +41,29 @@ export class VaultHost {
 
   history(path: string): Promise<FileVersion[]> {
     return this.vault().history(path);
+  }
+
+  /** The manuscripts in the vault (with at least one version): what an editorial pass can be planned over. */
+  async manuscripts(): Promise<{ fileId: string; path: string; version: number }[]> {
+    return (await this.vault().list())
+      .filter((e) => e.kind === 'manuscript' && e.fileId !== null && (e.version ?? 0) > 0)
+      .map((e) => ({ fileId: e.fileId!, path: e.path, version: e.version! }));
+  }
+
+  private async pathOf(fileId: string): Promise<string> {
+    const e = (await this.vault().list()).find((x) => x.fileId === fileId);
+    if (!e) throw new VaultHostError('That file is not in the vault, or your role cannot see it.');
+    return e.path;
+  }
+
+  /** The text of one version of a file, without touching the working folder. */
+  async textOf(fileId: string, version: number): Promise<string> {
+    return new TextDecoder().decode(await this.vault().read(await this.pathOf(fileId), version));
+  }
+
+  /** A file's versions, newest first. */
+  async versionsOf(fileId: string): Promise<FileVersion[]> {
+    return this.vault().history(await this.pathOf(fileId));
   }
 
   /** One file's versions, what it uses, where it is used and its data card. */

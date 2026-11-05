@@ -44,7 +44,7 @@ export interface MarketHost {
   /** Where the person's outline documents are (Cadrel finds them in the projects), so keyword suggestions can be built on one. */
   outlines?: OutlineSource;
   /** How an AI app launches the MCP server. Default: Cadrel Market's own bundled server next to the code. */
-  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
+  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string>; follow?: string };
 }
 
 export interface MarketModule {

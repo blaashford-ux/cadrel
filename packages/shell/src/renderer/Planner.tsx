@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { PlanProject, PlanState } from '../shared/api';
+import { inViewScope } from '@cadrel/kernel';
+import type { PlanProject, PlanState, StudioState } from '../shared/api';
+import { ScopeToggle, usePageScope } from './PageScope';
 import { byDate, lateTasks, monthGrid, monthTitle, relativeDay, shiftMonth } from './calendar';
 
 const api = window.cadrel.work;
@@ -7,13 +9,14 @@ type Ready = Extract<PlanState, { available: true }>;
 
 interface Props {
   /** Changes elsewhere (a stage move, a task) reload the plan. */
-  studio: unknown;
+  studio: StudioState | null;
   onProject: (id: string) => void;
 }
 
 /** The pipeline (every project by workflow and stage) and the calendar (every task and deadline), over the same records the Projects page edits. */
 export function Planner({ studio, onProject }: Props) {
   const [plan, setPlan] = useState<PlanState | null>(null);
+  const ps = usePageScope('planner');
   const [tab, setTab] = useState<'pipeline' | 'calendar'>('pipeline');
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -26,14 +29,17 @@ export function Planner({ studio, onProject }: Props) {
   if (error) return <div className="banner error" role="alert">{error}</div>;
   if (!plan) return <p className="muted">Loading…</p>;
   if (!plan.available) return <section className="card"><p className="muted">{plan.reason}</p></section>;
+  // The Project in scope: its Books' stages and its tasks, deadlines and what is inside it; closed Books are left out with the rest of the scope.
+  const view: Ready = ps.scope && studio ? { ...plan, projects: plan.projects.filter((p) => inViewScope(studio.tree, ps.scope!, p.id)), tasks: plan.tasks.filter((t) => inViewScope(studio.tree, ps.scope!, t.projectId)) } : plan;
   return (
     <div className="planner">
+      <div className="row"><ScopeToggle s={ps} /></div>
       <div className="tabs" role="tablist" aria-label="Planner">
         {(['pipeline', 'calendar'] as const).map((t) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t === 'pipeline' ? 'Pipeline' : 'Calendar'}</button>
         ))}
       </div>
-      {tab === 'pipeline' ? <Pipeline plan={plan} onProject={onProject} /> : <Calendar plan={plan} onProject={onProject} />}
+      {tab === 'pipeline' ? <Pipeline plan={view} onProject={onProject} /> : <Calendar plan={view} onProject={onProject} />}
     </div>
   );
 }

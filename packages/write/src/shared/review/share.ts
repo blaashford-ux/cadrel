@@ -575,6 +575,10 @@ export interface JoinOptions {
   drive: () => DriveApi;
   /** Local folder for projects shared with this person ("Shared With Me"). */
   sharedRoot: string;
+  /** Whether an invitation to edit the manuscript (a collaborator's) may be joined. Cadrel Reader says no. Default: yes. */
+  allowEdit?: boolean;
+  /** What to call this app in messages. Default: Cadrel Write. */
+  appName?: string;
 }
 
 /** A project somebody shared with this person, as it sits on this device. */
@@ -595,10 +599,14 @@ export class ReviewJoin {
 
   async join(invite: { packageId: string; commentsId: string; reviewerId: string; project: string; role?: 'edit' }, readerName: string): Promise<JoinResult> {
     const { fs } = this.o;
+    const app = this.o.appName ?? 'Cadrel Write';
+    if (invite.role === 'edit' && this.o.allowEdit === false) {
+      throw new Error(`This invitation is to edit “${invite.project}” with its author, which ${app} can’t do. ${app} is for reading and giving feedback. Ask the author for a reader invitation, or open this one in Cadrel Write.`);
+    }
     const drive = this.o.drive();
     const pkgFile = await drive.getFile(invite.packageId);
     const commentsFile = await drive.getFile(invite.commentsId);
-    if (!pkgFile || !commentsFile) throw new Error('Cadrel Write can’t open that project yet. Pick both files when Google asks, or ask the owner to send the link again.');
+    if (!pkgFile || !commentsFile) throw new Error(`${app} can’t open that project yet. Pick both files when Google asks, or ask the owner to send the link again.`);
     const pkg = parsePackage(await drive.download(invite.packageId));
     if (!pkg) throw new Error('That file isn’t a Cadrel Write review package.');
 

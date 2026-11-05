@@ -22,7 +22,7 @@ These come from the product owner and are not open for redesign here.
 |---|---|---|---|
 | **Team member** (employee, contractor with an account) | Cadrel sign-in; roles and scopes | whatever the roles give: check out and edit, comment, approve | the vault; Notes are native records |
 | **Freelancer / guest** | Cadrel account with the **Guest** role, scoped to books or files, expiring | read, comment, or edit exactly what was granted | the vault |
-| **Beta reader** (no account) | a **Google Drive review package** (a link to a read-and-comment copy) | read and comment; nothing else | their comments come back as a review file that is **imported into Notes** |
+| **Beta reader** (no account) | a **Google Drive review package** (a link to a read-and-comment copy), opened in **Cadrel Reader**, a separate, smaller app they install instead of the suite | read, comment and suggest; nothing else | their comments come back as a review file that is **imported into Notes** |
 
 What this removes from MDEdit's model once the vault exists:
 - **Drive as the way a team shares a project** (MDEdit's "collaborator" share with edit rights, and the *Shared With Me* folder). Colleagues are Cadrel people; there is nothing to share by link.

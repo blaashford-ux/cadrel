@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__CADREL_TITLE__</title>
+<!--
+  The record of one chapter. One self-contained page: no network, no libraries. It is written when the chapter is logged and kept as the
+  permanent record of what the trackers knew then (a later correction writes a new version; the old one is kept beside the project).
+  The data is the JSON block at the bottom of <body>:
+  { project, chapter, recorded_at,
+    litrpg?: { events:[{ character, id, type, text, corrects? }],
+               after:[{ name, level?, xp_total?, xp_to_next_level?, class?:{ name }, attributes?:[{ name, value }], skills?:[], items?:[], titles?:[], companions?:[] }] },
+    timeline?: { days:[{ day, weekday?, mode, flashback, locations, characters_present, pov_character?, major_events, time_of_day_markers }] } }
+  Replace the marker in that block with the JSON (escape "<" as <) to build the page by hand.
+-->
+<style>
+  :root {
+    --bg: #ece8de; --paper: #fffdf8; --ink: #231f2e; --muted: #6a6478; --line: #ddd6c4; --soft: #f4efe3;
+    --accent: #5b3fb8; --accent-2: #7e63d8; --accent-ink: #ffffff; --gold: #9a6700; --gold-soft: #f8ecd0;
+    --shadow: 0 2px 4px rgba(35,31,46,.08), 0 16px 40px rgba(35,31,46,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1018; --paper: #1a1b27; --ink: #ecebf4; --muted: #a29fb4; --line: #34354a; --soft: #232436;
+      --accent: #a794ff; --accent-2: #7e69e0; --accent-ink: #14112b; --gold: #f0c36a; --gold-soft: #35301f; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1018; --paper: #1a1b27; --ink: #ecebf4; --muted: #a29fb4; --line: #34354a; --soft: #232436;
+    --accent: #a794ff; --accent-2: #7e69e0; --accent-ink: #14112b; --gold: #f0c36a; --gold-soft: #35301f; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 820px; margin: 28px auto; padding: 0 16px; }
+  .record { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); overflow: hidden; }
+  .head { padding: 28px 34px 22px; background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%); color: var(--accent-ink); }
+  .head small { display: block; font-size: 12px; letter-spacing: .18em; text-transform: uppercase; opacity: .9; }
+  .head h1 { margin: 6px 0 0; font: 700 34px/1.1 Georgia, "Iowan Old Style", "Times New Roman", serif; }
+  .body { padding: 6px 34px 28px; }
+  h2 { display: flex; align-items: center; gap: 12px; margin: 26px 0 12px; font: 650 12px/1 system-ui, sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  h2::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .who { margin: 14px 0 6px; font: 700 18px/1.2 Georgia, serif; }
+  ul.events { list-style: none; margin: 0 0 8px; padding: 0; }
+  ul.events li { display: flex; gap: 10px; padding: 5px 0; border-top: 1px solid var(--line); }
+  ul.events li:first-child { border-top: 0; }
+  .ico { flex: none; width: 1.4em; text-align: center; color: var(--accent); }
+  .id { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .stand { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 15px; background: var(--soft); }
+  .card h3 { margin: 0 0 6px; font: 700 17px/1.25 Georgia, serif; }
+  .kv { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .kv span:first-child { color: var(--muted); }
+  .pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .pills span { font-size: 12px; padding: 1px 9px; border-radius: 999px; background: var(--gold-soft); color: var(--gold); }
+  .day { border: 1px solid var(--line); border-radius: 12px; padding: 12px 15px; margin-bottom: 10px; }
+  .day h3 { margin: 0; font: 700 17px/1.25 Georgia, serif; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .day h3 em { font: 400 13px system-ui, sans-serif; color: var(--muted); font-style: normal; }
+  .row { margin-top: 5px; font-size: 14px; }
+  .row b { color: var(--muted); font-weight: 600; margin-right: 6px; }
+  .none { color: var(--muted); text-align: center; padding: 30px 0; }
+  .foot { padding: 0 34px 24px; text-align: center; color: var(--muted); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; }
+  @media print {
+    @page { margin: 12mm; }
+    body { background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { margin: 0; padding: 0; max-width: none; } .record { box-shadow: none; border-radius: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="page"><article class="record" id="record" aria-label="Chapter record"></article></div>
+<script id="data" type="application/json">__CADREL_DATA__</script>
+<script>
+(function () {
+  var S = JSON.parse(document.getElementById('data').textContent);
+  var root = document.getElementById('record');
+  function h(tag, attrs, kids) {
+    var e = document.createElement(tag);
+    for (var k in (attrs || {})) { if (k === 'text') e.textContent = attrs[k]; else if (k === 'class') e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    (kids || []).forEach(function (c) { if (c) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return e;
+  }
+  var has = function (v) { return v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length); };
+  var fmt = function (n) { return Number(n).toLocaleString(); };
+  var ICON = { level_up: '▲', xp_award: '✦', stat_allocation: '◆', class_assigned: '⚔', skill_gained: '✧', item_gained: '◈', item_lost: '◇', title_gained: '★', summon_gained: '❖', quest_reward: '✔' };
+  document.title = (S.project || 'Project') + ' · Chapter ' + S.chapter + ' record';
+
+  root.appendChild(h('header', { class: 'head' }, [h('small', { text: S.project || '' }), h('h1', { text: 'Chapter ' + S.chapter })]));
+  var body = h('div', { class: 'body' });
+
+  if (S.litrpg) {
+    body.appendChild(h('h2', { text: 'What changed' }));
+    var byWho = {};
+    S.litrpg.events.forEach(function (e) { (byWho[e.character] = byWho[e.character] || []).push(e); });
+    Object.keys(byWho).forEach(function (name) {
+      body.appendChild(h('div', { class: 'who', text: name }));
+      body.appendChild(h('ul', { class: 'events' }, byWho[name].map(function (e) {
+        return h('li', {}, [h('span', { class: 'ico', text: ICON[e.type] || '•' }), h('span', { text: e.text + (e.corrects ? ' (corrects ' + e.corrects + ')' : '') }), h('span', { class: 'id', text: e.id })]);
+      })));
+    });
+    body.appendChild(h('h2', { text: 'Where they stand after it' }));
+    body.appendChild(h('div', { class: 'stand' }, S.litrpg.after.map(function (c) {
+      var rows = [];
+      if (has(c.level)) rows.push(h('div', { class: 'kv' }, [h('span', { text: 'Level' }), h('span', { text: String(c.level) })]));
+      if (has(c.xp_total)) rows.push(h('div', { class: 'kv' }, [h('span', { text: 'XP' }), h('span', { text: fmt(c.xp_total) + (has(c.xp_to_next_level) ? ' (' + fmt(c.xp_to_next_level) + ' to next)' : '') })]));
+      if (c['class'] && has(c['class'].name)) rows.push(h('div', { class: 'kv' }, [h('span', { text: 'Class' }), h('span', { text: c['class'].name })]));
+      (c.attributes || []).forEach(function (a) { rows.push(h('div', { class: 'kv' }, [h('span', { text: a.name }), h('span', { text: String(a.value) })])); });
+      var pills = [];
+      [['skills', 'skill'], ['items', 'item'], ['titles', 'title'], ['companions', 'companion']].forEach(function (p) {
+        var n = (c[p[0]] || []).length; if (n) pills.push(h('span', { text: n + ' ' + p[1] + (n === 1 ? '' : 's') }));
+      });
+      return h('div', { class: 'card' }, [h('h3', { text: c.name })].concat(rows, pills.length ? [h('div', { class: 'pills' }, pills)] : []));
+    })));
+  }
+
+  if (S.timeline) {
+    body.appendChild(h('h2', { text: 'In-story time' }));
+    S.timeline.days.forEach(function (d) {
+      var meta = [d.mode ? d.mode.replace('_', ' ') : '', d.weekday || '', d.flashback ? 'flashback' : ''].filter(Boolean).join(' · ');
+      var rows = [];
+      if (has(d.locations)) rows.push(h('div', { class: 'row' }, [h('b', { text: 'Where' }), d.locations.join(', ')]));
+      if (has(d.characters_present) || has(d.pov_character)) rows.push(h('div', { class: 'row' }, [h('b', { text: 'Who' }), (d.characters_present || []).join(', ') + (has(d.pov_character) ? (has(d.characters_present) ? ' · ' : '') + d.pov_character + ' (POV)' : '')]));
+      if (has(d.time_of_day_markers)) rows.push(h('div', { class: 'row' }, [h('b', { text: 'When' }), d.time_of_day_markers.join(', ')]));
+      if (has(d.major_events)) rows.push(h('div', { class: 'row' }, [h('b', { text: 'Happens' }), d.major_events.join('; ')]));
+      body.appendChild(h('div', { class: 'day' }, [h('h3', {}, [/^\d+$/.test(String(d.day)) ? 'Day ' + d.day : String(d.day), meta ? h('em', { text: meta }) : null])].concat(rows)));
+    });
+  }
+
+  if (!body.children.length) body.appendChild(h('p', { class: 'none', text: 'Nothing was logged for this chapter.' }));
+  root.appendChild(body);
+  root.appendChild(h('div', { class: 'foot', text: 'Permanent record · written ' + String(S.recorded_at || '').slice(0, 10) }));
+})();
+</script>
+</body>
+</html>

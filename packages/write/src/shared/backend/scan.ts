@@ -4,13 +4,14 @@ import type { FsPort } from '../fsPort';
 import { basename, joinPath } from '../paths';
 
 const MD_EXT = /\.(md|markdown)$/i;
+const HTML_EXT = /\.html?$/i;
 const SKIP_DIRS = new Set(['node_modules']);
 
 const byName = (a: TreeNode, b: TreeNode) =>
   a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
 /**
- * Recursively collects Markdown files and folders under `dir`. Folders come before files,
+ * Recursively collects Markdown files (and web pages, which are shown read-only) and folders under `dir`. Folders come before files,
  * both sorted naturally. Empty folders are kept (so you can add files to them); hidden
  * folders, node_modules and symlinks are skipped (no loops).
  */
@@ -44,6 +45,8 @@ export async function scanFolder(fs: FsPort, dir: string): Promise<DirNode> {
         } catch {
           // unreadable folder (permissions): skip it
         }
+      } else if (e.isFile && HTML_EXT.test(e.name)) {
+        files.push({ kind: 'file', name: e.name, path: full, html: true });
       } else if (e.isFile && MD_EXT.test(e.name)) {
         const stem = stemOf(e.name);
         const node: TreeNode = { kind: 'file', name: e.name, path: full };

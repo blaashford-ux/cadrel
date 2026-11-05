@@ -6,12 +6,12 @@ import { createProject, emptyTree } from '@cadrel/kernel';
 import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
 import { rollUp, StudioService } from '../src/main/studio';
 
-async function service(writeRoot: string | null = '/books') {
+async function service(writeRoot: string | null = '/books', viewer?: ConstructorParameters<typeof StudioService>[0]['viewer']) {
   const mem = new MemoryFs();
   mem.seed('/books/DR1/.cadrel/project.json', '{"status":"drafting"}');
   mem.seed('/books/DR1/Book.md', '# One\n\nShe walked slowly to the door.\n');
   const file = path.join(await mkdtemp(path.join(os.tmpdir(), 'cadrel-svc-')), 'studio.json');
-  return new StudioService({ file, author: () => 'Blake', writeRoot: async () => writeRoot, fs: mem });
+  return new StudioService({ file, author: () => 'Blake', writeRoot: async () => writeRoot, fs: mem, viewer });
 }
 
 describe('StudioService', () => {
@@ -65,5 +65,42 @@ describe('rollUp', () => {
       { projectId: null, status: 'open' as const }
     ];
     expect(rollUp(c.tree, notes)).toEqual({ [a.project.id]: 2, [b.project.id]: 1, [c.project.id]: 1 });
+  });
+});
+
+describe('projects hidden from people who are not assigned to them', () => {
+  it('shows the tree, notes, counts and links of the visible projects only, and refuses changes to the rest', async () => {
+    const file = path.join(await mkdtemp(path.join(os.tmpdir(), 'cadrel-hide-')), 'studio.json');
+    const base = { file, author: () => 'Blake', writeRoot: async () => null, fs: new MemoryFs() };
+    const everyone = new StudioService(base);
+    const ser = await everyone.createProject({ name: 'Dragon Rider', kind: 'Series' });
+    const b1 = await everyone.createProject({ name: 'Book 1', parentId: ser.id, kind: 'Book' });
+    const secret = await everyone.createProject({ name: 'Secret', kind: 'Book' });
+    await everyone.link(b1.id, 'write', 'DR1');
+    await everyone.link(secret.id, 'write', 'Hush');
+    await everyone.addNote({ projectId: secret.id, body: 'Hidden note.' });
+    await everyone.addNote({ projectId: b1.id, body: 'Visible note.' });
+
+    // The same file, seen by someone who is assigned to Book 1 only (so Dragon Rider shows as the container it sits in).
+    const narrowed = new StudioService({ ...base, viewer: async (t) => ({ all: false, visible: new Set(t.projects.filter((p) => p.name !== 'Secret').map((p) => p.id)) }) });
+    const st = await narrowed.state();
+    expect(st.tree.projects.map((p) => p.name).sort()).toEqual(['Book 1', 'Dragon Rider']);
+    expect(st.tree.links).toEqual([{ projectId: b1.id, module: 'write', ref: 'DR1' }]);
+    expect(st.notes.map((n) => n.body)).toEqual(['Visible note.']);
+    expect(st.openByProject).toEqual({ [ser.id]: 1, [b1.id]: 1 });
+    expect(await narrowed.hiddenLinks()).toEqual([{ module: 'write', ref: 'Hush' }]);
+    for (const attempt of [
+      () => narrowed.updateProject(secret.id, { name: 'Nope' }),
+      () => narrowed.addNote({ projectId: secret.id, body: 'x' }),
+      () => narrowed.createProject({ name: 'Child', parentId: secret.id }),
+      () => narrowed.link(secret.id, 'write', 'Other'),
+      () => narrowed.archiveProject(secret.id, true),
+      () => narrowed.deleteProject(secret.id, true)
+    ]) await expect(attempt()).rejects.toThrow(/no such project/);
+    await narrowed.updateProject(b1.id, { name: 'Book One' }); // what they can see they can still change (their role decides that)
+
+    const after = await everyone.state(); // the hidden project is untouched in the file
+    expect(after.tree.projects.map((p) => p.name).sort()).toEqual(['Book One', 'Dragon Rider', 'Secret']);
+    expect(after.notes).toHaveLength(2);
   });
 });

@@ -50,14 +50,21 @@ export const CONDITION_KINDS = {
   has_subprojects: 'It has at least one subproject',
   subprojects_done: 'Every subproject has reached a Done stage',
   no_open_tasks: 'It and its subprojects have no open tasks',
-  approved: 'It has been signed off'
+  approved: 'It has been signed off',
+  pass_closed: 'An editorial pass has been closed',
+  queries_resolved: 'Every editor’s query has been answered'
 } as const;
 export type ConditionKind = keyof typeof CONDITION_KINDS;
 export interface Condition {
   kind: ConditionKind;
   /** For `approved`: the label of the sign-off that must stand ("Cover approved"). */
   label?: string;
+  /** For `pass_closed`: which kind of pass must be closed. A proofread only advises, so it cannot be asked for. */
+  passKind?: GatePassKind;
 }
+/** The editorial passes a gate can ask for. Proofreading is left out on purpose: it advises, it never holds a stage back. */
+export const GATE_PASS_KINDS = ['developmental', 'line', 'copy'] as const;
+export type GatePassKind = (typeof GATE_PASS_KINDS)[number];
 
 export interface Stage { key: string; name: string; category: StageCategory; color: string; position: number }
 export interface Transition { from: string; to: string; roleIds: string[]; conditions: Condition[] }
@@ -134,6 +141,11 @@ export function cleanConditions(raw: unknown): Condition[] {
       if (!label) return fail('invalid', 'A sign-off gate needs the label of the approval it asks for.');
       if (label.length > 40) return fail('invalid', 'A sign-off label is 40 characters at most.');
       if (!out.some((x) => x.kind === kind && x.label!.toLowerCase() === label.toLowerCase())) out.push({ kind, label });
+    } else if (kind === 'pass_closed') {
+      const passKind = (c as Condition).passKind;
+      if ((passKind as string) === 'proof') return fail('invalid', 'A proofread only advises. It cannot hold a stage back.');
+      if (!passKind || !(GATE_PASS_KINDS as readonly string[]).includes(passKind)) return fail('invalid', `A pass gate asks for one of: ${GATE_PASS_KINDS.join(', ')}.`);
+      if (!out.some((x) => x.kind === kind && x.passKind === passKind)) out.push({ kind, passKind });
     } else if (!out.some((x) => x.kind === kind)) out.push({ kind });
   }
   return out;
@@ -335,14 +347,36 @@ export interface ProjectFacts {
   openTasks: number;
   /** The labels of the sign-offs the project currently stands approved under. */
   approved: string[];
+  /** Editorial passes on the project and everything under it. Absent where the Studio holds no editorial records: no pass is closed, no query waits. */
+  editorial?: EditorialFacts;
+}
+export interface EditorialFacts {
+  /** The kinds of pass that have been closed. */
+  closed: string[];
+  /** The kinds of pass still under way (planned, in progress, delivered or responded). */
+  live: string[];
+  /** Queries raised by an editor that the author has not answered. */
+  unansweredQueries: number;
 }
 
 /** The conditions that do not hold for a project, in words. Empty means the gate is open on the project's side. */
 export function unmetConditions(facts: ProjectFacts, conditions: Condition[]): string[] {
   const out: string[] = [];
-  for (const { kind, label } of conditions) {
+  for (const { kind, label, passKind } of conditions) {
     if (kind === 'approved') {
       if (!facts.approved.some((l) => l.toLowerCase() === (label ?? '').toLowerCase())) out.push(`Needs sign-off: “${label}”`);
+      continue;
+    }
+    if (kind === 'pass_closed') {
+      const name = { developmental: 'developmental edit', line: 'line edit', copy: 'copy edit' }[passKind ?? 'line'] ?? 'editorial pass';
+      const ed = facts.editorial;
+      if (ed?.live.includes(passKind ?? '')) out.push(`The ${name} is still under way. It needs closing first.`);
+      else if (!ed?.closed.includes(passKind ?? '')) out.push(`Needs a closed ${name}`);
+      continue;
+    }
+    if (kind === 'queries_resolved') {
+      const n = facts.editorial?.unansweredQueries ?? 0;
+      if (n > 0) out.push(`${n} editor’s quer${n === 1 ? 'y is' : 'ies are'} still unanswered`);
       continue;
     }
     const ok =

@@ -3,17 +3,20 @@ import { parseInviteLink } from '../shared/review/link';
 import type { SharedProject } from '../shared/review/share';
 import { PickerFrame, pickerUrl } from './PickerFrame';
 import { pickAll, shortIds } from './pickFiles';
+import { appName } from './appName';
 import { useEscape } from './useEscape';
 import { loadIdentity, saveIdentity } from './useReview';
 
 interface Props {
+  /** A link to start with (one the app was opened with). */
+  initialLink?: string;
   onJoined(p: SharedProject): void;
   onClose(): void;
 }
 
 /** Open an invitation: paste the link, let Google's picker grant access to the two files, then download the project. */
-export function JoinDialog({ onJoined, onClose }: Props) {
-  const [link, setLink] = useState('');
+export function JoinDialog({ initialLink = '', onJoined, onClose }: Props) {
+  const [link, setLink] = useState(initialLink);
   const [name, setName] = useState(() => {
     const me = loadIdentity();
     return me.id === 'owner' ? '' : me.name;
@@ -28,6 +31,9 @@ export function JoinDialog({ onJoined, onClose }: Props) {
   useEscape(onClose);
   const api = window.cadrelWrite;
   const invite = parseInviteLink(link);
+  const app = appName();
+  // Cadrel Reader reads and comments; an invitation to edit the manuscript belongs in Cadrel Write.
+  const wrongApp = window.cadrelWrite.capabilities?.reader === true && invite?.role === 'edit';
 
   const start = async () => {
     if (!invite) return;
@@ -85,7 +91,7 @@ export function JoinDialog({ onJoined, onClose }: Props) {
         <h3>Open an invitation</h3>
         {waiting ? (
           <>
-            <p className="modal-hint">{waitingFor > 1 ? 'Google’s file picker is open in your browser. Select both files there' : 'One more file to go: Google’s file picker is open again in your browser. Select the file it shows'}; if the browser doesn’t switch back by itself, come back to Cadrel Write (on the phone, tap “Return to Cadrel Write”).</p>
+            <p className="modal-hint">{waitingFor > 1 ? 'Google’s file picker is open in your browser. Select both files there' : 'One more file to go: Google’s file picker is open again in your browser. Select the file it shows'}; if the browser doesn’t switch back by itself, come back to {app} (on the phone, tap “Return to {app}”).</p>
             <div className="modal-actions">
               <button type="button" onClick={() => (attempt.current++, setWaiting(false), setBusy(false))}>Cancel</button>
             </div>
@@ -94,13 +100,13 @@ export function JoinDialog({ onJoined, onClose }: Props) {
           <PickerFrame
             token={token}
             ids={[invite.packageId, invite.commentsId]}
-            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish() : (setToken(null), setError('Select both files so Cadrel Write can open the project and save your notes.')))}
+            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish() : (setToken(null), setError(`Select both files so ${app} can open the project and save your notes.`)))}
             onCancel={() => setToken(null)}
             onError={() => (setToken(null), setError('Couldn’t load Google’s file picker. Check your connection and try again.'))}
           />
         ) : (
           <>
-            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how Cadrel Write is allowed to open this one project (and nothing else in your Drive).</p>
+            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how {app} is allowed to open this one project (and nothing else in your Drive).</p>
             <label>
               Invitation link
               <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" autoFocus aria-invalid={link !== '' && !invite} />
@@ -109,11 +115,12 @@ export function JoinDialog({ onJoined, onClose }: Props) {
               Your name (shown on your notes)
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
             </label>
-            {link !== '' && !invite && <div className="modal-error" role="alert">That doesn’t look like a Cadrel Write invitation.</div>}
+            {link !== '' && !invite && <div className="modal-error" role="alert">That doesn’t look like a Cadrel invitation.</div>}
+            {wrongApp && <div className="modal-error" role="alert">This invitation is to edit “{invite!.project}” with its author, which {app} can’t do: {app} is for reading and giving feedback. Open it in Cadrel Write, or ask the author for a reader invitation.</div>}
             {error && <div className="modal-error" role="alert">{error}</div>}
             <div className="modal-actions">
               <button type="button" onClick={onClose}>Cancel</button>
-              <button type="button" className="primary" disabled={!invite || busy} onClick={() => void start()}>
+              <button type="button" className="primary" disabled={!invite || busy || wrongApp} onClick={() => void start()}>
                 {busy ? 'Opening…' : 'Continue'}
               </button>
             </div>

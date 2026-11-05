@@ -20,7 +20,7 @@ export function buildInviteLink(i: Invite): string {
 }
 
 /**
- * Reads an invitation pasted as a link (the web page address or an `cadrel-write:` link). A whole invitation message can be
+ * Reads an invitation pasted as a link (the web page address, or a `cadrel-reader:` or older `cadrel-write:` link). A whole invitation message can be
  * pasted too: the first word in it that is an invitation link is used. Null when there is none.
  */
 export function parseInviteLink(text: string): Invite | null {
@@ -33,7 +33,7 @@ export function parseInviteLink(text: string): Invite | null {
 
 function parseOne(t: string): Invite | null {
   const at = t.search(/[#?]/);
-  if (at < 0 || !/^(https?:\/\/|cadrel-write:)/i.test(t)) return null;
+  if (at < 0 || !/^(https?:\/\/|cadrel-reader:|cadrel-write:)/i.test(t)) return null;
   const q = new URLSearchParams(t.slice(at + 1));
   const packageId = q.get('p');
   const commentsId = q.get('c');
@@ -43,20 +43,40 @@ function parseOne(t: string): Invite | null {
   return { packageId, commentsId, reviewerId: reviewerId!, project: (q.get('n') ?? 'Shared project').slice(0, 120), ...(q.get('m') === 'edit' ? { role: 'edit' as const } : {}) };
 }
 
-/** Where reviewers get the app. */
-export const LATEST_RELEASE = 'https://github.com/blaashford-ux/cadrel/releases/latest';
+/** Where reviewers get Cadrel Reader (its releases are tagged `reader-vX.Y.Z`, apart from Cadrel's own). */
+export const LATEST_RELEASE = 'https://github.com/blaashford-ux/cadrel/releases?q=reader-v&expanded=true';
+/** Where collaborators (people who edit the manuscript with the author) get Cadrel Write: the full Cadrel app. */
+export const WRITE_RELEASE = 'https://github.com/blaashford-ux/cadrel/releases/latest';
 
-/** The invitation link wrapped in a short note for someone who doesn't have Cadrel Write yet. */
+/** The scheme Cadrel Reader registers, so an invitation link opens it directly. `cadrel-write:` is the older one, still read. */
+export const READER_SCHEME = 'cadrel-reader';
+
+/** The link as a `cadrel-reader:` link, which opens Cadrel Reader directly when it is installed. Null if it is not an invitation. */
+export function readerLink(link: string): string | null {
+  const invite = parseInviteLink(link);
+  if (!invite) return null;
+  const q = new URLSearchParams({ v: '1', p: invite.packageId, c: invite.commentsId, r: invite.reviewerId, n: invite.project });
+  return `${READER_SCHEME}://join?${q}`;
+}
+
+/**
+ * The invitation link wrapped in a short note for someone who doesn't have the app yet. A reader is sent to Cadrel Reader; a
+ * collaborator, who edits the manuscript, is sent to Cadrel (which has Write).
+ */
 export function inviteMessage(project: string, link: string, reviewerName?: string, role?: 'edit'): string {
   const hello = reviewerName?.trim() ? `Hi ${reviewerName.trim()},\n\n` : '';
-  const ask =
-    role === 'edit'
-      ? `I'd like you to work on “${project}” with me. I'm using Cadrel Write, a writing app for Windows, and you can edit the same manuscript there: your changes and mine are merged each time either of us syncs.`
-      : `I'd like your feedback on “${project}”. I'm using Cadrel Write, a writing app for Windows, and you can read it and leave comments and suggestions there.`;
+  if (role === 'edit') {
+    return (
+      `${hello}I'd like you to work on “${project}” with me. I'm using Cadrel, a writing suite for Windows, and you can edit the same manuscript in its Write app: your changes and mine are merged each time either of us syncs.\n\n` +
+      `1. Get Cadrel (Windows installer): ${WRITE_RELEASE}\n` +
+      `2. Open Cadrel Write, go to Projects → Shared with me → Open invitation…, and paste this link:\n${link}\n\n` +
+      `Google will ask you to pick two files; that's how Cadrel Write is allowed to open this one project, and nothing else in your Drive.`
+    );
+  }
   return (
-    `${hello}${ask}\n\n` +
-    `1. Get Cadrel Write (Windows installer): ${LATEST_RELEASE}\n` +
-    `2. Open Cadrel Write, go to Projects → Shared with me → Open invitation…, and paste this link:\n${link}\n\n` +
-    `Google will ask you to pick two files; that's how Cadrel Write is allowed to open this one project, and nothing else in your Drive.`
+    `${hello}I'd like your feedback on “${project}”. Cadrel Reader is an app for Windows and Android for reading it and leaving comments and suggestions.\n\n` +
+    `1. Get Cadrel Reader (Windows installer or Android app): ${LATEST_RELEASE}\n` +
+    `2. Open Cadrel Reader, choose Open invitation…, and paste this link:\n${link}\n\n` +
+    `Google will ask you to pick two files; that's how Cadrel Reader is allowed to open this one project, and nothing else in your Drive.`
   );
 }

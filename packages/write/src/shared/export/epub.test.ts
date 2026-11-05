@@ -5,7 +5,7 @@ import { assembleBook, type BookBuild } from './assemble';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildEpub, epubCss, verifyEpub } from './epub';
-import { bundledFont, embeddedFileName, FONT_FILES } from './fonts';
+import { BUNDLED_FONTS, bundledFont, embeddedFileName, FONT_FILES, fontFiles, LICENCE_FILE } from './fonts';
 import { defaultBookDetails, type BookDetails } from './model';
 import { epubcheckAvailable, runEpubcheck } from './testing/epubcheck';
 
@@ -269,10 +269,20 @@ describe('verifyEpub catches broken books', () => {
   });
 });
 
+const fakeFamily = (family: string) =>
+  Object.fromEntries([...fontFiles(bundledFont(family)!).map((f) => f.file), LICENCE_FILE].map((f) => [f, new Uint8Array([0, 1, 0, 0, f.length & 255])]));
+const fakeFonts = (...families: string[]) => Object.fromEntries((families.length ? families : ['EB Garamond', 'Crimson Pro']).map((f) => [f.toLowerCase(), fakeFamily(f)]));
+
+/** The real files of a bundled family, as the exporter reads them (faces plus the OFL licence). */
+const realFamily = (family: string) => {
+  const b = bundledFont(family)!;
+  const dir = path.resolve(__dirname, '../../../assets/fonts', b.slug);
+  return Object.fromEntries([...fontFiles(b).map((f) => f.file), LICENCE_FILE].map((f) => [f, new Uint8Array(readFileSync(path.join(dir, f)))]));
+};
+
 describe.skipIf(!epubcheckAvailable)('epubcheck (the real validator)', () => {
-  it.each(['EB Garamond', 'Crimson Pro', 'Libre Baskerville'])('accepts a book that embeds the real %s font files', (family) => {
-    const b = bundledFont(family)!;
-    const fonts = Object.fromEntries(FONT_FILES.map((f) => [f.file, new Uint8Array(readFileSync(path.resolve(__dirname, '../../../assets/fonts', b.slug, f.file)))]));
+  it.each(BUNDLED_FONTS.map((b) => b.family))('accepts a book that embeds the real %s font files', (family) => {
+    const fonts = { [family.toLowerCase()]: realFamily(family) };
     const r = runEpubcheck(buildEpub(book((d) => (d.export.epub.font = family)), undefined, fonts));
     expect(r.output).toContain('No errors or warnings detected');
     expect(r.ok).toBe(true);
@@ -296,14 +306,13 @@ describe.skipIf(!epubcheckAvailable)('epubcheck (the real validator)', () => {
 });
 
 describe('embedded fonts', () => {
-  const fakeFonts = () => Object.fromEntries(FONT_FILES.map((f) => [f.file, new Uint8Array([0, 1, 0, 0, f.weight & 255])]));
-
   it('a bundled family is embedded: four faces, manifest items, css @font-face, and still passes the self-check', () => {
     const b = book((d) => (d.export.epub.font = 'Crimson Pro'));
     const bytes = buildEpub(b, undefined, fakeFonts());
     const files = unzip(bytes);
     const crimson = bundledFont('Crimson Pro')!;
     for (const f of FONT_FILES) expect(files[`OEBPS/fonts/${embeddedFileName(crimson, f)}`]).toBeTruthy();
+    expect(files['OEBPS/fonts/crimson-pro-OFL.txt']).toBeTruthy();
     const css = read(files, 'OEBPS/stylesheet.css');
     expect(css.match(/@font-face/g)).toHaveLength(4);
     expect(css).toContain('src: url("fonts/crimson-pro-Regular.ttf")');
@@ -316,7 +325,7 @@ describe('embedded fonts', () => {
   it('the default family is embedded too, keeping the Garamond fallback', () => {
     const files = unzip(buildEpub(book(), undefined, fakeFonts()));
     expect(read(files, 'OEBPS/stylesheet.css')).toContain('font-family: "EB Garamond", Garamond, serif;');
-    expect(Object.keys(files).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(4);
+    expect(Object.keys(files).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(5); // four faces and the licence
   });
 
   it('a system font is only named, never embedded', () => {
@@ -362,5 +371,43 @@ describe('buildEpub — alignment', () => {
     const l = page((d) => void (d.export.epub.bodyAlign = 'left')).css;
     expect(l).toMatch(/p \{ text-align: left;/);
     expect(l).not.toMatch(/p \{ text-align: justify;/);
+  });
+
+  it('a separate heading font is embedded beside the body font, each with its licence, and used only for headings', () => {
+    const b = book((d) => { d.export.epub.font = 'Literata'; d.export.epub.headingFont = 'Cormorant Garamond'; });
+    const bytes = buildEpub(b, undefined, fakeFonts('Literata', 'Cormorant Garamond'));
+    const files = unzip(bytes);
+    const css = read(files, 'OEBPS/stylesheet.css');
+    expect(css.match(/@font-face/g)).toHaveLength(8);
+    expect(css).toContain('body, p { font-family: "Literata", serif;');
+    expect(css).toMatch(/h1 \{\s*font-family: "Cormorant Garamond", serif;/);
+    expect(css).toContain('p.booktitle { text-align: center; font-family: "Cormorant Garamond", serif;');
+    expect(files['OEBPS/fonts/literata-OFL.txt']).toBeTruthy();
+    expect(files['OEBPS/fonts/cormorant-garamond-OFL.txt']).toBeTruthy();
+    expect(verifyEpub(bytes)).toEqual([]);
+  });
+
+  it('an empty heading font means the body font, which is embedded once', () => {
+    const files = unzip(buildEpub(book((d) => (d.export.epub.font = 'Crimson Pro')), undefined, fakeFonts()));
+    const css = read(files, 'OEBPS/stylesheet.css');
+    expect(css.match(/@font-face/g)).toHaveLength(4);
+    expect(css).toMatch(/h1 \{\s*font-family: "Crimson Pro", serif;/);
+  });
+
+  it('variable families (Reserved Font Name) embed their two unmodified files with a weight range', () => {
+    const files = unzip(buildEpub(book((d) => (d.export.epub.font = 'Lora')), undefined, fakeFonts('Lora')));
+    const css = read(files, 'OEBPS/stylesheet.css');
+    expect(css.match(/@font-face/g)).toHaveLength(2);
+    expect(css).toContain('font-weight: 300 900;');
+    expect(files['OEBPS/fonts/lora-Variable.ttf']).toBeTruthy();
+    expect(files['OEBPS/fonts/lora-VariableItalic.ttf']).toBeTruthy();
+    expect(files['OEBPS/fonts/lora-OFL.txt']).toBeTruthy();
+  });
+
+  it('nothing is embedded when a bundled family arrived without its licence', () => {
+    const lacking = fakeFonts('Crimson Pro');
+    delete lacking['crimson pro'][LICENCE_FILE];
+    const files = unzip(buildEpub(book((d) => (d.export.epub.font = 'Crimson Pro')), undefined, lacking));
+    expect(Object.keys(files).some((n) => n.startsWith('OEBPS/fonts/'))).toBe(false);
   });
 });

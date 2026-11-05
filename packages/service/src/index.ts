@@ -11,18 +11,22 @@ import {
   acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
-  updatePerson, updateRole, defaultRoles,
+  updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
+  editorialFacts, type EditorialFacts,
+  listVerification, verifyPass, type VerificationRecord,
+  decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
+  answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
+  assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
+  briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
-  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage
+  type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
 } from '@cadrel/kernel';
 
-export class PermissionDenied extends Error {
-  constructor(readonly capability: string, readonly reason: string) {
-    super(`You are not allowed to do that (${capability}): ${reason}.`);
-  }
-}
+import { PermissionDenied } from './errors';
+export { PermissionDenied };
+export { VaultAs } from './vault';
 
 /** What the service needs to know about who may do what. Read on every call, so a role change takes effect at once. */
 export interface Access {
@@ -39,12 +43,18 @@ export function ownerAccess(personId: string, studioId: string): Access {
   return { assignments: () => assignments, roles: () => roles };
 }
 
-/** Reads who holds what from the Studio's own records, on every call, so a change takes effect at once. This is what the app and the Worker use. */
-export function dbAccess(db: Db, studioId: string): Access {
+/** Who holds what, as the permission checks read it. */
+export type AccessSnapshot = Awaited<ReturnType<typeof loadAccess>>;
+
+/**
+ * Reads who holds what from the Studio's own records, on every call, so a change takes effect at once. This is what the app uses, where the
+ * records are a local file. A server, where every row read is billed, passes `load` to hand back what it already holds until the records change.
+ */
+export function dbAccess(db: Db, studioId: string, load: () => Promise<AccessSnapshot> = () => loadAccess(db, { studioId })): Access {
   return {
-    assignments: async () => (await loadAccess(db, { studioId })).assignments,
-    roles: async () => (await loadAccess(db, { studioId })).roles,
-    teams: async (personId) => (await loadAccess(db, { studioId })).teamsOf(personId)
+    assignments: async () => (await load()).assignments,
+    roles: async () => (await load()).roles,
+    teams: async (personId) => (await load()).teamsOf(personId)
   };
 }
 
@@ -54,7 +64,16 @@ export interface ServiceOptions {
   access: Access;
   /** The clock; injected so decisions and stamps are reproducible. */
   now?: () => Date;
+  /**
+   * The Studio's project tree, which the records (tasks, sign-offs, decisions) hang off. With it, they follow who is assigned to what: a person
+   * sees and changes the records of the projects they are assigned to, and a task or sign-off can be given only to someone assigned to its
+   * project. Without it (no tree to go by) nothing is limited.
+   */
+  projects?: () => Promise<ProjectTree | null>;
 }
+
+const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read' };
+const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign' };
 
 export class StudioService {
   constructor(private readonly o: ServiceOptions) {}
@@ -94,6 +113,11 @@ export class StudioAs {
   }
   private scopePath(scope: { kind: ScopeKind; id: string }): ScopeRef[] {
     return scope.kind === 'studio' ? this.studioPath() : [...this.studioPath(), { kind: scope.kind, id: scope.id }];
+  }
+
+  /** The projects this person can see: those they are assigned to (see `projectVisibility`), or all of them for the Owner and Admin. */
+  async visibleProjects(tree: ProjectTree): Promise<ProjectVisibility> {
+    return projectVisibility(tree, await this.context(), this.o.studioId);
   }
 
   /** Whether this person may do something, and why: the interface greys things out from this and "Explain access" shows the reason. */
@@ -150,7 +174,26 @@ export class StudioAs {
       };
     },
     teams: async (): Promise<Team[]> => (await this.need('people.read'), listTeams(this.o.db, this.ctx())),
+    /**
+     * Who is in the Studio, by name only, for showing who a task, sign-off or lock belongs to. Anyone who holds a role anywhere may see it; the
+     * rest of a person's record (email, kind, roles) needs people.read.
+     */
+    directory: async (): Promise<{ id: string; name: string }[]> => {
+      const some = ['people.read', 'task.read', 'catalogue.read', 'manuscript.read', 'asset.read', 'market.read', 'royalties.read'];
+      let ok = false;
+      for (const c of some) if (await this.canAt(c, null) || await this.canOn(c, null)) { ok = true; break; }
+      if (!ok) throw new PermissionDenied('task.read', 'no active role grants it here');
+      return (await listPeople(this.o.db, this.ctx())).map((p) => ({ id: p.id, name: p.name }));
+    },
     penNames: async (): Promise<PenName[]> => (await this.need('people.read'), listPenNames(this.o.db, this.ctx())),
+    /**
+     * Only the names of the pen names the Studio publishes under, for limiting what Market imports and shows. Anyone who works with books or
+     * money needs these, whether or not they may see the people.
+     */
+    penNameNames: async (): Promise<string[]> => {
+      if (!(await this.can('people.read')) && !(await this.can('catalogue.read')) && !(await this.can('royalties.read'))) throw new PermissionDenied('catalogue.read', 'no active role grants it here');
+      return (await listPenNames(this.o.db, this.ctx())).map((n) => n.displayName);
+    },
     roles: async (): Promise<RoleRecord[]> => (await this.need('people.read'), listRoles(this.o.db, this.ctx())),
     assignments: async (o?: { subjectId?: string; roleId?: string }): Promise<AssignmentRecord[]> => (await this.need('people.read'), listAssignments(this.o.db, this.ctx(), o)),
 
@@ -310,47 +353,377 @@ export class StudioAs {
    * them); it is withdrawn by whoever asked, or by task.manage. Decisions are recorded with task.edit and can never be changed or removed.
    * Projects live in the project tree, so the caller checks a project exists and expands a project to its subprojects.
    */
+  /** Whether this person holds a capability on a project (a role given there or above it counts), or, with no project, anywhere at all. */
+  async canOn(capability: string, projectId?: string | null): Promise<boolean> {
+    try {
+      await this.needWork(capability, projectId);
+      return true;
+    } catch (e) {
+      if (e instanceof PermissionDenied) return false;
+      throw e;
+    }
+  }
+
+  /** Whether this person holds a capability at the studio (no project) or on one project (a role given there or above it counts). Without a project tree it is the studio. */
+  async canAt(capability: string, projectId?: string | null): Promise<boolean> {
+    const tree = projectId ? await this.o.projects?.() : null;
+    const path = tree && projectId ? this.projectPath(tree, projectId) : this.studioPath();
+    return explain(await this.context(), capability, { path }).allowed;
+  }
+
+  /** The path to a project in the permission check: the studio, the projects above it, and it. */
+  private projectPath(tree: ProjectTree, projectId: string): ScopeRef[] {
+    return [...this.studioPath(), ...ancestorsOf(tree, projectId).map((p) => ({ kind: 'project' as const, id: p.id })), { kind: 'project', id: projectId }];
+  }
+  /**
+   * The check for a task, sign-off or decision. A role given on a project holds there, not at the whole studio, so the capability is looked for on
+   * the project the record is on; for a list (no project in particular) it is enough to hold it anywhere. Whoever sees every project is checked
+   * at the studio, as before. Without a project tree to go by it is always the studio.
+   */
+  private async needWork(capability: string, projectId?: string | null): Promise<void> {
+    const tree = await this.o.projects?.();
+    if (!tree || (await this.visibleProjects(tree)).all) return this.need(capability);
+    const ctx = await this.context();
+    if (projectId) {
+      const d = explain(ctx, capability, { path: this.projectPath(tree, projectId) });
+      if (!d.allowed) throw new PermissionDenied(capability, d.reason);
+      return;
+    }
+    const held = ctx.assignments.some((a) => {
+      if (a.expiresAt && a.expiresAt <= ctx.now) return false;
+      const mine = (a.subject.kind === 'person' && a.subject.id === this.personId) || (a.subject.kind === 'team' && ctx.actor.teamIds.includes(a.subject.id));
+      const role = ctx.roles.get(a.roleId);
+      return mine && !!role && (role.all === true || role.capabilities.includes(capability));
+    });
+    if (!held) throw new PermissionDenied(capability, `no active role grants ${capability} here`);
+  }
+  /**
+   * Which projects' records this person may reach with `capability`: those they are assigned to and hold it on. Null when everything is theirs
+   * (they see every project, or there is no tree to go by). A project shown to them only as the container of a Book they are on is not theirs.
+   */
+  private async reach(capability = 'task.read'): Promise<((projectId: string | null | undefined) => boolean) | null> {
+    const tree = await this.o.projects?.();
+    if (!tree) return null;
+    const v = await this.visibleProjects(tree);
+    if (v.all) return null;
+    const ctx = await this.context();
+    const ok = new Set([...v.assigned].filter((id) => explain(ctx, capability, { path: this.projectPath(tree, id) }).allowed));
+    return (projectId) => !!projectId && ok.has(projectId);
+  }
+  private async mustReach(projectId: string | null | undefined, capability = 'task.read'): Promise<void> {
+    const reach = await this.reach(capability);
+    if (reach && !reach(projectId)) throw new Error('There is no such project.');
+  }
+  /** Whether `personId` is assigned to the project (so work may be given to them): by a role on it or above it, or by holding every project. */
+  private async assignedTo(personId: string, projectId: string): Promise<boolean> {
+    const tree = await this.o.projects?.();
+    if (!tree) return true;
+    const v = await new StudioAs(this.o, personId).visibleProjects(tree);
+    return v.all || v.assigned.has(projectId);
+  }
+  private async mustBeAssigned(personIds: (string | null | undefined)[], projectId: string, what: string): Promise<void> {
+    for (const id of personIds) {
+      if (!id || (await this.assignedTo(id, projectId))) continue;
+      const who = (await getPerson(this.o.db, this.ctx(), id).catch(() => null))?.name ?? 'That person';
+      throw new Error(`${who} is not assigned to this project, so ${what} cannot go to them. Give them a role on the project first (on its page, under People).`);
+    }
+  }
+  /** The active people work on this project may be given to: those assigned to it (and the Owner and Admin, who hold every project). */
+  private async assignable(projectId: string): Promise<{ id: string; name: string }[]> {
+    const people = await listPeople(this.o.db, this.ctx());
+    const out: { id: string; name: string }[] = [];
+    for (const p of people) if (await this.assignedTo(p.id, projectId)) out.push({ id: p.id, name: p.name });
+    return out;
+  }
+
   readonly work = {
-    tasks: async (f?: TaskFilter): Promise<TaskRecord[]> => (await this.need('task.read'), listTasks(this.o.db, this.ctx(), f)),
-    task: async (id: string): Promise<TaskRecord | null> => (await this.need('task.read'), getTask(this.o.db, this.ctx(), id)),
-    openTaskCount: async (projectIds: string[]): Promise<number> => (await this.need('task.read'), openTaskCount(this.o.db, this.ctx(), projectIds)),
+    tasks: async (f?: TaskFilter): Promise<TaskRecord[]> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return (await listTasks(this.o.db, this.ctx(), f)).filter((t) => !reach || reach(t.projectId));
+    },
+    task: async (id: string): Promise<TaskRecord | null> => {
+      await this.needWork('task.read');
+      const t = await getTask(this.o.db, this.ctx(), id);
+      const reach = await this.reach();
+      return t && (!reach || reach(t.projectId)) ? t : null;
+    },
+    openTaskCount: async (projectIds: string[]): Promise<number> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return openTaskCount(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
     createTask: async (i: NewTask): Promise<TaskRecord> => {
-      await this.need(i?.assigneeId && i.assigneeId !== this.personId ? 'task.assign' : 'task.edit');
+      await this.mustReach(i?.projectId, 'task.read');
+      await this.needWork(i?.assigneeId && i.assigneeId !== this.personId ? 'task.assign' : 'task.edit', i?.projectId);
+      await this.mustBeAssigned([i?.assigneeId], i.projectId, 'a task');
       return createTask(this.o.db, this.ctx(), i);
     },
     updateTask: async (id: string, patch: TaskPatch): Promise<TaskRecord> => {
       const t = await this.mineToChange(id);
-      if (patch?.assigneeId !== undefined && (patch.assigneeId || null) !== t.assigneeId && patch.assigneeId !== this.personId) await this.need('task.assign');
+      if (patch?.assigneeId !== undefined && (patch.assigneeId || null) !== t.assigneeId) {
+        if (patch.assigneeId !== this.personId) await this.needWork('task.assign', t.projectId);
+        await this.mustBeAssigned([patch.assigneeId], t.projectId, 'a task');
+      }
       return updateTask(this.o.db, this.ctx(), id, patch);
     },
     setState: async (id: string, state: TaskState): Promise<TaskRecord> => (await this.mineToChange(id), setTaskState(this.o.db, this.ctx(), id, state)),
     addDependency: async (id: string, dependsOnId: string): Promise<TaskRecord> => (await this.mineToChange(id), addDependency(this.o.db, this.ctx(), id, dependsOnId)),
     removeDependency: async (id: string, dependsOnId: string): Promise<TaskRecord> => (await this.mineToChange(id), removeDependency(this.o.db, this.ctx(), id, dependsOnId)),
+    /** The people a task or sign-off on this project may be given to. */
+    assignable: async (projectId: string): Promise<{ id: string; name: string }[]> => {
+      await this.mustReach(projectId);
+      await this.needWork('task.read', projectId);
+      return this.assignable(projectId);
+    },
 
-    approvals: async (f?: { projectId?: string; projectIds?: string[]; approverId?: string; state?: ApprovalState | 'any' }): Promise<ApprovalRecord[]> => (await this.need('task.read'), listApprovals(this.o.db, this.ctx(), f)),
+    approvals: async (f?: { projectId?: string; projectIds?: string[]; approverId?: string; state?: ApprovalState | 'any' }): Promise<ApprovalRecord[]> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return (await listApprovals(this.o.db, this.ctx(), f)).filter((a) => !reach || reach(a.projectId));
+    },
     /** The sign-offs waiting for this person's answer. */
-    waitingForMe: async (): Promise<ApprovalRecord[]> => (await this.need('task.read'), approvalsWaitingFor(this.o.db, this.ctx(), this.personId)),
-    approvedLabels: async (projectId: string): Promise<string[]> => (await this.need('task.read'), approvedLabels(this.o.db, this.ctx(), projectId)),
-    requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => (await this.need('task.edit'), requestApproval(this.o.db, this.ctx(), i)),
-    respond: async (id: string, response: 'approved' | 'rejected', reason?: string): Promise<ApprovalRecord> => (await this.need('task.read'), respondToApproval(this.o.db, this.ctx(), id, response, reason)),
-    withdraw: async (id: string): Promise<ApprovalRecord> => {
-      await this.need('task.read');
+    waitingForMe: async (): Promise<ApprovalRecord[]> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return (await approvalsWaitingFor(this.o.db, this.ctx(), this.personId)).filter((a) => !reach || reach(a.projectId));
+    },
+    /** What a workflow gate sees of editorial passes on these projects (a project and its subprojects). Needs task.read, like the other gate facts. */
+    editorialFacts: async (projectIds: string[]): Promise<EditorialFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return editorialFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
+    approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
+    requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {
+      await this.mustReach(i?.projectId);
+      await this.needWork('task.edit', i?.projectId);
+      await this.mustBeAssigned(i?.approverIds ?? [], i.projectId, 'a sign-off');
+      return requestApproval(this.o.db, this.ctx(), i);
+    },
+    respond: async (id: string, response: 'approved' | 'rejected', reason?: string): Promise<ApprovalRecord> => {
       const a = await getApproval(this.o.db, this.ctx(), id);
-      if (a && a.requestedBy !== this.personId) await this.need('task.manage');
+      if (a) await this.mustReach(a.projectId);
+      await this.needWork('task.read', a?.projectId);
+      return respondToApproval(this.o.db, this.ctx(), id, response, reason);
+    },
+    withdraw: async (id: string): Promise<ApprovalRecord> => {
+      const a = await getApproval(this.o.db, this.ctx(), id);
+      if (a) await this.mustReach(a.projectId);
+      await this.needWork('task.read', a?.projectId);
+      if (a && a.requestedBy !== this.personId) await this.needWork('task.manage', a.projectId);
       return withdrawApproval(this.o.db, this.ctx(), id);
     },
 
-    decisions: async (f?: { projectId?: string; projectIds?: string[]; current?: boolean }): Promise<DecisionRecord[]> => (await this.need('task.read'), listDecisions(this.o.db, this.ctx(), f)),
-    decision: async (id: string): Promise<DecisionRecord | null> => (await this.need('task.read'), getDecision(this.o.db, this.ctx(), id)),
-    record: async (i: Parameters<typeof recordDecision>[2]): Promise<DecisionRecord> => (await this.need('task.edit'), recordDecision(this.o.db, this.ctx(), i))
+    decisions: async (f?: { projectId?: string; projectIds?: string[]; current?: boolean }): Promise<DecisionRecord[]> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return (await listDecisions(this.o.db, this.ctx(), f)).filter((d) => !reach || !d.projectId || reach(d.projectId));
+    },
+    decision: async (id: string): Promise<DecisionRecord | null> => {
+      await this.needWork('task.read');
+      const d = await getDecision(this.o.db, this.ctx(), id);
+      const reach = await this.reach();
+      return d && (!reach || !d.projectId || reach(d.projectId)) ? d : null;
+    },
+    record: async (i: Parameters<typeof recordDecision>[2]): Promise<DecisionRecord> => {
+      if (i?.projectId) await this.mustReach(i.projectId);
+      await this.needWork('task.edit', i?.projectId);
+      return recordDecision(this.o.db, this.ctx(), i);
+    }
   };
+
+  /**
+   * Briefs for a manuscript and for an edit. A manuscript brief is read with task.read and written with task.edit (the author and the people
+   * running the book); an edit brief is read with edit.read and written with edit.assign (whoever assigns the editors). Both only on projects
+   * this person can reach. A brief is never overwritten: a revision is a new version, and the one before stays readable.
+   */
+  readonly briefs = {
+    list: async (f: BriefFilter = {}): Promise<BriefRecord[]> => {
+      const all = await listBriefs(this.o.db, this.ctx(), f);
+      const out: BriefRecord[] = [];
+      for (const b of all) if (await this.mayReadBrief(b)) out.push(b);
+      return out;
+    },
+    get: async (id: string): Promise<BriefRecord | null> => {
+      const b = await getBrief(this.o.db, this.ctx(), id);
+      return b && (await this.mayReadBrief(b)) ? b : null;
+    },
+    versions: async (id: string): Promise<BriefVersion[]> => {
+      const b = await this.briefToRead(id);
+      return briefVersions(this.o.db, this.ctx(), b.id);
+    },
+    create: async (i: NewBrief): Promise<BriefRecord> => {
+      const cap = BRIEF_WRITE[i?.kind as BriefKind] ?? 'task.edit';
+      await this.mustReach(i?.projectId, BRIEF_READ[i?.kind as BriefKind] ?? 'task.read');
+      await this.needWork(cap, i.projectId);
+      return createBrief(this.o.db, this.ctx(), i);
+    },
+    revise: async (id: string, i: { body: string; note?: string; title?: string; basedOn: number }): Promise<BriefRecord> => {
+      const b = await this.briefToRead(id);
+      await this.needWork(BRIEF_WRITE[b.kind], b.projectId);
+      return reviseBrief(this.o.db, this.ctx(), id, i);
+    }
+  };
+  /**
+   * Editorial passes. Reading needs edit.read; planning a pass and choosing or changing its editor needs edit.assign (the editor must be
+   * assigned to the project); starting and delivering needs edit.run, and only the pass's own editor may unless the person also holds
+   * edit.assign; the author's answer needs edit.respond; closing a pass needs edit.approve; calling one off needs edit.assign.
+   */
+  readonly passes = {
+    list: async (f: PassFilter = {}): Promise<PassRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      return (await listPasses(this.o.db, this.ctx(), f)).filter((p) => !reach || reach(p.projectId));
+    },
+    get: async (id: string): Promise<PassRecord | null> => {
+      await this.needWork('edit.read');
+      const p = await getPass(this.o.db, this.ctx(), id);
+      const reach = await this.reach('edit.read');
+      return p && (!reach || reach(p.projectId)) ? p : null;
+    },
+    create: async (i: NewPass): Promise<PassRecord> => {
+      await this.mustReach(i?.projectId, 'edit.read');
+      await this.needWork('edit.assign', i.projectId);
+      await this.mustBeAssigned([i.editorId], i.projectId, 'an editorial pass');
+      return createPass(this.o.db, this.ctx(), i);
+    },
+    assign: async (id: string, editorId: string): Promise<PassRecord> => {
+      const p = await this.passToRead(id);
+      await this.needWork('edit.assign', p.projectId);
+      await this.mustBeAssigned([editorId], p.projectId, 'an editorial pass');
+      return assignEditor(this.o.db, this.ctx(), id, editorId);
+    },
+    start: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'in_progress'),
+    deliver: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'delivered'),
+    respond: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'responded'),
+    close: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'closed'),
+    cancel: async (id: string): Promise<PassRecord> => this.movePassAs(id, 'cancelled')
+  };
+  /**
+   * Queries, comments and suggestions inside a pass. Reading needs edit.read. Raising, resolving and withdrawing are the pass's editor's (edit.run;
+   * someone with edit.assign may do it for them); the author's answer needs edit.respond. Only items of passes on projects this person can reach.
+   */
+  readonly queries = {
+    list: async (f: QueryFilter = {}): Promise<QueryRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const all = await listQueries(this.o.db, this.ctx(), f);
+      if (!reach) return all;
+      const ok = new Set((await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id));
+      return all.filter((q) => ok.has(q.passId));
+    },
+    counts: async (passIds: string[]): Promise<Record<string, QueryCounts>> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const ok = reach ? (await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id) : passIds;
+      return queryCounts(this.o.db, this.ctx(), passIds.filter((id) => ok.includes(id)));
+    },
+    raise: async (passId: string, items: NewQuery[]): Promise<QueryRecord[]> => {
+      await this.editorOf(await this.passToRead(passId));
+      return raiseQueries(this.o.db, this.ctx(), passId, items);
+    },
+    /** Cadrel Write's notes as items in this pass. Notes without a usable anchor are counted, not raised. */
+    importNotes: async (passId: string, notes: Parameters<typeof queriesFromNotes>[0]): Promise<{ raised: QueryRecord[]; skipped: number }> => {
+      await this.editorOf(await this.passToRead(passId));
+      const { items, skipped } = queriesFromNotes(notes);
+      return { raised: items.length ? await raiseQueries(this.o.db, this.ctx(), passId, items) : [], skipped };
+    },
+    /** The author accepts, rejects or defers an item (edit.respond). A deferral makes a task for the revisit and everything is entered in the decision ledger. */
+    decide: async (id: string, i: NewEditDecision): Promise<EditDecisionRecord> => {
+      const q = await this.queryToRead(id);
+      await this.needWork('edit.respond', (await this.passToRead(q.passId)).projectId);
+      return decideQuery(this.o.db, this.ctx(), id, i);
+    },
+    /** The decisions on a pass's items: the ones standing now, or with `history` every change of mind. */
+    decisions: async (f: EditDecisionFilter = {}): Promise<EditDecisionRecord[]> => {
+      await this.needWork('edit.read');
+      const reach = await this.reach('edit.read');
+      const all = await listEditDecisions(this.o.db, this.ctx(), f);
+      if (!reach) return all;
+      const ok = new Set((await listPasses(this.o.db, this.ctx(), { state: 'any' })).filter((p) => reach(p.projectId)).map((p) => p.id));
+      const qs = new Map((await listQueries(this.o.db, this.ctx())).map((q) => [q.id, q.passId]));
+      return all.filter((d) => ok.has(qs.get(d.queryId) ?? ''));
+    },
+    /**
+     * Checks the changes the author accepted against the text of a later version (the pass's editor, edit.run). The caller supplies that text;
+     * the records hold none. Replaces any earlier check against the same version.
+     */
+    verify: async (passId: string, input: { revisedVersion: number; revisedText: string }): Promise<VerificationRecord[]> => {
+      await this.editorOf(await this.passToRead(passId));
+      return verifyPass(this.o.db, this.ctx(), passId, input);
+    },
+    /** The last check of a pass (or of one revised version). */
+    verification: async (passId: string, revisedVersion?: number): Promise<VerificationRecord[]> => {
+      await this.passToRead(passId);
+      return listVerification(this.o.db, this.ctx(), { passId, revisedVersion });
+    },
+    answer: async (id: string, response: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.needWork('edit.respond', (await this.passToRead(q.passId)).projectId);
+      return answerQuery(this.o.db, this.ctx(), id, response);
+    },
+    resolve: async (id: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.editorOf(await this.passToRead(q.passId));
+      return resolveQuery(this.o.db, this.ctx(), id);
+    },
+    withdraw: async (id: string): Promise<QueryRecord> => {
+      const q = await this.queryToRead(id);
+      await this.editorOf(await this.passToRead(q.passId));
+      return withdrawQuery(this.o.db, this.ctx(), id);
+    }
+  };
+  /** The pass's own editor with edit.run, or anyone with edit.run and edit.assign. */
+  private async editorOf(p: PassRecord): Promise<void> {
+    await this.needWork('edit.run', p.projectId);
+    if (p.editorId !== this.personId) await this.needWork('edit.assign', p.projectId);
+  }
+  private async queryToRead(id: string): Promise<QueryRecord> {
+    await this.needWork('edit.read');
+    const q = await getQuery(this.o.db, this.ctx(), id);
+    if (!q) throw new Error('That item is not there.');
+    await this.passToRead(q.passId); // throws if its pass is not there for this person
+    return q;
+  }
+  private async passToRead(id: string): Promise<PassRecord> {
+    await this.needWork('edit.read');
+    const p = await getPass(this.o.db, this.ctx(), id);
+    const reach = await this.reach('edit.read');
+    if (!p || (reach && !reach(p.projectId))) throw new Error('That pass is not there.');
+    return p;
+  }
+  private async movePassAs(id: string, to: PassState): Promise<PassRecord> {
+    const p = await this.passToRead(id);
+    if (to === 'in_progress' || to === 'delivered') {
+      await this.editorOf(p);
+    } else await this.needWork(to === 'responded' ? 'edit.respond' : to === 'closed' ? 'edit.approve' : 'edit.assign', p.projectId);
+    return movePass(this.o.db, this.ctx(), id, to);
+  }
+
+  private async mayReadBrief(b: BriefRecord): Promise<boolean> {
+    try {
+      await this.mustReach(b.projectId, BRIEF_READ[b.kind]);
+      await this.needWork(BRIEF_READ[b.kind], b.projectId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private async briefToRead(id: string): Promise<BriefRecord> {
+    const b = await getBrief(this.o.db, this.ctx(), id);
+    if (!b || !(await this.mayReadBrief(b))) throw new Error('That brief is not there.');
+    return b;
+  }
 
   /** A task this person may change: any task for task.manage, else one assigned to them with task.edit. */
   private async mineToChange(id: string): Promise<TaskRecord> {
-    await this.need('task.edit');
     const t = await getTask(this.o.db, this.ctx(), id);
     if (!t) throw new Error('That task is not there.');
-    if (t.assigneeId !== this.personId) await this.need('task.manage');
+    const reach = await this.reach();
+    if (reach && !reach(t.projectId)) throw new Error('That task is not there.');
+    await this.needWork('task.edit', t.projectId);
+    if (t.assigneeId !== this.personId) await this.needWork('task.manage', t.projectId);
     return t;
   }
 
@@ -385,3 +758,4 @@ export class StudioAs {
     }
   };
 }
+export { decodeError, decodeValue, encodeError, encodeValue, type WireError } from './wire';

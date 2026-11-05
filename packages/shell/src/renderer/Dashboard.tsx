@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { kindLabel, outline } from '@cadrel/kernel';
+import { inViewScope, kindLabel, outline } from '@cadrel/kernel';
 import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } from '../shared/api';
 import { captureState } from './capture';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
 import { Glance, StageTag, usePulse, useStages } from './Glance';
+import { ScopeToggle, usePageScope } from './PageScope';
 
 const api = window.cadrel;
 
@@ -86,6 +87,7 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
   const now = Date.now();
   const pulse = usePulse(studio);
   const stageOf = useStages(studio);
+  const ps = usePageScope('dashboard');
   const [marketBusy, setMarketBusy] = useState<'reconnect' | 'disconnect' | 'free' | null>(null);
   const reconnect = () => {
     setMarketBusy('reconnect');
@@ -111,12 +113,17 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
     });
   };
   if (!overview) return <p className="muted">Loading…</p>;
-  const { write, market } = overview;
-  const live = write.projects.filter((p) => !p.archived);
+  // The Project in scope: its own projects (and Books), the manuscripts linked to them and the Market categories assigned to them.
+  const folders = ps.scope ? new Set(ps.scope.links.filter((l) => l.module === 'write').map((l) => l.ref)) : null;
+  const cats = ps.scope ? new Set(ps.scope.links.filter((l) => l.module === 'market').map((l) => l.ref)) : null;
+  const { write } = overview;
+  const market = cats ? { ...overview.market, categories: overview.market.categories.filter((c) => cats.has(c.key)) } : overview.market;
+  const live = write.projects.filter((p) => !p.archived && (!folders || folders.has(p.name)));
   const totalWords = live.reduce((n, p) => n + (p.words ?? 0), 0);
 
   return (
     <div className="dashboard">
+      <div className="row"><ScopeToggle s={ps} /></div>
       <Glance pulse={pulse} onGo={onGo} onProject={onProject} />
 
       <section className="card wide" aria-labelledby="d-projects">
@@ -139,7 +146,7 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
               </tr>
             </thead>
             <tbody>
-              {outline(studio.tree).map(({ project: p, depth }) => {
+              {outline(studio.tree).filter(({ project: p }) => !ps.scope || inViewScope(studio.tree, ps.scope, p.id)).map(({ project: p, depth }) => {
                 const f = factsFor(studio.tree, overview, p.id);
                 const pct = percent(f.words, f.goalWords);
                 return (

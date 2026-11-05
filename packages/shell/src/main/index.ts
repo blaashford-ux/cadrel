@@ -6,7 +6,7 @@
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { promises as fsp, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { promises as fsp, appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, Menu, WebContentsView, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, screen, shell } from 'electron';
 import { createWriteModule, type WriteModule } from '@cadrel/write/electron/module';
 import { chromeColors, drawsOwnChrome, markOwnChrome, onChromeTheme, shellColor, watchWindow, windowInfo } from '@cadrel/write/electron/windowChrome';
@@ -24,17 +24,19 @@ import { CONTROLS_HEIGHT, WINDOW_RADIUS, controlsBounds, controlsUrl } from './c
 import { marketUnavailable, summariseMarket, summariseWrite, writeUnavailable } from './overview';
 import { runShellSmoke } from './smoke';
 import { SettingsStore } from './settings';
+import { ScopeHost, scopeMenu } from './scope';
 import { StudioService } from './studio';
 import { ProjectManager, type WriteFolders } from './manage';
 import { nodeFs } from '@cadrel/write/electron/nodeFs';
 import { AI_ACCESS_FILE, accessReader, sanitizeAccess, type AiAccess } from '@cadrel/write/src/shared/agent/access';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { NOTES_VERSION, linksOf, NoteError, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
+import { NOTES_VERSION, linksOf, NoteError, viewScopeOf, type ViewScope, PROJECT_TREE_VERSION, ProjectError, STUDIO_SCHEMA_VERSION, UserError, type UserProfile } from '@cadrel/kernel';
 import { PeopleHost } from './people';
 import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
+import { Editorial } from './editorial';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
@@ -45,9 +47,12 @@ import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
 import { StudioRegistry, LOCAL_ID } from './studios';
+import { SLOW_REFRESH_MS, MIN_REFRESH_GAP_MS } from '../shared/refresh';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
+import { syncCaptures } from './sharedCaptures';
+import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -83,6 +88,10 @@ let settings: SettingsStore;
 /** The active Studio's own settings (where its Projects and Write folders are, if the person moved them). */
 let studioSettings: SettingsStore;
 let studio: StudioService;
+/** What the app is showing: the Project and Book every page and module view follows (docs/UI-MODEL.md). */
+let scope: ScopeHost;
+/** Checks the scope against the Studio's projects after something may have changed them; never lets a failure reach the caller. */
+const rescope = (): void => void scope?.refresh().catch(() => undefined);
 let users: UserStore;
 let admin: AdminStore;
 let studios: StudioRegistry;
@@ -91,6 +100,10 @@ let updater: Updater;
 let installerToRun: string | null = null;
 let manager: ProjectManager;
 let stages: ProjectStages;
+/** Set when the active Studio's records are on its server: the way to it, and whether this person owns it. */
+let serverLink: { client: StudioClient; owner: boolean; studioId: string } | null = null;
+let syncTimer: ReturnType<typeof setInterval> | null = null;
+let syncFocus: (() => void) | null = null;
 let userCache: UserProfile | null = null;
 
 async function refreshUser(): Promise<UserProfile> {
@@ -171,12 +184,47 @@ const KIT_BRAND: KitBrand = { id: 'cadrel', name: 'Cadrel', folder: 'Cadrel AI K
 /** Limits the AI server's My Books to this Studio's pen names, where this computer holds the Studio's records. */
 const penNameArgs = (): string[] => { const p = peopleHost.penNameScope(); return p ? ['--pen-names', JSON.stringify(p)] : []; };
 const mcpFile = () => path.join(here, 'mcp.mjs');
+/**
+ * Which Studio the AI server serves is not written into an AI app's configuration (that is written once, and Studios switch). The configuration says
+ * only `--active <this file>`, and the app keeps the file as the arguments of the Studio it is running: that Studio's projects, notes, records, pen names
+ * and library, nothing else. The Claude Desktop extension's launcher watches the file and starts the server again when it changes; a configuration made
+ * by hand picks the Studio up the next time the AI app starts the server. The file belongs to the whole app, not to a Studio.
+ */
+const activeFile = () => path.join(userData, 'mcp-active.json');
+const activeArgs = (): string[] => {
+  const library = market?.service.status().libraryRoot;
+  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile(), path.join(studioDir, 'vault-blobs')), ...penNameArgs(), ...(library ? ['--library', library] : [])];
+};
+/** Writes the active Studio's server arguments, if they are not what the file already says (so an unchanged Studio never restarts the AI server). */
+function publishActiveStudio(): void {
+  try {
+    const text = JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2);
+    if (readFileSync(activeFile(), 'utf8') === text) return;
+    writeActiveFile(text);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
+      try {
+        writeActiveFile(JSON.stringify({ studio: studios.active().name, args: activeArgs() }, null, 2));
+        return;
+      } catch (w) {
+        e = w;
+      }
+    }
+    updateLog(`could not write the active Studio file: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+function writeActiveFile(text: string): void {
+  mkdirSync(path.dirname(activeFile()), { recursive: true });
+  const tmp = `${activeFile()}.${process.pid}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, activeFile()); // whole or not at all: the launcher never reads half a file
+}
 /** How an AI app starts the server: the installed app's own runtime acting as Node (it carries the native modules), the system Node in development. */
 const mcpLaunch = () => ({
   command: app.isPackaged ? process.execPath : 'node',
-  // Pinned to the active Studio: its projects and its notes, nothing else (the library is added by Market).
-  args: [mcpFile(), '--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs()],
-  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>
+  args: [mcpFile(), '--active', activeFile()],
+  env: (app.isPackaged ? { ELECTRON_RUN_AS_NODE: '1' } : {}) as Record<string, string>,
+  follow: activeFile()
 });
 /**
  * The file inside the Claude Desktop extension: a small launcher that starts the server above with the installed app's runtime.
@@ -184,9 +232,11 @@ const mcpLaunch = () => ({
  * Arguments the extension's settings add (the projects folder) are passed on to the server.
  */
 async function kitLauncher(): Promise<Uint8Array> {
+  publishActiveStudio();
   const launch = mcpLaunch();
   const handshake = await readHandshake(launch);
-  return Buffer.from(launcherSource({ label: 'Cadrel', ...launch, handshake, logFile: path.join(marketData(), 'logs', 'mcp-launcher.log') }), 'utf8');
+  // The log is beside the active file, not in a Studio's folder: the launcher outlives a switch.
+  return Buffer.from(launcherSource({ label: 'Cadrel', command: launch.command, args: launch.args, env: launch.env, handshake, logFile: path.join(userData, 'logs', 'mcp-launcher.log'), followFile: launch.follow }), 'utf8');
 }
 
 /** Who a note written in the app is by: the profile's name, else the Windows user. */
@@ -264,6 +314,8 @@ const projectsFolder = () => studioSettings.get().projectsFolder ?? projectsDefa
 const writeFolder = () => studioSettings.get().writeFolder ?? writeDefault();
 const studioFile = () => path.join(studioDir, 'studio.json');
 const recordsFile = () => path.join(studioDir, 'records.db');
+/** What this computer keeps of the Studio's editorial records for reading offline, and the answers waiting to be sent. */
+const editorialOfflineFile = () => path.join(studioDir, 'editorial-offline.json');
 /** What the person lets AI tools create or edit; the MCP server reads it on every change, so a switch applies at once. Missing means nothing is allowed. */
 const aiAccessFile = () => path.join(studioDir, AI_ACCESS_FILE);
 const accessNow = async (): Promise<AiAccess> => accessReader(nodeFs, aiAccessFile())();
@@ -316,6 +368,63 @@ async function moveMarket(dest: string): Promise<void> {
   if (await fsp.readdir(dest).then((f) => f.length > 0, () => false)) await fsp.rename(dest, `${dest} (old copy ${new Date().toISOString().slice(0, 10)}-${Date.now() % 100000})`);
   await fsp.mkdir(dest, { recursive: true });
   await market.service.moveTo(dest);
+}
+
+/**
+ * Keeps the project tree and the server's the same. The owner's tree is the Studio's: it is published when it changes here (and when the
+ * AI server changed the file), and everyone else's is replaced by what the server shows them and cannot be edited here. A Studio that could
+ * not be reached when the app started is tried again.
+ */
+function startServerSync(link: NonNullable<typeof serverLink>): void {
+  let lastPublished = '';
+  let lastTick = 0;
+  let treeSeen: string | null = null;
+  let publishing: ReturnType<typeof setTimeout> | null = null;
+  const publish = async () => {
+    const tree = (await studio.studio.read()).tree;
+    const text = JSON.stringify(tree);
+    if (text === lastPublished) return;
+    await link.client.publishTree(tree);
+    lastPublished = text;
+  };
+  if (link.owner) {
+    studio.studio.onTreeChange = () => {
+      if (publishing) clearTimeout(publishing);
+      publishing = setTimeout(() => void publish().catch(() => undefined), 400);
+    };
+  } else {
+    studio.studio.treeLock = () => 'The projects of this Studio are kept by its owner.';
+  }
+  const tick = async () => {
+    lastTick = Date.now();
+    try {
+      if (!peopleHost.isRemote) {
+        const opened = await peopleHost.openRemote({ client: link.client, studioId: link.studioId, offlineFile: editorialOfflineFile() });
+        if (!opened.ok) return;
+        if (win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      }
+      if (link.owner) await publish();
+      else {
+        // Ask whether anything changed (two rows on the server) before fetching the tree again (which makes it work out what this person may see).
+        // The counter is read before the tree, so a change in between is simply fetched on the next tick. A Studio without counters is fetched every time.
+        const v = await link.client.version().catch(() => null);
+        if (v && v.data === treeSeen) return;
+        const replaced = await studio.studio.replaceTree(await link.client.tree());
+        treeSeen = v?.data ?? null;
+        if (replaced && win && !win.isDestroyed()) win.webContents.send('shell:studios', studios.view());
+      }
+    } catch {
+      /* away: tried again at the next tick */
+    }
+  };
+  void tick();
+  // Not a short timer (every one is a database read on the Studio's server): slowly while the window is up, and when it gets focus again.
+  const looking = () => !!win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+  if (syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(() => { if (looking()) void tick(); }, SLOW_REFRESH_MS);
+  if (syncFocus) app.off('browser-window-focus', syncFocus);
+  syncFocus = () => { if (Date.now() - lastTick >= MIN_REFRESH_GAP_MS) void tick(); };
+  app.on('browser-window-focus', syncFocus);
 }
 
 /** Moving anything out from under the editor with changes unsaved would lose them. */
@@ -415,6 +524,12 @@ async function ensureFolders(): Promise<void> {
 const cipher = { available: () => safeStorage.isEncryptionAvailable(), encrypt: (p: string) => safeStorage.encryptString(p), decrypt: (b: Buffer) => safeStorage.decryptString(b) };
 /** A Studio's secrets (its key for this computer, and the Cloudflare token if kept) live in its own data folder. Under test a marked plain file stands in for the operating system's store. */
 const secretsFor = (id: string) => new Secrets(path.join(userData, 'studios', id, 'secrets'), cipher, TEST);
+/** The way to a Studio's server from this computer (the key it was built or joined with), or null if this Studio has none. */
+async function serverClient(e: { id: string; url: string | null }): Promise<StudioClient | null> {
+  const key = await studioKey(e.id);
+  return key && e.url ? new StudioClient({ url: e.url, key, fetchFn: fetch }) : null;
+}
+
 async function studioKey(id: string): Promise<KeyPair | null> {
   try {
     const k = JSON.parse((await secretsFor(id).get('studio-key')) ?? 'null') as KeyPair | null;
@@ -548,7 +663,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
   if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
@@ -646,7 +761,7 @@ function createWindow(): void {
 
 /** The stage (name and colour) of the Cadrel project each Write folder belongs to, looked up by folder name. */
 async function stageByFolder(): Promise<{ (folder: string): { name: string; color: string } | null; all(): Map<string, NonNullable<ProjectStageView['stage']>> }> {
-  const tree = (await studio.studio.read()).tree;
+  const tree = await studio.tree();
   const views = await stages.views();
   const byFolder = new Map<string, NonNullable<ProjectStageView['stage']>>();
   for (const l of tree.links) {
@@ -669,7 +784,9 @@ async function overview(): Promise<Overview> {
       }
     })().catch(marketUnavailable)
   ]);
-  return { write: w, market: m };
+  // A manuscript folder that belongs to a project this person cannot see is not listed, nor is its words counted.
+  const hidden = new Set((await studio.hiddenLinks().catch(() => [])).filter((l) => l.module === 'write').map((l) => l.ref));
+  return { write: hidden.size ? { ...w, projects: w.projects.filter((p) => !hidden.has(p.name)) } : w, market: m };
 }
 
 function registerShellIpc(): void {
@@ -690,7 +807,9 @@ function registerShellIpc(): void {
     ipcMain.handle(channel, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         if (err instanceof ProjectError || err instanceof NoteError || (err instanceof Error && /^There is no project/.test(err.message))) return { __error: err.message };
         throw err;
@@ -701,7 +820,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:manage:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -711,7 +832,9 @@ function registerShellIpc(): void {
     ipcMain.handle(`shell:${name}`, async (e, ...a: unknown[]) => {
       if (!fromShell(e)) throw new Error('not allowed');
       try {
-        return await fn(...(a as A));
+        const done = await fn(...(a as A));
+        rescope();
+        return done;
       } catch (err) {
         return { __error: err instanceof Error ? err.message : String(err) };
       }
@@ -807,10 +930,59 @@ function registerShellIpc(): void {
       return { reachable: false, error: (e as Error).message, members: [], invites: [] };
     }
   });
-  manageLike('studios:createInvite', async (id: string, i: { role: string; label: string }) => {
+  manageLike('studios:createInvite', async (id: string, i: { role: string; label: string; projectId?: string | null; days?: number | null }) => {
     adminOnly();
     const { e, client } = await clientFor(String(id));
-    return client.invite(String(i?.role), String(i?.label ?? ''), e.name);
+    return client.invite(String(i?.role), String(i?.label ?? ''), e.name, { projectId: typeof i?.projectId === 'string' && i.projectId ? i.projectId : null, days: typeof i?.days === 'number' && i.days > 0 ? i.days : null });
+  });
+  // The records on a Studio's server, backed up to a file the owner keeps, and put back from one.
+  manageLike('studios:backupServer', async (id: string) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer; use Settings → Backup and import.');
+    let file = picked('CADREL_TEST_BACKUP_TO');
+    if (!file) {
+      const r = await dialog.showSaveDialog(win!, { title: 'Back up this Studio’s records', defaultPath: path.join(app.getPath('documents'), `${e.name} records ${stamp()}.json`), filters: [{ name: 'Studio records', extensions: ['json'] }] });
+      if (r.canceled || !r.filePath) return null;
+      file = r.filePath;
+    }
+    return { file, ...(await backupServerRecords({ client, file, studio: { id: e.id, name: e.name } })) };
+  });
+  manageLike('studios:restoreServer', async (id: string) => {
+    adminOnly();
+    mustBeIdle();
+    const { e, client } = await clientFor(String(id));
+    if (!e.recordsOnServer) throw new Error('This Studio’s records are on this computer.');
+    let file = picked('CADREL_TEST_RESTORE_FROM');
+    if (!file) {
+      const r = await dialog.showOpenDialog(win!, { title: 'Put back the Studio’s records', filters: [{ name: 'Studio records', extensions: ['json'] }], properties: ['openFile'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      file = r.filePaths[0];
+    }
+    const done = await restoreServerRecords({ client, file });
+    setTimeout(() => void restartApp(), 50);
+    return done;
+  });
+  // Moving the Studio on this computer to its server: from then on everyone, the owner too, uses the records there.
+  manageLike('studios:moveRecords', async (id: string) => {
+    adminOnly();
+    mustBeIdle();
+    const e = studios.get(String(id));
+    if (e.id !== studios.view().activeId) throw new Error('Open this Studio first: its records are on this computer only while it is the one in use.');
+    if (e.role !== 'owner' || e.status !== 'ready') throw new Error('Only the owner of a built Studio can move its records to its server.');
+    if (e.recordsOnServer) throw new Error('This Studio’s records are already on its server.');
+    if (!peopleHost.me || peopleHost.isRemote) throw new Error('This Studio has no records on this computer to move.');
+    const { client } = await clientFor(e.id);
+    const copy = path.join(os.tmpdir(), `cadrel-records-${Date.now()}.db`);
+    if (!(await peopleHost.snapshot(copy))) throw new Error('This Studio has no records on this computer to move.');
+    try {
+      const moved = await moveRecordsToServer({ client, recordsCopy: copy, ownerPersonId: peopleHost.me, blobsDir: path.join(studioDir, 'vault-blobs'), tree: (await studio.studio.read()).tree });
+      studios.update(e.id, { recordsOnServer: true, note: moved.missing.length ? `${moved.missing.length} file version${moved.missing.length === 1 ? ' was' : 's were'} not found on this computer and could not be sent.` : null });
+      setTimeout(() => void restartApp(), 50); // reopen the Studio through its server
+      return { ...moved, view: studiosChanged(studios.view()) };
+    } finally {
+      await fsp.rm(copy, { force: true });
+    }
   });
   manageLike('studios:revokeInvite', async (id: string, inviteId: string) => {
     adminOnly();
@@ -855,6 +1027,9 @@ function registerShellIpc(): void {
     return r && { workflowName: r.workflow.name, current: r.current, options: r.options };
   });
   manageLike('stages:move', async (projectId: string, to: string) => stages.move(String(projectId), String(to)));
+  manageLike('stages:close', async (bookId: string) => stages.closeBook(String(bookId)));
+  manageLike('stages:reopen', async (bookId: string, to: string) => stages.reopenBook(String(bookId), String(to)));
+  manageLike('stages:clear', async (projectId: string) => stages.clearStage(String(projectId)));
   const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
   manageLike('vault:state', async () => vaultHost().state());
   manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
@@ -874,14 +1049,34 @@ function registerShellIpc(): void {
     if (!plan.available || !work) return buildPulse({ plan, approvals: [], decisions: [], catalogue: { available: false, marketAvailable: false, financeVisible: false, may: { create: false, edit: false, archive: false }, series: [], books: [], unlisted: [], projects: [] } });
     const nameOf = new Map(plan.projects.map((x) => [x.id, x.name]));
     const label = <T extends { projectId: string | null }>(r: T) => ({ ...r, projectName: (r.projectId && nameOf.get(r.projectId)) || '' });
-    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }), work.decisions({ current: true }), catalogueList(await catalogueSources())]);
+    // a role that may not see approvals or decisions has none on its Dashboard; it is not an error
+    const [approvals, decisions, catalogue] = await Promise.all([work.approvals({ state: 'pending' }).catch(() => [] as Awaited<ReturnType<typeof work.approvals>>), work.decisions({ current: true }).catch(() => [] as Awaited<ReturnType<typeof work.decisions>>), catalogueList(await catalogueSources())]);
     return buildPulse({ plan, approvals: approvals.filter((a) => nameOf.has(a.projectId)).map(label), decisions: decisions.map(label), catalogue });
   });
+  /** The Editing page's logic, with this Studio's vault for the manuscripts, their versions and their text. */
+  const editorial = () => new Editorial(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('editing:state', async () => editorial().state());
+  manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
+  manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));
+  manageLike('editing:send', async () => editorial().sendWaiting());
+  manageLike('editing:planning', async (projectId?: string) => editorial().planning(projectId ? String(projectId) : undefined));
+  manageLike('editing:plan', async (input: never) => editorial().plan(input));
+  manageLike('editing:text', async (passId: string) => editorial().text(String(passId)));
+  manageLike('editing:raise', async (passId: string, items: never) => editorial().raise(String(passId), items));
+  manageLike('editing:later', async (passId: string) => editorial().laterVersions(String(passId)));
+  manageLike('editing:compare', async (passId: string, version: number) => editorial().compare(String(passId), version));
+  manageLike('editing:verify', async (passId: string, version: number) => editorial().verify(String(passId), version));
+  manageLike('editing:briefs', async (projectId: string) => editorial().briefs(String(projectId)));
+  manageLike('editing:briefVersions', async (id: string) => editorial().briefVersions(String(id)));
+  manageLike('editing:createBrief', async (input: never) => editorial().createBrief(input));
+  manageLike('editing:reviseBrief', async (id: string, input: never) => editorial().reviseBrief(String(id), input));
+  manageLike('editing:dismiss', async (id: string) => editorial().dismissRefused(String(id)));
   manageLike('work:mine', async () => new ProjectWork(studio, peopleHost, stages).mine());
   manageLike('work:call', async (name: string, ...args: unknown[]) => new ProjectWork(studio, peopleHost, stages).call(String(name), args));
   manageLike('people:state', async () => peopleHost.state());
   manageLike('people:call', async (name: string, ...args: unknown[]) => peopleHost.call(String(name), ...args));
   manageLike('people:effective', async (personId: string, projectId?: string | null) => peopleHost.effective(String(personId), projectId));
+  manageLike('people:visible', async (personId: string) => peopleHost.visibilityOf(String(personId), (await studio.studio.read()).tree));
   manageLike('people:explain', async (personId: string, capability: string, projectId?: string | null) => peopleHost.explain(String(personId), String(capability), projectId));
   // My Books: one published book across Market and Finance. Finance's figures are decided here, from the person's role, never by the page.
   const roleKey = () => {
@@ -894,12 +1089,12 @@ function registerShellIpc(): void {
     return v;
   };
   const catalogueSources = async (): Promise<Sources> => ({
-    people: peopleHost, tree: (await studio.studio.read()).tree, stages: await stages.views(),
+    people: peopleHost, tree: await studio.tree(), stages: await stages.views(),
     write: await write.listProjects().then((l) => summariseWrite(l).projects, () => []), market: market.service, financeVisible: financeSeen()
   });
   manageLike('mybooks:catalogue', async () => catalogueList(await catalogueSources()));
   manageLike('mybooks:catalogueBook', async (id: string) => catalogueDetail(await catalogueSources(), String(id)));
-  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, (await studio.studio.read()).tree, String(name), args));
+  manageLike('mybooks:call', async (name: string, ...args: unknown[]) => catalogueCall(peopleHost, await studio.tree(), String(name), args));
   manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
@@ -1028,6 +1223,7 @@ function registerShellIpc(): void {
   manageOp('templates', async () => admin.templates().map((t) => ({ id: t.id, name: t.name, description: t.description })));
   manageOp('create', (o: Parameters<ProjectManager['create']>[0]) => manager.create(o));
   manageOp('addManuscript', (id: string, template: string) => manager.addManuscript(id, template));
+  manageOp('addFirstBook', (id: string, name?: string) => manager.addFirstBook(String(id), typeof name === 'string' ? name : undefined));
   manageOp('rename', (id: string, name: string) => manager.rename(id, name));
   manageOp('archive', (id: string, archived: boolean) => manager.archive(id, archived === true));
   manageOp('remove', (id: string) => manager.remove(id));
@@ -1036,6 +1232,10 @@ function registerShellIpc(): void {
   manageOp('setManuscript', (id: string, patch: { status?: string; notes?: string }) => manager.setManuscript(id, patch ?? {}));
   manageOp('addMissingParts', (id: string) => manager.addMissingParts(id));
   manageOp('open', async (id: string) => {
+    // Write shows only the Project and Book Cadrel is showing, so opening a manuscript from elsewhere first makes it the scope (and shows
+    // closed Books when that is what was asked for), or Write would send it straight back to the list.
+    const want = viewScopeOf(await studio.tree(), id);
+    if (want) await scope.set({ ...want, ...(want.book && (await stages.closedBooks()).has(want.book) ? { showClosed: true } : {}) });
     await manager.open(id);
     showPage('write');
   });
@@ -1046,6 +1246,29 @@ function registerShellIpc(): void {
   });
   manageOp('unfiled', () => manager.unfiled());
   manageOp('adopt', (name: string, parentId?: string | null) => manager.adopt(name, parentId));
+  // The scope: the shell's pages ask and change it; the module views (Write, Market, Finance) can only ask, and are told when it changes.
+  ipcMain.handle('shell:scope:get', async (e) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    return scope.get();
+  });
+  ipcMain.handle('shell:scope:set', async (e, change: unknown) => {
+    if (!fromShell(e)) throw new Error('not allowed');
+    const c = (change && typeof change === 'object' ? change : {}) as Record<string, unknown>;
+    const id = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && v.length <= 80 ? v : undefined);
+    return scope.set({ ...(id(c.project) !== undefined ? { project: id(c.project) } : {}), ...(id(c.book) !== undefined ? { book: id(c.book) } : {}), ...(typeof c.showClosed === 'boolean' ? { showClosed: c.showClosed } : {}) } as Partial<ViewScope>);
+  });
+  ipcMain.handle('shell:scope:menu', async (e, at: unknown) => {
+    if (!fromShell(e) || !win || win.isDestroyed()) throw new Error('not allowed');
+    const pos = (at && typeof at === 'object' ? at : {}) as { x?: unknown; y?: unknown };
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : undefined);
+    const items = scopeMenu(await studio.tree(), await scope.get());
+    const menu = Menu.buildFromTemplate(items.map((i) => (i.type === 'separator' ? { type: 'separator' as const } : { label: i.label, enabled: !i.disabled, ...(i.set ? { type: (i.checkbox ? 'checkbox' : 'radio') as 'checkbox' | 'radio', checked: i.checked === true, click: () => void scope.set(i.set!).catch(() => undefined) } : {}) })));
+    menu.popup({ window: win, x: num(pos.x), y: num(pos.y) });
+  });
+  ipcMain.handle('scope:get', async (e) => {
+    if (!(['write', 'market', 'finance'] as const).some((id) => views[id] && e.sender === views[id]!.webContents)) throw new Error('not allowed');
+    return scope.get();
+  });
   studioOp('studio:state', () => studio.state());
   studioOp('studio:createProject', async (o: Parameters<StudioService['createProject']>[0]) => ({ id: (await studio.createProject(o)).id }));
   studioOp('studio:updateProject', (id: string, c: { name?: string; kind?: string }) => studio.updateProject(id, c));
@@ -1149,6 +1372,38 @@ function registerShellIpc(): void {
     return img.isEmpty() ? null : img.resize({ width: 128, quality: 'best' }).toDataURL();
   });
   ipcMain.handle('shell:prefs:folders', guard(() => folders()));
+  /** Where another Studio on this computer keeps its Market library: the one it was pointed at, else its default place, if a library is there. */
+  const libraryOfStudio = async (e: { id: string; folderName: string }): Promise<string | null> => {
+    const has = (dir: string) => fsp.stat(path.join(dir, 'scout.db')).then((st) => st.isFile(), () => false);
+    const chosen = await fsp.readFile(path.join(userData, 'studios', e.id, 'market', 'config.json'), 'utf8').then((t) => (JSON.parse(t) as { libraryRoot?: unknown }).libraryRoot, () => null);
+    if (typeof chosen === 'string' && (await has(chosen))) return chosen;
+    const dflt = path.join(cadrelFolder(), e.folderName, 'Market');
+    return (await has(dflt)) ? dflt : null;
+  };
+  ipcMain.handle('shell:prefs:marketStudios', guard(async () => {
+    const out: { id: string; name: string; library: string }[] = [];
+    for (const e of studios.view().studios) {
+      if (e.id === studios.active().id) continue;
+      const library = await libraryOfStudio(e);
+      if (library && !sameDir(library, market.service.status().libraryRoot ?? '')) out.push({ id: e.id, name: e.name, library });
+    }
+    return out;
+  }));
+  // Captures shared through the Studio's server: what this computer has is sent, what it lacks is fetched and read in.
+  ipcMain.handle('shell:prefs:shareCaptures', guard(async () => {
+    if (!serverLink) return null;
+    const root = market.service.status().libraryRoot;
+    if (!root) throw new Error('Choose a Market library first.');
+    const r = await syncCaptures({ client: serverLink.client, root, importPack: (file) => market.service.importData(file) });
+    return { sent: r.sent, fetched: r.fetched, added: r.imported?.added ?? 0, alreadyHad: r.imported?.alreadyHad ?? 0, skipped: r.imported?.skipped ?? 0 };
+  }));
+  ipcMain.handle('shell:prefs:marketFromStudio', guard(async (id: unknown) => {
+    if (typeof id !== 'string' || id === studios.active().id) throw new Error('Choose another Studio.');
+    const e = studios.get(id);
+    const library = await libraryOfStudio(e);
+    if (!library) throw new Error(`${e.name} has no Market library on this computer.`);
+    return market.service.importFromLibrary(library);
+  }));
   const isKey = (k: unknown): k is FolderKey => k === 'cadrel' || k === 'projects' || k === 'write' || k === 'market';
   const TITLES: Record<FolderKey, string> = { cadrel: 'Choose where the Cadrel folder goes', projects: 'Choose where your project folders go', write: 'Choose Write’s own folder', market: 'Choose where Market’s library goes' };
   const CURRENT = (k: FolderKey) => (k === 'cadrel' ? cadrelFolder() : k === 'projects' ? projectsFolder() : k === 'write' ? writeFolder() : market.service.status().libraryRoot ?? marketDefault());
@@ -1283,7 +1538,14 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     // The Studio's people and roles: a Studio this person owns starts with its default roles and them as Owner.
     {
       const here = studios.active();
-      await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+      const client = here.recordsOnServer ? await serverClient(here) : null;
+      if (client) {
+        // the records are on the Studio's server: this computer asks for them there, as the person the key belongs to
+        serverLink = { client, owner: here.role === 'owner', studioId: here.id };
+        await peopleHost.openRemote({ client, studioId: here.id, offlineFile: editorialOfflineFile() });
+      } else {
+        await peopleHost.open({ file: path.join(studioDir, 'records.db'), studioId: here.id, owned: here.role === 'owner', ownerName: userCache?.displayName || os.userInfo().username });
+      }
     }
     // The name used to be a setting; it belongs to the profile now.
     const legacy = settings.get().author?.trim();
@@ -1301,10 +1563,27 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
         const l = await write.listProjects();
         return l.exists ? l.root : null;
       },
-      fs: nodeFs
+      fs: nodeFs,
+      viewer: (tree) => peopleHost.myVisibility(tree)
     });
+    peopleHost.setProjects(async () => (await studio.studio.read()).tree);
+    if (serverLink) startServerSync(serverLink);
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
+    scope = new ScopeHost({
+      tree: () => studio.tree(),
+      hidden: () => studio.hiddenLinks(),
+      closed: () => stages.closedBooks(),
+      remembered: () => studioSettings.get().scope,
+      remember: (s) => studioSettings.update((x) => void (x.scope = s)),
+      announce: (r) => {
+        if (win && !win.isDestroyed()) win.webContents.send('shell:scope', r);
+        for (const id of ['write', 'market', 'finance'] as const) {
+          const c = views[id]?.webContents;
+          if (c && !c.isDestroyed()) c.send('scope:changed', r);
+        }
+      }
+    });
 
     write = await createWriteModule({
       getWindow: () => win,
@@ -1318,12 +1597,12 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       dataDir: writeData(),
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
-      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => ['--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile()), ...penNameArgs(), ...(market.service.status().libraryRoot ? ['--library', market.service.status().libraryRoot!] : [])] },
+      mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {
-      const link = linksOf((await studio.studio.read()).tree, projectId, 'write')[0];
+      const link = linksOf(await studio.tree(), projectId, 'write')[0];
       if (!link) return null;
       try {
         return (JSON.parse(await fsp.readFile(path.join(write.projectsRoot(), link.ref, '.cadrel', 'project.json'), 'utf8')) as { status?: unknown }).status as string | null;
@@ -1350,6 +1629,9 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Market’s own updater is switched off here.'
     });
     await market.start();
+    // From here the AI server can be told which Studio this is, and kept told: the library may be chosen or moved while the app runs.
+    publishActiveStudio();
+    setInterval(publishActiveStudio, 15_000).unref();
     // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
     finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
     finance.start();

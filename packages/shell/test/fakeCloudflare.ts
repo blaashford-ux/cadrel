@@ -2,6 +2,7 @@
 import http from 'node:http';
 import worker, { type Env } from '../../worker/src/index';
 import { fakeD1 } from '../../worker/test/d1fake';
+import { fakeR2 } from '../../worker/test/r2fake';
 
 export const ACCOUNT = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 export const TOKEN = 'cf-token-0123456789abcdefghijklmnopqrstuv';
@@ -42,7 +43,7 @@ export function fakeCloudflare(opts: { subdomain?: string | null; allowedToken?:
         const form = init!.body as FormData;
         const meta = JSON.parse(await (form.get('metadata') as Blob).text()) as { bindings: { type: string; name: string; id?: string; text?: string }[] };
         const source = await (form.get('worker.mjs') as Blob).text();
-        const env: Record<string, unknown> = { FILES: { head: async () => null } };
+        const env: Record<string, unknown> = { FILES: fakeR2() };
         for (const b of meta.bindings) {
           if (b.type === 'd1') env.DB = dbs.get(b.id!) ?? (() => { throw new Error('no such database'); })();
           if (b.type === 'plain_text') env[b.name] = b.text;

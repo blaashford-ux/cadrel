@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { bundledFont, FONT_FILES } from '../../src/shared/export/fonts';
+import { bundledFont, fontFiles, LICENCE_FILE } from '../../src/shared/export/fonts';
 import { writeBytesAtomic } from '../files';
 import { listInstalledFonts } from '../fonts';
 import { buildPrintPdf, type PdfResources } from './pdf';
@@ -43,7 +43,9 @@ export function makeExportDeps(
       const b = bundledFont(family);
       if (!b) return null;
       const out: Record<string, Uint8Array> = {};
-      for (const f of FONT_FILES) out[f.file] = new Uint8Array(await fsp.readFile(path.join(resources.fontsDir, b.slug, f.file)));
+      for (const f of fontFiles(b)) out[f.file] = new Uint8Array(await fsp.readFile(path.join(resources.fontsDir, b.slug, f.file)));
+      // The licence travels with the font: it is read here and must be present, or the font is not embedded.
+      out[LICENCE_FILE] = new Uint8Array(await fsp.readFile(path.join(resources.fontsDir, b.slug, LICENCE_FILE)));
       return out;
     },
     installedFonts: listInstalledFonts,

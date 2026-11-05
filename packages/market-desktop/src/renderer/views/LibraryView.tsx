@@ -3,6 +3,7 @@ import type { BookRow, CategorySummary } from '../../shared/api.js';
 import { BookDetailView } from './BookDetailView.js';
 import { MyBooksView } from './MyBooksView.js';
 import { DataTable, type Column } from './DataTable.js';
+import { scopedBooks, scopedCategories, useMarketScope } from '../scope.js';
 
 const api = window.cadrelMarket;
 
@@ -18,17 +19,20 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [sub, setSub] = useState<'all' | 'mine'>('all');
+  const scope = useMarketScope();
+  const keys = scope.keys;
+  useEffect(() => setCat(''), [scope.token]);
   const [editing, setEditing] = useState<{ key: string; name: string } | null>(null);
   const [err, setErr] = useState('');
   const rename = async (key: string, name: string) => {
-    try { await api.renameCategory(key, name); setEditing(null); setErr(''); setCats(await api.categories()); } catch (e) { setErr((e as Error).message); }
+    try { await api.renameCategory(key, name); setEditing(null); setErr(''); setCats(scopedCategories(await api.categories(), keys)); } catch (e) { setErr((e as Error).message); }
   };
   useEffect(() => { if (show) setOpen(show.asin); }, [show]);
 
-  useEffect(() => { void api.categories().then(setCats); }, [version]);
+  useEffect(() => { void api.categories().then((c) => setCats(scopedCategories(c, keys))); }, [version, scope.token]);
   useEffect(() => {
-    void api.books({ categoryKey: cat || undefined, search: search || undefined }).then(setBooks);
-  }, [cat, search, version, open]);
+    void scopedBooks(api, keys, { categoryKey: cat || undefined, search: search || undefined }).then(setBooks);
+  }, [cat, search, version, open, scope.token]);
 
   const columns: Column<BookRow>[] = [
     { key: 'title', label: 'Title', get: (b) => b.title ?? b.asin, render: (b) => <button className="link" onClick={() => setOpen(b.asin)}>{b.title ?? b.asin}</button> },
@@ -81,7 +85,7 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
       <h2>Books</h2>
       <div className="row">
         <select value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category">
-          <option value="">All categories</option>
+          <option value="">{keys ? 'All of this project’s categories' : 'All categories'}</option>
           {cats.map((c) => <option key={c.key} value={c.key}>{c.name ?? c.key}</option>)}
         </select>
         <input placeholder="Search title, author or ASIN" value={search} onChange={(e) => setSearch(e.target.value)} />

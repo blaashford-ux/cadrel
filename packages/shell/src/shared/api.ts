@@ -1,15 +1,15 @@
-import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { NoteStatus, NoteTarget, NoteView, ProjectTree } from '@cadrel/kernel';
+import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -89,6 +89,8 @@ export interface ManageApi {
   /** `workflowId` is chosen here, once: the project keeps it. Without one, the default for a project (or for a subproject, when it has a parent) is used. */
   create(o: { name: string; parentId?: string | null; kind?: string; template?: string | null; workflowId?: string | null }): Promise<{ id: string; folder: string | null }>;
   addManuscript(projectId: string, template: string): Promise<string>;
+  /** Gives a Project with no Books its first: the Project's manuscript folder becomes the Book's, and the Book starts in the Project's stage. */
+  addFirstBook(projectId: string, name?: string): Promise<{ id: string }>;
   rename(projectId: string, name: string): Promise<void>;
   archive(projectId: string, archived: boolean): Promise<void>;
   /** Deletes the project, its subprojects and notes, and moves their manuscript folders to the recycle bin. */
@@ -306,6 +308,8 @@ export interface StudioEntry {
   resources: { worker: string; d1Id: string | null; d1Name: string; bucket: string } | null;
   /** The versions the Studio's server last reported, and the ones in this app; an upgrade is offered when the app's are newer. */
   server: { api: number; schema: number } | null;
+  /** The Studio's records (people, roles, catalogue, work, files) are on its server and this computer uses them there. Always so for a Studio the person joined. */
+  recordsOnServer: boolean;
 }
 
 /** One person in a Studio, as the owner sees them. */
@@ -362,7 +366,14 @@ export interface StudiosApi {
   forgetToken(id: string): Promise<StudiosView>;
   /** Who is in the Studio and what invitations are open (owner only; asks the Studio's server). */
   people(id: string): Promise<StudioPeople>;
-  createInvite(id: string, invite: { role: string; label: string }): Promise<{ link: string; expiresAt: string }>;
+  /** `projectId` gives the role on that one project only (a guest's one book); `days` ends it after that long. */
+  createInvite(id: string, invite: { role: string; label: string; projectId?: string | null; days?: number | null }): Promise<{ link: string; expiresAt: string }>;
+  /** Saves the Studio's records as they are on its server to a file the owner chooses (null if cancelled). */
+  backupServer(id: string): Promise<{ file: string; rows: number; bytes: number } | null>;
+  /** Replaces the server's records with a saved copy (null if cancelled). Cadrel restarts. */
+  restoreServer(id: string): Promise<{ rows: number } | null>;
+  /** Moves the Studio in use to its server: its records, the vault's files and its projects. Cadrel restarts into it. */
+  moveRecords(id: string): Promise<{ rows: number; files: number; missing: string[]; view: StudiosView }>;
   revokeInvite(id: string, inviteId: string): Promise<StudioPeople>;
   removeMember(id: string, memberId: string): Promise<StudioPeople>;
   /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */
@@ -608,6 +619,8 @@ export interface PeopleApi {
   explainAccess(personId: string, capability: string, projectId?: string | null): Promise<{ allowed: boolean; reason: string }>;
   /** Every capability the person holds at the studio, or on one project when `projectId` is given (`*` means all). */
   effectiveCapabilities(personId: string, projectId?: string | null): Promise<string[]>;
+  /** The projects a person can see: those they are assigned to (and the Projects above an assigned Book, shown as containers), or all of them. */
+  visibleProjects(personId: string): Promise<{ all: boolean; assigned: string[]; context: string[] }>;
 }
 
 /** The workflows an administrator builds: the stages a book moves through and the gates between them. */
@@ -643,6 +656,8 @@ export type WorkState =
       available: true;
       me: string;
       people: { id: string; name: string }[];
+      /** The people a task or sign-off on this project may be given to: those assigned to it. */
+      assignable: { id: string; name: string }[];
       /** What the person using the app may do with work: task.edit (their own), task.assign (hand work over), task.manage (anyone's). */
       may: { edit: boolean; assign: boolean; manage: boolean };
       tasks: OnProject<TaskRecord>[];
@@ -651,6 +666,94 @@ export type WorkState =
       /** The sign-off labels the project stands approved under now. */
       approved: string[];
     };
+/** One editorial pass as the Editing page lists it. */
+export interface EditingPassRow extends PassRecord {
+  projectName: string;
+  editorName: string;
+  /** Items of each state in the pass. */
+  counts: QueryCounts;
+  /** Queries the author has not answered yet. */
+  unanswered: number;
+  /** Suggestions that have no decision yet. */
+  undecided: number;
+  /** What this person can do next on it, or null when nothing waits on them. */
+  next: 'start' | 'deliver' | 'answer' | 'respond' | 'close' | null;
+}
+export type EditingState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** What this person may do on editorial passes anywhere (a role given on one book counts). */
+      may: { run: boolean; assign: boolean; respond: boolean; approve: boolean };
+      passes: EditingPassRow[];
+      /** When the records are on the Studio's server: answers waiting to be sent, ones it turned down, and whether it could not be reached. */
+      offline: { away: boolean; pending: number; refused: { id: string; call: 'answer' | 'decide'; queryId: string; error: string; response?: string; queuedAt: string }[] } | null;
+    };
+/** An item in a pass with the author's decision on it and what the check of the revision found. */
+export interface EditingItem extends QueryRecord {
+  decision: EditDecisionRecord | null;
+  verified: VerificationRecord | null;
+}
+export type EditingPassState =
+  | { available: false; reason: string }
+  | { available: true; pass: EditingPassRow; items: EditingItem[]; may: { run: boolean; assign: boolean; respond: boolean; approve: boolean }; me: string; people: { id: string; name: string }[] };
+/** What planning a pass can choose from: the projects the person may plan in, the manuscripts in the vault, and (once a project is chosen) who can edit it and the edit briefs it has. */
+export type EditingPlanning =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      projects: { id: string; name: string }[];
+      files: { fileId: string; path: string; version: number }[];
+      editors: { id: string; name: string }[];
+      briefs: { id: string; title: string; version: number }[];
+    };
+export interface NewEditingPass {
+  projectId: string;
+  kind: PassRecord['kind'];
+  fileId: string;
+  editorId: string;
+  /** The version to cover; the newest when left out. */
+  fileVersion?: number;
+  briefId?: string | null;
+  title?: string;
+}
+/** An item the editor raises by selecting text: `start` and `end` are character offsets into the version's text. Without them it is a point about the whole pass. */
+export interface NewEditingItem {
+  kind: QueryRecord['kind'];
+  start?: number;
+  end?: number;
+  body?: string;
+  replacement?: string;
+  category?: string;
+}
+/** The text of the version a pass covers, for reading it and for selecting passages. */
+export interface EditingText {
+  file: string | null;
+  version: number;
+  text: string;
+}
+/** A later version of the manuscript: what a pass can be compared with and checked against. */
+export interface EditingLaterVersion {
+  n: number;
+  author: string;
+  createdAt: string;
+  comment: string;
+}
+/** Two versions side by side. Long runs of unchanged paragraphs are one `skip` row, with a paragraph of context kept either side of a change. */
+export type EditingCompareRow = CompareRow | { kind: 'skip'; count: number };
+export interface EditingCompare {
+  from: number;
+  to: number;
+  rows: EditingCompareRow[];
+  stats: { same: number; added: number; removed: number; changed: number; wordsAdded: number; wordsRemoved: number };
+}
+/** A book's briefs: the manuscript brief and the edit briefs, each with its newest text. */
+export type EditingBriefs =
+  | { available: false; reason: string }
+  | { available: true; may: { manuscript: boolean; edit: boolean }; briefs: BriefRecord[]; people: { id: string; name: string }[] };
+/** The changes the Editing page may ask for, by name. */
+export type EditingCall = 'start' | 'deliver' | 'respond' | 'close' | 'cancel' | 'answer' | 'decide' | 'resolve' | 'withdraw';
 /** What waits on the person using the app, across projects. */
 export interface MineState {
   available: boolean;
@@ -662,6 +765,8 @@ export type VaultState =
   | { available: false; reason: string }
   | {
       available: true;
+      /** The Studio's server cannot be reached: the list is what was last known, and anything that changes the vault has to wait. */
+      offline?: boolean;
       dir: string;
       machine: string;
       me: string;
@@ -754,6 +859,41 @@ export type Pulse =
       people: { id: string; name: string }[];
     };
 export interface PulseTask { id: string; title: string; kind: string; due: string | null; projectId: string; projectName: string; assigneeId: string | null }
+/** Editorial passes: what waits on the person, one pass with its items, and the changes the page makes. A refusal comes back as the service gave it. */
+export interface EditingApi {
+  state(): Promise<EditingState>;
+  pass(passId: string): Promise<EditingPassState>;
+  start(passId: string): Promise<void>;
+  deliver(passId: string): Promise<void>;
+  /** The author has answered everything: the editor can see it and the pass can be closed. */
+  respond(passId: string): Promise<void>;
+  close(passId: string): Promise<void>;
+  cancel(passId: string): Promise<void>;
+  answer(queryId: string, response: string): Promise<void>;
+  /** Accept, reject or defer an item. Rejecting or deferring needs a reason, and deferring a date. */
+  decide(queryId: string, input: { outcome: 'accept' | 'reject' | 'defer'; reason?: string; revisit?: string }): Promise<void>;
+  resolve(queryId: string): Promise<void>;
+  withdraw(queryId: string): Promise<void>;
+  /** Sends the answers waiting for the Studio's server now. */
+  sendWaiting(): Promise<void>;
+  dismissRefused(id: string): Promise<void>;
+  /** What planning a pass can choose from; pass the project to get its editors and edit briefs. */
+  planning(projectId?: string): Promise<EditingPlanning>;
+  plan(input: NewEditingPass): Promise<{ id: string }>;
+  /** The exact text of the version a pass covers. */
+  text(passId: string): Promise<EditingText>;
+  /** Raises queries, comments and suggestions in a pass that is in progress, from passages selected in `text`. */
+  raise(passId: string, items: NewEditingItem[]): Promise<void>;
+  /** The versions of the manuscript after the one the pass covers, newest first. */
+  laterVersions(passId: string): Promise<EditingLaterVersion[]>;
+  compare(passId: string, version: number): Promise<EditingCompare>;
+  /** Checks the changes the author accepted against a later version, and keeps the result with the pass. */
+  verify(passId: string, version: number): Promise<void>;
+  briefs(projectId: string): Promise<EditingBriefs>;
+  briefVersions(briefId: string): Promise<BriefVersion[]>;
+  createBrief(input: { projectId: string; kind: BriefKind; title: string; body: string }): Promise<BriefRecord>;
+  reviseBrief(briefId: string, input: { body: string; note?: string; title?: string; basedOn: number }): Promise<BriefRecord>;
+}
 export interface WorkApi {
   pulse(): Promise<Pulse>;
   plan(): Promise<PlanState>;
@@ -778,7 +918,7 @@ export interface ProjectStageView {
   workflowName: string;
   stage: { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold' } | null;
 }
-export interface StageMoveOption { key: string; name: string; color: string; allowed: boolean; reasons: string[] }
+export interface StageMoveOption { key: string; name: string; color: string; category: 'start' | 'active' | 'review' | 'done' | 'hold'; allowed: boolean; reasons: string[] }
 
 /** Where projects are in their workflows, and the moves between stages. A move is checked against the workflow's gates and the person's roles. */
 export interface StagesApi {
@@ -787,13 +927,43 @@ export interface StagesApi {
   /** Where one project can go, and for each move whether it is open now and what is in the way. Null for a project with no workflow. */
   options(projectId: string): Promise<{ workflowName: string; current: ProjectStageView['stage']; options: StageMoveOption[] } | null>;
   move(projectId: string, to: string): Promise<void>;
+  /** Closes a Book: moves it to the first Done stage open to this person from where it is. */
+  close(bookId: string): Promise<void>;
+  /** Reopens a closed Book into one of the stages open from its Done stage. */
+  reopen(bookId: string, to: string): Promise<void>;
+  /** Takes the stage off a Project above its Books (made before stages moved to Books). */
+  clear(projectId: string): Promise<void>;
+}
+
+/** The scope with the names to show for it, so a page or module view needs nothing else to label it. */
+export interface ScopeView extends ResolvedViewScope {
+  projectName: string | null;
+  /** The chosen Book's name, or null for all books. */
+  bookName: string | null;
+  /** Every module's records that are inside the scope (the Write folders and Market categories of this Project and Book). */
+  links: ScopeLink[];
+  /** Records of projects the person cannot see: no view lists them, even when it shows everything. */
+  hidden: { module: string; ref: string }[];
+}
+
+/** The Project and Book the app is showing (docs/UI-MODEL.md). One scope for the whole app: the shell's pages and the module views follow it. */
+export interface ScopeApi {
+  get(): Promise<ScopeView>;
+  /** Changes the Project and/or the Book; answers with the scope that resulted (a Book that is not the Project's is dropped). */
+  set(change: Partial<ViewScope>): Promise<ScopeView>;
+  /** Opens the native menu for choosing the Project and Book at a point in the window (native, so it draws above the module views). */
+  openMenu(at: { x: number; y: number }): Promise<void>;
+  /** Called whenever the scope changes, whoever changed it (another page, a project archived). */
+  onChange(cb: (scope: ScopeView) => void): () => void;
 }
 
 export interface CadrelApi {
+  scope: ScopeApi;
   studios: StudiosApi;
   stages: StagesApi;
   workflow: WorkflowApi;
   work: WorkApi;
+  editing: EditingApi;
   vault: VaultApi;
   people: PeopleApi;
   myBooks: MyBooksApi;
@@ -819,6 +989,12 @@ export interface CadrelApi {
     reset(which: FolderKey): Promise<AppFolders>;
     /** Restart Cadrel (to finish moving the Cadrel folder). */
     restart(): Promise<void>;
+    /** The other Studios on this computer that have a Market library, whose captures can be brought into this Studio's. */
+    marketStudios(): Promise<{ id: string; name: string; library: string }[]>;
+    /** Copies another Studio's Market captures into this Studio's library (pages already here are kept; the other library is not changed). */
+    marketFromStudio(id: string): Promise<{ added: number; alreadyHad: number; skipped: number }>;
+    /** Sends this Studio's Market captures to its server and fetches the ones other people sent. Null where the Studio has no server for it. */
+    shareCaptures(): Promise<{ sent: number; fetched: number; added: number; alreadyHad: number; skipped: number } | null>;
   };
   admin: AdminApi;
   assistants: AssistantsApi;

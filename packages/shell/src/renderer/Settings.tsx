@@ -31,6 +31,78 @@ function locate(f: AppFolders, key: FolderKey): { path: string; isDefault: boole
 
 const mb = (n: number) => `${(n / 1048576).toFixed(0)} MB`;
 
+/**
+ * Each Studio has its own Market library, so captures made in one are not in another. This copies another Studio's captures into this one's,
+ * keeping what is already here and leaving the other library as it is.
+ */
+function CapturesFromStudios() {
+  const [list, setList] = useState<{ id: string; name: string; library: string }[]>([]);
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    void api.prefs.marketStudios().then(setList, () => setList([]));
+  }, []);
+  if (list.length === 0) return null;
+  const run = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.prefs.marketFromStudio(pick);
+      setNote(`${r.added.toLocaleString()} ${r.added === 1 ? 'item' : 'items'} added${r.alreadyHad ? `; ${r.alreadyHad.toLocaleString()} were already here` : ''}${r.skipped ? `; ${r.skipped.toLocaleString()} could not be read` : ''}.`);
+    } catch (e) {
+      setNote(String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" aria-labelledby="s-captures">
+      <h3 id="s-captures">Market captures from another Studio</h3>
+      <p className="muted small">Each Studio keeps its own Market library, so a capture made while another Studio was open is not in this one. Copy them across here. Pages already in this library are kept, and the other library is not changed.</p>
+      <div className="row">
+        <select aria-label="Studio to copy captures from" value={pick} onChange={(e) => setPick(e.target.value)}>
+          <option value="">Choose a Studio…</option>
+          {list.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <button type="button" disabled={!pick || busy} onClick={() => void run()}>{busy ? 'Copying…' : 'Copy captures'}</button>
+      </div>
+      {note && <p role="status" className="muted">{note}</p>}
+    </section>
+  );
+}
+
+/** Where the Studio has a server, the people in it share the captures Market saves, so each does not have to capture the same pages. */
+function SharedCaptures() {
+  const [on, setOn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    void api.studios.get().then((v) => setOn(!!v.studios.find((s) => s.id === v.activeId)?.recordsOnServer), () => setOn(false));
+  }, []);
+  if (!on) return null;
+  const run = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const r = await api.prefs.shareCaptures();
+      setNote(r ? `Sent ${r.sent.toLocaleString()} file${r.sent === 1 ? '' : 's'}; fetched ${r.fetched.toLocaleString()}${r.fetched ? ` and read in ${r.added.toLocaleString()} new item${r.added === 1 ? '' : 's'}${r.skipped ? `, ${r.skipped.toLocaleString()} could not be read` : ''}` : ''}.` : 'This Studio has no server to share through.');
+    } catch (e) {
+      setNote(String((e as Error).message ?? e).replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="card" aria-labelledby="s-share">
+      <h3 id="s-share">Captures shared with this Studio</h3>
+      <p className="muted small">The pages Market saves are public page source, so the people in this Studio share them through its server: yours go up, theirs come down and are read into your own library. Nothing is changed or removed on either side. You need to be allowed to capture to send, and to see market research to fetch.</p>
+      <div className="row"><button type="button" disabled={busy} onClick={() => void run()}>{busy ? 'Sharing…' : 'Share captures now'}</button></div>
+      {note && <p role="status" className="muted">{note}</p>}
+    </section>
+  );
+}
+
 /** Looks for a newer version of Cadrel and installs it. A development build follows development releases only. */
 function UpdateCard({ info }: { info: ShellInfo | null }) {
   const [st, setSt] = useState<UpdateStatus | null>(null);
@@ -218,6 +290,9 @@ export function Settings() {
         </dl>
         {moving && <p role="status" className="muted">Moving…</p>}
       </section>
+
+      <CapturesFromStudios />
+      <SharedCaptures />
 
       <McpCard />
 

@@ -17,7 +17,8 @@ import { compileFind, replaceAllInText, type FindOptions } from '../shared/find'
 import type { Progress } from '../shared/progress';
 import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
 import { chapterLabel } from './treeRows';
-import { basename, dirname, isInside, remapPath } from '../shared/paths';
+import { basename, dirname, isInside, joinPath, remapPath } from '../shared/paths';
+import { addRewriteLink, dropRewriteLinksUnder, remapRewriteLinks, removeRewriteLink, rewriteFileName, rewriteLinkOf, type RewriteLink } from '../shared/rewrite';
 import { collectFiles, collectOrphans, findNode, flattenPaths } from '../shared/tree';
 import { analyzeManuscript, type ChapterInput } from '../shared/analysis/analyze';
 import { renderReport } from '../shared/analysis/report';
@@ -65,6 +66,8 @@ export interface WorkspaceState {
   progress: { progress: Progress; total: number | null; manuscript: string | null } | null;
   /** Labels of undone actions Redo would re-apply, oldest first. */
   redoLabels: string[];
+  /** Rewrite mode is on for the link whose original is this file (relative to the project), so it and its rewrite are shown side by side. */
+  rewriteOn: string | null;
 }
 
 /** How many structural actions (delete / move / add chapter, whole-file replace) can be undone. */
@@ -114,6 +117,7 @@ export class Workspace {
     chapterLevel: 1,
     undoLabels: [],
     redoLabels: [],
+    rewriteOn: null,
     project: null,
     progress: null
   };
@@ -299,7 +303,7 @@ export class Workspace {
     this.undoStack = [];
     this.redoStack = [];
     this.state = { ...this.state, chapterLevel: this.effectiveLevel(this.appLevel, null) };
-    this.set({ root: null, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project: null, progress: null });
+    this.set({ root: null, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project: null, progress: null, rewriteOn: null });
     this.api.setLastProject(null);
     return true;
   }
@@ -380,7 +384,7 @@ export class Workspace {
     this.lastSession = '';
     this.undoStack = [];
     this.redoStack = [];
-    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project, progress: null });
+    this.set({ root, expanded: new Set(), docs: new Map(), tabs: [], activeId: null, error: null, notice: null, undoLabels: [], redoLabels: [], project, progress: null, rewriteOn: null });
     if (project) {
       this.api.setLastProject(folder);
       void this.refreshProgress();
@@ -648,6 +652,122 @@ export class Workspace {
       nextActive = (after ?? before)?.id ?? null;
     }
     this.set({ tabs: remaining, activeId: nextActive });
+    const pair = this.rewritePair();
+    if (pair && !(remaining.some((t) => t.file === pair.original) && remaining.some((t) => t.file === pair.rewrite))) this.set({ rewriteOn: null });
+  }
+
+  // ---- rewrite mode ---------------------------------------------------------------------------
+
+  /** The original and its rewrite as full paths, while rewrite mode is on; null when it is off or the link is gone. */
+  rewritePair(): { original: string; rewrite: string } | null {
+    const project = this.state.project;
+    const on = this.state.rewriteOn;
+    const link = project && on ? project.meta.rewriteLinks.find((l) => l.original === on) : undefined;
+    return project && link ? { original: joinPath(project.path, link.original), rewrite: joinPath(project.path, link.rewrite) } : null;
+  }
+
+  /** The link a file is in (as the original or as the rewrite), with the other file as a full path; null if it is in none. */
+  rewriteLinkFor(file: string): { role: 'original' | 'rewrite'; other: string } | null {
+    const project = this.state.project;
+    const at = project ? rewriteLinkOf(project.meta.rewriteLinks, relativeTo(project.path, file)) : null;
+    return project && at ? { role: at.role, other: joinPath(project.path, at.other) } : null;
+  }
+
+  /** Changes the links, starting from what is stored now (a sync may have brought links from another computer). */
+  private async patchRewriteLinks(change: (current: RewriteLink[]) => RewriteLink[]): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    try {
+      const current = (await this.api.getProjectMeta(project.path))?.rewriteLinks ?? project.meta.rewriteLinks;
+      const next = change(current);
+      if (JSON.stringify(next) === JSON.stringify(current)) return true;
+      const meta = await this.api.updateProject(project.path, { rewriteLinks: next });
+      if (this.state.project?.path === project.path) this.set({ project: { ...this.state.project, meta } });
+      if (this.state.rewriteOn && !meta.rewriteLinks.some((l) => l.original === this.state.rewriteOn)) this.set({ rewriteOn: null });
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /**
+   * Starts a rewrite of `file`: makes the new file beside it (a copy of the text, or a blank page), links the two so either can bring up the
+   * other later, and shows them side by side. Unsaved edits in the original are settled first, so the copy is what is on screen.
+   */
+  async startRewrite(file: string, from: 'copy' | 'blank'): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    const rel = relativeTo(project.path, file);
+    const links = (await this.api.getProjectMeta(project.path))?.rewriteLinks ?? project.meta.rewriteLinks;
+    const already = rewriteLinkOf(links, rel);
+    if (already) {
+      this.set({ error: `${basename(file)} is already linked to ${basename(already.other)} as a rewrite. Unlink them first.` });
+      return false;
+    }
+    const tab = this.tabForFile(file);
+    if (tab && !(await this.leaveTab(tab))) return false;
+    const chapter = tab?.chapter ?? 0; // the rewrite opens at the chapter being read
+    try {
+      await this.refresh(); // so the name is chosen against what is in the folder now
+      const dir = dirname(file);
+      const folder = this.state.root ? findNode(this.state.root, dir) : undefined;
+      const name = rewriteFileName(basename(file), new Set(folder && folder.kind === 'dir' ? folder.children.map((c) => c.name) : []));
+      const text = from === 'copy' ? (await this.api.readFile(file)).text : `# ${stripExt(name)}\n\n`;
+      const created = await this.api.createFile(dir, name, text);
+      const linked = await this.patchRewriteLinks((current) => addRewriteLink(current, rel, relativeTo(project.path, created)));
+      await this.refresh();
+      this.expandPath(created);
+      if (!linked) return false;
+      return this.setRewriteMode(created, true, chapter);
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /** Turns rewrite mode on or off for the link `file` is in, from either file. Turning it on opens both and makes `file` the active one. */
+  async setRewriteMode(file: string, on: boolean, chapterAt?: number): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    const at = rewriteLinkOf(project.meta.rewriteLinks, relativeTo(project.path, file));
+    if (!at) {
+      this.set({ error: `${basename(file)} is not linked to a rewrite.` });
+      return false;
+    }
+    if (!on) {
+      this.set({ rewriteOn: null });
+      return true;
+    }
+    // the original becomes read only: unsaved edits in it are settled first, so a locked pane never holds work that is not saved
+    const originalTab = this.tabForFile(joinPath(project.path, at.link.original));
+    if (originalTab && originalTab.draft !== null && !(await this.leaveTab(originalTab))) return false;
+    const partner = joinPath(project.path, at.other);
+    const chapter = chapterAt ?? this.tabForFile(file)?.chapter ?? 0;
+    await this.openChapter(partner, chapter);
+    if (!this.state.docs.has(partner)) return false; // it could not be opened; the error says why
+    await this.openChapter(file, chapter);
+    this.set({ rewriteOn: at.link.original });
+    return true;
+  }
+
+  /** Takes the link away: the two files stay, as ordinary files. */
+  async unlinkRewrite(file: string): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    const rel = relativeTo(project.path, file);
+    return this.patchRewriteLinks((links) => removeRewriteLink(links, rel));
+  }
+
+  /** Shows `chapter` in the file's tab without making it the active one (the other pane of a rewrite follows the one being read). */
+  async followChapter(file: string, chapter: number): Promise<void> {
+    const tab = this.tabForFile(file);
+    const doc = this.state.docs.get(file);
+    if (!tab || !doc) return;
+    const target = Math.max(0, Math.min(chapter, doc.chapters.length - 1));
+    if (target === tab.chapter) return;
+    if (!(await this.leaveTab(tab))) return;
+    this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, markDeclined: false, reloadKey: t.reloadKey + 1 }));
   }
 
   async gotoChapter(delta: 1 | -1): Promise<void> {
@@ -898,10 +1018,11 @@ export class Workspace {
     if (!project) return;
     const fresh = await this.api.getProjectMeta(project.path).catch(() => null);
     if (!fresh || this.state.project?.path !== project.path) return;
-    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.stage?.category, m.activeManuscript, m.manuscriptGoals, m.goal]);
+    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.stage?.category, m.activeManuscript, m.manuscriptGoals, m.goal, m.rewriteLinks]);
     if (pick(fresh) === pick(project.meta)) return;
-    const { editedChapters, stage, activeManuscript, manuscriptGoals, goal } = fresh;
-    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, stage, activeManuscript, manuscriptGoals, goal } } });
+    const { editedChapters, stage, activeManuscript, manuscriptGoals, goal, rewriteLinks } = fresh;
+    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, stage, activeManuscript, manuscriptGoals, goal, rewriteLinks } } });
+    if (this.state.rewriteOn && !rewriteLinks.some((l) => l.original === this.state.rewriteOn)) this.set({ rewriteOn: null }); // unlinked on another computer
     if (activeManuscript !== project.meta.activeManuscript) void this.refreshProgress();
   }
 
@@ -1115,9 +1236,15 @@ export class Workspace {
     const moved = active ? remapPath(active, f, t) : null;
     const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
     const edited = Object.fromEntries(Object.entries(current).map(([k, v]) => [remapPath(k, f, t), v]));
-    const patch: { activeManuscript?: string | null; editedChapters?: Record<string, string[]> } = {};
+    const patch: { activeManuscript?: string | null; editedChapters?: Record<string, string[]>; rewriteLinks?: RewriteLink[] } = {};
     if (active && moved !== active) patch.activeManuscript = moved;
     if (Object.keys(edited).some((k) => !(k in current))) patch.editedChapters = edited;
+    const links = (await this.api.getProjectMeta(project.path))?.rewriteLinks ?? project.meta.rewriteLinks;
+    const remapped = remapRewriteLinks(links, f, t);
+    if (JSON.stringify(remapped) !== JSON.stringify(links)) {
+      patch.rewriteLinks = remapped;
+      if (this.state.rewriteOn) this.set({ rewriteOn: remapPath(this.state.rewriteOn, f, t) });
+    }
     if (!Object.keys(patch).length) return;
     try {
       const meta = await this.api.updateProject(project.path, patch);
@@ -1159,6 +1286,11 @@ export class Workspace {
       return false;
     }
     this.removeTabs(affected.map((t) => t.id));
+    const project = this.state.project;
+    if (project) {
+      const rel = relativeTo(project.path, path);
+      await this.patchRewriteLinks((links) => dropRewriteLinksUnder(links, rel));
+    }
     this.undoStack = this.undoStack.filter((e) => !isInside(e.file, path));
     this.redoStack = this.redoStack.filter((e) => !isInside(e.file, path));
     this.publishUndo();

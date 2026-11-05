@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { execFile } from 'node:child_process';
@@ -87,7 +88,7 @@ export interface ServiceOptions {
   openExternal: (url: string) => void | Promise<void>;
   revealInFolder: (p: string) => void;
   /** How an MCP client should launch the server. */
-  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
+  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string>; follow?: string };
   /** Builds the local neural embedder; defaults to the real one. Overridable in tests. */
   /** Test hook: stands in for OCR so tests need not run the real engine. */
   ocrFactory?: () => Promise<{ recognize(image: Buffer, crop?: { left: number; top: number; width: number; height: number }): Promise<{ text: string; confidence: number }>; close(): Promise<void> }>;
@@ -1306,6 +1307,32 @@ export class AppService {
     });
   }
 
+  /**
+   * Brings the captures of another library (another Studio's) into this one: its pages are packed and unpacked here like any data pack, so pages
+   * already here are kept and nothing in the other library is changed. The other library must not be this one.
+   */
+  async importFromLibrary(root: string): Promise<{ added: number; alreadyHad: number; skipped: number }> {
+    const mine = this.need();
+    if (typeof root !== 'string' || !path.isAbsolute(root)) throw new Error('bad folder');
+    if (path.resolve(root) === path.resolve(mine.root)) throw new Error('That is this Studio’s own library.');
+    if (!fs.existsSync(path.join(root, 'scout.db'))) throw new Error('There is no Market library in that folder.');
+    const theirs = Library.open(root);
+    const file = path.join(os.tmpdir(), `cadrel-captures-${crypto.randomBytes(6).toString('hex')}.zip`);
+    try {
+      await exportPack(theirs, file, { categoryKeys: null });
+    } catch (e) {
+      theirs.close();
+      fs.rmSync(file, { force: true });
+      throw e;
+    }
+    theirs.close();
+    try {
+      return await this.importData(file);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+  }
+
   /** Add the contents of a data pack to the library. Pages already there are kept. */
   async importData(file: string): Promise<{ added: number; alreadyHad: number; skipped: number }> {
     const lib = this.need();
@@ -1448,7 +1475,8 @@ export class AppService {
   mcpConfig(): McpSnippets {
     const root = this.need().root;
     const base = this.opts.mcpLaunch?.() ?? { command: 'node', args: [path.resolve('packages/market-mcp/dist/main.mjs')], env: {} };
-    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
+    // A launch that follows the active Studio gets its library from that file; baking this one in would pin a configuration to a Studio.
+    return buildMcpSnippets({ ...base, args: base.follow ? base.args : [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
   }
 
   /**
@@ -1463,7 +1491,8 @@ export class AppService {
     // answers it from what the server itself reports and hands over when the server is ready (see launcher.ts)
     const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : readHandshake(c));
     const brand = this.opts.mcpBrand ?? MARKET_BRAND;
-    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
+    const follow = this.opts.mcpLaunch?.().follow;
+    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log'), ...(follow ? { followFile: follow } : {}) });
     const manifest = {
       manifest_version: '0.2',
       name: brand.id,

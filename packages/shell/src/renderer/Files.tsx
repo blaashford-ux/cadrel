@@ -59,6 +59,7 @@ export function Files() {
   return (
     <div className="files">
       <p className="muted">Real files in your working folder, kept in the vault. A file nobody is editing is read-only; check it out to edit it (nobody else can then), check it in to save a new version. <button type="button" className="link" onClick={() => void api.openFolder()}>Open the folder</button> <span className="muted small">{s.dir}</span></p>
+      {s.offline && <div className="banner" role="status"><strong>The Studio cannot be reached.</strong> This is what was last known. Files you have checked out can still be edited here; check them in when you are back online. Check-out, check-in and Get latest need the connection.</div>}
       {s.kept.map((k) => (
         <div key={k.path} className="banner" role="alert">
           <strong>{nameOf(k.removedBy)} released your check-out of {k.path}.</strong> {k.reason && `“${k.reason}”. `}

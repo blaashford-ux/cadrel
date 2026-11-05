@@ -1,0 +1,100 @@
+{
+  "name": "@cadrel/reader",
+  "version": "0.9.0",
+  "description": "Cadrel Reader: read a manuscript an author shared with you and give comments and suggestions",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:electron && concurrently -k \"vite\" \"wait-on http://localhost:5175 && electron .\"",
+    "build:electron": "node scripts/build-electron.mjs",
+    "build:renderer": "vite build",
+    "build": "npm run build:electron && npm run build:renderer",
+    "version:sync": "node scripts/sync-version.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
+    "test": "vitest run",
+    "pack": "node scripts/sync-version.mjs && npm run build && node scripts/builder.mjs --dir --publish never",
+    "dist": "node scripts/sync-version.mjs && npm run build && node scripts/builder.mjs --win nsis --publish never",
+    "dev:mobile": "vite --config vite.mobile.config.ts",
+    "build:mobile": "vite build --config vite.mobile.config.ts",
+    "android:sync": "npm run build:mobile && cap sync android"
+  },
+  "build": {
+    "appId": "com.blaashford.cadrel.reader",
+    "productName": "Cadrel Reader",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "assets/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "protocols": [
+      {
+        "name": "Cadrel Reader invitation",
+        "schemes": [
+          "cadrel-reader"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "CadrelReader-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cadrel Reader",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "deleteAppDataOnUninstall": false
+    },
+    "copyright": "Copyright \u00a9 2026 blaashford-ux",
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office",
+      "target": [
+        "dir"
+      ],
+      "executableName": "cadrel-reader"
+    }
+  },
+  "devDependencies": {
+    "@cadrel/write": "*",
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/filesystem": "^8.1.4",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.0",
+    "wait-on": "^8.0.0"
+  },
+  "author": "blaashford-ux",
+  "homepage": "https://github.com/blaashford-ux/cadrel",
+  "private": true
+}

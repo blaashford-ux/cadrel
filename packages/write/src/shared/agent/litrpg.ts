@@ -400,6 +400,36 @@ export function appendEvents(ledger: LitrpgLedger, entries: { name: string; even
   return deltas;
 }
 
+// ---- a series: what happened in earlier Books --------------------------------------------------
+
+/**
+ * This Book's ledger with what happened in the Books before it placed in front, as if at "chapter 0" of this one: a character who ended
+ * Book 1 at level 24 starts Book 2 at level 24, and the checks catch a jump between the two. The earlier Books' events keep their order,
+ * their ids are prefixed ("b1:e17") so they cannot clash with this Book's, and nothing here is saved: the joined ledger is for reading
+ * (state, checks, views). Each Book's own ledger stays as logged, in its own folder.
+ */
+export function carryLedger(own: LitrpgLedger, earlier: LitrpgLedger[]): LitrpgLedger {
+  const out: LitrpgLedger = { meta: { ...own.meta }, characters: {}, consistency_flags: own.consistency_flags.map((f) => ({ ...f })) };
+  const names = new Set<string>(Object.keys(own.characters));
+  for (const l of earlier) for (const n of Object.keys(l.characters)) names.add(n);
+  for (const name of names) {
+    const carried: LitrpgEvent[] = [];
+    earlier.forEach((l, i) => {
+      for (const e of l.characters[name]?.event_log ?? []) {
+        carried.push({ ...e, id: `b${i + 1}:${e.id}`, chapter: 0, ...(e.corrects ? { corrects: `b${i + 1}:${e.corrects}` } : {}) });
+      }
+    });
+    out.characters[name] = { current_state: emptyState(), event_log: [...carried, ...(own.characters[name]?.event_log ?? [])] };
+  }
+  return refresh(out);
+}
+
+/**
+ * The flags a joined ledger's checks found that concern this Book: those that touch one of its chapters. A flag wholly about an earlier
+ * Book belongs to that Book's own ledger, and is not repeated here.
+ */
+export const flagsForThisBook = <F extends { chapters_involved: number[] }>(flags: F[]): F[] => flags.filter((f) => f.chapters_involved.length === 0 || f.chapters_involved.some((c) => c > 0));
+
 // ---- views ----------------------------------------------------------------------------------
 
 /** One line in plain words for an event, for the feed on the dashboard. */

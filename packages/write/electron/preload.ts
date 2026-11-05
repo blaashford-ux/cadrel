@@ -1,10 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { UpdateProgress } from '../src/shared/update';
 import type { ThemeCustom } from '../src/shared/theme';
-import { DESKTOP_CAPABILITIES, type ExportProgress, type WriteApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
+import { DESKTOP_CAPABILITIES, READER_CAPABILITIES, type ExportProgress, type WriteApi, type MenuAction, type SyncStatus, type WindowInfo } from '../src/shared/api';
 
 const api: WriteApi = {
-  capabilities: DESKTOP_CAPABILITIES,
+  // Cadrel Reader's window is opened with this argument (see packages/reader); everything else is the full app.
+  capabilities: process.argv.includes('--cadrel-reader') ? READER_CAPABILITIES : DESKTOP_CAPABILITIES,
+  takeInviteLink: () => ipcRenderer.invoke('review:takeInviteLink'),
+  onInviteLink: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on('review:inviteLink', listener);
+    return () => ipcRenderer.removeListener('review:inviteLink', listener);
+  },
   getShareStatus: (project) => ipcRenderer.invoke('review:shareStatus', project),
   listShares: () => ipcRenderer.invoke('review:listShares'),
   stopSharing: (project) => ipcRenderer.invoke('review:stop', project),

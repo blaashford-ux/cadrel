@@ -183,3 +183,45 @@ describe('project tree', () => {
     expect(() => outline(t)).not.toThrow();
   });
 });
+
+import { adoptWorkflow, clearWorkflow } from '../src/projects';
+describe('taking a stage off a project', () => {
+  it('clears the workflow and stage, and leaves the rest alone', () => {
+    let t = emptyTree();
+    const r = createProject(t, { name: 'Dragon Rider', workflowId: 'wf1', stage: 'drafting' });
+    t = clearWorkflow(r.tree, r.project.id);
+    expect(t.projects[0]).toMatchObject({ name: 'Dragon Rider', workflowId: null, stage: null });
+  });
+  it('lets it be given one again (as when it later becomes a Book), but still only one', () => {
+    let t = emptyTree();
+    const r = createProject(t, { name: 'X', workflowId: 'wf1', stage: 'planning' });
+    expect(() => adoptWorkflow(r.tree, r.project.id, 'wf2', 'planning')).toThrow(/already has a workflow/);
+    t = adoptWorkflow(clearWorkflow(r.tree, r.project.id), r.project.id, 'wf2', 'planning');
+    expect(t.projects[0]).toMatchObject({ workflowId: 'wf2', stage: 'planning' });
+  });
+  it('refuses a project that is not there', () => {
+    expect(() => clearWorkflow(emptyTree(), 'gone')).toThrow(/no project/i);
+  });
+});
+
+describe('comparable titles as links', () => {
+  const base = () => {
+    const x = createProject(emptyTree(), { name: 'Dragon Rider' });
+    return createProject(x.tree, { name: 'Other' }).tree;
+  };
+  it('keeps a comp by its ASIN, upper-cased, and refuses what is not one', () => {
+    const t = base();
+    const a = t.projects[0]!.id;
+    const linked = linkRecord(t, a, 'comp', ' b0abc12345 ');
+    expect(linked.links).toEqual([{ projectId: a, module: 'comp', ref: 'B0ABC12345' }]);
+    expect(() => linkRecord(t, a, 'comp', 'not an asin')).toThrow(/not an ASIN/);
+  });
+  it('can be a comp for several projects at once, and leaves one without touching the other', () => {
+    const t = base();
+    const [a, b] = [t.projects[0]!.id, t.projects[1]!.id];
+    const both = linkRecord(linkRecord(t, a, 'comp', 'B0ABC12345'), b, 'comp', 'b0abc12345');
+    expect(both.links).toHaveLength(2);
+    expect(linkRecord(both, a, 'comp', 'B0ABC12345').links).toHaveLength(2); // linking again adds nothing
+    expect(unlinkRecord(both, 'comp', 'B0ABC12345', a).links).toEqual([{ projectId: b, module: 'comp', ref: 'B0ABC12345' }]);
+  });
+});

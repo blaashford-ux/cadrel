@@ -23,7 +23,7 @@ import {
 } from '../src/shared/agent/tools';
 import { checkKeywords } from '../src/shared/agent/keywords';
 import { editProjectFile, listProjectFiles, readProjectFile, writeProjectFile } from '../src/shared/agent/projectFiles';
-import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type ViewTemplates } from '../src/shared/agent/trackers';
+import { buildTrackerView, checkTracker, litrpgLog, litrpgState, timelineLog, type Earlier, type ViewTemplates } from '../src/shared/agent/trackers';
 import { EVENT_TYPES } from '../src/shared/agent/litrpg';
 import type { AiAccess } from '../src/shared/agent/access';
 import { SKILLS } from './skills.generated';
@@ -35,7 +35,7 @@ function viewTemplates(): ViewTemplates {
     if (!t) throw new Error(`The ${skill} skill has no ${path}.`);
     return t;
   };
-  return { timeline: asset('cadrel-timeline-tracker', 'assets/timeline-view.html'), litrpg: asset('cadrel-litrpg-tracker', 'assets/litrpg-dashboard.html'), sheet: asset('cadrel-litrpg-tracker', 'assets/character-sheet.html') };
+  return { timeline: asset('cadrel-timeline-tracker', 'assets/timeline-view.html'), litrpg: asset('cadrel-litrpg-tracker', 'assets/litrpg-dashboard.html'), sheet: asset('cadrel-litrpg-tracker', 'assets/character-sheet.html'), chapter: asset('cadrel-litrpg-tracker', 'assets/chapter-record.html') };
 }
 
 export interface ServerOptions {
@@ -48,6 +48,31 @@ export interface ServerOptions {
   tried?: { root: string; source: string }[];
   /** What the person has allowed the AI to change, read afresh at each change. Without it nothing may be created or edited. */
   access?: () => Promise<AiAccess>;
+  /**
+   * Inside Cadrel a project is a Project (a series) with Books under it, each with its own manuscript folder. This turns what the AI named
+   * (a Project, a Book, a path such as "Dragon Rider / Book 2", or a plain folder name) into the folder to work in, or throws an AgentError that
+   * tells it what to say instead ("which book?"). Without it `project` is simply a folder name.
+   */
+  resolve?: (ref: ProjectRef) => Promise<string>;
+  /** Manuscript folders that belong to projects the person cannot see: list_projects leaves them out. */
+  hidden?: () => Promise<ReadonlySet<string>>;
+  /**
+   * Where this Book's tracker ledgers live and what came before it: a series that has a folder of its own keeps one ledger file for all its Books
+   * there; otherwise it is the folders of the Books before this one, in order. Either way the trackers carry what happened in them forward.
+   */
+  earlier?: (folder: string) => Promise<Earlier>;
+}
+
+/** What a tool call names, and what it needs of it. */
+export interface ProjectRef {
+  /** A folder name from list_projects, or a Project or Book (its name, path or id). */
+  project: string;
+  /** A Book of that Project, by name or id. */
+  book?: string;
+  /** "book": the Book's own material (manuscript, outline, trackers). "either": a Book's or the series' (characters, world, style, premise). */
+  level: 'book' | 'either';
+  /** The call changes something: a closed Book refuses it. */
+  write: boolean;
 }
 
 /** Which AI is connected, from the client's own name, so notes say who wrote them. */
@@ -59,7 +84,10 @@ export function agentFromClient(clientName: string | undefined, override?: strin
   return { agent: 'ai', agentName: 'AI' };
 }
 
-const project = z.string().describe('Project name, as returned by list_projects.');
+const project = z
+  .string()
+  .describe('The project: a name from list_projects, or inside Cadrel a Project or Book such as "Dragon Rider" or "Dragon Rider / Book 2" (see studio_projects). With a series, also give `book`.');
+const book = z.string().optional().describe('Which Book of the project, such as "Book 2", when the project is a series with more than one open Book. Book-level work (manuscript, outline, blurb, keywords, trackers) needs it then; series-level material (characters, world, style) does not.');
 const file = z.string().describe('Path of a manuscript file inside the project, as returned by list_files, e.g. "Manuscript/Book 1.md".');
 const skill = z
   .string()
@@ -98,7 +126,7 @@ export function noProjects(o: Pick<ServerOptions, 'root' | 'tried'>): string {
 
 /** What the AI is told about Cadrel Write's tools. A server that adds other modules' tools puts this beside theirs. */
 export const WRITE_INSTRUCTIONS =
-  'Cadrel Write holds a writer\'s book projects as Markdown files. As an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
+  'Cadrel Write holds a writer\'s book projects as Markdown files. Inside Cadrel a project can be a series with Books under it: name the project, and add `book` when it has more than one open Book (a call that needs one and lacks it says which to pick; a closed Book can be read but not changed). Book-level work (manuscript, outline, blurb, keywords, trackers) belongs to a Book; series-level material (series bible, characters, world, style) belongs to the project itself, so leave `book` out for it. As an editor: read chapters with read_chapter and leave comments and suggestions with add_notes. ' +
   'By default you cannot change the manuscript: the author reviews your notes in Cadrel Write and accepts or rejects each one. Quote text exactly as read_chapter returns it. ' +
   'create_file and edit_file work only if the author has allowed them under Settings → MCP in Cadrel (both are off until they do). If one is refused, do not try to get round it: tell the author what you wanted to change, leave add_notes suggestions, and mention the setting. ' +
   'As a development partner: list_project_files, read_project_file, write_project_file and edit_project_file work on the project\'s other files (premise, outline, characters, worldbuilding, blurb, keywords), never on the manuscript, and never replace a file without mode "replace". ' +
@@ -123,22 +151,25 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     }
   };
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
+  /** The folder a call works in (see `ServerOptions.resolve`). */
+  const ref = (a: { project: string; book?: string }, level: ProjectRef['level'], write = false): Promise<string> => (o.resolve ? o.resolve({ project: a.project, book: a.book, level, write }) : Promise.resolve(a.project));
 
   server.registerTool('list_projects', { description: 'List the book projects (with their status) that you can read and review.', inputSchema: {}, annotations: readOnly }, run(async (c) => {
-      const projects = await listProjects(c);
+      const hide = (await o.hidden?.()) ?? new Set<string>();
+      const projects = (await listProjects(c)).filter((p) => !hide.has(p.project));
       return projects.length ? projects : { projects, message: noProjects(o) };
     }));
 
   server.registerTool(
     'list_files',
-    { description: 'List the manuscript (Markdown) files in a project, with word and chapter counts.', inputSchema: { project }, annotations: readOnly },
-    (a) => run((c) => listFiles(c, a.project))()
+    { description: 'List the manuscript (Markdown) files in a project, with word and chapter counts.', inputSchema: { project, book }, annotations: readOnly },
+    (a) => run(async (c) => listFiles(c, await ref(a, 'book')))()
   );
 
   server.registerTool(
     'list_chapters',
-    { description: 'List the chapters of a file (split at its top-level headings), with their word counts and whether the author has marked each as edited. Chapters are numbered from 0.', inputSchema: { project, file }, annotations: readOnly },
-    (a) => run((c) => listChapters(c, a.project, a.file))()
+    { description: 'List the chapters of a file (split at its top-level headings), with their word counts and whether the author has marked each as edited. Chapters are numbered from 0.', inputSchema: { project, book, file }, annotations: readOnly },
+    (a) => run(async (c) => listChapters(c, await ref(a, 'book'), a.file))()
   );
 
   server.registerTool(
@@ -149,13 +180,14 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'The result also lists the notes already on the chapter (yours, the author\'s and other reviewers\'): do not repeat them, and respect ones the author has resolved.',
       inputSchema: {
         project,
+        book,
         file,
         chapter: z.union([z.number().int().min(0), z.string()]).describe('Chapter number from list_chapters (from 0), or its exact heading text.'),
         include_markdown: z.boolean().optional().describe('Also return the Markdown source, e.g. to check emphasis or heading formatting. Quotes must still come from the plain text.'),
       },
       annotations: readOnly,
     },
-    (a) => run((c) => readChapter(c, a.project, a.file, a.chapter, { markdown: a.include_markdown }))()
+    (a) => run(async (c) => readChapter(c, await ref(a, 'book'), a.file, a.chapter, { markdown: a.include_markdown }))()
   );
 
   server.registerTool(
@@ -166,6 +198,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'Each hit has the file, chapter and a snippet.',
       inputSchema: {
         project,
+        book,
         query: z.string().describe('Text to find (up to 200 characters). Case-insensitive unless case_sensitive is set.'),
         file: file.optional().describe('Search only this file.'),
         regex: z.boolean().optional().describe('Treat the query as a regular expression.'),
@@ -174,7 +207,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: readOnly,
     },
-    (a) => run((c) => searchText(c, a.project, a.query, { file: a.file, regex: a.regex, caseSensitive: a.case_sensitive, limit: a.limit }))()
+    (a) => run(async (c) => searchText(c, await ref(a, 'book'), a.query, { file: a.file, regex: a.regex, caseSensitive: a.case_sensitive, limit: a.limit }))()
   );
 
   server.registerTool(
@@ -183,6 +216,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       description: 'List review notes in a project, optionally filtered. Use it to see what the author has already resolved or answered.',
       inputSchema: {
         project,
+        book,
         file: file.optional(),
         status: z.enum(['open', 'resolved', 'accepted', 'rejected']).optional(),
         kind: z.enum(['comment', 'suggestion']).optional(),
@@ -191,7 +225,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: readOnly,
     },
-    (a) => run((c) => getNotes(c, a.project, { file: a.file, status: a.status, kind: a.kind, reviewer: a.reviewer, category: a.category }))()
+    (a) => run(async (c) => getNotes(c, await ref(a, 'book'), { file: a.file, status: a.status, kind: a.kind, reviewer: a.reviewer, category: a.category }))()
   );
 
   server.registerTool(
@@ -201,30 +235,30 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         `Add up to ${LIMITS.notesPerCall} comments and suggestions in one call. Each note is checked separately: valid ones are saved and appear in the author's Notes panel, ` +
         'and any that fail come back with the reason (quote not found, quote matches several places, and so on) so you can fix and resend just those. ' +
         'A suggestion must sit inside one paragraph. Notes never change the manuscript.',
-      inputSchema: { project, skill, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
+      inputSchema: { project, book, skill, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => addNotes(c, a.project, a.skill, a.notes))()
+    (a) => run(async (c) => addNotes(c, await ref(a, 'book', true), a.skill, a.notes))()
   );
 
   server.registerTool(
     'reply_to_note',
     {
       description: 'Reply in the thread of an existing note, for example to answer the author\'s reply. Does not change the note otherwise.',
-      inputSchema: { project, skill, note_id: z.string(), body: z.string() },
+      inputSchema: { project, book, skill, note_id: z.string(), body: z.string() },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => replyToNote(c, a.project, a.skill, a.note_id, a.body))()
+    (a) => run(async (c) => replyToNote(c, await ref(a, 'book', true), a.skill, a.note_id, a.body))()
   );
 
   server.registerTool(
     'withdraw_note',
     {
       description: 'Remove one of your own notes that you now think is wrong. Cannot remove anyone else\'s notes or a suggestion the author already accepted.',
-      inputSchema: { project, note_id: z.string() },
+      inputSchema: { project, book, note_id: z.string() },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    (a) => run((c) => withdrawNote(c, a.project, a.note_id))()
+    (a) => run(async (c) => withdrawNote(c, await ref(a, 'book', true), a.note_id))()
   );
 
   server.registerTool(
@@ -236,6 +270,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'Only do this when the author asks, or when they have told you to mark chapters as you finish them. It never changes the manuscript or your notes.',
       inputSchema: {
         project,
+        book,
         file,
         edited: z.boolean().describe('true marks the chapters as edited; false unmarks them.'),
         chapters: z.array(z.union([z.number().int().min(0), z.string()])).optional().describe('Chapter numbers from list_chapters (from 0), or exact headings.'),
@@ -243,7 +278,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
-    (a) => run((c) => setChaptersEdited(c, a.project, a.file, { chapters: a.chapters, through: a.through }, a.edited))()
+    (a) => run(async (c) => setChaptersEdited(c, await ref(a, 'book', true), a.file, { chapters: a.chapters, through: a.through }, a.edited))()
   );
 
 
@@ -252,10 +287,10 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'list_project_files',
     {
       description: 'List the project\'s text files (Markdown, text, JSON, HTML, CSV) with a guessed kind: manuscript, premise, outline, bible, character, world, research, copy, tracker, view, style or other. Look here before creating anything, so existing work is built on, not duplicated.',
-      inputSchema: { project, folder: z.string().optional().describe('Only files inside this folder, e.g. "Characters".') },
+      inputSchema: { project, book, folder: z.string().optional().describe('Only files inside this folder, e.g. "Characters".') },
       annotations: readOnly,
     },
-    (a) => run((c) => listProjectFiles(c, a.project, a.folder))()
+    (a) => run(async (c) => listProjectFiles(c, await ref(a, 'either'), a.folder))()
   );
   server.registerTool(
     'read_project_file',
@@ -263,13 +298,14 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       description: 'Read one text file of the project (not only the manuscript). A long file comes in parts: when the result says truncated, call again with start set to nextStart.',
       inputSchema: {
         project,
+        book,
         file: z.string().describe('Path inside the project from list_project_files, e.g. "Characters/Mira.md".'),
         start: z.number().int().min(0).optional().describe('Character offset to start from (default 0).'),
         max_chars: z.number().int().min(1).optional().describe('Most characters to return (default 40000, at most 120000).'),
       },
       annotations: readOnly,
     },
-    (a) => run((c) => readProjectFile(c, a.project, a.file, { start: a.start, maxChars: a.max_chars }))()
+    (a) => run(async (c) => readProjectFile(c, await ref(a, 'either'), a.file, { start: a.start, maxChars: a.max_chars }))()
   );
   server.registerTool(
     'write_project_file',
@@ -279,22 +315,23 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'mode "create" (default) refuses to overwrite; "replace" overwrites and keeps the old version in .cadrel/previous; "append" adds to the end of a Markdown or text file, which is how to save a long document in parts. Read the file first before replacing it.',
       inputSchema: {
         project,
+        book,
         file: z.string().describe('Path inside the project, e.g. "Premise.md" or "Characters/Mira.md".'),
         content: z.string().describe('The whole text (for append, the text to add). At most 400000 characters per call.'),
         mode: z.enum(['create', 'replace', 'append']).optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => writeProjectFile(c, a.project, a.file, a.content, a.mode))()
+    (a) => run(async (c) => writeProjectFile(c, await ref(a, 'either', true), a.file, a.content, a.mode))()
   );
   server.registerTool(
     'edit_project_file',
     {
       description: 'Change one exact piece of text in a project file (a find-and-replace that must match exactly once unless replace_all). The old version is kept. Use it for small changes instead of rewriting a long file.',
-      inputSchema: { project, file: z.string(), old_text: z.string().describe('Exact text to change, copied from read_project_file.'), new_text: z.string().describe('What replaces it (empty deletes it).'), replace_all: z.boolean().optional() },
+      inputSchema: { project, book, file: z.string(), old_text: z.string().describe('Exact text to change, copied from read_project_file.'), new_text: z.string().describe('What replaces it (empty deletes it).'), replace_all: z.boolean().optional() },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run((c) => editProjectFile(c, a.project, a.file, a.old_text, a.new_text, a.replace_all))()
+    (a) => run(async (c) => editProjectFile(c, await ref(a, 'either', true), a.file, a.old_text, a.new_text, a.replace_all))()
   );
   server.registerTool(
     'check_keywords',
@@ -327,9 +364,10 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
     'litrpg_log',
     {
       description:
-        'Append mechanics events (levels, XP, stats, class, skills, items, titles, companions) to the project\'s LitRPG ledger, creating it on first use. Events are validated (a bad one saves nothing and says which), kept in chapter order, each character is replayed from the log, and the arithmetic checks run. Returns what changed and any new flags.',
+        'Append mechanics events (levels, XP, stats, class, skills, items, titles, companions) to the project\'s LitRPG ledger, creating it on first use. Events are validated (a bad one saves nothing and says which), kept in chapter order, each character is replayed from the log, and the arithmetic checks run. Returns what changed and any new flags. Each chapter you log also gets a permanent page of its own, Tracking/Chapters/Chapter N.html (what changed in it, and where each character stands after it); a later correction writes a new version and keeps the old one.',
       inputSchema: {
         project,
+        book,
         characters: z.array(z.object({ name: z.string(), events: z.array(event) })).describe('Events by character, in chapter order.'),
         flags: z.array(z.object({ type: z.enum(['arithmetic_mismatch', 'threshold_contradiction', 'ability_drift', 'silent_jump']), character: z.string().optional(), chapters_involved: z.array(z.number().int()).optional(), description: z.string() })).optional().describe('Contradictions you found by reading that the checks cannot see.'),
         resolve_flags: z.array(z.string()).optional().describe('Flag ids the author has said are resolved. Never resolve one yourself.'),
@@ -337,24 +375,25 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: write,
     },
-    (a) => run((c) => litrpgLog(c, a.project, a as never))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return litrpgLog(c, f, a as never, { templates: viewTemplates(), earlier: await o.earlier?.(f) }); })()
   );
   server.registerTool(
     'litrpg_state',
     {
       description: 'A character\'s level, XP, class, attributes, skills, items, titles and companions as of a chapter (or the end of the ledger), replayed from the event log. as_of_day uses the timeline ledger to find the last chapter narrated by that in-story day. Answers from the ledger; does not read the manuscript.',
-      inputSchema: { project, character: z.string().optional().describe('Leave out for every character.'), as_of_chapter: z.number().int().min(0).optional(), as_of_day: z.union([z.number().int(), z.string()]).optional() },
+      inputSchema: { project, book, character: z.string().optional().describe('Leave out for every character.'), as_of_chapter: z.number().int().min(0).optional(), as_of_day: z.union([z.number().int(), z.string()]).optional() },
       annotations: readOnly,
     },
-    (a) => run((c) => litrpgState(c, a.project, { character: a.character, as_of_chapter: a.as_of_chapter, as_of_day: a.as_of_day }))()
+    (a) => run(async (c) => { const f = await ref(a, 'book'); return litrpgState(c, f, { character: a.character, as_of_chapter: a.as_of_chapter, as_of_day: a.as_of_day }, await o.earlier?.(f)); })()
   );
   server.registerTool(
     'timeline_log',
     {
       description:
-        'Merge what the text says about in-story days into the project\'s timeline ledger, creating it on first use: chapters on each day, locations, characters, events, and every elapsed-time or calendar statement with its exact quote. Lists grow and duplicates are ignored, so send only what is new. The chronology checks run and new flags come back.',
+        'Merge what the text says about in-story days into the project\'s timeline ledger, creating it on first use: chapters on each day, locations, characters, events, and every elapsed-time or calendar statement with its exact quote. Lists grow and duplicates are ignored, so send only what is new. The chronology checks run and new flags come back. Each chapter the days mention also gets its permanent page, Tracking/Chapters/Chapter N.html, with the in-story days it narrates.',
       inputSchema: {
         project,
+        book,
         days: z
           .array(
             z.object({
@@ -381,33 +420,34 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: write,
     },
-    (a) => run((c) => timelineLog(c, a.project, a as never))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return timelineLog(c, f, a as never, { templates: viewTemplates(), earlier: await o.earlier?.(f) }); })()
   );
   server.registerTool(
     'check_tracker',
     {
       description: 'Run every consistency check over a whole ledger ("does the math check out?", "does the timeline hold together?"), save any new flags, and list every flag still open. Flags are the author\'s to resolve.',
-      inputSchema: { project, tracker: z.enum(['litrpg', 'timeline']) },
+      inputSchema: { project, book, tracker: z.enum(['litrpg', 'timeline']) },
       annotations: write,
     },
-    (a) => run((c) => checkTracker(c, a.project, a.tracker))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return checkTracker(c, f, a.tracker, await o.earlier?.(f)); })()
   );
   server.registerTool(
     'build_tracker_view',
     {
       description:
-        'Draw a ledger as a self-contained HTML page and save it in the project\'s Tracking folder: "timeline" (day ribbon, chapter map, progression chart, flags), "litrpg" (dashboard with an as-of-chapter slider), or "character_sheet" (a printable sheet that shows only known values and no notes; optionally as of a chapter). ' +
+        'Draw a ledger as a self-contained HTML page and save it in the project\'s Tracking folder: "timeline" (day ribbon, chapter map, progression chart, flags), "litrpg" (dashboard with an as-of-chapter slider), "character_sheet" (a printable sheet that shows only known values and no notes; optionally as of a chapter), or "chapters" (the permanent record of each chapter, Tracking/Chapters/Chapter N.html; litrpg_log and timeline_log write these as they go, so use this only to bring up to date a ledger logged before they existed, or one chapter with as_of_chapter). ' +
         'Set return_html to get the page itself back, to show it as an artifact; otherwise only the saved path comes back.',
       inputSchema: {
         project,
-        view: z.enum(['timeline', 'litrpg', 'character_sheet']),
+        book,
+        view: z.enum(['timeline', 'litrpg', 'character_sheet', 'chapters']),
         character: z.string().optional().describe('For a character sheet: the character\'s name, or "all".'),
-        as_of_chapter: z.number().int().min(0).optional().describe('For a character sheet: the state as of this chapter.'),
+        as_of_chapter: z.number().int().min(0).optional().describe('For a character sheet: the state as of this chapter. For "chapters": write just this chapter\'s record.'),
         return_html: z.boolean().optional(),
       },
       annotations: write,
     },
-    (a) => run((c) => buildTrackerView(c, a.project, { view: a.view, character: a.character, as_of_chapter: a.as_of_chapter, return_html: a.return_html }, viewTemplates()))()
+    (a) => run(async (c) => { const f = await ref(a, 'book', true); return buildTrackerView(c, f, { view: a.view, character: a.character, as_of_chapter: a.as_of_chapter, return_html: a.return_html }, viewTemplates(), await o.earlier?.(f)); })()
   );
 
   const writes = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -420,12 +460,13 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'Off unless the author has allowed AI tools to create files in Cadrel (Settings → MCP): if it is off the call is refused and nothing is written.',
       inputSchema: {
         project,
+        book,
         file: z.string().describe('Path of the new file inside the project, ending in .md, e.g. "Manuscript/Chapter 2.md". Folders on the way are made if needed.'),
         content: z.string().describe(`The Markdown text of the file (up to ${LIMITS.fileContent} characters).`),
       },
       annotations: writes,
     },
-    (a) => run((c) => createFile(c, a.project, a.file, a.content))()
+    (a) => run(async (c) => createFile(c, await ref(a, 'book', true), a.file, a.content))()
   );
 
   server.registerTool(
@@ -437,6 +478,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         'Prefer add_notes suggestions unless the author has asked you to make the change yourself.',
       inputSchema: {
         project,
+        book,
         file,
         edits: z
           .array(
@@ -450,7 +492,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       },
       annotations: { ...writes, destructiveHint: true },
     },
-    (a) => run((c) => editFile(c, a.project, a.file, a.edits))()
+    (a) => run(async (c) => editFile(c, await ref(a, 'book', true), a.file, a.edits))()
   );
 
   // The same instructions the skills carry, for clients that have prompts but not skills (GPT-based ones among them).

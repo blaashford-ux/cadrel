@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareVersions, expectedSha256, fetchLatestRelease, fetchReleaseFor, isDevBuild, isReleaseDownloadUrl, parseRelease } from './update';
+import { compareVersions, expectedSha256, fetchLatestRelease, fetchReleaseFor, isDevBuild, isReleaseDownloadUrl, parseRelease, productOfTag } from './update';
 
 const release = {
   tag_name: 'v0.5.0',
@@ -94,5 +94,55 @@ describe('development builds follow development releases', () => {
 
   it('says so when no dev release exists', async () => {
     await expect(fetchReleaseFor(fetchWith([rel('v0.3.0', false)]), 'windows', '0.2.0-dev.1')).rejects.toThrow(/No development release/);
+  });
+});
+
+describe('Cadrel and Cadrel Reader update separately', () => {
+  const rel = (tag: string, prerelease = false, asset = tag.startsWith('reader-') ? `CadrelReader-Setup-${tag.replace(/^reader-v/, '')}.exe` : `Cadrel-Setup-${tag.replace(/^v/, '')}.exe`) => ({
+    tag_name: tag,
+    prerelease,
+    draft: false,
+    html_url: `https://github.com/blaashford-ux/cadrel/releases/tag/${tag}`,
+    body: '',
+    assets: [{ name: asset, browser_download_url: `https://github.com/blaashford-ux/cadrel/releases/download/${tag}/${asset}`, size: 1 }]
+  });
+  const listing = (rs: object[]) => (async () => ({ ok: true, status: 200, json: async () => rs })) as unknown as typeof fetch;
+  const mixed = [rel('reader-v0.9.1'), rel('v0.6.0'), rel('reader-v0.9.0'), rel('v0.5.0'), rel('reader-v0.10.0-dev.4', true), rel('v0.7.0-dev.2', true)];
+
+  it('tells a release’s product from its tag', () => {
+    expect(productOfTag('reader-v0.9.0')).toBe('reader');
+    expect(productOfTag('v0.5.0')).toBe('cadrel');
+    expect(productOfTag('nightly')).toBeNull();
+  });
+
+  it('Reader is offered only Reader releases, the newest first by version', async () => {
+    const info = await fetchReleaseFor(listing(mixed), 'windows', '0.9.0', 'reader');
+    expect(info.latest).toBe('0.9.1');
+    expect(info.available).toBe(true);
+    expect(info.asset?.name).toBe('CadrelReader-Setup-0.9.1.exe');
+  });
+
+  it('Reader’s development builds follow Reader’s development releases only', async () => {
+    const info = await fetchReleaseFor(listing(mixed), 'windows', '0.10.0-dev.1', 'reader');
+    expect(info.latest).toBe('0.10.0-dev.4');
+  });
+
+  it('Cadrel’s development builds never see Reader’s development releases', async () => {
+    const info = await fetchReleaseFor(listing(mixed), 'windows', '0.7.0-dev.1');
+    expect(info.latest).toBe('0.7.0-dev.2');
+  });
+
+  it('Cadrel’s installer pattern does not match Reader’s file, nor the other way round', () => {
+    expect(parseRelease(rel('v0.6.0', false, 'CadrelReader-Setup-0.6.0.exe'), 'windows', '0.5.0').asset).toBeNull();
+    expect(parseRelease(rel('reader-v0.9.0', false, 'Cadrel-Setup-0.9.0.exe'), 'windows', '0.8.0', 'reader').asset).toBeNull();
+  });
+
+  it('refuses a release of the other product', () => {
+    expect(() => parseRelease(rel('reader-v0.9.0'), 'windows', '0.8.0')).toThrow(/not for this app/);
+    expect(() => parseRelease(rel('v0.6.0'), 'windows', '0.5.0', 'reader')).toThrow(/not for this app/);
+  });
+
+  it('says so when Reader has no release yet', async () => {
+    await expect(fetchReleaseFor(listing([rel('v0.6.0')]), 'windows', '0.9.0', 'reader')).rejects.toThrow(/No release has been published/);
   });
 });

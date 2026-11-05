@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it } from 'vitest';
@@ -8,11 +9,13 @@ import { skillsSource } from '../scripts/skills.mjs';
 import { createServer } from './server';
 import { SKILLS } from './skills.generated';
 
-const allFolders = readdirSync('skills', { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+// Paths are the package's own, so the test passes from the repo root as well as from this folder.
+const at = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
+const allFolders = readdirSync(at('skills'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 const REVIEW = ['cadrel-copy-edit', 'cadrel-developmental-edit', 'cadrel-line-edit'];
 const AUTHOR = ['cadrel-litrpg-tracker', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords', 'cadrel-premise-to-outline', 'cadrel-series-developer', 'cadrel-timeline-tracker'];
 const folders = REVIEW;
-const read = (f: string) => readFileSync(`skills/${f}/SKILL.md`, 'utf8');
+const read = (f: string) => readFileSync(at(`skills/${f}/SKILL.md`), 'utf8');
 
 describe('the skills', () => {
   it('are the three editing passes and the six authoring skills', () => {
@@ -29,7 +32,7 @@ describe('the skills', () => {
   });
 
   it('are in step with the generated prompts (run `npm run build:skills` if this fails)', () => {
-    expect(readFileSync('mcp/skills.generated.ts', 'utf8')).toBe(skillsSource());
+    expect(readFileSync(at('mcp/skills.generated.ts'), 'utf8')).toBe(skillsSource());
   });
 
   it('share one identical "Working in Cadrel Write" section, so a fix to it can’t miss a skill', () => {
@@ -52,13 +55,13 @@ describe('the skills', () => {
   it('give each tracker its page templates, and the pages show only what the skill says they do', () => {
     const files = (n: string) => Object.keys(SKILLS.find((s) => s.name === n)!.files).sort();
     expect(files('cadrel-timeline-tracker')).toEqual(['assets/timeline-view.html']);
-    expect(files('cadrel-litrpg-tracker')).toEqual(['assets/character-sheet.html', 'assets/litrpg-dashboard.html']);
-    for (const t of ['cadrel-timeline-tracker/assets/timeline-view.html', 'cadrel-litrpg-tracker/assets/litrpg-dashboard.html', 'cadrel-litrpg-tracker/assets/character-sheet.html']) {
-      const html = readFileSync(`skills/${t}`, 'utf8');
+    expect(files('cadrel-litrpg-tracker')).toEqual(['assets/chapter-record.html', 'assets/character-sheet.html', 'assets/litrpg-dashboard.html']);
+    for (const t of ['cadrel-timeline-tracker/assets/timeline-view.html', 'cadrel-litrpg-tracker/assets/litrpg-dashboard.html', 'cadrel-litrpg-tracker/assets/character-sheet.html', 'cadrel-litrpg-tracker/assets/chapter-record.html']) {
+      const html = readFileSync(at(`skills/${t}`), 'utf8');
       expect(html.split('__CADREL_DATA__')).toHaveLength(2);
       expect(html.replace('http://www.w3.org/2000/svg', '')).not.toMatch(/https?:\/\/|<script[^>]+src=/);
     }
-    const sheet = readFileSync('skills/cadrel-litrpg-tracker/assets/character-sheet.html', 'utf8');
+    const sheet = readFileSync(at('skills/cadrel-litrpg-tracker/assets/character-sheet.html'), 'utf8');
     expect(sheet.replace(/<!--[\s\S]*?-->/g, '')).not.toMatch(/source_quote|consistency|flag|note|declined/i);
   });
 
@@ -94,6 +97,56 @@ describe('the skills', () => {
     expect(author.text).toContain('Work in the project "Novel".');
     expect(author.text).toContain('What I want: log chapters 1 to 5');
     expect(author.text).not.toContain('add_notes using skill');
+    await client.close();
+  });
+});
+
+describe('the skills know the series level from the Book level', () => {
+  it('the series developer works at the series level: the project, never a Book', () => {
+    const t = read('cadrel-series-developer');
+    expect(t).toMatch(/work at the series level/);
+    expect(t).toMatch(/leave `book` out/);
+    expect(t).toMatch(/series' own folder, not in one Book's/);
+  });
+
+  it('the Book-level authoring skills read the series first, pass the Book, and save in the Book', () => {
+    for (const f of ['cadrel-premise-to-outline', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords']) {
+      const t = read(f);
+      expect(t, f).toMatch(/this work is for \*\*one Book\*\*/);
+      expect(t, f).toMatch(/read first/);
+      expect(t, f).toMatch(/starting with the series/);
+      expect(t, f).toMatch(/pass the same `book`/);
+      expect(t, f).toMatch(/closed Book is read-only/);
+    }
+  });
+
+  it('the trackers work on one Book at a time, carry the earlier Books forward, and keep one ledger file for a series', () => {
+    for (const f of ['cadrel-litrpg-tracker', 'cadrel-timeline-tracker']) expect(read(f), f).toMatch(/pass `book` on every call/);
+    expect(read('cadrel-litrpg-tracker')).toMatch(/earlier Books' ledgers in front/);
+    expect(read('cadrel-timeline-tracker')).toMatch(/one story clock/);
+    expect(read('cadrel-timeline-tracker')).toMatch(/earlier Books' days in front/);
+    for (const f of ['cadrel-litrpg-tracker', 'cadrel-timeline-tracker']) expect(read(f), f).toMatch(/series' own folder/);
+  });
+
+  it('the editing passes review one Book and read the series material first', () => {
+    for (const f of REVIEW) {
+      const t = read(f);
+      expect(t, f).toMatch(/one Book's manuscript/);
+      expect(t, f).toMatch(/`studio_context`/);
+      expect(t, f).toMatch(/pass `book` on every call/);
+      expect(t, f).toMatch(/closed Book can be read but not given notes/);
+    }
+  });
+
+  it('every tool that names a project also takes a book', async () => {
+    const server = createServer({ fs: new MemoryFs(), root: '/books' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'x', version: '1' });
+    await Promise.all([server.connect(a), client.connect(b)]);
+    const tools = (await client.listTools()).tools;
+    const withProject = tools.filter((t) => 'project' in ((t.inputSchema as { properties?: Record<string, unknown> }).properties ?? {}));
+    expect(withProject.length).toBeGreaterThanOrEqual(20);
+    for (const t of withProject) expect((t.inputSchema as { properties: Record<string, unknown> }).properties, t.name).toHaveProperty('book');
     await client.close();
   });
 });

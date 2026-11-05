@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { CategoryReport, Opportunity, OpportunityWeights, SalesCurve } from '../../shared/api.js';
 import { ChartCard, GroupedBars, Legend, S1 } from '../charts.js';
+import { useMarketScope } from '../scope.js';
 
 const api = window.cadrelMarket;
 const num = (v: number | null | undefined, d = 1) => (v == null ? '–' : Number(v.toFixed(d)).toLocaleString('en-US'));
@@ -95,7 +96,9 @@ export function OpportunityPanel({ r, onChanged }: { r: CategoryReport; onChange
 
 export function CompareCategories({ topN, current, onPick, version }: { topN: number; current: string; onPick: (key: string) => void; version: number }) {
   const [rows, setRows] = useState<Opportunity[] | null>(null);
-  useEffect(() => { void api.rankCategories(topN).then(setRows); }, [topN, version]);
+  const scope = useMarketScope();
+  const keys = scope.keys;
+  useEffect(() => { void api.rankCategories(topN).then((r) => setRows(keys ? r.filter((o) => keys.includes(o.category)) : r)); }, [topN, version, scope.token]);
   if (!rows || rows.length < 2) return null;
   return (
     <div className="card" aria-label="Compare categories">

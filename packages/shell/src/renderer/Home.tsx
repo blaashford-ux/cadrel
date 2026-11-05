@@ -7,6 +7,7 @@ import { factsFor } from './projectFacts';
 import { GlanceLine, StageTag, usePulse, useStages } from './Glance';
 import { NotConnected } from './NotConnected';
 import { StudioSwitcher } from './StudioSwitcher';
+import { useScope } from './useScope';
 
 interface Props {
   overview: Overview | null;
@@ -44,12 +45,14 @@ function Mine({ studio, onProject }: { studio: StudioState | null; onProject: (i
 
 export function Home({ overview, studio, onGo, onProject, studios }: Props) {
   const now = Date.now();
+  const current = useScope();
   const pulse = usePulse(studio);
   const stageOf = useStages(studio);
   const recent = overview?.write.projects.find((p) => !p.archived);
   const pct = recent ? percent(recent.words, recent.goalWords) : null;
   const m = overview?.market;
-  const top = studio ? childrenOf(studio.tree, null).filter((p) => p.status !== 'archived') : [];
+  // The project Cadrel is showing comes first, so Home starts where you are working.
+  const top = (studio ? childrenOf(studio.tree, null).filter((p) => p.status !== 'archived') : []).sort((a, b) => Number(b.id === current?.project) - Number(a.id === current?.project));
 
   return (
     <div className="home">
@@ -87,7 +90,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
               return (
                 <li key={p.id}>
                   <button type="button" className="link" onClick={() => onProject(p.id)}>{p.name}</button>
-                  <span className="chip">{kindLabel(studio.tree, p)}</span> <StageTag view={stageOf[p.id]} />
+                  <span className="chip">{kindLabel(studio.tree, p)}</span>{p.id === current?.project && <span className="chip" title="The project Cadrel is showing">current</span>} <StageTag view={stageOf[p.id]} />
                   <span className="muted small">
                     {subs.length ? `${subs.length} subproject${subs.length === 1 ? '' : 's'} · ` : ''}
                     {formatWords(f.words)} words{open ? ` · ${open} open note${open === 1 ? '' : 's'}` : ''}

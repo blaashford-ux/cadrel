@@ -16,6 +16,10 @@ export interface ReviewHostOptions {
   drive(): DriveApi;
   connected(): boolean;
   accessToken(): Promise<string>;
+  /** Cadrel Reader passes false: it reads and comments, so it refuses invitations to edit. */
+  allowEdit?: boolean;
+  /** What messages call this app (default Cadrel Write). */
+  appName?: string;
 }
 
 const NOT_CONNECTED = 'Connect Google Drive first (File → Google Drive Sync…).';
@@ -23,7 +27,7 @@ const NOT_CONNECTED = 'Connect Google Drive first (File → Google Drive Sync…
 /** `ReviewSharingApi` for one device: the owner and reviewer services plus the checks the UI relies on. */
 export function createReviewHost(o: ReviewHostOptions): ReviewSharingApi {
   const share = new ReviewShare({ fs: o.fs, drive: o.drive, stateFile: o.stateFile });
-  const join = new ReviewJoin({ fs: o.fs, drive: o.drive, sharedRoot: `${o.root.replace(/[\\/]+$/, '')}/${SHARED_WITH_ME}` });
+  const join = new ReviewJoin({ fs: o.fs, drive: o.drive, sharedRoot: `${o.root.replace(/[\\/]+$/, '')}/${SHARED_WITH_ME}`, allowEdit: o.allowEdit, appName: o.appName });
   const need = () => {
     if (!o.connected()) throw new Error(NOT_CONNECTED);
   };

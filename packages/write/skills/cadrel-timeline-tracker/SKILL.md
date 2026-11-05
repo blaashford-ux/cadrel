@@ -19,7 +19,7 @@ A chapter can span minutes, or "the next three days" can sit in one paragraph. D
 
 You have Cadrel's project tools. A project is a folder of Markdown files, and the manuscript is read-only to you.
 
-1. **Find the work.** `list_projects`, then `list_files` and `list_chapters`. Ask which project or file if it isn't clear.
+1. **Find the work, one Book at a time.** In Cadrel a project is a series with Books under it, and a ledger belongs to **one Book**. If `studio_context` is available, call it with the project first (it names the Books and the series files to read). Then `list_projects`, `list_files` and `list_chapters`. With several open Books, pass `book` on every call; if it isn't clear which Book, or which file, ask. A closed Book is read-only: you can query it, not log to it. A series has **one story clock**: its Books share a single `Tracking/Timeline Ledger.json` (kept in the series' own folder when it has one, with each Book's days inside), and day numbers carry on from the Book before, so day 1 of Book 2 is the day after the last day of Book 1 unless the text says otherwise. Read and checked, a Book's timeline has the earlier Books' days in front of it, so a Book that opens before the last one ended, or a weekday that disagrees across Books, is flagged. Log only this Book's chapters, with this Book's own chapter numbers.
 2. **Start from the ledger.** `list_project_files` shows whether `Tracking/Timeline Ledger.json` exists. If it does, `read_project_file` it and work from it; don't re-read chapters it already covers. If there is none, offer to build one from Chapter 1 (or wherever the author says).
 3. **Read the chapters** you were asked to cover with `read_chapter`. Use `search_text` to find every "days later", weekday or date phrase when auditing a long book.
 4. **Log what you found** with `timeline_log`: one entry per day touched, with chapters, locations, who is present, the POV character, major events (short; this is an index, not a recap), time-of-day markers, and the claims with their exact quotes. Entries merge into the ledger: lists grow and duplicates are ignored, so send only what is new or changed. The tool runs the arithmetic checks itself and returns the new flags.
@@ -42,6 +42,8 @@ If these tools aren't available, keep the ledger in the shape below in a file or
 - Time of day ("evening", "morning").
 
 ## Consistency checking
+
+`timeline_log` also writes `Tracking/Chapters/Chapter N.html` for each chapter it touched, with that chapter's in-story day. The same page also carries what the mechanics ledger recorded for it, so there is one permanent page per chapter. An unchanged chapter is not rewritten; a changed one keeps its old version in the project's history.
 
 `timeline_log` and `check_tracker` raise these automatically, as flags with both quotes and chapter numbers:
 

@@ -29,7 +29,7 @@ const STATUSES: StudioStatus[] = ['local', 'not-provisioned', 'provisioning', 'r
 
 const localStudio = (): StudioEntry => ({
   id: LOCAL_ID, name: 'My Studio', role: 'owner', status: 'local', url: null, accountId: null, createdAt: new Date(0).toISOString(), note: null,
-  folderName: 'My Studio', memberRole: null, fingerprint: null, tokenKept: false, resources: null, server: null
+  folderName: 'My Studio', memberRole: null, fingerprint: null, tokenKept: false, resources: null, server: null, recordsOnServer: false
 });
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -70,7 +70,9 @@ export function sanitizeStudios(raw: unknown): Data {
       fingerprint: typeof o.fingerprint === 'string' && /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(o.fingerprint) ? o.fingerprint : null,
       tokenKept: o.tokenKept === true,
       resources: sanitizeResources(o.resources),
-      server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number } : null
+      server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number } : null,
+      // a Studio the person joined has its records on its server and nowhere else
+      recordsOnServer: o.role === 'member' || o.recordsOnServer === true
     });
   }
   const activeId = typeof r.activeId === 'string' && studios.some((s) => s.id === r.activeId) ? r.activeId : LOCAL_ID;
@@ -175,7 +177,7 @@ export class StudioRegistry {
 
   /** A Studio the person was invited to and has joined. */
   addMember(o: { name: string; url: string; fingerprint: string; memberRole: string; studioId: string }): StudiosView {
-    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', url: o.url, fingerprint: o.fingerprint, memberRole: o.memberRole, note: null });
+    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', recordsOnServer: true, url: o.url, fingerprint: o.fingerprint, memberRole: o.memberRole, note: null });
     return this.save();
   }
 
@@ -195,7 +197,7 @@ export class StudioRegistry {
   }
 
   /** What the build tells us as it goes. */
-  update(id: string, patch: Partial<Pick<StudioEntry, 'status' | 'url' | 'accountId' | 'note' | 'fingerprint' | 'tokenKept' | 'resources' | 'server'>>): StudiosView {
+  update(id: string, patch: Partial<Pick<StudioEntry, 'status' | 'url' | 'accountId' | 'note' | 'fingerprint' | 'tokenKept' | 'resources' | 'server' | 'recordsOnServer'>>): StudiosView {
     const s = this.owned(id);
     Object.assign(s, patch);
     return this.save();

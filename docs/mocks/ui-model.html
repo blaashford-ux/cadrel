@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cadrel: scope mock</title>
+<style>
+  :root { --bg:#e8e3d8; --panel:#f1efe8; --card:#faf8f3; --ink:#1d2a33; --muted:#6a6f72; --line:#d6d0c2; --accent:#33495c; --warm:#9a6b32; --ok:#2f7d5b; --warn:#b4691f; --chip:#e4dfd2; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171a; --panel:#1b1f23; --card:#22272c; --ink:#e7e4dc; --muted:#98a0a5; --line:#31383e; --accent:#7fa3c0; --warm:#d1a367; --ok:#6bc39a; --warn:#e0a060; --chip:#2c3238; } }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui, sans-serif; }
+  .shell { display:grid; grid-template-columns: 236px 1fr; height:100%; }
+  .rail { background:var(--panel); border-right:1px solid var(--line); padding:12px 10px; overflow:auto; }
+  .mark { font-weight:700; letter-spacing:.3px; padding:2px 8px 10px; }
+  .mark span { color:var(--warm); }
+  .scope { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; margin-bottom:12px; }
+  .scope label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:6px 0 3px; }
+  .scope label:first-child { margin-top:0; }
+  select { width:100%; font:inherit; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  .hint { font-size:12px; color:var(--muted); margin-top:6px; }
+  .rail ul { list-style:none; margin:0 0 6px; padding:0; }
+  .rail hr { border:0; border-top:1px solid var(--line); margin:8px 4px; }
+  .nav { width:100%; display:flex; align-items:center; gap:8px; text-align:left; font:inherit; color:var(--ink); background:none; border:0; border-radius:8px; padding:7px 10px; cursor:pointer; }
+  .nav:hover { background:var(--chip); }
+  .nav[aria-current=page] { background:var(--accent); color:#fff; }
+  .tag { margin-left:auto; font-size:10px; padding:1px 6px; border-radius:99px; background:var(--chip); color:var(--muted); }
+  .nav[aria-current=page] .tag { background:rgba(255,255,255,.2); color:#fff; }
+  .tag.scoped { background:color-mix(in srgb, var(--warm) 25%, transparent); color:var(--warm); }
+  .nav[aria-current=page] .tag.scoped { color:#fff; }
+  main { overflow:auto; padding:22px 28px 60px; }
+  h1 { font-size:22px; margin:0 0 2px; }
+  h2 { font-size:15px; margin:0 0 8px; }
+  .sub { color:var(--muted); margin:0 0 16px; }
+  .bar { display:flex; align-items:center; gap:10px; margin:0 0 14px; flex-wrap:wrap; }
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .seg button { font:inherit; border:0; padding:6px 12px; background:var(--card); color:var(--ink); cursor:pointer; }
+  .seg button[aria-pressed=true] { background:var(--accent); color:#fff; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .row { display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid var(--line); }
+  .row:first-of-type { border-top:0; }
+  .grow { flex:1; }
+  .chip { display:inline-block; padding:1px 9px; border-radius:99px; border:1px solid currentColor; font-size:12px; }
+  .st-Planning { color:#6a7bd1; } .st-Drafting { color:var(--warn); } .st-Revising { color:#a35bb0; } .st-Editing { color:#2b8ea3; } .st-Published { color:var(--ok); } .st-Hold { color:var(--muted); }
+  .muted { color:var(--muted); }
+  button.b { font:inherit; padding:5px 11px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+  button.b:hover { background:var(--chip); }
+  button.p { background:var(--accent); color:#fff; border-color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 8px; border-top:1px solid var(--line); }
+  th { font-size:12px; color:var(--muted); font-weight:600; border-top:0; }
+  .empty { border:1px dashed var(--line); border-radius:12px; padding:22px; text-align:center; color:var(--muted); }
+  .tree { margin:0; padding-left:18px; } .tree li { margin:3px 0; }
+  .split { display:grid; grid-template-columns: 240px 1fr; gap:18px; }
+  .banner { background:color-mix(in srgb, var(--warm) 14%, transparent); border:1px solid color-mix(in srgb, var(--warm) 40%, transparent); border-radius:10px; padding:8px 12px; margin-bottom:12px; }
+  .editor { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px 28px; min-height:150px; }
+  .editor h3 { margin:0 0 6px; font-size:20px; }
+  .fold { color:var(--muted); }
+  .ro { opacity:.7; }
+  code { background:var(--chip); padding:0 5px; border-radius:5px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Cadrel">
+    <div class="mark">Cadr<span>el</span> <span style="color:var(--muted);font-weight:400">· My Studio</span></div>
+    <div class="scope" aria-label="Scope">
+      <label for="proj">Project</label>
+      <select id="proj"></select>
+      <label for="book">Book</label>
+      <select id="book"></select>
+      <div class="hint" id="scopehint"></div>
+    </div>
+    <ul id="nav1"></ul><hr /><ul id="nav2"></ul><hr /><ul id="nav3"></ul>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<script>
+// ---- the pretend Studio -------------------------------------------------------------------------------
+var STAGES = ['Planning', 'Drafting', 'Revising', 'Editing', 'Published'];
+var CATEGORIES = ['Dragon Fantasy', 'Epic Fantasy', 'Cozy Mystery', 'Paranormal Romance', 'Sci-Fi Adventure', 'LitRPG'];
+var data = {
+  projects: [
+    { id: 'dr', name: 'Dragon Rider', kind: 'Series', categories: ['Dragon Fantasy', 'Epic Fantasy'],
+      series: ['Series Bible.md', 'Characters/Mira.md', 'Characters/Tor.md', 'Worldbuilding/Dragons.md'],
+      books: [
+        { id: 'b1', name: 'Book 1: Ember', stage: 'Published', closed: true },
+        { id: 'b2', name: 'Book 2: Ash', stage: 'Drafting', closed: false },
+        { id: 'b3', name: 'Book 3: Cinder', stage: 'Planning', closed: false } ] },
+    { id: 'lk', name: 'The Lost King', kind: 'Standalone', categories: ['Cozy Mystery'],
+      series: ['Characters/Mara.md'],
+      books: [ { id: 'b4', name: 'The Lost King', stage: 'Revising', closed: false } ] }
+  ],
+  notes: [ { p: 'dr', b: 'b2', t: 'Chapter 4 drags; cut the market scene?' }, { p: 'dr', b: 'b3', t: 'Outline: who betrays Mira?' }, { p: 'dr', b: null, t: 'Dragons never speak: keep consistent.' }, { p: 'lk', b: 'b4', t: 'Check the crown timeline.' } ]
+};
+var S = { page: 'home', proj: 'dr', book: 'b2', showClosed: false, toggle: { market: 'Project', planner: 'Project', dashboard: 'Project', mybooks: 'Project', finance: 'Project', notes: 'Project', files: 'Project' } };
+
+// Pages: [id, label, behaviour]  follows | toggle | none
+var NAV1 = [['home','Home','none'],['mybooks','My Books','toggle'],['dashboard','Dashboard','toggle'],['planner','Planner','toggle'],['projects','Projects','none'],['files','Files','follows'],['notes','Notes','follows']];
+var NAV2 = [['write','Write','follows'],['market','Market','toggle'],['finance','Finance','toggle']];
+var NAV3 = [['ext','Extensions','none'],['settings','Settings','none']];
+
+var $ = function (id) { return document.getElementById(id); };
+var proj = function () { return data.projects.filter(function (p) { return p.id === S.proj; })[0]; };
+var openBooks = function (p) { return p.books.filter(function (b) { return S.showClosed || !b.closed; }); };
+var chip = function (s) { return '<span class="chip st-' + (s === 'On hold' ? 'Hold' : s) + '">' + s + '</span>'; };
+
+function renderRail() {
+  function item(x) {
+    var tag = x[2] === 'follows' ? '<span class="tag scoped">project</span>' : x[2] === 'toggle' ? '<span class="tag scoped">' + (S.toggle[x[0]] ? S.toggle[x[0]].toLowerCase() : 'project') + '</span>' : '';
+    if (x[0] === 'write') tag = '<span class="tag scoped">project</span>';
+    return '<li><button class="nav" data-go="' + x[0] + '"' + (S.page === x[0] ? ' aria-current="page"' : '') + '>' + x[1] + tag + '</button></li>';
+  }
+  $('nav1').innerHTML = NAV1.map(item).join(''); $('nav2').innerHTML = NAV2.map(item).join(''); $('nav3').innerHTML = NAV3.map(item).join('');
+  $('proj').innerHTML = data.projects.map(function (p) { return '<option value="' + p.id + '"' + (p.id === S.proj ? ' selected' : '') + '>' + p.name + '</option>'; }).join('');
+  var p = proj(), bs = openBooks(p);
+  if (S.book && !bs.some(function (b) { return b.id === S.book; })) S.book = null;
+  $('book').innerHTML = '<option value="">All books</option>' + bs.map(function (b) { return '<option value="' + b.id + '"' + (b.id === S.book ? ' selected' : '') + '>' + b.name + '</option>'; }).join('');
+  // A project with one open book (a standalone novel) has nothing to choose: the book is implied and its switcher is hidden.
+  if (bs.length === 1) S.book = bs[0].id;
+  $('book').style.display = $('book').previousElementSibling.style.display = bs.length === 1 ? 'none' : '';
+  $('scopehint').textContent = bs.length === 1 ? p.name + (p.books.length > 1 ? ' has one open book.' : ' is a single book.') : S.book ? 'Showing ' + bookName(S.book) + ' in ' + p.name + '.' : 'Showing every open book in ' + p.name + '.';
+}
+function bookName(id) { var r = ''; data.projects.forEach(function (p) { p.books.forEach(function (b) { if (b.id === id) r = b.name; }); }); return r; }
+
+function seg(key) {
+  return '<div class="seg" role="group" aria-label="Scope">' + ['Project', 'All'].map(function (v) { return '<button data-tog="' + key + '" data-v="' + v + '" aria-pressed="' + (S.toggle[key] === v) + '">' + (v === 'Project' ? proj().name : 'All (whole Studio)') + '</button>'; }).join('') + '</div>';
+}
+
+// ---- pages ----------------------------------------------------------------------------------------------
+var PAGES = {
+  home: function () {
+    return '<h1>Home</h1><p class="sub">Outside any project: your work across the Studio. The current project comes first.</p>' +
+      data.projects.slice().sort(function (a) { return a.id === S.proj ? -1 : 1; }).map(function (p) {
+        return '<div class="card"><h2>' + p.name + ' <span class="muted">· ' + p.kind + (p.id === S.proj ? ' · current' : '') + '</span></h2>' +
+          p.books.filter(function (b) { return !b.closed; }).map(function (b) { return '<div class="row"><span class="grow">' + b.name + '</span>' + chip(b.stage) + '</div>'; }).join('') + '</div>';
+      }).join('');
+  },
+  projects: function () {
+    var p = proj();
+    var books = p.books.filter(function (b) { return S.showClosed || !b.closed; });
+    return '<h1>Projects</h1><p class="sub">The Project page stays as it is. It gains Associations, and is where Books are added and closed.</p><div class="split"><div class="card"><h2>Studio</h2><ul class="tree">' +
+      data.projects.map(function (q) { return '<li><b>' + (q.id === S.proj ? '▸ ' : '') + q.name + '</b> <span class="muted">' + q.kind + '</span><ul>' + q.books.filter(function (b) { return !b.closed; }).map(function (b) { return '<li>' + b.name + '</li>'; }).join('') + '</ul></li>'; }).join('') +
+      '</ul></div><div><div class="card"><h2>' + p.name + '</h2><div class="muted">' + p.kind + ' · no stage: a project is only active or archived. Stages belong to its Books.</div></div>' +
+      '<div class="card"><div class="bar"><h2 class="grow" style="margin:0">Books</h2><label class="muted"><input type="checkbox" data-closed ' + (S.showClosed ? 'checked' : '') + '> Show closed</label><button class="b p" data-addbook>Add book</button></div>' +
+      books.map(function (b) {
+        var i = STAGES.indexOf(b.stage);
+        return '<div class="row' + (b.closed ? ' ro' : '') + '"><span class="grow">' + b.name + (b.closed ? ' <span class="muted">(closed, read-only)</span>' : '') + '</span>' + chip(b.stage) +
+          (b.closed ? '<button class="b" data-reopen="' + b.id + '">Reopen</button>' : (i < STAGES.length - 1 ? '<button class="b" data-adv="' + b.id + '">Move to ' + STAGES[i + 1] + '</button>' : '') + '<button class="b" data-close="' + b.id + '">Close book</button>') + '</div>';
+      }).join('') + (books.length ? '' : '<div class="empty">No open books. Add one: it starts in Planning.</div>') + '</div>' +
+      '<div class="card"><h2>Associations</h2><div class="muted" style="margin-bottom:8px">What is assigned here is what appears in this project everywhere else.</div><b>Market categories</b><div style="margin:6px 0">' +
+      (p.categories.map(function (c) { return '<span class="chip" style="margin-right:6px">' + c + ' <a href="#" data-unassign="' + c + '" style="color:inherit;text-decoration:none">×</a></span>'; }).join('') || '<span class="muted">none yet</span>') + '</div>' +
+      '<select id="assign"><option value="">Assign a category…</option>' + CATEGORIES.filter(function (c) { return p.categories.indexOf(c) < 0; }).map(function (c) { return '<option>' + c + '</option>'; }).join('') + '</select></div></div></div>';
+  },
+  write: function () {
+    var p = proj(), bs = S.book ? p.books.filter(function (b) { return b.id === S.book; }) : openBooks(p);
+    var lock = function (b) { return b.closed ? ' <span class="muted">(read-only)</span>' : ''; };
+    return '<h1>Write</h1><p class="sub">Series material on top, then the current book. Other books are folded away.</p><div class="split"><div class="card"><h2>' + p.name + '</h2>' +
+      '<div class="muted">Series</div><ul class="tree">' + p.series.map(function (f) { return '<li>' + f + '</li>'; }).join('') + '</ul>' +
+      bs.map(function (b) { return '<div class="muted" style="margin-top:8px">' + b.name + ' ' + chip(b.stage) + lock(b) + '</div><ul class="tree"><li>Manuscript/Draft 1.md</li><li>Outline.md</li><li>Premise.md</li></ul>'; }).join('') +
+      (S.book ? '<div class="fold" style="margin-top:8px">▸ ' + (p.books.length - 1) + ' other book(s) folded</div>' : '') + '</div>' +
+      '<div class="editor"><h3>' + (S.book ? bookName(S.book) : p.name) + '</h3><div class="muted">' + (S.book ? 'Chapter 1 · stage-driven tools (editing pass, gates) apply to this book only.' : 'Choose a book in the rail to open its manuscript.') + '</div><p>The editor goes here.</p></div></div>';
+  },
+  market: function () {
+    var p = proj(), all = S.toggle.market === 'All';
+    var cats = all ? CATEGORIES : p.categories;
+    return '<h1>Market</h1><p class="sub">Research. Scoped to the project’s assigned categories, or all of them for exploring.</p><div class="bar">' + seg('market') + '</div>' +
+      (cats.length ? '<div class="card"><table><tr><th>Category</th><th>Assigned to</th></tr>' + cats.map(function (c) {
+        var who = data.projects.filter(function (q) { return q.categories.indexOf(c) >= 0; }).map(function (q) { return q.name; });
+        return '<tr><td>' + c + '</td><td class="muted">' + (who.join(', ') || 'not assigned') + '</td></tr>'; }).join('') + '</table></div>'
+        : '<div class="empty">No categories are assigned to ' + p.name + '.<br /><button class="b" data-tog="market" data-v="All">Show all categories</button> <button class="b" data-go="projects">Assign on the Project page</button></div>');
+  },
+  notes: function () { return generic('Notes', 'notes', function (all) {
+    var rows = data.notes.filter(function (n) { return all || (n.p === S.proj && (!S.book || n.b === S.book || n.b === null)); });
+    return rows.map(function (n) { return '<div class="row"><span class="grow">' + n.t + '</span><span class="muted">' + data.projects.filter(function (q) { return q.id === n.p; })[0].name + (n.b ? ' · ' + bookName(n.b) : ' · series') + '</span></div>'; }).join(''); }); },
+  planner: function () { return generic('Planner', 'planner', function (all) {
+    var ps = all ? data.projects : [proj()];
+    return ps.map(function (p) { return p.books.filter(function (b) { return !b.closed && (all || !S.book || b.id === S.book); }).map(function (b) { return '<div class="row"><span class="grow">' + b.name + '</span>' + chip(b.stage) + '<span class="muted">next: ' + (b.stage === 'Planning' ? 'outline sign-off' : 'chapter 12 draft') + '</span></div>'; }).join(''); }).join(''); }); },
+  dashboard: function () { return generic('Dashboard', 'dashboard', function (all) {
+    var ps = all ? data.projects : [proj()];
+    return '<table><tr><th>Book</th><th>Stage</th><th>Words</th></tr>' + ps.map(function (p) { return p.books.filter(function (b) { return !b.closed; }).map(function (b) { return '<tr><td>' + b.name + '</td><td>' + chip(b.stage) + '</td><td>' + (b.stage === 'Planning' ? '0' : '41,200') + '</td></tr>'; }).join(''); }).join('') + '</table>'; }); },
+  mybooks: function () { return generic('My Books', 'mybooks', function (all) {
+    var ps = all ? data.projects : [proj()];
+    return ps.map(function (p) { return p.books.filter(function (b) { return b.stage === 'Published'; }).map(function (b) { return '<div class="row"><span class="grow">' + b.name + '</span><span class="muted">rank 18,402 · 31 units / 30 days</span></div>'; }).join(''); }).join('') || '<div class="empty">No published books in this project yet.</div>'; }); },
+  finance: function () { return generic('Finance', 'finance', function (all) { return '<div class="row"><span class="grow">' + (all ? 'Studio royalties, last month' : proj().name + ' royalties, last month') + '</span><b>' + (all ? '$1,284' : proj().id === 'dr' ? '$1,020' : '$264') + '</b></div>'; }); },
+  files: function () { return generic('Files', 'files', function (all) { return (all ? data.projects : [proj()]).map(function (p) { return p.series.map(function (f) { return '<div class="row"><span class="grow">' + f + '</span><span class="muted">' + p.name + '</span></div>'; }).join(''); }).join(''); }); },
+  ext: function () { return '<h1>Extensions</h1><p class="sub">Not scoped: applies to the whole Studio.</p>'; },
+  settings: function () { return '<h1>Settings</h1><p class="sub">Not scoped.</p>'; }
+};
+function generic(title, key, body) {
+  var all = S.toggle[key] === 'All';
+  return '<h1>' + title + '</h1><p class="sub">' + (all ? 'Whole Studio.' : 'Just ' + proj().name + (S.book ? ', ' + bookName(S.book) : '') + '.') + '</p><div class="bar">' + seg(key) + '</div><div class="card">' + (body(all) || '<div class="empty">Nothing here for this scope.</div>') + '</div>';
+}
+
+function render() { renderRail(); $('main').innerHTML = PAGES[S.page](); }
+document.addEventListener('click', function (e) {
+  var t = e.target.closest('[data-go],[data-tog],[data-adv],[data-close],[data-reopen],[data-addbook],[data-unassign],[data-closed]'); if (!t) return;
+  var p = proj(), b;
+  if (t.dataset.go) S.page = t.dataset.go;
+  if (t.dataset.tog) S.toggle[t.dataset.tog] = t.dataset.v;
+  if (t.dataset.adv) { b = p.books.filter(function (x) { return x.id === t.dataset.adv; })[0]; b.stage = STAGES[STAGES.indexOf(b.stage) + 1]; }
+  if (t.dataset.close) { b = p.books.filter(function (x) { return x.id === t.dataset.close; })[0]; b.closed = true; b.stage = 'Published'; }
+  if (t.dataset.reopen) { p.books.filter(function (x) { return x.id === t.dataset.reopen; })[0].closed = false; }
+  if (t.hasAttribute('data-addbook')) { var n = p.books.length + 1; p.books.push({ id: 'n' + n + p.id, name: 'Book ' + n + ': Untitled', stage: 'Planning', closed: false }); }
+  if (t.dataset.unassign) { e.preventDefault(); p.categories = p.categories.filter(function (c) { return c !== t.dataset.unassign; }); }
+  if (t.hasAttribute('data-closed')) S.showClosed = t.checked;
+  render();
+});
+document.addEventListener('change', function (e) {
+  if (e.target.id === 'proj') { S.proj = e.target.value; var bs = openBooks(proj()); S.book = bs.length ? bs[0].id : null; }
+  if (e.target.id === 'book') S.book = e.target.value || null;
+  if (e.target.id === 'assign' && e.target.value) proj().categories.push(e.target.value);
+  render();
+});
+render();
+</script>
+</body>
+</html>

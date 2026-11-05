@@ -218,6 +218,15 @@ export function adoptWorkflow(t: ProjectTree, id: string, workflowId: string, st
 }
 
 /**
+ * Takes the workflow and stage off a project that should not have one (a Project above its Books: stages belong to Books). The one way a
+ * workflow leaves a project; `adoptWorkflow` can give it one again if it is later made a Book.
+ */
+export function clearWorkflow(t: ProjectTree, id: string, now?: string): ProjectTree {
+  need(t, id);
+  return { ...t, projects: t.projects.map((x) => (x.id === id ? touch(x, { workflowId: null, stage: null }, now) : x)) };
+}
+
+/**
  * Moves a project under another (or to the top level with `parentId` null), optionally to a position among its new
  * siblings. A project cannot go under itself or anything below it.
  */
@@ -262,8 +271,17 @@ export function linksOf(t: ProjectTree, projectId: string, module?: string): Pro
   return t.links.filter((l) => l.projectId === projectId && (!module || l.module === module));
 }
 
-/** Modules whose records can belong to several projects at once: a Market category is often shared by every book in a genre. A manuscript folder is not. */
-export const SHARED_LINK_MODULES: readonly string[] = ['market'];
+/**
+ * Modules whose records can belong to several projects at once: a Market category is often shared by every book in a genre, and a comparable
+ * title (a comp, kept by its ASIN) by every book it is a comp for. A manuscript folder is not.
+ */
+export const SHARED_LINK_MODULES: readonly string[] = ['market', 'comp'];
+
+/** A comparable title is kept by its ASIN: ten letters and digits, upper case. Null if what was given is not one. */
+export const compRef = (raw: string): string | null => {
+  const a = raw.trim().toUpperCase();
+  return /^[A-Z0-9]{10}$/.test(a) ? a : null;
+};
 export const isSharedLink = (module: string): boolean => SHARED_LINK_MODULES.includes(module);
 
 /** Every project a module's record belongs to (one, except for the modules in SHARED_LINK_MODULES). */
@@ -283,8 +301,14 @@ export function projectFor(t: ProjectTree, module: string, ref: string): Project
  */
 export function linkRecord(t: ProjectTree, projectId: string, module: string, ref: string): ProjectTree {
   need(t, projectId);
-  const m = module.trim(), r = ref.trim();
+  const m = module.trim();
+  let r = ref.trim();
   if (!m || !r) fail('A link needs a module and a record.');
+  if (m === 'comp') {
+    const asin = compRef(r);
+    if (!asin) fail(`"${r}" is not an ASIN. A comparable title is kept by its ASIN: ten letters and digits, from the book's Amazon page.`);
+    r = asin!;
+  }
   const keep = isSharedLink(m) ? (l: ProjectLink) => !(l.module === m && l.ref === r && l.projectId === projectId) : (l: ProjectLink) => !(l.module === m && l.ref === r);
   return { ...t, links: [...t.links.filter(keep), { projectId, module: m, ref: r }] };
 }

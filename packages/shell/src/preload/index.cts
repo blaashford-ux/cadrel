@@ -10,6 +10,16 @@ const studioCall = async (channel: string, ...args: unknown[]) => {
 
 // Sandboxed preload (CommonJS). Everything the shell's page may do is listed here; nothing generic is exposed.
 const api: CadrelApi = {
+  scope: {
+    get: () => ipcRenderer.invoke('shell:scope:get'),
+    set: (change) => ipcRenderer.invoke('shell:scope:set', change),
+    openMenu: (at) => ipcRenderer.invoke('shell:scope:menu', at),
+    onChange: (cb) => {
+      const h = (_e: unknown, v: Parameters<typeof cb>[0]) => cb(v);
+      ipcRenderer.on('shell:scope', h);
+      return () => ipcRenderer.removeListener('shell:scope', h);
+    }
+  },
   studios: {
     get: () => studioCall('shell:studios:get'),
     setActive: (id) => studioCall('shell:studios:setActive', id),
@@ -22,6 +32,9 @@ const api: CadrelApi = {
     forgetToken: (id) => studioCall('shell:studios:forgetToken', id),
     people: (id) => studioCall('shell:studios:people', id),
     createInvite: (id, invite) => studioCall('shell:studios:createInvite', id, invite),
+    moveRecords: (id) => studioCall('shell:studios:moveRecords', id),
+    backupServer: (id) => studioCall('shell:studios:backupServer', id),
+    restoreServer: (id) => studioCall('shell:studios:restoreServer', id),
     revokeInvite: (id, inviteId) => studioCall('shell:studios:revokeInvite', id, inviteId),
     removeMember: (id, memberId) => studioCall('shell:studios:removeMember', id, memberId),
     join: (link, details) => studioCall('shell:studios:join', link, details),
@@ -34,7 +47,10 @@ const api: CadrelApi = {
   stages: {
     views: () => studioCall('shell:stages:views'),
     options: (projectId) => studioCall('shell:stages:options', projectId),
-    move: (projectId, to) => studioCall('shell:stages:move', projectId, to)
+    move: (projectId, to) => studioCall('shell:stages:move', projectId, to),
+    close: (bookId) => studioCall('shell:stages:close', bookId),
+    reopen: (bookId, to) => studioCall('shell:stages:reopen', bookId, to),
+    clear: (projectId) => studioCall('shell:stages:clear', projectId)
   },
   vault: {
     state: () => studioCall('shell:vault:state'),
@@ -69,6 +85,32 @@ const api: CadrelApi = {
     withdraw: (id) => studioCall('shell:work:call', 'withdraw', id),
     recordDecision: (i) => studioCall('shell:work:call', 'record', i)
   },
+  editing: {
+    state: () => studioCall('shell:editing:state'),
+    pass: (id) => studioCall('shell:editing:pass', id),
+    start: (id) => studioCall('shell:editing:call', 'start', id),
+    deliver: (id) => studioCall('shell:editing:call', 'deliver', id),
+    respond: (id) => studioCall('shell:editing:call', 'respond', id),
+    close: (id) => studioCall('shell:editing:call', 'close', id),
+    cancel: (id) => studioCall('shell:editing:call', 'cancel', id),
+    answer: (id, response) => studioCall('shell:editing:call', 'answer', id, response),
+    decide: (id, input) => studioCall('shell:editing:call', 'decide', id, input),
+    resolve: (id) => studioCall('shell:editing:call', 'resolve', id),
+    withdraw: (id) => studioCall('shell:editing:call', 'withdraw', id),
+    sendWaiting: () => studioCall('shell:editing:send'),
+    dismissRefused: (id) => studioCall('shell:editing:dismiss', id),
+    planning: (projectId) => studioCall('shell:editing:planning', projectId),
+    plan: (input) => studioCall('shell:editing:plan', input),
+    text: (id) => studioCall('shell:editing:text', id),
+    raise: (id, items) => studioCall('shell:editing:raise', id, items),
+    laterVersions: (id) => studioCall('shell:editing:later', id),
+    compare: (id, version) => studioCall('shell:editing:compare', id, version),
+    verify: (id, version) => studioCall('shell:editing:verify', id, version),
+    briefs: (projectId) => studioCall('shell:editing:briefs', projectId),
+    briefVersions: (id) => studioCall('shell:editing:briefVersions', id),
+    createBrief: (input) => studioCall('shell:editing:createBrief', input),
+    reviseBrief: (id, input) => studioCall('shell:editing:reviseBrief', id, input)
+  },
   workflow: {
     state: () => studioCall('shell:workflow:state'),
     create: (i) => studioCall('shell:workflow:call', 'create', i),
@@ -96,7 +138,8 @@ const api: CadrelApi = {
     revoke: (id) => studioCall('shell:people:call', 'revoke', id),
     setExpiry: (id, expiresAt) => studioCall('shell:people:call', 'setExpiry', id, expiresAt),
     explainAccess: (personId, capability, projectId) => studioCall('shell:people:explain', personId, capability, projectId),
-    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId)
+    effectiveCapabilities: (personId, projectId) => studioCall('shell:people:effective', personId, projectId),
+    visibleProjects: (personId) => studioCall('shell:people:visible', personId)
   },
   myBooks: {
     catalogue: () => studioCall('shell:mybooks:catalogue'),
@@ -131,6 +174,7 @@ const api: CadrelApi = {
     templates: () => studioCall('shell:manage:templates'),
     create: (o) => studioCall('shell:manage:create', o),
     addManuscript: (id, template) => studioCall('shell:manage:addManuscript', id, template),
+    addFirstBook: (id, name) => studioCall('shell:manage:addFirstBook', id, name),
     rename: (id, name) => studioCall('shell:manage:rename', id, name),
     archive: (id, archived) => studioCall('shell:manage:archive', id, archived),
     remove: (id) => studioCall('shell:manage:remove', id),
@@ -180,7 +224,10 @@ const api: CadrelApi = {
     folders: () => ipcRenderer.invoke('shell:prefs:folders'),
     choose: (which) => studioCall('shell:prefs:choose', which),
     reset: (which) => studioCall('shell:prefs:reset', which),
-    restart: () => studioCall('shell:prefs:restart')
+    restart: () => studioCall('shell:prefs:restart'),
+    marketStudios: () => studioCall('shell:prefs:marketStudios'),
+    marketFromStudio: (id) => studioCall('shell:prefs:marketFromStudio', id),
+    shareCaptures: () => studioCall('shell:prefs:shareCaptures')
   },
   admin: {
     get: () => studioCall('shell:admin:get'),

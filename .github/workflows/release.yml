@@ -4,6 +4,8 @@ name: release
 #   push to main -> release  vX.Y.Z           (X.Y.Z from the VERSION file)
 #   push to dev  -> pre-release vX.Y.Z-dev.N  (N = this workflow's run number)
 # The installer is also on the run page as the "Cadrel-windows-installer" artifact.
+# Cadrel Reader is released apart, from packages/reader/VERSION, under tags reader-vX.Y.Z (and reader-vX.Y.Z-dev.N from dev):
+# see the publish-reader job. A merge that changes only one of them leaves the other's release alone.
 # Studios are not deployed here: the app builds each one in its owner's own Cloudflare account (docs/STUDIOS.md).
 on:
   push:
@@ -41,6 +43,11 @@ jobs:
           else
             tag="v${version}-dev.${GITHUB_RUN_NUMBER}"; flags=(--prerelease)
           fi
+          # A release of Cadrel needs a new VERSION. When a merge to main left it alone (a change to Cadrel Reader or the docs only),
+          # this tag already exists and there is nothing to publish.
+          if [ "$GITHUB_REF_NAME" = "main" ] && gh release view "$tag" >/dev/null 2>&1; then
+            echo "$tag is already released: nothing new to publish for Cadrel."; exit 0
+          fi
           cd dist
           installer="$(ls Cadrel-Setup-*.exe | head -n1)"
           sha256sum "$installer" > SHA256SUMS.txt
@@ -64,3 +71,60 @@ jobs:
           NOTES
           sed -i 's/^          //' ../notes.md
           gh release create "$tag" "$installer" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel ${tag#v}" --notes-file ../notes.md --generate-notes "${flags[@]}"
+
+  publish-reader:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release and its tag
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: CadrelReader-windows-installer
+          path: dist
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(scripts/check-reader-version.sh)"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            tag="reader-v${version}"
+            # Reader is released when packages/reader/VERSION is raised; a merge that left it alone has nothing new for Reader.
+            if gh release view "$tag" >/dev/null 2>&1; then echo "$tag is already released: nothing new to publish for Cadrel Reader."; exit 0; fi
+            # Never "latest": that stays Cadrel's, which the Cadrel app updates from. Reader finds its own releases by their tag.
+            flags=(--latest=false)
+          else
+            # A development build is published when the merge touched Reader (or the Write code it is built from).
+            if ! git diff --name-only HEAD^1 HEAD | grep -qE '^(packages/reader/|packages/write/)'; then
+              echo "This merge does not touch Cadrel Reader: no development release."; exit 0
+            fi
+            tag="reader-v${version}-dev.${GITHUB_RUN_NUMBER}"; flags=(--prerelease)
+          fi
+          cd dist
+          installer="$(ls CadrelReader-Setup-*.exe | head -n1)"
+          sha256sum "$installer" > SHA256SUMS.txt
+          cat > ../notes.md <<NOTES
+          ## Cadrel Reader (Windows 10 / 11)
+
+          For reading a manuscript an author shared with you, and giving comments and suggestions. To write or share, use Cadrel.
+
+          1. Download **${installer}** below and run it.
+          2. Windows SmartScreen may say *"Windows protected your PC"* because this installer is not code-signed yet.
+             Click **More info → Run anyway**.
+          3. Open the invitation link you were sent, or choose **Open invitation…** in the app and paste it.
+
+          Your settings stay in your user profile and are kept if you uninstall.
+
+          **Verify the download (optional):** in PowerShell, \`Get-FileHash .\\${installer} -Algorithm SHA256\` should match \`SHA256SUMS.txt\`:
+
+          \`\`\`
+          $(cat SHA256SUMS.txt)
+          \`\`\`
+
+          ## What's changed
+          NOTES
+          sed -i 's/^          //' ../notes.md
+          gh release create "$tag" "$installer" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel Reader ${tag#reader-v}" --notes-file ../notes.md --generate-notes "${flags[@]}"

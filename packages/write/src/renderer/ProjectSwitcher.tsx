@@ -16,8 +16,9 @@ interface Props {
   onNew?(): void;
   /** Absent where the app can't open arbitrary folders (the phone). */
   onOpenFolder?(): void;
-  onSettings(): void;
-  onProgress(): void;
+  /** Absent in Cadrel Reader, where a project has no settings or progress of its own to open. */
+  onSettings?(): void;
+  onProgress?(): void;
 }
 
 /** The sidebar header: the open project's name, with a menu to jump to another project or back to the Projects home. */
@@ -51,7 +52,7 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, opened
       </button>
       {open && (
         <div className="switcher-menu" role="menu">
-          {isProject && (
+          {isProject && onProgress && onSettings && (
             <>
               <button type="button" role="menuitem" onClick={() => (setOpen(false), onProgress())}>
                 Progress…

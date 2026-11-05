@@ -18,8 +18,8 @@ import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
-  FileLinkError, acknowledgeOrphans, addReference, addVaultFile, getCard, referencesOf, removeReference, setCard, setReferenceVersion, whereUsed, type DataCard, type FileRef, checkIn, checkOut, cleanVaultPath, fileKind, fileVersions, forceRelease, listVaultFiles, newRecordId, pendingOrphans, undoCheckOut,
-  type Db, type FileVersion, type VaultFileRow
+  DbVaultStore, FileLinkError, type DataCard, type FileRef, cleanVaultPath, fileKind,
+  type Db, type FileVersion, type VaultFileRow, type VaultStore
 } from '@cadrel/kernel';
 
 export class VaultError extends Error {
@@ -83,8 +83,10 @@ export interface VaultEntry {
 }
 
 export interface VaultOptions {
-  db: Db;
-  studioId: string;
+  /** Where the vault's records are: the Studio's records file (with `studioId`), or any other store (the Studio's server). */
+  db?: Db;
+  studioId?: string;
+  store?: VaultStore;
   blobs: BlobStore;
   /** The working folder. */
   dir: string;
@@ -107,7 +109,12 @@ const WRITABLE = 0o644;
 
 export class LocalVault {
   private mem: LocalState | null = null;
-  constructor(private readonly o: VaultOptions) {}
+  private readonly store: VaultStore;
+  constructor(private readonly o: VaultOptions) {
+    if (o.store) this.store = o.store;
+    else if (o.db && o.studioId) this.store = new DbVaultStore({ db: o.db, studioId: o.studioId, personId: o.personId, now: o.now });
+    else throw new Error('A vault needs a records file or a store.');
+  }
 
   private now(): string {
     return (this.o.now?.() ?? new Date()).toISOString();
@@ -161,7 +168,7 @@ export class LocalVault {
   // ---- reading -------------------------------------------------------------------------------------------------------------
 
   private async fileAt(rel: string): Promise<VaultFileRow | null> {
-    return (await listVaultFiles(this.o.db, this.o.studioId)).find((f) => f.path.toLowerCase() === rel.toLowerCase()) ?? null;
+    return (await this.store.list()).find((f) => f.path.toLowerCase() === rel.toLowerCase()) ?? null;
   }
 
   private async entry(f: VaultFileRow, st: LocalState): Promise<VaultEntry> {
@@ -182,7 +189,7 @@ export class LocalVault {
   /** Every file in the vault, and every file in the working folder that is not (untracked), for the files this person may read. */
   async list(): Promise<VaultEntry[]> {
     const st = await this.state();
-    const files = await listVaultFiles(this.o.db, this.o.studioId);
+    const files = await this.store.list();
     const out: VaultEntry[] = [];
     for (const f of files) {
       if (this.o.can && !(await this.o.can(`${fileKind(f.path) === 'manuscript' ? 'manuscript' : 'asset'}.read`))) continue;
@@ -222,7 +229,7 @@ export class LocalVault {
     const p = this.clean(rel);
     await this.allow(p, 'read');
     const f = (await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.'));
-    return fileVersions(this.o.db, (await f).id);
+    return this.store.versions((await f).id);
   }
 
   /** The contents of a version (the newest by default), without touching the working folder. */
@@ -231,7 +238,7 @@ export class LocalVault {
     await this.allow(p, 'read');
     const f = (await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.'));
     const file = await f;
-    const v = (await fileVersions(this.o.db, file.id)).find((x) => x.n === (version ?? file.currentVersion));
+    const v = (await this.store.versions(file.id)).find((x) => x.n === (version ?? file.currentVersion));
     if (!v) throw new VaultError('not-found', 'There is no such version.');
     return this.blob(v.hash);
   }
@@ -244,15 +251,12 @@ export class LocalVault {
     await this.allow(p, 'write');
     const bytes = (await this.readLocal(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the working folder.'));
     const content = await bytes;
-    const added = await addVaultFile(this.o.db, { studioId: this.o.studioId, path: p, personId: this.o.personId, now: this.now(), id: newRecordId() });
-    if (!added.ok) throw new VaultError('exists', 'A file with that name is already in the vault.');
+    if (await this.fileAt(p)) throw new VaultError('exists', 'A file with that name is already in the vault.');
     const hash = await this.o.blobs.put(content);
-    const got = await checkOut(this.o.db, { fileId: added.id, personId: this.o.personId, machine: this.o.machine, now: this.now() });
-    if (!got.ok) throw new VaultError('locked', 'That file is locked.');
-    const done = await checkIn(this.o.db, { fileId: added.id, personId: this.o.personId, machine: this.o.machine, hash, size: content.length, comment, now: this.now() });
-    if (!done.ok) throw new VaultError('not-holder', 'The first version could not be saved.');
+    const added = await this.store.addFile({ path: p, hash, size: content.length, comment, machine: this.o.machine });
+    if (!added.ok) throw new VaultError(added.reason === 'exists' ? 'exists' : added.reason === 'locked' ? 'locked' : 'not-holder', added.reason === 'exists' ? 'A file with that name is already in the vault.' : added.reason === 'locked' ? 'That file is locked.' : 'The first version could not be saved.');
     const st = await this.state();
-    st.files[p] = { fileId: added.id, version: done.version, hash };
+    st.files[p] = { fileId: added.id, version: added.version, hash };
     await this.save();
     await this.setWritable(p, false);
     return this.status(p);
@@ -270,13 +274,13 @@ export class LocalVault {
     const st = await this.state();
     const e = await this.entry(file, st);
     if (e.status === 'modified-unprotected') throw new VaultError('conflict', 'The copy on disk was changed without checking it out. Save it elsewhere or discard those changes first; it will not be overwritten.');
-    const r = await checkOut(this.o.db, { fileId: file.id, personId: this.o.personId, machine: this.o.machine, now: this.now() });
+    const r = await this.store.checkOut({ fileId: file.id, machine: this.o.machine });
     if (!r.ok) {
       if (r.reason === 'locked') throw new VaultError('locked', `${r.heldBy.personId === this.o.personId ? 'You have' : 'Someone else has'} this file checked out${r.heldBy.personId === this.o.personId ? ' on another machine' : ''} (since ${r.heldBy.since.slice(0, 10)}).`);
       throw new VaultError('not-found', 'That file is not in the vault.');
     }
     // after taking the lock nobody else can change the file, so the newest version is the one to start from
-    const cur = (await fileVersions(this.o.db, file.id))[0];
+    const cur = (await this.store.versions(file.id))[0];
     if (cur && (e.status === 'not-local' || e.status === 'out-of-date' || (await this.readLocal(p)) === null)) {
       await this.writeLocal(p, await this.blob(cur.hash), true);
       st.files[p] = { fileId: file.id, version: cur.n, hash: cur.hash };
@@ -298,12 +302,12 @@ export class LocalVault {
     const st = await this.state();
     const hash = sha256(content);
     if (st.files[p] && st.files[p]!.hash === hash) {
-      await undoCheckOut(this.o.db, { fileId: file.id, personId: this.o.personId, machine: this.o.machine, now: this.now() });
+      await this.store.undoCheckOut({ fileId: file.id, machine: this.o.machine });
       await this.setWritable(p, false);
       return { ...(await this.status(p)), unchanged: true };
     }
     await this.o.blobs.put(content);
-    const r = await checkIn(this.o.db, { fileId: file.id, personId: this.o.personId, machine: this.o.machine, hash, size: content.length, comment: comment.trim(), now: this.now() });
+    const r = await this.store.checkIn({ fileId: file.id, machine: this.o.machine, hash, size: content.length, comment: comment.trim() });
     if (!r.ok) throw new VaultError('not-holder', 'Your lock on this file was removed, so this was not saved to the vault. Your copy is kept on your disk; use Get latest to see what is in the vault.');
     st.files[p] = { fileId: file.id, version: r.version, hash };
     await this.save();
@@ -316,7 +320,7 @@ export class LocalVault {
     const p = this.clean(rel);
     await this.allow(p, 'write');
     const file = await ((await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.')));
-    const ok = await undoCheckOut(this.o.db, { fileId: file.id, personId: this.o.personId, machine: this.o.machine, now: this.now() });
+    const ok = await this.store.undoCheckOut({ fileId: file.id, machine: this.o.machine });
     if (!ok) throw new VaultError('not-holder', 'You do not have this file checked out here.');
     await this.restoreCurrent(file);
     return this.status(p);
@@ -333,7 +337,7 @@ export class LocalVault {
   }
 
   private async restoreCurrent(file: VaultFileRow): Promise<void> {
-    const cur = (await fileVersions(this.o.db, file.id))[0];
+    const cur = (await this.store.versions(file.id))[0];
     if (!cur) return;
     await this.writeLocal(file.path, await this.blob(cur.hash), false);
     const st = await this.state();
@@ -350,7 +354,7 @@ export class LocalVault {
     const st = await this.state();
     const updated: string[] = [];
     const skipped: { path: string; why: string }[] = [];
-    for (const f of await listVaultFiles(this.o.db, this.o.studioId)) {
+    for (const f of await this.store.list()) {
       if (wanted && !wanted.has(f.path.toLowerCase())) continue;
       if (this.o.can && !(await this.o.can(`${fileKind(f.path) === 'manuscript' ? 'manuscript' : 'asset'}.read`))) continue;
       const e = await this.entry(f, st);
@@ -358,7 +362,7 @@ export class LocalVault {
       if (e.status === 'modified-unprotected') { skipped.push({ path: f.path, why: 'The copy on disk was changed without a check-out.' }); continue; }
       if (e.status === 'not-local' && !(o.fetchMissing || wanted)) continue;
       if (e.status === 'latest' || f.currentVersion === 0) continue;
-      const cur = (await fileVersions(this.o.db, f.id))[0]!;
+      const cur = (await this.store.versions(f.id))[0]!;
       await this.writeLocal(f.path, await this.blob(cur.hash), false);
       st.files[f.path] = { fileId: f.id, version: cur.n, hash: cur.hash };
       updated.push(f.path);
@@ -395,36 +399,36 @@ export class LocalVault {
 
   /** What the file uses (a cover's source PSD and fonts), each at a version or the latest. */
   async references(rel: string): Promise<FileRef[]> {
-    return referencesOf(this.o.db, (await this.known(rel, 'read')).id);
+    return this.store.references((await this.known(rel, 'read')).id);
   }
   /** Where the file is used: the files that refer to it, and whether each names an older version. */
   async whereUsed(rel: string): Promise<FileRef[]> {
-    return whereUsed(this.o.db, (await this.known(rel, 'read')).id);
+    return this.store.whereUsed((await this.known(rel, 'read')).id);
   }
   /** `rel` uses `to`, at `version` or the latest. Needs write access to `rel` and read access to `to`. */
   async addReference(rel: string, to: string, version?: number | null, note?: string): Promise<void> {
     const from = await this.known(rel, 'write');
     const target = await this.known(to, 'read');
-    await this.linkWork(() => addReference(this.o.db, { fileId: from.id, refersToId: target.id, version: version ?? null, note, actor: this.o.personId, now: this.now() }));
+    await this.linkWork(() => this.store.addReference({ fileId: from.id, refersToId: target.id, version: version ?? null, note }));
   }
   /** Points a reference at another version (null: the latest). References are never updated automatically. */
   async setReferenceVersion(rel: string, to: string, version: number | null): Promise<void> {
     const from = await this.known(rel, 'write');
     const target = await this.known(to, 'read');
-    await this.linkWork(() => setReferenceVersion(this.o.db, { fileId: from.id, refersToId: target.id, version, actor: this.o.personId, now: this.now() }));
+    await this.linkWork(() => this.store.setReferenceVersion({ fileId: from.id, refersToId: target.id, version }));
   }
   async removeReference(rel: string, to: string): Promise<void> {
     const from = await this.known(rel, 'write');
     const target = await this.known(to, 'read');
-    await removeReference(this.o.db, { fileId: from.id, refersToId: target.id, actor: this.o.personId, now: this.now() });
+    await this.store.removeReference({ fileId: from.id, refersToId: target.id });
   }
   async card(rel: string): Promise<DataCard> {
-    return getCard(this.o.db, (await this.known(rel, 'read')).id);
+    return this.store.card((await this.known(rel, 'read')).id);
   }
   /** Replaces the file's data card (an empty value removes a field). */
   async setCard(rel: string, fields: Record<string, string>, projectId?: string | null): Promise<DataCard> {
     const f = await this.known(rel, 'write');
-    return this.linkWork(() => setCard(this.o.db, { fileId: f.id, fields, projectId: projectId ?? null, actor: this.o.personId, now: this.now() }));
+    return this.linkWork(() => this.store.setCard({ fileId: f.id, fields, projectId: projectId ?? null }));
   }
 
   // ---- administration ------------------------------------------------------------------------------------------------------
@@ -434,7 +438,7 @@ export class LocalVault {
     const p = this.clean(rel);
     if (this.o.can && !(await this.o.can('vault.force'))) throw new VaultError('denied', 'You are not allowed to do that (vault.force).');
     const file = await ((await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.')));
-    const r = await forceRelease(this.o.db, { fileId: file.id, adminId: this.o.personId, reason, now: this.now() });
+    const r = await this.store.forceRelease({ fileId: file.id, reason });
     if (!r.ok) throw new VaultError(r.reason === 'reason-required' ? 'invalid' : 'conflict', r.reason === 'reason-required' ? 'Say why you are removing the lock.' : 'Nobody has this file checked out.');
     // the administrator may be on the holder's own machine (one computer, one person); keep the copy aside there too
     await this.keepOrphansAside();
@@ -447,8 +451,8 @@ export class LocalVault {
   async keepOrphansAside(): Promise<{ path: string; savedAs: string | null; removedBy: string; reason: string }[]> {
     const out: { path: string; savedAs: string | null; removedBy: string; reason: string }[] = [];
     const st = await this.state();
-    const files = await listVaultFiles(this.o.db, this.o.studioId);
-    for (const o of (await pendingOrphans(this.o.db, this.o.personId)).filter((x) => x.machine === this.o.machine)) {
+    const files = await this.store.list();
+    for (const o of (await this.store.orphans()).filter((x) => x.machine === this.o.machine)) {
       const f = files.find((x) => x.id === o.fileId);
       if (!f) continue;
       const local = st.files[f.path];
@@ -467,7 +471,7 @@ export class LocalVault {
         st.orphans.push({ path: f.path, savedAs, removedBy: o.removedBy, removedAt: o.removedAt, reason: o.reason, version: local.version });
       }
       if (f.currentVersion > 0) await this.restoreCurrent(f);
-      await acknowledgeOrphans(this.o.db, { personId: this.o.personId, machine: this.o.machine, fileId: f.id, now: this.now() });
+      await this.store.acknowledgeOrphans({ machine: this.o.machine, fileId: f.id });
       out.push({ path: f.path, savedAs, removedBy: o.removedBy, reason: o.reason });
     }
     await this.save();

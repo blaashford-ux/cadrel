@@ -582,3 +582,37 @@ describe('collaboration: editable links', () => {
 });
 
 const newOwnerFile = (id: string) => newReviewFile('Novel', { id, name: id === 'owner' ? 'Me' : id });
+
+describe('a reader-only app (Cadrel Reader)', () => {
+  const readerJoin = (s: ReturnType<typeof setup>) =>
+    new ReviewJoin({ fs: s.readerFs, drive: () => s.drive, sharedRoot: '/root/Shared With Me', allowEdit: false, appName: 'Cadrel Reader' });
+
+  it('opens a reader invitation and sends its comments back to the author', async () => {
+    const s = setup();
+    const inv = await s.share.invite('/root/Novel', 'Novel', 'Sam');
+    const invite = parseInviteLink(inv.link)!;
+    s.drive.granted = new Set([invite.packageId, invite.commentsId]);
+    const join = readerJoin(s);
+    const joined = await join.join(invite, 'Sam');
+    s.drive.granted = null;
+    expect(joined.role).toBeUndefined();
+    expect(await s.readerFs.readText(`${joined.dir}/Manuscript/Book.md`)).toContain('Hello there');
+
+    await makeReviews(s.readerFs).save(joined.dir, invite.reviewerId, serializeReviewFile({ ...newReviewFile('Novel', { id: invite.reviewerId, name: 'Sam' }), items: [note('c1')] }));
+    await join.sync(joined.dir);
+    await s.share.sync('/root/Novel', 'Novel');
+    const seen = parseReviewFile(await s.ownerFs.readText(`/root/Novel/.cadrel/review/${invite.reviewerId}.json`));
+    expect(seen?.items.map((i) => i.id)).toEqual(['c1']);
+  });
+
+  it('refuses an invitation to edit before downloading anything, and says where to go', async () => {
+    const s = setup();
+    const inv = await s.share.invite('/root/Novel', 'Novel', 'Sam', null, 'edit');
+    const invite = parseInviteLink(inv.link)!;
+    s.drive.granted = new Set([invite.packageId, invite.commentsId]);
+    s.drive.calls.length = 0;
+    await expect(readerJoin(s).join(invite, 'Sam')).rejects.toThrow(/Cadrel Reader can’t do.*Cadrel Write/s);
+    expect(s.drive.calls.filter((c) => c.startsWith('download'))).toHaveLength(0);
+    expect(await s.readerFs.stat('/root/Shared With Me')).toBeNull();
+  });
+});

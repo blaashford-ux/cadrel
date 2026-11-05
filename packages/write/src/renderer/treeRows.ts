@@ -22,6 +22,8 @@ export interface Row {
   marked?: boolean;
   /** File that can't be marked because another file with the same name owns the export settings. */
   exportBlocked?: boolean;
+  /** A web page: opens in the page viewer, has no chapters. */
+  html?: boolean;
 }
 
 /**
@@ -62,7 +64,7 @@ export function buildRows(
   const walk = (nodes: TreeNode[], depth: number, parentKey: string | null) => {
     for (const n of nodes) {
       // An empty folder has nothing to expand, so it gets no arrow.
-      const expandable = n.kind === 'file' || n.children.length > 0;
+      const expandable = (n.kind === 'file' && !n.html) || (n.kind === 'dir' && n.children.length > 0);
       const open = expandable && (n.kind === 'dir' ? filtering || expanded.has(n.path) : expanded.has(n.path));
       rows.push({
         key: n.path,
@@ -73,6 +75,7 @@ export function buildRows(
         expandable,
         expanded: open,
         parentKey,
+        ...(n.kind === 'file' && n.html ? { html: true } : {}),
         ...(n.kind === 'file' && n.marked ? { marked: true } : {}),
         ...(n.kind === 'file' && n.exportBlocked ? { exportBlocked: true } : {})
       });

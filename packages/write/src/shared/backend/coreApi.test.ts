@@ -95,6 +95,16 @@ describe('files on the phone’s API', () => {
     await expect(backend.api.readFile(`${path}/../etc.md`)).rejects.toThrow(/outside/);
   });
 
+  it('lists web pages (tracker pages, chapter records) as read-only files', async () => {
+    const path = await novel();
+    await fs.mkdir(`${path}/Tracking/Chapters`, { recursive: true });
+    await fs.writeText(`${path}/Tracking/Chapters/Chapter 1.html`, '<p>x</p>');
+    const tree = await backend.api.scanFolder(path);
+    const chapters = (tree.children.find((c) => c.name === 'Tracking') as { children: { name: string; html?: boolean; children?: { name: string; html?: boolean }[] }[] }).children[0];
+    expect(chapters.children).toEqual([expect.objectContaining({ name: 'Chapter 1.html', html: true })]);
+    await expect(backend.api.writeFile(`${path}/Tracking/Chapters/Chapter 1.html`, 'y')).rejects.toThrow(/non-Markdown/);
+  });
+
   it('only opens folders inside the Root', async () => {
     await expect(backend.api.scanFolder('/data')).rejects.toThrow(/outside the Root/);
   });

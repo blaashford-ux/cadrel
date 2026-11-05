@@ -11,7 +11,7 @@ export const RECORDS_INSTRUCTIONS =
   'Tasks and deadlines belong to a project or subproject (use studio_projects for names): work_tasks lists them, work_add_task and work_set_task add and finish them. ' +
   'A sign-off is an answer that named people give (work_request_approval asks for one; you cannot answer one, only the people asked can). Decisions are the author\'s own ledger: read them with work_decisions, but tell the author to record a decision themselves. ' +
   'books_list shows the catalogue (series, position, editions with their ASINs, and the project each book is made in). files_list shows the vault\'s files, who has each checked out, what each uses and where it is used. ' +
-  'You cannot approve or reject, move a project between stages, change the catalogue, check files in or out, or release anyone\'s lock: those are for the person to do in Cadrel. Never invent a project, task or person: look them up first, and ask when it is unclear.';
+  'You cannot approve or reject, change the catalogue, check files in or out, or release anyone\'s lock: those are for the person to do in Cadrel. Never invent a project, task or person: look them up first, and ask when it is unclear.';
 
 export interface RecordsToolOptions {
   service: StudioService;
@@ -62,7 +62,7 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
 
   /** The assistant is a tool of the person's role: a role without `assistant.use` has none of these. */
   const allowed = async () => {
-    if (!(await as().can('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
   };
   /** Notes in the audit log that the person's change was made by the assistant, so the record is honest about who typed it. */
   const viaAssistant = async (tool: string, target: string) => {
@@ -98,8 +98,17 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
 
   server.registerTool(
     'work_people',
-    { description: 'The people in the studio (id and name), for assigning tasks and asking for sign-offs. Needs permission to see people.', inputSchema: {}, annotations: readOnly },
-    () => guarded(async () => (await allowed(), (await as().people.list()).map((p) => ({ id: p.id, name: p.name, kind: p.kind }))))
+    {
+      description: 'The people in the studio (id and name), for assigning tasks and asking for sign-offs. Pass `project` to get only the people who are assigned to it: a task or sign-off can be given to nobody else. Needs permission to see people.',
+      inputSchema: { project: projectRef.optional() },
+      annotations: readOnly
+    },
+    (a) =>
+      guarded(async () => {
+        await allowed();
+        if (a.project) return as().work.assignable(resolveProject((await o.studio.read()).tree, a.project));
+        return (await as().people.list()).map((p) => ({ id: p.id, name: p.name, kind: p.kind }));
+      })
   );
 
   server.registerTool(
@@ -263,6 +272,35 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
             };
           })
         };
+      })
+  );
+
+  server.registerTool(
+    'books_link_project',
+    {
+      description:
+        'Link a published book in the catalogue to the project (or book) it is made in, or unlink it (leave `project` out). A book is made in one project and a project makes one book: linking moves it. This is how a project\'s stage and progress show on the book in My Books. Find the book with books_list. Needs permission to edit the catalogue.',
+      inputSchema: { book: z.string().describe('The book: its id, its exact title, or one of its ASINs (see books_list).'), project: projectRef.optional() },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+    },
+    (a) =>
+      guarded(async () => {
+        await allowed();
+        const { tree } = await o.studio.read();
+        const want = a.book.trim().toLowerCase();
+        const books = await as().catalogue.books();
+        const hits = books.filter((b) => b.id === a.book || b.title.toLowerCase() === want || b.editions.some((e) => e.asin?.toLowerCase() === want));
+        if (hits.length !== 1) throw new Error(hits.length ? `More than one book matches "${a.book}". Use its id from books_list.` : `No book "${a.book}" in the catalogue. Use books_list to see them.`);
+        const book = hits[0]!;
+        let projectId: string | null = null;
+        if (a.project) {
+          projectId = resolveProject(tree, a.project);
+          const v = await as().visibleProjects(tree);
+          if (!v.all && !v.assigned.has(projectId)) throw new Error(`There is no project "${a.project}". Use studio_projects to see the names.`);
+        }
+        await as().catalogue.linkProject(book.id, projectId);
+        await viaAssistant('books_link_project', book.id);
+        return { book: book.title, project: projectId ? pathOf(tree, projectId) : null };
       })
   );
 

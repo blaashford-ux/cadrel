@@ -1,3 +1,4 @@
+import { appName } from './appName';
 import { useEffect, useState } from 'react';
 import type { WindowInfo } from '../shared/api';
 import logo from './logo.png';
@@ -23,7 +24,7 @@ export function TitleBar({ title, dirty }: Props) {
     <header className="titlebar" onDoubleClick={(e) => e.target === e.currentTarget && control('maximize')}>
       <div className="tb-left">
         <img className="tb-logo" src={logo} alt="" width={20} height={20} />
-        <span className="wordmark">Cadrel Write</span>
+        <span className="wordmark">{appName()}</span>
         <MenuBar />
       </div>
       <div className="tb-title" title={title} onDoubleClick={() => control('maximize')}>
