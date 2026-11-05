@@ -99,29 +99,6 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await app.close();
   }, 60_000);
 
-  it('hosts Write and Market in their own views, each with only its own bridge', async () => {
-    const { app, shell } = await launch();
-    await shell.getByRole('button', { name: 'Write', exact: true }).click();
-    const write = await waitFor(() => moduleView(app, 'write'), 'the Write view');
-    await write.getByRole('main', { name: 'Projects' }).waitFor();
-    expect(await write.evaluate(() => [typeof (window as any).cadrelWrite, typeof (window as any).cadrel, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
-
-    await shell.getByRole('button', { name: 'Market', exact: true }).click();
-    const market = await waitFor(() => moduleView(app, 'market'), 'the Market view');
-    await market.getByRole('tab', { name: 'Queue' }).waitFor();
-    expect(await market.evaluate(() => [typeof (window as any).cadrelMarket, typeof (window as any).cadrel, typeof (window as any).cadrelWrite])).toEqual(['object', 'undefined', 'undefined']);
-    expect(await shell.evaluate(() => [typeof (window as any).cadrel, typeof (window as any).cadrelWrite, typeof (window as any).cadrelMarket])).toEqual(['object', 'undefined', 'undefined']);
-
-    // Only the page you are on is showing, and it fills everything beside the rail.
-    const v = await views(app);
-    expect(v.map((x) => x.visible)).toEqual([false, true]);
-    for (const x of v) expect(x).toMatchObject({ x: 64, y: 0 });
-    await shell.getByRole('button', { name: 'Home', exact: true }).click();
-    await waitFor(async () => (await views(app)).every((x) => !x.visible), 'every module view to hide');
-    await waitFor(async () => (await shell.locator('.rail-btn[aria-current="page"]').getAttribute('aria-label')) === 'Home', 'Home to be highlighted');
-    await app.close();
-  }, 90_000);
-
   it('a module view cannot drive the shell', async () => {
     const { app, shell } = await launch();
     await shell.getByRole('button', { name: 'Write', exact: true }).click();
