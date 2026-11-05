@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.7.1 (tweaks and fixes)
+
+- **A daily-target bar in Cadrel Write's status bar.** Next to the project total, a bar fills as today's words approach the day's target, and when you pass it the bar changes colour and the text says the target is beaten. The target is the Progress window's "Needed per day", worked out once and shared by both, so they always agree. Without a goal deadline there is no daily target and no bar.
+
 ## 0.7.0 (M2: the team vault and M3: Editorial, in development)
 
 - **Editorial passes.** A developmental, line, copy or proof edit of one manuscript is now a record: it covers an exact version of the file (and of an edit brief), has an editor, and moves planned, in progress, delivered, responded, closed. The Editor raises **queries, comments and suggestions** anchored to passages of that version; the Author answers every query and accepts, rejects or defers every suggestion (a reason is required to reject or defer, a date to defer); each decision is written to the decision ledger, and a deferral makes a task for the revisit. A pass cannot be marked responded while a query is unanswered or a suggestion undecided. Briefs (for the manuscript and for an edit) are written on the book's page and keep every version. The Editing page, in the rail after Planner, plans passes, reads the exact text of the version, raises items from selected text, compares the covered version with a later one side by side, and checks which accepted changes were made, changed or missed.

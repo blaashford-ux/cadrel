@@ -13,7 +13,7 @@ interface Props {
   onUndo(): void;
   onRedo(): void;
   /** The open project's totals, shown as a button that opens the Progress window. */
-  project?: { total: number | null; goal: number | null; today: number } | null;
+  project?: { total: number | null; goal: number | null; today: number; dailyTarget?: number | null } | null;
   onProgress?(): void;
   /** Google Drive sync (absent where it isn't available). */
   sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; progress?: { done: number; total: number } | null; onOpen(): void };
@@ -37,6 +37,7 @@ export function StatusBar(p: Props) {
           {p.project.total !== null && p.project.today > 0 ? ` · +${p.project.today.toLocaleString()} today` : ''}
         </button>
       )}
+      {p.project && p.project.dailyTarget ? <DailyBar written={Math.max(0, p.project.today)} target={p.project.dailyTarget} /> : null}
       {p.sync && (
         <button type="button" className={`sb-undo sb-sync s-${p.sync.state}`} onClick={p.sync.onOpen} title="Google Drive sync">
           {p.sync.state === 'off' ? 'Sync off' : p.sync.state === 'syncing' ? (p.sync.progress ? `Syncing ${p.sync.progress.done}/${p.sync.progress.total}` : 'Syncing…') : p.sync.state === 'error' ? 'Sync problem' : p.sync.state === 'confirm' ? 'Sync needs OK' : 'Synced'}
@@ -55,5 +56,28 @@ export function StatusBar(p: Props) {
       <span>{p.mode === 'source' ? 'Source' : 'Visual'}</span>
       <span>{p.eol === '\r\n' ? 'CRLF' : 'LF'}</span>
     </footer>
+  );
+}
+
+/** Fills as today's words approach the daily target; at 100% it changes colour and the text says the target is beaten. */
+function DailyBar({ written, target }: { written: number; target: number }) {
+  const pct = Math.min(100, (written / target) * 100);
+  const over = written > target;
+  return (
+    <span
+      className={`sb-daily${over ? ' over' : ''}`}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={target}
+      aria-valuenow={Math.min(written, target)}
+      title="Words written today against the daily target (from the project goal and deadline)"
+    >
+      <span className="sb-daily-track">
+        <span className="sb-daily-fill" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="sb-daily-text">
+        {over ? `Target beaten! ${written.toLocaleString()} / ${target.toLocaleString()}` : `${written.toLocaleString()} / ${target.toLocaleString()} today`}
+      </span>
+    </span>
   );
 }
