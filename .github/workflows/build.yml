@@ -4,8 +4,8 @@ name: build
 #   test     typecheck, the whole test suite (unit, real Electron end-to-end, real PDF layout, epubcheck, DOCX), and a
 #            smoke test of the packaged Linux app
 #   windows  builds the Windows installers (Cadrel, and Cadrel Reader which is released apart from it), smoke-tests the installed
-#            layout, and attaches the installers to the run: Actions tab -> the run -> Artifacts -> Cadrel-windows-installer
-#            and CadrelReader-windows-installer
+#            layout, and attaches the installers to the run for one day (not on pull requests, to stay within the storage quota): Actions tab -> the run
+#            -> Artifacts -> Cadrel-windows-installer and CadrelReader-windows-installer
 on:
   pull_request:
     branches: [main, dev]
@@ -108,12 +108,15 @@ jobs:
           $p = Start-Process -FilePath $exe.FullName -ArgumentList "--smoke-test=$out" -Wait -PassThru
           if (Test-Path $out) { Get-Content $out } else { Write-Host 'The smoke test wrote no result file.' }
           if ($p.ExitCode -ne 0) { throw "Smoke test failed (exit code $($p.ExitCode))" }
+      # Only release.yml needs the installers (it publishes them); a pull request run builds and smoke-tests them but stores nothing.
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: Cadrel-windows-installer
           path: packages/shell/release/Cadrel-Setup-*.exe
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
+          compression-level: 0 # installers are already compressed
       - name: Build the Cadrel Reader installer
         shell: pwsh
         env:
@@ -139,9 +142,12 @@ jobs:
           $p = Start-Process -FilePath $exe -ArgumentList "--smoke-test=$out" -Wait -PassThru
           if (Test-Path $out) { Get-Content $out } else { Write-Host 'The smoke test wrote no result file.' }
           if ($p.ExitCode -ne 0) { throw "Reader smoke test failed (exit code $($p.ExitCode))" }
+      # Only release.yml needs the installers (it publishes them); a pull request run builds and smoke-tests them but stores nothing.
       - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
         with:
           name: CadrelReader-windows-installer
           path: packages/reader/release/CadrelReader-Setup-*.exe
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 1
+          compression-level: 0 # installers are already compressed
