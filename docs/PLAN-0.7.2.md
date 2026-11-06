@@ -11,7 +11,8 @@
 | Question | Answer |
 |---|---|
 | Distribution | **GitHub release APKs only**, updated in-app by `AppUpdate`. No Play Store, so no AAB or Play account. |
-| Reader release number | **0.10.0** (`packages/reader/VERSION`). |
+| Reader release number | **0.10.0** (`packages/reader/VERSION`). Windows installer ships **unsigned**. |
+| Write Mobile name and id | **Cadrel Write**, id `com.blaashford.cadrel` (the one already in `packages/write/capacitor.config.ts`). Its manuscript and all other project files are **editable**. |
 | Existing Android project | **None.** The earlier Android builds were produced entirely in GitHub CI, so there is no project, plugin source or keystore to recover. Everything native is created fresh, and no earlier install has to keep updating. |
 | Write Mobile scope | It **cannot create or edit projects**; it can only **switch** between them. Interpreted as: no create, rename, duplicate, delete, template or project-settings changes. Writing inside a project (its files and chapters) stays, because that is the app's purpose. If you meant it should also be read-only, say so. |
 
@@ -33,7 +34,7 @@ Consequence: the Android work is mostly **building the missing native layer once
 
 Decide these first; each changes the build.
 
-1. **Names and ids** (open). Proposed: *Cadrel Reader* `com.blaashford.cadrel.reader` (already set), *Cadrel Write Mobile* with a new id (`com.blaashford.cadrel.write`; the current `com.blaashford.cadrel` in `packages/write/capacitor.config.ts` is the full-Write phone build and should be retired or kept as a dev id). Pick before the first Play/APK install, since ids cannot change later.
+1. ~~Names and ids~~ **Decided: Cadrel Write, `com.blaashford.cadrel`.** Proposed: *Cadrel Reader* `com.blaashford.cadrel.reader` (already set), *Cadrel Write Mobile* with a new id (`com.blaashford.cadrel.write`; the current `com.blaashford.cadrel` in `packages/write/capacitor.config.ts` is the full-Write phone build and should be retired or kept as a dev id). Pick before the first Play/APK install, since ids cannot change later.
 2. ~~Distribution~~ **Decided: GitHub APKs.**
 3. **How mobile Write holds a project.** Recommended: a **local cache of the project's files** (app-private storage, the existing `createCapacitorFs`) that syncs with the Studio vault when online. Writing on a train must work. Alternative (live against the server only) is simpler and wrong for a writing tool.
 4. **Spike: can a phone sign requests?** Ed25519 key in Android Keystore or in app storage, join via `cadrel://join?...` link, then `GET /v1/me`. This proves the Studio protocol runs unchanged outside Electron (`studioClient.ts` uses Node/Electron APIs; the signing part must move into a shared, platform-neutral module).
@@ -142,6 +143,4 @@ Cadrel's own `VERSION` rises to `0.7.2` only when something in the Cadrel line c
 
 ## Still open
 
-1. App id and name for Write Mobile (Phase 0, item 1).
-2. Whether "cannot edit projects" also means the manuscript is read-only (assumed not).
-3. Code signing for the Windows Reader installer, or ship unsigned.
+Nothing blocking. Phase 1 (Reader 0.10.0) is done on this branch apart from the merge to `main`.

@@ -13,6 +13,13 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Roles that may not see a page get an answer, not an error.** The people and roles page, project work, planning, Home and the Dashboard say what the role does not allow instead of failing; everyone in the Studio sees names (not emails or roles) wherever a task, sign-off or lock belongs to someone.
 - **What is not done in M2.** A code-signed installer (the workflow signs when it is given a certificate; there is none yet), updates from the Studio's server, replicating the file store, the security policy page, separate Author / Editor / Director dashboards, the assistant's record tools for a Studio whose records are on the server, live updates and notifications, and any run against a real Cloudflare account. See docs/STUDIOS.md.
 
+## Cadrel Reader 0.10.0
+
+- **Cadrel Reader has its own icon.** It had borrowed Cadrel Write's; it is now an open book with a comment bubble, so the two apps can be told apart in the taskbar, the Start menu and the installer.
+- **Checked against the current Write code.** Reader is built from `@cadrel/write`, which has changed a great deal since 0.9.0. The whole Write test suite, Reader's type check, both builds (Windows app and phone bundle) and the headless Reader smoke test (reader mode, author channels absent, first screen is *Shared with me*, no author buttons) pass on this release.
+- **Unsigned on purpose.** The Windows installer is not code-signed, and the release page says so and how to get past SmartScreen. Signing can be added later when a certificate exists.
+- **Not in this release:** the Android app (it follows in the 0.7.2 work; see [docs/PLAN-0.7.2.md](docs/PLAN-0.7.2.md)), and a hand test of clicking an invitation link on a real Windows machine, which is still only tested as far as the link reaching the window.
+
 ## Cadrel Reader 0.9.0
 
 Cadrel Reader is a new, separate app for beta readers (released under tags `reader-vX.Y.Z`; its version is in `packages/reader/VERSION`). It is Write's reading and review experience on its own: open an invitation, read the manuscript, leave comments and suggestions, and they reach the author through Google Drive. It has no writing, sharing, export, import, AI or project management. It has its own installer (`CadrelReader-Setup-<version>.exe`), its own data folder (`%APPDATA%\Cadrel Reader`, shared projects in `Documents\Cadrel Reader\Shared With Me`) and its own update feed, and it installs beside Cadrel. See [packages/reader/README.md](packages/reader/README.md).

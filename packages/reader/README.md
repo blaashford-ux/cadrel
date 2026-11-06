@@ -34,6 +34,5 @@ npm test -w @cadrel/reader
 ## Not done
 
 - **The Android app is not built from this repository.** `npm run build:mobile` makes the phone's web bundle and `capacitor.config.ts` has Reader's own id (`com.blaashford.cadrel.reader`), but the native Android project (the `android/` folder with the Google sign-in, update and external-browser plugins, and its manifest) is not in this repository, nor is an APK build in CI. Reader needs its own native project made from Write's, with: that app id, the `cadrel-reader://` scheme in its manifest (for the picker's hand-back and for invitation links), and the `CadrelReader-*.apk` file name the updater looks for.
-- **The icon is Write's**, as a placeholder (`assets/icon.png`, `build/icon.*`).
-- **Code signing**, as for Cadrel: the installer is unsigned until the certificate secrets exist.
+- **Code signing:** the Windows installer ships unsigned by decision (the release notes explain SmartScreen). The workflow signs if it is ever given a certificate.
 - Clicking an invitation link on Windows is registered by the installer; it has been tested here only as far as the link reaching the window (`electron/inviteArg.test.ts`), not by a real click on a Windows machine.
