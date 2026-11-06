@@ -7,3 +7,4 @@ dist-mobile/
 release/
 **/assets/vendor/
 *.log
+packages/*/android/

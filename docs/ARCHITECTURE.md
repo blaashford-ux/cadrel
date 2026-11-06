@@ -213,6 +213,7 @@ interface ModuleManifest {
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |
 | `sales` (module: **Finance**) | KDP import, royalties, splits, payments, payouts; moves out of Market in M1 | BookScout `library/sales` |
+| `android-native` | The native Android layer shared by Cadrel Write and Cadrel Reader: three Capacitor plugins (update, Google Drive sign-in, external browser) and the script that turns a generated Capacitor project into the signed app. See [ANDROID.md](ANDROID.md) | new |
 | `studio` | the project tree and notes store (one file, shared by the app and the AI server), Write notes reader | new |
 | `mcp` | one server, actor-scoped, tools registered by modules | BookScout `mcp` |
 | `mod-*` | one UI package per further module | new |

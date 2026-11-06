@@ -3,7 +3,8 @@ name: release
 # Merging builds and publishes a GitHub release:
 #   push to main -> release  vX.Y.Z           (X.Y.Z from the VERSION file)
 #   push to dev  -> pre-release vX.Y.Z-dev.N  (N = this workflow's run number)
-# The installer is also on the run page as the "Cadrel-windows-installer" artifact.
+# The installer is also on the run page as the "Cadrel-windows-installer" artifact. Cadrel Write's Android app (Cadrel-<version>.apk) is attached to
+# this release when it was signed with the release key, and Cadrel Reader's (CadrelReader-<version>.apk) to its own.
 # Cadrel Reader is released apart, from packages/reader/VERSION, under tags reader-vX.Y.Z (and reader-vX.Y.Z-dev.N from dev):
 # see the publish-reader job. A merge that changes only one of them leaves the other's release alone.
 # Studios are not deployed here: the app builds each one in its owner's own Cloudflare account (docs/STUDIOS.md).
@@ -21,6 +22,7 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    secrets: inherit # the Android signing key (ANDROID_KEYSTORE_*), which the called workflow cannot see otherwise
 
   publish:
     needs: build
@@ -32,6 +34,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: Cadrel-windows-installer
+          path: dist
+      - name: Get the signed Android app, when there is one
+        uses: actions/download-artifact@v4
+        continue-on-error: true # no release key yet: the build only made a debug-signed APK, which is never published
+        with:
+          name: Cadrel-android-apk
           path: dist
       - name: Publish
         env:
@@ -50,7 +58,9 @@ jobs:
           fi
           cd dist
           installer="$(ls Cadrel-Setup-*.exe | head -n1)"
-          sha256sum "$installer" > SHA256SUMS.txt
+          apk="$(ls Cadrel-*.apk 2>/dev/null | head -n1 || true)"
+          files=("$installer"); [ -n "$apk" ] && files+=("$apk")
+          sha256sum "${files[@]}" > SHA256SUMS.txt
           cat > ../notes.md <<NOTES
           ## Install (Windows 10 / 11)
 
@@ -67,10 +77,22 @@ jobs:
           $(cat SHA256SUMS.txt)
           \`\`\`
 
-          ## What's changed
           NOTES
+          if [ -n "$apk" ]; then
+            cat >> ../notes.md <<ANDROID
+          ## Install (Cadrel Write for Android)
+
+          1. On the phone, open this page and download **${apk}**.
+          2. Android asks you to allow installing from your browser the first time; allow it, then open the file.
+          3. Open **Cadrel Write**.
+
+          The app updates itself from here: when a newer release is out, its About screen offers it, checks it against \`SHA256SUMS.txt\` and opens Android's installer.
+
+          ANDROID
+          fi
+          echo "## What's changed" >> ../notes.md
           sed -i 's/^          //' ../notes.md
-          gh release create "$tag" "$installer" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel ${tag#v}" --notes-file ../notes.md --generate-notes "${flags[@]}"
+          gh release create "$tag" "${files[@]}" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel ${tag#v}" --notes-file ../notes.md --generate-notes "${flags[@]}"
 
   publish-reader:
     needs: build
@@ -85,6 +107,12 @@ jobs:
         with:
           name: CadrelReader-windows-installer
           path: dist
+      - name: Get the signed Android app, when there is one
+        uses: actions/download-artifact@v4
+        continue-on-error: true # no release key yet: the build only made a debug-signed APK, which is never published
+        with:
+          name: CadrelReader-android-apk
+          path: dist
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -98,14 +126,16 @@ jobs:
             flags=(--latest=false)
           else
             # A development build is published when the merge touched Reader (or the Write code it is built from).
-            if ! git diff --name-only HEAD^1 HEAD | grep -qE '^(packages/reader/|packages/write/)'; then
+            if ! git diff --name-only HEAD^1 HEAD | grep -qE '^(packages/reader/|packages/write/|packages/android-native/)'; then
               echo "This merge does not touch Cadrel Reader: no development release."; exit 0
             fi
             tag="reader-v${version}-dev.${GITHUB_RUN_NUMBER}"; flags=(--prerelease)
           fi
           cd dist
           installer="$(ls CadrelReader-Setup-*.exe | head -n1)"
-          sha256sum "$installer" > SHA256SUMS.txt
+          apk="$(ls CadrelReader-*.apk 2>/dev/null | head -n1 || true)"
+          files=("$installer"); [ -n "$apk" ] && files+=("$apk")
+          sha256sum "${files[@]}" > SHA256SUMS.txt
           cat > ../notes.md <<NOTES
           ## Cadrel Reader (Windows 10 / 11)
 
@@ -124,7 +154,19 @@ jobs:
           $(cat SHA256SUMS.txt)
           \`\`\`
 
-          ## What's changed
           NOTES
+          if [ -n "$apk" ]; then
+            cat >> ../notes.md <<ANDROID
+          ## Cadrel Reader (Android)
+
+          1. On the phone, open this page and download **${apk}**.
+          2. Android asks you to allow installing from your browser the first time; allow it, then open the file.
+          3. Open the invitation link you were sent, or choose **Open invitation…** in the app and paste it.
+
+          The app updates itself from here: when a newer release is out, its About screen offers it, checks it against \`SHA256SUMS.txt\` and opens Android's installer.
+
+          ANDROID
+          fi
+          echo "## What's changed" >> ../notes.md
           sed -i 's/^          //' ../notes.md
-          gh release create "$tag" "$installer" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel Reader ${tag#reader-v}" --notes-file ../notes.md --generate-notes "${flags[@]}"
+          gh release create "$tag" "${files[@]}" SHA256SUMS.txt --target "$GITHUB_SHA" --title "Cadrel Reader ${tag#reader-v}" --notes-file ../notes.md --generate-notes "${flags[@]}"

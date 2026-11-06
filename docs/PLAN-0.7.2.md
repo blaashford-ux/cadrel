@@ -61,17 +61,17 @@ Exit: installer from the release page installs, opens an invitation, comments re
 
 ---
 
-## Phase 2: shared Android foundation
+## Phase 2: shared Android foundation (built, not yet run on the Android SDK; see [ANDROID.md](ANDROID.md))
 
 One piece of work that both Android apps use.
 
 1. **Native project strategy.** Recommended: do not hand-maintain two checked-in `android/` trees. Commit a small `packages/android-native/` holding the Java plugin sources (AppUpdate, DriveAuth, ExternalBrowser) plus manifest and Gradle templates, and have a script run `cap add android` then overlay them for each app (app id, name, icon, URL scheme, APK name). The alternative (check in one full project per app) is simpler to reason about but drifts.
 2. **Rebuild the three plugins** to match the TypeScript contracts already in `packages/write/src/mobile/*` (e.g. `AppUpdate.install({url, name, sumsUrl})` with progress events and the first-time install-permission rejection). Unit-test the TypeScript sides that exist; the Java side is covered by the CI install smoke below.
 3. **Manifest items:** URL schemes (`cadrel-reader://`, and `cadrel://join` for Write Mobile), `REQUEST_INSTALL_PACKAGES` for the self-updater, network config, adaptive icons.
-4. **Signing.** There is no existing keystore, so make a new release keystore per app (generated once, outside CI), store it and its passwords as repository secrets, never commit it. Android updates require the same key forever, so keep an offline backup (this is the single irreversible item in the plan). With no Play Store, there is no Play-managed key to fall back on.
+4. **Signing.** There is no existing keystore, so make **one** release keystore for both apps (`scripts/make-android-keystore.sh`, generated once, outside CI), store it and its passwords as repository secrets, never commit it. Android updates require the same key forever, so keep an offline backup (this is the single irreversible item in the plan). With no Play Store, there is no Play-managed key to fall back on.
 5. **CI.** New `build.yml` job: Node + JDK 17 + Android SDK, `build:mobile`, `cap sync`, `./gradlew assembleRelease`, sign, verify with `apksigner`, run on an emulator (install, launch, one screenshot). Dev builds get the `-dev.N` suffix like the Windows jobs.
 6. **Release.** Extend `release.yml`: attach `CadrelReader-<ver>.apk` to `reader-vX` releases (the name the Reader README says the updater expects) and the Write Mobile APK to its own tag; always include `SHA256SUMS.txt`, which `AppUpdate` verifies.
-7. **Versioning.** Add `packages/write-mobile/VERSION` and `scripts/check-write-mobile-version.sh`; extend the "touches `packages/write` must raise Reader's version" rule to cover it; update `docs/VERSIONING.md` and `docs/RELEASING.md`.
+7. **Versioning.** Cadrel Write's APK rides on Cadrel's own releases (`Cadrel-<version>.apk`, which is what the updater already looks for), so it uses `VERSION` and no new version file; changes to `packages/android-native` count as touching Reader. `docs/VERSIONING.md` and `docs/RELEASING.md` say so.
 
 Exit: a signed Reader APK built by CI installs on a device and updates itself from a later release.
 

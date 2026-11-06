@@ -13,12 +13,20 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Roles that may not see a page get an answer, not an error.** The people and roles page, project work, planning, Home and the Dashboard say what the role does not allow instead of failing; everyone in the Studio sees names (not emails or roles) wherever a task, sign-off or lock belongs to someone.
 - **What is not done in M2.** A code-signed installer (the workflow signs when it is given a certificate; there is none yet), updates from the Studio's server, replicating the file store, the security policy page, separate Author / Editor / Director dashboards, the assistant's record tools for a Studio whose records are on the server, live updates and notifications, and any run against a real Cloudflare account. See docs/STUDIOS.md.
 
+## Android foundation (0.7.2, in development)
+
+- **One native Android layer for both apps.** `packages/android-native` holds the three plugins the phone apps call (update from GitHub releases with a checksum, Google Drive sign-in, open the browser for Google's file picker), and `prepare.mjs`, which turns a freshly generated Capacitor project into the app: plugins registered, the app's link scheme and installer permission in the manifest, version, signing and Google sign-in in the build file, the app's own launcher icons. No Android project is committed. [docs/ANDROID.md](docs/ANDROID.md).
+- **CI builds, checks and publishes the APKs.** An `android` job builds Cadrel Write and Cadrel Reader, then checks signature, package, version, launcher activity, installer permission and that all three plugins are in the app. `Cadrel-<version>.apk` joins Cadrel's release and `CadrelReader-<version>.apk` joins Reader's, listed in `SHA256SUMS.txt`, with an Android section in the release notes.
+- **Signing is a one-time setup.** `scripts/make-android-keystore.sh` makes the release key and lists the four secrets to create. Without them the build signs with the debug key and the APK is never published. **Losing the key means every installed copy must be uninstalled and reinstalled**, so it must be backed up.
+- **Not done:** a first build on a machine with the Android SDK (the first CI run is the first real compile of the Java plugins), an emulator smoke test, and registering each app's Android OAuth client in Google Cloud, without which *Connect Google Drive* fails on the phone.
+- `release.yml` now passes the repository's secrets to the build (`secrets: inherit`), which the Android signing key needs; the Windows build sees them too.
+
 ## Cadrel Reader 0.10.0
 
 - **Cadrel Reader has its own icon.** It had borrowed Cadrel Write's; it is now an open book with a comment bubble, so the two apps can be told apart in the taskbar, the Start menu and the installer.
 - **Checked against the current Write code.** Reader is built from `@cadrel/write`, which has changed a great deal since 0.9.0. The whole Write test suite, Reader's type check, both builds (Windows app and phone bundle) and the headless Reader smoke test (reader mode, author channels absent, first screen is *Shared with me*, no author buttons) pass on this release.
 - **Unsigned on purpose.** The Windows installer is not code-signed, and the release page says so and how to get past SmartScreen. Signing can be added later when a certificate exists.
-- **Not in this release:** the Android app (it follows in the 0.7.2 work; see [docs/PLAN-0.7.2.md](docs/PLAN-0.7.2.md)), and a hand test of clicking an invitation link on a real Windows machine, which is still only tested as far as the link reaching the window.
+- **The Android app is built and released with it** (an APK on the same release, from the Android foundation above), once the release key exists. Not in this release: a hand test of clicking an invitation link on a real Windows machine, which is still only tested as far as the link reaching the window.
 
 ## Cadrel Reader 0.9.0
 

@@ -26,6 +26,7 @@ npm run dev -w @cadrel/reader            # Electron + Vite (port 5175)
 npm run build -w @cadrel/reader          # main process + window
 npm run dist -w @cadrel/reader           # Windows installer (run on Windows / CI)
 npm run dev:mobile -w @cadrel/reader     # the phone UI in a browser (an in-memory demo library and Drive)
+node packages/android-native/prepare.mjs reader   # the Android project, ready for ./gradlew assembleRelease
 npm test -w @cadrel/reader
 ```
 
@@ -33,6 +34,6 @@ npm test -w @cadrel/reader
 
 ## Not done
 
-- **The Android app is not built from this repository.** `npm run build:mobile` makes the phone's web bundle and `capacitor.config.ts` has Reader's own id (`com.blaashford.cadrel.reader`), but the native Android project (the `android/` folder with the Google sign-in, update and external-browser plugins, and its manifest) is not in this repository, nor is an APK build in CI. Reader needs its own native project made from Write's, with: that app id, the `cadrel-reader://` scheme in its manifest (for the picker's hand-back and for invitation links), and the `CadrelReader-*.apk` file name the updater looks for.
+- **The Android app** is built by CI from `packages/android-native` (see [docs/ANDROID.md](../../docs/ANDROID.md)): its own id (`com.blaashford.cadrel.reader`), the `cadrel-reader://` scheme, and `CadrelReader-<version>.apk` on Reader's releases. It has not yet been built on a machine with the Android SDK, and Google sign-in needs its Android OAuth client registered first.
 - **Code signing:** the Windows installer ships unsigned by decision (the release notes explain SmartScreen). The workflow signs if it is ever given a certificate.
 - Clicking an invitation link on Windows is registered by the installer; it has been tested here only as far as the link reaching the window (`electron/inviteArg.test.ts`), not by a real click on a Windows machine.
