@@ -1,0 +1,14 @@
+{
+  "name": "@cadrel/studio-client",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "description": "The app's side of a Studio's server: signed requests, joining by invitation, the vault and the project tree. No Electron, no Node: `fetch` is passed in, so the desktop shell and the phone app share it.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cadrel/kernel": "*",
+    "@cadrel/service": "*"
+  }
+}

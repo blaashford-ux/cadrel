@@ -4,7 +4,7 @@ Cadrel Write and Cadrel Reader each have an Android app. Both are Capacitor apps
 
 | App | Id | Version | Release it rides on | APK |
 |---|---|---|---|---|
-| Cadrel Write | `com.blaashford.cadrel` | `VERSION` | Cadrel's own, `vX.Y.Z` | `Cadrel-<version>.apk` |
+| Cadrel Write (`packages/write-mobile`, connected to a Studio) | `com.blaashford.cadrel` | `VERSION` | Cadrel's own, `vX.Y.Z` | `Cadrel-<version>.apk` |
 | Cadrel Reader | `com.blaashford.cadrel.reader` | `packages/reader/VERSION` | Reader's own, `reader-vX.Y.Z` | `CadrelReader-<version>.apk` |
 
 The file names are what the in-app updater looks for (`ASSET_PATTERN` in `packages/write/src/shared/update.ts`). A development build `X.Y.Z-dev.N` is attached to the matching pre-release and reports that version.
@@ -28,7 +28,7 @@ Needs JDK 21 and the Android SDK (platform 36). CI installs both.
 | Plugin | Does | Contract |
 |---|---|---|
 | `AppUpdate` | Downloads the release's APK, checks it against the release's `SHA256SUMS.txt`, opens Android's installer. Only downloads from this repository's releases, only over https, never installs a file whose checksum is missing or wrong. Rejects with `NEEDS_PERMISSION` (and opens the Settings page) until the person has allowed installs from this app. | `packages/write/src/mobile/appUpdate.ts` |
-| `DriveAuth` | Google authorization for the `drive.file` scope, giving the web code an access token for Drive sync and review sharing. | `driveAuth.ts` |
+| `DriveAuth` | Google authorization for the `drive.file` scope, giving the web code an access token for Drive. Cadrel Reader uses it (invitations and comments go through Drive); Cadrel Write does not. | `driveAuth.ts` |
 | `ExternalBrowser` | Opens Google's file picker in the phone's browser, which hands the choice back through `cadrel-write://picked?...` / `cadrel-reader://picked?...`. | `externalBrowser.ts` |
 
 ## Signing: one key, made once
@@ -45,7 +45,7 @@ Both apps are signed with this one key. The build's log prints the key's SHA-1 s
 
 ## Google sign-in for Drive
 
-The apps sign in to Google natively. For that Google needs to know the app: in the Google Cloud project that has the Drive API enabled (the one the desktop apps' OAuth client belongs to), create an **OAuth client ID of type Android** for **each app id** in the table above, with the **SHA-1** printed by `make-android-keystore.sh` (or by the build's log). The `drive.file` scope must be on the consent screen. Until this is done the apps install and run, but *Connect Google Drive* fails with a sign-in error. A build signed with the debug key has a different SHA-1 and will not work with the release key's client.
+**Only Cadrel Reader signs in to Google** (Cadrel Write talks to the Studio, not Drive). For Reader, Google needs to know the app: in the Google Cloud project that has the Drive API enabled (the one the desktop apps' OAuth client belongs to), create an **OAuth client ID of type Android** for `com.blaashford.cadrel.reader`, with the **SHA-1** printed by `make-android-keystore.sh` (or by the build's log). The `drive.file` scope must be on the consent screen. Until this is done Reader installs and runs, but *Connect Google Drive* fails with a sign-in error. Cadrel Write needs nothing from Google. A build signed with the debug key has a different SHA-1 and will not work with the release key's client.
 
 ## CI and releases
 
@@ -56,6 +56,10 @@ The apps sign in to Google natively. For that Google needs to know the app: in t
 ### Version codes
 
 Android needs a number that rises with every install: `versionCode` is `((MAJOR*1000 + MINOR)*100 + FIX)*1000 + BUILD`, where BUILD is the `-dev.N` number (up to 998) and 999 for a release. So 0.10.0 is `1000999`, and a release is above its own development builds and below the next version's. Limits: major 20, minor 999, fix 99.
+
+## Cadrel Write is the Studio app
+
+`packages/write-mobile` is the phone app that signs in to a Cadrel Studio ([its README](../packages/write-mobile/README.md)). The older Drive-based phone entry that lives in `packages/write/src/mobile` (and `capacitor.config.ts` there) is no longer built or released; Cadrel Reader still imports its storage, dialogs and plugin wrappers from there. Invitation links open the app through the `cadrel://` scheme.
 
 ## Not done
 

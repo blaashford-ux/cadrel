@@ -9,9 +9,10 @@ export const PLAY_SERVICES_AUTH = 'com.google.android.gms:play-services-auth:21.
 /**
  * Where each app comes from. `apk` is the file name the in-app updater looks for in the release (`ASSET_PATTERN` in
  * packages/write/src/shared/update.ts): Cadrel Write's APK rides on Cadrel's own releases, Reader's on its `reader-v` ones.
+ * Cadrel Write is `packages/write-mobile` (the Studio-connected phone app); its `cadrel://` scheme is what Studio invitation links open.
  */
 export const APPS = {
-  write: { dir: 'packages/write', versionFile: 'VERSION', schemes: ['cadrel-write'], apk: (v) => `Cadrel-${v}.apk` },
+  write: { dir: 'packages/write-mobile', versionFile: 'VERSION', schemes: ['cadrel'], apk: (v) => `Cadrel-${v}.apk` },
   reader: { dir: 'packages/reader', versionFile: 'packages/reader/VERSION', schemes: ['cadrel-reader'], apk: (v) => `CadrelReader-${v}.apk` }
 };
 

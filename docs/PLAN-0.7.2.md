@@ -77,7 +77,9 @@ Exit: a signed Reader APK built by CI installs on a device and updates itself fr
 
 ---
 
-## Phase 3: Cadrel Write Mobile (new package `packages/write-mobile`)
+## Phase 3: Cadrel Write Mobile (new package `packages/write-mobile`) (built; see [its README](../packages/write-mobile/README.md))
+
+**Decided during the build:** the phone works with the Studio's **vault** (check-out / check-in, versions, files tagged to a project), because that is the only file store the Studio's server has; a project's folder on a desktop is not in the Studio unless its files are in the vault, and uploading project folders is a later change to Cadrel itself. Spikes: the Studio protocol runs unchanged in a browser engine (Web Crypto Ed25519; older Android System WebView lacks it and the join says so); the existing vault routes were enough, so there are no Worker changes. Write's own `capabilities.manageProjects = false` already hides project management, so the phone is a third capabilities set (`studio`) plus a Studio screen.
 
 A phone app that is the writing interface only, connected to one or more Studios.
 
