@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { addDays, burnDown, dailySeries, dateRange, firstDay, localDate, summarize, type Goal, type Progress, type Projection } from '../shared/progress';
+import { addDays, burnDown, dailySeries, dateRange, firstDay, localDate, type Goal, type Progress, type Summary, type Projection } from '../shared/progress';
 import { goalFor, type ProjectMeta } from '../shared/projects';
 import { useEscape } from './useEscape';
 
 interface Props {
   project: { path: string; meta: ProjectMeta };
   progress: { progress: Progress; total: number | null; manuscript: string | null } | null;
+  /** The goal summary, calculated once by the app and shared with the status bar. Null without a goal. */
+  summary: Summary | null;
   onClose(): void;
   onSetGoal(): void;
 }
@@ -29,7 +31,7 @@ const H = 260;
 const M = { l: 48, r: 56, t: 14, b: 30 };
 
 /** Day-by-day words written (bars) with the burn-down toward the goal, plus the numbers that matter. */
-export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props) {
+export function ProgressDialog({ project, progress, summary, onClose, onSetGoal }: Props) {
   useEscape(onClose);
   const [range, setRange] = useState<Range>(30);
   const [hover, setHover] = useState<string | null>(null);
@@ -92,7 +94,7 @@ export function ProgressDialog({ project, progress, onClose, onSetGoal }: Props)
   const to = dates[dates.length - 1] ?? today;
   const series = dailySeries(p, from, to, today);
   const burn = goal ? burnDown(p, goal, from, to, today) : [];
-  const s = goal ? summarize(p, goal, total, today) : null;
+  const s = goal ? summary : null;
 
   const required = goal && s?.requiredPerDay ? s.requiredPerDay : 0;
   const maxBar = Math.max(1, required, ...series.map((d) => d.written)) * 1.12;

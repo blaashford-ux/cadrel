@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/reader",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Cadrel Reader: read a manuscript an author shared with you and give comments and suggestions",
   "main": "dist-electron/electron/main.js",
   "scripts": {
@@ -62,7 +62,7 @@
       "installerHeaderIcon": "build/icon.ico",
       "deleteAppDataOnUninstall": false
     },
-    "copyright": "Copyright \u00a9 2026 blaashford-ux",
+    "copyright": "Copyright © 2026 blaashford-ux",
     "linux": {
       "icon": "build/icon.png",
       "category": "Office",
