@@ -17,8 +17,65 @@ export class StudioApiError extends Error {
 /** The Studio could not be reached at all (no network, the server down), as opposed to answering with a refusal. */
 export class StudioOfflineError extends StudioApiError {}
 
+/**
+ * The service's calls that only read. The answers to these are kept here until the Studio says something changed (see `StudioClient.rpc`), so a
+ * page that refreshes itself does not make the server read its database again to be told the same thing. Anything not listed is a change,
+ * or is not known to be a pure read, and is always sent.
+ */
+const READS = new Set([
+  'can', 'canOn', 'canAt', 'explain', 'visibleProjects',
+  'catalogue.ips', 'catalogue.series', 'catalogue.books', 'catalogue.book', 'catalogue.byAsin', 'catalogue.projectLinks',
+  'people.list', 'people.get', 'people.teams', 'people.directory', 'people.penNames', 'people.penNameNames', 'people.roles', 'people.assignments', 'people.capabilityReview', 'people.explainAccess', 'people.effectiveCapabilities',
+  'business.contributions', 'business.credits', 'business.rights', 'business.shares',
+  'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
+  'briefs.list', 'briefs.get', 'briefs.versions', 'passes.list', 'passes.get', 'queries.list', 'queries.counts', 'queries.decisions', 'queries.verification',
+  'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove'
+]);
+/** How long the Studio's change counter is trusted before it is asked again. */
+export const FRESH_MS = 3_000;
+/** The longest an answer is kept even if nothing changed: a role that ends at a set time changes an answer without any record changing. */
+export const KEEP_MS = 5 * 60_000;
+
 export class StudioClient {
-  constructor(protected readonly o: { url: string; key: KeyPair; fetchFn: typeof fetch }) {}
+  constructor(protected readonly o: { url: string; key: KeyPair; fetchFn: typeof fetch; now?: () => number }) {}
+
+  private readonly kept = new Map<string, { at: number; value: unknown }>();
+  private seen: string | null = null;
+  private unversioned = false;
+  private checkedAt = -Infinity;
+  /** Moves when a change is made from here, so an answer that was on its way back when it happened is not kept. */
+  private generation = 0;
+  private now(): number {
+    return this.o.now ? this.o.now() : Date.now();
+  }
+  /** What this computer has changed (or cannot be sure of) may make every kept answer wrong: start over. */
+  forget(): void {
+    this.generation++;
+    this.kept.clear();
+    this.checkedAt = -Infinity;
+  }
+  /** Asks the Studio whether anything changed since the last time, and drops what was kept if so. One cheap request, however many answers are kept. */
+  private async check(): Promise<void> {
+    let v: { data: string; access: string };
+    try {
+      v = await this.version();
+    } catch (e) {
+      if (e instanceof StudioOfflineError) throw e;
+      this.unversioned = true; // a Studio from before the counters: nothing can be kept, everything is asked every time
+      this.kept.clear();
+      return;
+    }
+    const stamp = `${v.data}`;
+    if (stamp !== this.seen) {
+      this.kept.clear();
+      this.seen = stamp;
+    }
+    this.checkedAt = this.now();
+  }
+  /** The Studio's change counters: they differ whenever any of its records (data) or who may do what (access) changed. */
+  version(): Promise<{ data: string; access: string }> {
+    return this.request('GET', '/v1/version');
+  }
 
   /** One signed request. The answer is returned as it came; the callers below turn it into a value or an error. */
   protected async send(method: string, path: string, body: string | Uint8Array, contentType: string): Promise<Response> {
@@ -33,6 +90,7 @@ export class StudioClient {
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const res = await this.send(method, path, body === undefined ? '' : JSON.stringify(body), 'application/json');
     const data = (await res.json().catch(() => ({}))) as { error?: string };
+    if (res.status === 404 && data.error === 'not found') throw new StudioApiError('The Studio’s server does not know this request: it is running an older version of Cadrel. Use “Upgrade the server” and try again.', { status: 404 });
     if (!res.ok) throw new StudioApiError(data.error ?? `The Studio answered with status ${res.status}.`, { status: res.status });
     return data as T;
   }
@@ -52,12 +110,32 @@ export class StudioClient {
   }
 
   /** A call to the Studio's service, as the person this computer's key belongs to (the server decides who that is, and what they may do). */
-  rpc<T>(path: string[], args: unknown[]): Promise<T> {
-    return this.wire<T>('/v1/call', { path, args });
+  async rpc<T>(path: string[], args: unknown[]): Promise<T> {
+    const name = path.join('.');
+    if (!READS.has(name) || this.unversioned) {
+      try {
+        return await this.wire<T>('/v1/call', { path, args });
+      } finally {
+        this.forget(); // even a refusal or a dropped connection: the change may have gone through
+      }
+    }
+    if (this.now() - this.checkedAt >= FRESH_MS) await this.check();
+    if (this.unversioned) return this.wire<T>('/v1/call', { path, args });
+    const key = `${name}|${encodeValue(args)}`;
+    const hit = this.kept.get(key);
+    if (hit && this.now() - hit.at < KEEP_MS) return structuredClone(hit.value) as T;
+    const generation = this.generation;
+    const value = await this.wire<T>('/v1/call', { path, args });
+    if (generation === this.generation) this.kept.set(key, { at: this.now(), value: structuredClone(value) });
+    return value;
   }
   /** An operation of the Studio's vault, as that person. */
-  vault<T>(method: string, arg?: unknown): Promise<T> {
-    return this.wire<T>('/v1/vault', { method, args: [arg] });
+  async vault<T>(method: string, arg?: unknown): Promise<T> {
+    try {
+      return await this.wire<T>('/v1/vault', { method, args: [arg] });
+    } finally {
+      this.forget();
+    }
   }
   async putBlob(hash: string, bytes: Uint8Array): Promise<void> {
     const res = await this.send('PUT', `/v1/blobs/${hash}`, bytes, 'application/octet-stream');
@@ -66,7 +144,7 @@ export class StudioClient {
   async getBlob(hash: string): Promise<Uint8Array | null> {
     const res = await this.send('GET', `/v1/blobs/${hash}`, '', 'application/json');
     if (res.status === 404) return null;
-    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`, { status: res.status });
+    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`);
     return new Uint8Array(await res.arrayBuffer());
   }
   /** The names of the captures the Studio holds, a page at a time (`next` is null on the last). */
@@ -80,7 +158,7 @@ export class StudioClient {
   async getCapture(rel: string): Promise<Uint8Array | null> {
     const res = await this.send('GET', `/v1/captures/${rel}`, '', 'application/json');
     if (res.status === 404) return null;
-    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`, { status: res.status });
+    if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`);
     return new Uint8Array(await res.arrayBuffer());
   }
   /** The project tree as this person may see it. */
@@ -89,7 +167,11 @@ export class StudioClient {
   }
   /** The owner publishes the Studio's projects, which is what everyone else sees (each their own part). */
   async publishTree(tree: ProjectTree): Promise<void> {
-    await this.wire<boolean>('/v1/tree', tree, 'PUT');
+    try {
+      await this.wire<boolean>('/v1/tree', tree, 'PUT');
+    } finally {
+      this.forget();
+    }
   }
 
   async info() {

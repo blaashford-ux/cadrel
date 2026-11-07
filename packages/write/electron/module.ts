@@ -24,7 +24,7 @@ import { AiRemote } from './aiRemote';
 import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
 import { nodeFs } from './nodeFs';
-import { bundledFont } from '../src/shared/export/fonts';
+import { bundledFont, previewFile } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
 import { sanitizeAppDefaults, type AppDefaults } from '../src/shared/appDefaults';
 import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpened, type ProjectsConfig, type ProjectStage, type ProjectSummary, type ProjectMeta, type RootListing, type ProjectTemplate } from '../src/shared/projects';
@@ -260,7 +260,7 @@ async function createProjectFolder(name: string, templateId: string) {
 async function fontPreview(family: string): Promise<string | null> {
   const b = bundledFont(String(family));
   if (!b) return null;
-  const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, 'Regular.ttf')).catch(() => null);
+  const data = await fsp.readFile(path.join(pdfResources().fontsDir, b.slug, previewFile(b))).catch(() => null);
   return data ? `data:font/ttf;base64,${data.toString('base64')}` : null;
 }
 

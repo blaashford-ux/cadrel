@@ -20,7 +20,7 @@ export async function health(env: Env): Promise<Response> {
   const checks: Record<string, string> = {};
   try {
     await ensureSchema(env.DB);
-    await d1Db(env.DB).first('SELECT COUNT(*) AS n FROM vault_file');
+    await d1Db(env.DB).first('SELECT 1 AS ok FROM vault_file LIMIT 1'); // proves the table is there without counting its rows
     checks.database = 'ok';
   } catch {
     checks.database = 'unavailable';

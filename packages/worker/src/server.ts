@@ -19,7 +19,7 @@ export interface ServerEnv extends RecordsEnv {
 }
 
 /** What a caller may reach on the service by name. A list, so nothing inherited (`constructor`) or private is. */
-const NAMESPACES = new Set(['catalogue', 'people', 'business', 'work', 'workflows']);
+const NAMESPACES = new Set(['catalogue', 'people', 'business', 'work', 'workflows', 'briefs', 'passes', 'queries']);
 const METHODS = new Set(['can', 'canOn', 'canAt', 'explain', 'visibleProjects']);
 /** The largest file the Worker takes in one request (its request body limit is 100 MB). */
 export const MAX_BLOB = 95 * 1024 * 1024;

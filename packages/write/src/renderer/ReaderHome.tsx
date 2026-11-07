@@ -22,7 +22,7 @@ export function sharedAsSummaries(shared: SharedProject[]): ProjectSummary[] {
     lastEdited: null,
     meta: {
       version: 1, id: sp.dir, name: sp.project, templateId: '', templateName: '', createdAt: '', notes: '', archived: false, goal: null,
-      activeManuscript: null, manuscriptGoals: {}, excludedFolders: [], editedChapters: {}, overrides: { chapterLevel: null, book: {} }
+      activeManuscript: null, manuscriptGoals: {}, excludedFolders: [], editedChapters: {}, rewriteLinks: [], overrides: { chapterLevel: null, book: {} }
     }
   }));
 }

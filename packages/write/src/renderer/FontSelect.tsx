@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { LayerTag } from './layerEditor';
 import { fontService } from './fontService';
-import { BUNDLED_FONTS, bundledFont, fontStack } from '../shared/export/fonts';
+import { BUNDLED_FONTS, bundledFont, bundledFontsFor, fontStack, type FontRole } from '../shared/export/fonts';
 
 let installedPromise: Promise<string[]> | null = null;
 /** The installed font list is fetched once per session (it can take a moment on Windows). */
@@ -31,12 +31,16 @@ interface Props {
   onChange(family: string): void;
   hint?: ReactNode;
   path?: string;
+  /** Which list of included fonts to offer; all of them when absent. */
+  role?: FontRole;
+  /** For an optional font: the choice that means "use this other font" (shown first, value ''), and what it stands for. */
+  sameAs?: { label: string; family: string };
 }
 
 /** A font picker: the bundled families first, then everything installed on this computer. */
-export function FontSelect({ label, value, onChange, hint, path }: Props) {
+export function FontSelect({ label, value, onChange, hint, path, role, sameAs }: Props) {
   const [installed, setInstalled] = useState<string[] | null>(null);
-  const [previewFamily, setPreviewFamily] = useState(fontStack(value));
+  const [previewFamily, setPreviewFamily] = useState(fontStack(value || sameAs?.family || ''));
 
   useEffect(() => {
     let live = true;
@@ -48,16 +52,18 @@ export function FontSelect({ label, value, onChange, hint, path }: Props) {
 
   useEffect(() => {
     let live = true;
-    void ensurePreview(value).then((f) => live && setPreviewFamily(f));
+    void ensurePreview(value || sameAs?.family || '').then((f) => live && setPreviewFamily(f));
     return () => {
       live = false;
     };
-  }, [value]);
+  }, [value, sameAs?.family]);
 
   const bundledNames = new Set(BUNDLED_FONTS.map((b) => b.family.toLowerCase()));
   const others = (installed ?? []).filter((f) => !bundledNames.has(f.toLowerCase()));
-  const known = bundledNames.has(value.toLowerCase()) || others.some((f) => f.toLowerCase() === value.toLowerCase());
-  const note = bundledFont(value)?.note;
+  const offered = role ? bundledFontsFor(role) : BUNDLED_FONTS;
+  const inList = offered.some((b) => b.family.toLowerCase() === value.toLowerCase());
+  const known = !value || bundledNames.has(value.toLowerCase()) || others.some((f) => f.toLowerCase() === value.toLowerCase());
+  const note = bundledFont(value || sameAs?.family || '')?.note;
 
   return (
     <div className="field font-field">
@@ -66,12 +72,14 @@ export function FontSelect({ label, value, onChange, hint, path }: Props) {
           {label}
           <LayerTag path={path} />
         </span>
-        <select value={bundledFont(value)?.family ?? value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        <select value={value ? (bundledFont(value)?.family ?? value) : ''} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+          {sameAs && <option value="">{sameAs.label}</option>}
           <optgroup label="Included with Cadrel Write">
-            {BUNDLED_FONTS.map((b) => (
+            {!inList && bundledFont(value) && <option value={bundledFont(value)!.family}>{bundledFont(value)!.family}</option>}
+            {offered.map((b) => (
               <option key={b.slug} value={b.family}>
                 {b.family}
-                {b.family === BUNDLED_FONTS[0].family ? ' (default)' : ''}
+                {!sameAs && b.family === BUNDLED_FONTS[0].family ? ' (default)' : ''}
               </option>
             ))}
           </optgroup>

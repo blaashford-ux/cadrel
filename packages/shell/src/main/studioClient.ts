@@ -6,7 +6,7 @@ import { fingerprint, invitationLink } from '@cadrel/kernel';
 import { StudioClient as BaseClient } from '@cadrel/studio-client';
 import type { StudioInvite, StudioMember } from '../shared/api';
 
-export { joinStudio, StudioApiError, StudioOfflineError } from '@cadrel/studio-client';
+export { FRESH_MS, KEEP_MS, joinStudio, StudioApiError, StudioOfflineError } from '@cadrel/studio-client';
 
 export class StudioClient extends BaseClient {
   async people(): Promise<{ members: StudioMember[]; invites: StudioInvite[] }> {

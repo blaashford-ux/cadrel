@@ -88,7 +88,7 @@ export interface ServiceOptions {
   openExternal: (url: string) => void | Promise<void>;
   revealInFolder: (p: string) => void;
   /** How an MCP client should launch the server. */
-  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string> };
+  mcpLaunch?: () => { command: string; args: string[]; env: Record<string, string>; follow?: string };
   /** Builds the local neural embedder; defaults to the real one. Overridable in tests. */
   /** Test hook: stands in for OCR so tests need not run the real engine. */
   ocrFactory?: () => Promise<{ recognize(image: Buffer, crop?: { left: number; top: number; width: number; height: number }): Promise<{ text: string; confidence: number }>; close(): Promise<void> }>;
@@ -1475,7 +1475,8 @@ export class AppService {
   mcpConfig(): McpSnippets {
     const root = this.need().root;
     const base = this.opts.mcpLaunch?.() ?? { command: 'node', args: [path.resolve('packages/market-mcp/dist/main.mjs')], env: {} };
-    return buildMcpSnippets({ ...base, args: [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
+    // A launch that follows the active Studio gets its library from that file; baking this one in would pin a configuration to a Studio.
+    return buildMcpSnippets({ ...base, args: base.follow ? base.args : [...base.args, '--library', root] }, (this.opts.mcpBrand ?? MARKET_BRAND).id);
   }
 
   /**
@@ -1490,7 +1491,8 @@ export class AppService {
     // answers it from what the server itself reports and hands over when the server is ready (see launcher.ts)
     const handshake = await (this.opts.mcpHandshake ? this.opts.mcpHandshake() : readHandshake(c));
     const brand = this.opts.mcpBrand ?? MARKET_BRAND;
-    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log') });
+    const follow = this.opts.mcpLaunch?.().follow;
+    const launcher = launcherSource({ label: brand.name, command: c.command, args: c.args, env: c.env, handshake, logFile: path.join(this.opts.userData, 'logs', 'mcp-launcher.log'), ...(follow ? { followFile: follow } : {}) });
     const manifest = {
       manifest_version: '0.2',
       name: brand.id,

@@ -59,3 +59,24 @@ describe('the Files page’s vault', () => {
     await expect(j.call('add', ['x.md'])).rejects.toThrow(/owner/);
   });
 });
+
+describe('manuscripts and their versions, for editorial passes', () => {
+  it('lists manuscripts that have a version, reads any version’s text, and lists the versions', async () => {
+    await v.state();
+    await fsp.writeFile(path.join(dir, 'Vault', 'ch1.md'), 'one');
+    await fsp.writeFile(path.join(dir, 'Vault', 'cover.psd'), 'not text');
+    await fsp.writeFile(path.join(dir, 'Vault', 'loose.md'), 'never added');
+    await v.call('add', ['ch1.md', 'first']);
+    await v.call('add', ['cover.psd']);
+    await v.call('checkOut', ['ch1.md']);
+    await fsp.writeFile(path.join(dir, 'Vault', 'ch1.md'), 'two — with “quotes”');
+    await v.call('checkIn', ['ch1.md', 'second']);
+    const ms = await v.manuscripts();
+    expect(ms).toEqual([{ fileId: expect.any(String), path: 'ch1.md', version: 2 }]); // not the cover, not the file nobody added
+    expect(await v.textOf(ms[0]!.fileId, 1)).toBe('one');
+    expect(await v.textOf(ms[0]!.fileId, 2)).toBe('two — with “quotes”');
+    expect((await v.versionsOf(ms[0]!.fileId)).map((x) => [x.n, x.comment])).toEqual([[2, 'second'], [1, 'first']]);
+    await expect(v.textOf(ms[0]!.fileId, 9)).rejects.toThrow(/no such version/);
+    await expect(v.textOf('nope', 1)).rejects.toThrow(/not in the vault/);
+  });
+});
