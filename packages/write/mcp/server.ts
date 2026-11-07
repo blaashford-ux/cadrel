@@ -87,7 +87,7 @@ export function agentFromClient(clientName: string | undefined, override?: strin
 const project = z
   .string()
   .describe('The project: a name from list_projects, or inside Cadrel a Project or Book such as "Dragon Rider" or "Dragon Rider / Book 2" (see studio_projects). With a series, also give `book`.');
-const book = z.string().optional().describe('Which Book of the project, such as "Book 2", when the project is a series with more than one open Book. Book-level work (manuscript, outline, blurb, keywords, trackers) needs it then; series-level material (characters, world, style) does not.');
+const book = z.string().optional().describe('Which Book of the project, such as "Book 2", when the project is a series with more than one open Book. Book-level work (manuscript, outline, blurb, keywords, trackers) needs it then; series-level material (characters, world, style) does not. Use "series" for the manuscript or files in the Project\'s own folder when that is not one of its Books (for example a first book that was never made a Book).');
 const file = z.string().describe('Path of a manuscript file inside the project, as returned by list_files, e.g. "Manuscript/Book 1.md".');
 const skill = z
   .string()

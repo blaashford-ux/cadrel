@@ -19,6 +19,9 @@ export interface ResolverOptions {
 
 const lower = (s: string) => s.trim().toLowerCase();
 
+/** `book` values that mean the Project's own folder rather than one of its Books. */
+const SERIES_WORDS: ReadonlySet<string> = new Set(['series', 'project', '(series)']);
+
 /** A project by id, by path ("Dragon Rider / Book 1") or by a name that is unique; null if there is none, an AgentError if it is ambiguous. */
 export function findProject(t: ProjectTree, ref: string): Project | null {
   const byId = getProject(t, ref);
@@ -101,7 +104,10 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     const level = viewLevel(t, node.id);
     const open = level === 'project' ? viewBooks(t, node.id).filter((b) => !closed.has(b.id)) : [];
     let target: Project;
-    if (ref.book) {
+    if (ref.book && SERIES_WORDS.has(lower(ref.book)) && level === 'project' && folderOf(t, node.id) && !viewBooks(t, node.id).some((b) => lower(b.name) === lower(ref.book!))) {
+      // "series" names the Project's own folder, where a manuscript that is not a Book of its own (a first book, say) can live.
+      return folderOf(t, node.id)!;
+    } else if (ref.book) {
       if (level !== 'project') throw new AgentError(`"${node.name}" is a book, not a project, so there is no book to choose in it. Leave out book, or name the series.`);
       target = findBook(t, node, ref.book);
     } else if (level !== 'project') {
