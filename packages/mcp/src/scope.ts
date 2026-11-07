@@ -5,7 +5,7 @@
  */
 import { getProject, linksOf, pathOf, viewBooks, viewLevel, visibleTree, type Project, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import type { Studio } from '@cadrel/studio';
-import { AgentError } from '@cadrel/write/src/shared/agent/tools';
+import { AgentError, STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 import type { Earlier } from '@cadrel/write/src/shared/agent/trackers';
 import type { ProjectRef } from '@cadrel/write/mcp/server';
 
@@ -96,8 +96,8 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     const node = findNode(t, ref.project);
     if (!node) {
       // Not something in the project tree: a plain manuscript folder name from list_projects (or one not linked to a project yet).
-      if (ref.book) throw new AgentError(`There is no project "${ref.project}" to take a book from. Use studio_projects to see the Projects and their Books.`);
-      if ((await hidden()).has(ref.project)) throw new AgentError(`There is no project "${ref.project}". Use list_projects or studio_projects to see the projects you can work on.`);
+      if (ref.book) throw new AgentError(`There is no project "${ref.project}" to take a book from. Use studio_projects to see the Projects and their Books.${STUDIO_HINT}`);
+      if ((await hidden()).has(ref.project)) throw new AgentError(`There is no project "${ref.project}". Use list_projects or studio_projects to see the projects you can work on.${STUDIO_HINT}`);
       return ref.project;
     }
     const closed = await closedSet();

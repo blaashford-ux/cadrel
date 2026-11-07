@@ -15,6 +15,7 @@ import type { FsPort } from '@cadrel/write/src/shared/fsPort';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import { findNode } from '../scope.js';
 import type { McpModule } from '../server.js';
+import { STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 
 export const PROJECTS_INSTRUCTIONS =
   'studio_stage shows where a Book is in its workflow and moves it (or closes or reopens it) through the same gates the Projects page uses: a move the gates or the person\'s role do not allow comes back with every reason, and you should tell the author rather than look for a way round. Only a Book has a stage. ' +
@@ -72,7 +73,7 @@ export function registerProjectsTools(server: McpServer, o: ProjectsToolOptions)
   const node = async (ref: string) => {
     const t = await seen();
     const p = findNode(t, ref);
-    if (!p) return say(`There is no project "${ref}". Use studio_projects to see the names.`);
+    if (!p) return say(`There is no project "${ref}". Use studio_projects to see the names.${STUDIO_HINT}`);
     return { t, p };
   };
 

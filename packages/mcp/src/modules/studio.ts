@@ -12,6 +12,7 @@ import { bookOf, findBook, findNode } from '../scope.js';
 import { makeProjects } from '@cadrel/write/src/shared/backend/projects';
 import { defaultTemplates, projectNameError } from '@cadrel/write/src/shared/projects';
 import type { McpModule } from '../server.js';
+import { STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 
 export const STUDIO_INSTRUCTIONS =
   'Projects are how the studio is organised. A Project (usually a Series) holds its Books, each with its own manuscript folder, stage and files; the Project itself has no stage, and its own folder holds the series-level material (series bible, characters, world, style). A Book reads the series level for context and keeps its own manuscript, outline, blurb and keywords. Books are opened, worked and closed one at a time or several together; a closed Book is read-only. ' +
@@ -85,7 +86,7 @@ function resolve(t: ProjectTree, ref: string): string {
     return path.length >= want.length && want.every((w, i) => path[path.length - want.length + i] === w);
   });
   if (hits.length === 1) return hits[0]!.id;
-  if (hits.length === 0) throw new ProjectError(`There is no project "${ref}". Use studio_projects to see the names.`);
+  if (hits.length === 0) throw new ProjectError(`There is no project "${ref}". Use studio_projects to see the names.${STUDIO_HINT}`);
   throw new ProjectError(`"${ref}" matches ${hits.length} projects (${hits.map((h) => pathOf(t, h.id)).join('; ')}). Use a fuller path or the id.`);
 }
 
@@ -193,7 +194,7 @@ export function registerStudioTools(server: McpServer, o: StudioToolOptions): vo
         const { tree } = await seen();
         const closed = await closedSet();
         const found = findNode(tree, a.project);
-        if (!found) throw new ProjectError(`There is no project "${a.project}". Use studio_projects to see the names.`);
+        if (!found) throw new ProjectError(`There is no project "${a.project}". Use studio_projects to see the names.${STUDIO_HINT}`);
         const level = viewLevel(tree, found.id);
         const project = level === 'project' ? found : getProject(tree, found.parentId ?? '') ?? found;
         const open = viewBooks(tree, project.id).filter((b) => !closed.has(b.id));

@@ -6,6 +6,7 @@ import { DirBlobs } from '@cadrel/store';
 import type { Studio } from '@cadrel/studio';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import type { McpModule } from '../server.js';
+import { STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 
 export const EDITORIAL_INSTRUCTIONS =
   'These tools are for editorial passes: an editor\'s developmental, line, copy or proof read of one exact version of a manuscript file. ' +
@@ -74,7 +75,7 @@ export function registerEditorialTools(server: McpServer, o: EditorialToolOption
       return path.length >= want.length && want.every((w, i) => path[path.length - want.length + i] === w);
     });
     if (hits.length === 1) return hits[0]!.id;
-    throw new Error(hits.length ? `There is more than one project "${ref}". Use a fuller path or the id.` : `There is no project "${ref}". Use studio_projects to see the names.`);
+    throw new Error(hits.length ? `There is more than one project "${ref}". Use a fuller path or the id.` : `There is no project "${ref}". Use studio_projects to see the names.${STUDIO_HINT}`);
   };
   const pass = async (id: string): Promise<PassRecord> => {
     const p = await as().passes.get(id);
