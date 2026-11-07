@@ -27,6 +27,11 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Roles that may not see a page get an answer, not an error.** The people and roles page, project work, planning, Home and the Dashboard say what the role does not allow instead of failing; everyone in the Studio sees names (not emails or roles) wherever a task, sign-off or lock belongs to someone.
 - **What is not done in M2.** A code-signed installer (the workflow signs when it is given a certificate; there is none yet), updates from the Studio's server, replicating the file store, the security policy page, separate Author / Editor / Director dashboards, the assistant's record tools for a Studio whose records are on the server, live updates and notifications, and any run against a real Cloudflare account. See docs/STUDIOS.md.
 
+## 0.7.2 (Android apps, and the assistant reaches more of a series)
+
+- **A manuscript kept in a series' own folder can be reached.** A Project with one open Book sent every book-level call to that Book, so a first book whose manuscript sits in the series folder (not a Book of its own) could not be read or given notes. The assistant can now pass `book: "series"` to mean the Project's own folder.
+- **"No such project" says when it may be another Studio.** The assistant serves the Studio that is active, so a project of another Studio read as a bare "no project". Every such message now says so and how to fix it: switch to that Studio in Cadrel and reconnect.
+
 ## Cadrel Write for Android (0.7.2, in development)
 
 - **A phone app that plugs into a Studio and is only the writing interface.** `packages/write-mobile` is Cadrel Write's editor on Android, signed in to a Cadrel Studio. Join with the owner's invitation link (or tap it) and a name; the phone checks the Studio belongs to the owner the link names and makes its own key. Pick a project and write: the projects are the ones the person's roles let them see, as folders on the phone that Write opens like any project, with the vault's Markdown, plain-text and Fountain files in them. **It switches between projects and between Studios, and cannot create, rename, move or delete projects or files**; images and other non-text files stay on the Studio.
