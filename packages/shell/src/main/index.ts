@@ -1672,9 +1672,19 @@ function retireAssistantServers(): void {
 
 let finalSyncStarted = false;
 let marketStopped = false;
+let savedForQuit = false;
 app.on('before-quit', (e) => {
   quitting = true;
   if (installerToRun) retireAssistantServers();
+  // Settings and the Studio list are written in the background (a change returns before the file is on disk), and a process that exits takes a write
+  // that has not finished with it: a choice made a moment before closing was lost. Wait for them (at most 3 s) before anything else on the way out.
+  if (!savedForQuit) {
+    savedForQuit = true;
+    e.preventDefault();
+    const saved = Promise.all([write?.flush(), settings?.flush(), studios?.flush(), studioSettings?.flush()]).catch(() => undefined);
+    void Promise.race([saved, new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+    return;
+  }
   void write?.flush();
   void settings?.flush();
   void peopleHost.close();
