@@ -13,8 +13,8 @@ import type { StudioClient } from './studioClient';
 const TABLES = [
   'person', 'pen_name', 'pen_name_person', 'team', 'team_member', 'role', 'role_capability', 'assignment', 'capability_seen',
   'workflow', 'workflow_stage', 'workflow_transition', 'workflow_transition_role',
-  'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision',
-  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card',
+  'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision', 'brief', 'brief_version',
+  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card', 'edit_pass', 'edit_query', 'edit_decision', 'edit_verification',
   'contribution', 'credit', 'rights', 'revenue_share', 'audit'
 ];
 const CHUNK = 300;

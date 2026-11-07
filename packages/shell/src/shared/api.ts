@@ -1,4 +1,4 @@
-import type { DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -666,6 +666,94 @@ export type WorkState =
       /** The sign-off labels the project stands approved under now. */
       approved: string[];
     };
+/** One editorial pass as the Editing page lists it. */
+export interface EditingPassRow extends PassRecord {
+  projectName: string;
+  editorName: string;
+  /** Items of each state in the pass. */
+  counts: QueryCounts;
+  /** Queries the author has not answered yet. */
+  unanswered: number;
+  /** Suggestions that have no decision yet. */
+  undecided: number;
+  /** What this person can do next on it, or null when nothing waits on them. */
+  next: 'start' | 'deliver' | 'answer' | 'respond' | 'close' | null;
+}
+export type EditingState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** What this person may do on editorial passes anywhere (a role given on one book counts). */
+      may: { run: boolean; assign: boolean; respond: boolean; approve: boolean };
+      passes: EditingPassRow[];
+      /** When the records are on the Studio's server: answers waiting to be sent, ones it turned down, and whether it could not be reached. */
+      offline: { away: boolean; pending: number; refused: { id: string; call: 'answer' | 'decide'; queryId: string; error: string; response?: string; queuedAt: string }[] } | null;
+    };
+/** An item in a pass with the author's decision on it and what the check of the revision found. */
+export interface EditingItem extends QueryRecord {
+  decision: EditDecisionRecord | null;
+  verified: VerificationRecord | null;
+}
+export type EditingPassState =
+  | { available: false; reason: string }
+  | { available: true; pass: EditingPassRow; items: EditingItem[]; may: { run: boolean; assign: boolean; respond: boolean; approve: boolean }; me: string; people: { id: string; name: string }[] };
+/** What planning a pass can choose from: the projects the person may plan in, the manuscripts in the vault, and (once a project is chosen) who can edit it and the edit briefs it has. */
+export type EditingPlanning =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      projects: { id: string; name: string }[];
+      files: { fileId: string; path: string; version: number }[];
+      editors: { id: string; name: string }[];
+      briefs: { id: string; title: string; version: number }[];
+    };
+export interface NewEditingPass {
+  projectId: string;
+  kind: PassRecord['kind'];
+  fileId: string;
+  editorId: string;
+  /** The version to cover; the newest when left out. */
+  fileVersion?: number;
+  briefId?: string | null;
+  title?: string;
+}
+/** An item the editor raises by selecting text: `start` and `end` are character offsets into the version's text. Without them it is a point about the whole pass. */
+export interface NewEditingItem {
+  kind: QueryRecord['kind'];
+  start?: number;
+  end?: number;
+  body?: string;
+  replacement?: string;
+  category?: string;
+}
+/** The text of the version a pass covers, for reading it and for selecting passages. */
+export interface EditingText {
+  file: string | null;
+  version: number;
+  text: string;
+}
+/** A later version of the manuscript: what a pass can be compared with and checked against. */
+export interface EditingLaterVersion {
+  n: number;
+  author: string;
+  createdAt: string;
+  comment: string;
+}
+/** Two versions side by side. Long runs of unchanged paragraphs are one `skip` row, with a paragraph of context kept either side of a change. */
+export type EditingCompareRow = CompareRow | { kind: 'skip'; count: number };
+export interface EditingCompare {
+  from: number;
+  to: number;
+  rows: EditingCompareRow[];
+  stats: { same: number; added: number; removed: number; changed: number; wordsAdded: number; wordsRemoved: number };
+}
+/** A book's briefs: the manuscript brief and the edit briefs, each with its newest text. */
+export type EditingBriefs =
+  | { available: false; reason: string }
+  | { available: true; may: { manuscript: boolean; edit: boolean }; briefs: BriefRecord[]; people: { id: string; name: string }[] };
+/** The changes the Editing page may ask for, by name. */
+export type EditingCall = 'start' | 'deliver' | 'respond' | 'close' | 'cancel' | 'answer' | 'decide' | 'resolve' | 'withdraw';
 /** What waits on the person using the app, across projects. */
 export interface MineState {
   available: boolean;
@@ -771,6 +859,41 @@ export type Pulse =
       people: { id: string; name: string }[];
     };
 export interface PulseTask { id: string; title: string; kind: string; due: string | null; projectId: string; projectName: string; assigneeId: string | null }
+/** Editorial passes: what waits on the person, one pass with its items, and the changes the page makes. A refusal comes back as the service gave it. */
+export interface EditingApi {
+  state(): Promise<EditingState>;
+  pass(passId: string): Promise<EditingPassState>;
+  start(passId: string): Promise<void>;
+  deliver(passId: string): Promise<void>;
+  /** The author has answered everything: the editor can see it and the pass can be closed. */
+  respond(passId: string): Promise<void>;
+  close(passId: string): Promise<void>;
+  cancel(passId: string): Promise<void>;
+  answer(queryId: string, response: string): Promise<void>;
+  /** Accept, reject or defer an item. Rejecting or deferring needs a reason, and deferring a date. */
+  decide(queryId: string, input: { outcome: 'accept' | 'reject' | 'defer'; reason?: string; revisit?: string }): Promise<void>;
+  resolve(queryId: string): Promise<void>;
+  withdraw(queryId: string): Promise<void>;
+  /** Sends the answers waiting for the Studio's server now. */
+  sendWaiting(): Promise<void>;
+  dismissRefused(id: string): Promise<void>;
+  /** What planning a pass can choose from; pass the project to get its editors and edit briefs. */
+  planning(projectId?: string): Promise<EditingPlanning>;
+  plan(input: NewEditingPass): Promise<{ id: string }>;
+  /** The exact text of the version a pass covers. */
+  text(passId: string): Promise<EditingText>;
+  /** Raises queries, comments and suggestions in a pass that is in progress, from passages selected in `text`. */
+  raise(passId: string, items: NewEditingItem[]): Promise<void>;
+  /** The versions of the manuscript after the one the pass covers, newest first. */
+  laterVersions(passId: string): Promise<EditingLaterVersion[]>;
+  compare(passId: string, version: number): Promise<EditingCompare>;
+  /** Checks the changes the author accepted against a later version, and keeps the result with the pass. */
+  verify(passId: string, version: number): Promise<void>;
+  briefs(projectId: string): Promise<EditingBriefs>;
+  briefVersions(briefId: string): Promise<BriefVersion[]>;
+  createBrief(input: { projectId: string; kind: BriefKind; title: string; body: string }): Promise<BriefRecord>;
+  reviseBrief(briefId: string, input: { body: string; note?: string; title?: string; basedOn: number }): Promise<BriefRecord>;
+}
 export interface WorkApi {
   pulse(): Promise<Pulse>;
   plan(): Promise<PlanState>;
@@ -840,6 +963,7 @@ export interface CadrelApi {
   stages: StagesApi;
   workflow: WorkflowApi;
   work: WorkApi;
+  editing: EditingApi;
   vault: VaultApi;
   people: PeopleApi;
   myBooks: MyBooksApi;

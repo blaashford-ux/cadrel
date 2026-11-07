@@ -218,7 +218,7 @@ describe('runExport with a chapter heading level setting', () => {
 
 describe('runExport fonts', () => {
   const only = (kind: 'epub' | 'pdf') => (d: BookDetails) => void (d.export.outputs = { epub: kind === 'epub', pdf: kind === 'pdf', docx: false });
-  const files4 = () => ({ 'Regular.ttf': new Uint8Array([1]), 'Italic.ttf': new Uint8Array([2]), 'Bold.ttf': new Uint8Array([3]), 'BoldItalic.ttf': new Uint8Array([4]) });
+  const files4 = () => ({ 'Regular.ttf': new Uint8Array([1]), 'Italic.ttf': new Uint8Array([2]), 'Bold.ttf': new Uint8Array([3]), 'BoldItalic.ttf': new Uint8Array([4]), 'OFL.txt': new Uint8Array([5]) });
 
   it('embeds a bundled family in the EPUB and says nothing about it', async () => {
     const { deps, files } = setup((d) => {
@@ -232,7 +232,22 @@ describe('runExport fonts', () => {
     expect(asked).toBe('Libre Baskerville');
     expect(r.warnings.join(' ')).not.toMatch(/font/i);
     const zip = unzipSync(files.get(r.outputs[0].path) as Uint8Array);
-    expect(Object.keys(zip).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(4);
+    expect(Object.keys(zip).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(5); // four faces and the licence
+  });
+
+  it('asks for the heading family too when it differs, and embeds both', async () => {
+    const { deps, files } = setup((d) => {
+      only('epub')(d);
+      d.export.epub.font = 'Libre Baskerville';
+      d.export.epub.headingFont = 'Crimson Pro';
+    });
+    const asked: string[] = [];
+    deps.loadBundledFont = async (f) => (asked.push(f), files4());
+    const r = await runExport(MD, deps);
+    expect(r.errors).toEqual([]);
+    expect(asked.sort()).toEqual(['Crimson Pro', 'Libre Baskerville']);
+    const zip = unzipSync(files.get(r.outputs[0].path) as Uint8Array);
+    expect(Object.keys(zip).filter((n) => n.startsWith('OEBPS/fonts/'))).toHaveLength(10);
   });
 
   it('a system font in the EPUB is named but not embedded, with a warning', async () => {

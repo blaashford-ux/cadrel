@@ -1264,3 +1264,156 @@ describe('text analysis', () => {
     expect([one, two].filter(Boolean)).toHaveLength(1);
   });
 });
+
+describe('rewrite mode', () => {
+  const PROJ = ROOT;
+  const REWRITE = `${ROOT}/a (rewrite).md`;
+  const links = () => api.projectMetas.get(PROJ)!.rewriteLinks;
+  beforeEach(async () => {
+    await ws.closeProject();
+    api.addProject(PROJ);
+    await ws.openPath(PROJ);
+  });
+
+  it('starts from a copy: makes the file beside the original, links the two, opens both, and shows them side by side', async () => {
+    await ws.openChapter(A, 1);
+    expect(await ws.startRewrite(A, 'copy')).toBe(true);
+    expect(api.text(REWRITE)).toBe(BOOK); // the same text
+    expect(links()).toEqual([{ original: 'a.md', rewrite: 'a (rewrite).md' }]);
+    expect(state().rewriteOn).toBe('a.md');
+    expect(ws.rewritePair()).toEqual({ original: A, rewrite: REWRITE });
+    expect(state().tabs.map((t) => t.file).sort()).toEqual([A, REWRITE].sort());
+    expect(state().activeId).toBe(tabOf(REWRITE).id); // you go on writing in the rewrite
+    expect(tabOf(REWRITE).chapter).toBe(1); // at the chapter you were on
+    expect(tabOf(A).chapter).toBe(1);
+    expect(api.text(A)).toBe(BOOK); // the original is not touched
+  });
+
+  it('starts from a blank page', async () => {
+    expect(await ws.startRewrite(A, 'blank')).toBe(true);
+    expect(api.text(REWRITE)).toBe('# a (rewrite)\n\n');
+    expect(ws.rewriteLinkFor(A)).toEqual({ role: 'original', other: REWRITE });
+    expect(ws.rewriteLinkFor(REWRITE)).toEqual({ role: 'rewrite', other: A });
+    expect(ws.rewriteLinkFor(B)).toBeNull();
+  });
+
+  it('numbers the name when "(rewrite)" is taken, and refuses a file that is already linked', async () => {
+    api.add('a (rewrite).md', '# Something else\n');
+    expect(await ws.startRewrite(A, 'copy')).toBe(true);
+    expect(links()).toEqual([{ original: 'a.md', rewrite: 'a (rewrite 2).md' }]);
+    expect(await ws.startRewrite(A, 'copy')).toBe(false); // the original is in a link already
+    expect(state().error).toMatch(/already linked/);
+    expect(await ws.startRewrite(`${ROOT}/a (rewrite 2).md`, 'copy')).toBe(false); // so is the rewrite
+    expect(links()).toHaveLength(1);
+    expect(state().tabs.filter((t) => /rewrite/.test(t.file))).toHaveLength(1); // no stray file was opened
+  });
+
+  it('can be turned off and on again from either file', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.setRewriteMode(A, false);
+    expect(state().rewriteOn).toBeNull();
+    expect(ws.rewritePair()).toBeNull();
+    expect(state().tabs).toHaveLength(2); // both stay open
+    await ws.setRewriteMode(REWRITE, true); // from the rewrite
+    expect(state().rewriteOn).toBe('a.md');
+    expect(state().activeId).toBe(tabOf(REWRITE).id);
+    await ws.setRewriteMode(REWRITE, false);
+    await ws.setRewriteMode(A, true); // from the original
+    expect(state().rewriteOn).toBe('a.md');
+    expect(state().activeId).toBe(tabOf(A).id);
+  });
+
+  it('brings both files back after they were closed, at the chapter the chosen one was on', async () => {
+    await ws.startRewrite(A, 'copy');
+    for (const t of [...state().tabs]) await ws.closeTab(t.id);
+    expect(state().rewriteOn).toBeNull(); // closing a file of the pair ends the mode
+    await ws.openChapter(A, 2);
+    await ws.setRewriteMode(A, true);
+    expect(state().tabs).toHaveLength(2);
+    expect(tabOf(REWRITE).chapter).toBe(2);
+    expect(tabOf(A).chapter).toBe(2);
+  });
+
+  it('ends the mode when one file of the pair is closed, and leaves the link', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.closeTab(tabOf(A).id);
+    expect(state().rewriteOn).toBeNull();
+    expect(links()).toHaveLength(1);
+  });
+
+  it('refuses to turn the mode on for a file with no link', async () => {
+    expect(await ws.setRewriteMode(A, true)).toBe(false);
+    expect(state().error).toMatch(/not linked/);
+  });
+
+  it('unlinking leaves both files, as ordinary files', async () => {
+    await ws.startRewrite(A, 'copy');
+    expect(await ws.unlinkRewrite(REWRITE)).toBe(true); // from either side
+    expect(links()).toEqual([]);
+    expect(state().rewriteOn).toBeNull();
+    expect(api.text(A)).toBe(BOOK);
+    expect(api.text(REWRITE)).toBe(BOOK);
+    expect(await ws.startRewrite(A, 'blank')).toBe(true); // free to be linked again
+  });
+
+  it('follows a rename of either file, and of the folder they are in', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.renameNode(A, 'novel');
+    expect(links()).toEqual([{ original: 'novel.md', rewrite: 'a (rewrite).md' }]);
+    expect(state().rewriteOn).toBe('novel.md');
+    expect(ws.rewritePair()).toEqual({ original: `${ROOT}/novel.md`, rewrite: REWRITE });
+    await ws.renameNode(REWRITE, 'novel two');
+    expect(links()).toEqual([{ original: 'novel.md', rewrite: 'novel two.md' }]);
+    expect(ws.rewritePair()).toEqual({ original: `${ROOT}/novel.md`, rewrite: `${ROOT}/novel two.md` });
+
+    api.add('sub/c.md', '# C\n');
+    await ws.startRewrite(`${ROOT}/sub/c.md`, 'copy');
+    await ws.renameNode(`${ROOT}/sub`, 'deeper');
+    expect(links().map((l) => l.original)).toContain('deeper/c.md');
+    expect(links().find((l) => l.original === 'deeper/c.md')!.rewrite).toBe('deeper/c (rewrite).md');
+  });
+
+  it('deleting either file ends the link and the mode, and the other file stays', async () => {
+    await ws.startRewrite(A, 'copy');
+    expect(await ws.deleteNode(REWRITE, 'file')).toBe(true);
+    expect(links()).toEqual([]);
+    expect(state().rewriteOn).toBeNull();
+    expect(state().tabs.map((t) => t.file)).toEqual([A]);
+    expect(api.text(A)).toBe(BOOK);
+  });
+
+  it('settles unsaved edits in the original before copying, so the copy is what is on screen', async () => {
+    await ws.openChapter(A, 0);
+    ws.setDraft(tabOf(A).id, '# One\nfirst, with new words');
+    api.unsavedAnswers = ['save'];
+    expect(await ws.startRewrite(A, 'copy')).toBe(true);
+    expect(api.unsavedAsked).toEqual(['a.md']);
+    expect(api.text(REWRITE)).toContain('first, with new words');
+  });
+
+  it('makes nothing when the unsaved edits question is cancelled', async () => {
+    await ws.openChapter(B, 0);
+    ws.setDraft(tabOf(B).id, '# Bee\nunsaved');
+    api.unsavedAnswers = ['cancel'];
+    expect(await ws.startRewrite(B, 'copy')).toBe(false);
+    expect(links()).toEqual([]);
+    expect([...api.files.keys()].filter((f) => /rewrite/.test(f))).toEqual([]);
+  });
+
+  it('shows another chapter in a pane without making it the active one', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.followChapter(A, 2); // the original is not the active tab
+    expect(tabOf(A).chapter).toBe(2);
+    expect(state().activeId).toBe(tabOf(REWRITE).id);
+    await ws.followChapter(A, 99); // beyond the last chapter: the last
+    expect(tabOf(A).chapter).toBe(2);
+    await ws.followChapter('/nowhere.md', 1); // not open: nothing happens
+  });
+
+  it('a project saved before rewrite mode has no links, and a folder that is not a project cannot start one', async () => {
+    expect(links()).toEqual([]);
+    await ws.closeProject();
+    await ws.openPath(ROOT);
+    expect(await ws.startRewrite(A, 'copy')).toBe(true); // openPath on a project folder is still the project
+  });
+});

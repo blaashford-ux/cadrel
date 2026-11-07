@@ -18,7 +18,7 @@ async function studio() {
     await ana.people.grant({ subject: { kind: 'person', id: p.id }, roleId: `role_${roleKey}`, scope: STUDIO });
     return p.id;
   };
-  return { svc, ana, person };
+  return { svc, ana, person, db };
 }
 
 describe('tasks, approvals and decisions behind the permission check', () => {
@@ -193,5 +193,155 @@ describe('records follow who is assigned to the project', () => {
     const eve = await person('Eve', 'editor');
     await ana.work.createTask({ projectId: 'anything', title: 'x', assigneeId: eve });
     expect(await svc.as(eve).work.tasks({ state: 'any' })).toHaveLength(1);
+  });
+});
+
+describe('briefs behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: manuscript briefs read with task.read and written with task.edit; edit briefs read with edit.read and written with edit.assign', async (key) => {
+    const { svc, ana, person } = await studio();
+    const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
+    const me = svc.as(id).briefs;
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const m = await ana.briefs.create({ projectId: 'p1', kind: 'manuscript', title: 'M', body: 'm' });
+    const e = await ana.briefs.create({ projectId: 'p1', kind: 'edit', title: 'E', body: 'e' });
+
+    expect((await me.list()).map((b) => b.id).sort(), 'list shows only what this role may read').toEqual([...(has('task.read') ? [m.id] : []), ...(has('edit.read') ? [e.id] : [])].sort());
+    expect((await me.get(m.id)) !== null, 'get manuscript').toBe(has('task.read'));
+    expect((await me.get(e.id)) !== null, 'get edit').toBe(has('edit.read'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'manuscript', title: 'x', body: 'x' })), 'write manuscript').toBe(!has('task.edit'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'edit', title: 'x', body: 'x' })), 'write edit').toBe(!has('edit.assign'));
+    if (has('edit.read') && has('edit.assign')) expect((await me.revise(e.id, { body: 'e2', basedOn: 1 })).current.n).toBe(2);
+    if (has('edit.read') && !has('edit.assign')) expect(await denied(me.revise(e.id, { body: 'e2', basedOn: 1 }))).toBe(true);
+    if (!has('edit.read')) await expect(me.versions(e.id)).rejects.toThrow('That brief is not there.');
+  });
+});
+
+describe('editorial passes behind the permission check', () => {
+  async function withFile() {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    return s;
+  }
+
+  it.each(ROLE_KEYS)('%s: reads with edit.read, plans with edit.assign, runs with edit.run, answers with edit.respond, closes with edit.approve', async (key) => {
+    const { svc, ana, person } = await withFile();
+    const editor = await person('Eve', 'editor');
+    const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
+    const me = svc.as(id).passes;
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const mk = async (kind: 'developmental' | 'line' | 'copy', editorId: string) => ana.passes.create({ projectId: 'p1', kind, fileId: 'f1', editorId });
+
+    expect(await denied(me.list()), 'list').toBe(!has('edit.read'));
+    const a = await mk('developmental', id); // the pass is this person's own
+    const b = await mk('line', editor); // someone else's
+    expect(await denied(me.get(a.id)), 'get').toBe(!has('edit.read'));
+    expect(await denied(me.create({ projectId: 'p1', kind: 'copy', fileId: 'f1', editorId: editor })), 'plan').toBe(!has('edit.assign'));
+    expect(await denied(me.assign(b.id, id)), 'assign').toBe(!has('edit.read') || !has('edit.assign'));
+    expect(await denied(me.start(a.id)), 'start own').toBe(!has('edit.read') || !has('edit.run'));
+    expect(await denied(me.start(b.id)), "start someone else's").toBe(!has('edit.read') || !has('edit.run') || !has('edit.assign'));
+    if (has('edit.read') && has('edit.run')) expect((await me.deliver(a.id)).state, 'deliver, once started').toBe('delivered');
+    expect(await denied(me.respond(b.id)), 'respond').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.close(b.id)), 'close').toBe(!has('edit.read') || !has('edit.approve'));
+    expect(await denied(me.cancel(b.id)), 'cancel').toBe(!has('edit.read') || !has('edit.assign'));
+  });
+});
+
+describe('queries behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: reads with edit.read, raises as the pass’s editor with edit.run, answers with edit.respond', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const other = await s.person('Eve', 'editor');
+    const me = s.svc.as(id);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const mine = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: id });
+    const theirs = await s.ana.passes.create({ projectId: 'p1', kind: 'copy', fileId: 'f1', editorId: other });
+    await s.ana.passes.start(mine.id);
+    await s.ana.passes.start(theirs.id);
+    const item = { kind: 'query' as const, body: 'Why?' };
+
+    expect(await denied(me.queries.list()), 'list').toBe(!has('edit.read'));
+    expect(await denied(me.queries.counts([mine.id])), 'counts').toBe(!has('edit.read'));
+    expect(await denied(me.queries.raise(mine.id, [item])), 'raise on my pass').toBe(!has('edit.read') || !has('edit.run'));
+    expect(await denied(me.queries.raise(theirs.id, [item])), "raise on someone else's").toBe(!has('edit.read') || !has('edit.run') || !has('edit.assign'));
+    expect(await denied(me.queries.importNotes(mine.id, [])), 'import notes').toBe(!has('edit.read') || !has('edit.run'));
+    const [q] = await s.ana.queries.raise(mine.id, [item]);
+    await s.ana.passes.deliver(mine.id);
+    expect(await denied(me.queries.answer(q!.id, 'Because')), 'answer').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.queries.resolve(q!.id)), 'resolve').toBe(!has('edit.read') || !has('edit.run'));
+  });
+
+  it('imports Write’s notes into a pass and says how many it could not place', async () => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: 'ana' });
+    await s.ana.passes.start(p.id);
+    const r = await s.ana.queries.importNotes(p.id, [{ kind: 'comment', body: 'Adverb.', anchor: { quote: 'slowly', prefix: '', suffix: '', start: 3 } }, { kind: 'comment', body: 'Loose' }]);
+    expect([r.raised.length, r.skipped]).toEqual([1, 1]);
+    expect(await s.ana.queries.list({ passId: p.id })).toHaveLength(1);
+  });
+});
+
+describe('decisions on pass items behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: decides with edit.respond; reads decisions with edit.read', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: 'ana' });
+    await s.ana.passes.start(p.id);
+    const [q] = await s.ana.queries.raise(p.id, [{ kind: 'suggestion', anchor: { quote: 'a', prefix: '', suffix: '', start: 0 }, replacement: 'b' }]);
+    await s.ana.passes.deliver(p.id);
+    const me = s.svc.as(id).queries;
+
+    expect(await denied(me.decide(q!.id, { outcome: 'accept' })), 'decide').toBe(!has('edit.read') || !has('edit.respond'));
+    expect(await denied(me.decisions()), 'read').toBe(!has('edit.read'));
+    if (has('edit.read') && has('edit.respond')) expect((await s.ana.queries.decisions({ passId: p.id })).map((d) => d.outcome)).toEqual(['accept']);
+  });
+});
+
+describe('revision verification behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: checks a revision as the pass’s editor (edit.run); reads the result with edit.read', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 2)", [S]);
+    for (const n of [1, 2]) await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', ?, ?, 1, 'ana', '2026-11-01T00:00:00.000Z')", [n, `h${n}`]);
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const caps = new Set(defaultRole(key).capabilities);
+    const has = (c: string) => key === 'owner' || caps.has(c);
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', fileVersion: 1, editorId: id });
+    await s.ana.passes.start(p.id);
+    const [q] = await s.ana.queries.raise(p.id, [{ kind: 'suggestion', anchor: { quote: 'slowly', prefix: '', suffix: '', start: 0 }, replacement: 'quickly' }]);
+    await s.ana.passes.deliver(p.id);
+    await s.ana.queries.decide(q!.id, { outcome: 'accept' });
+    await s.ana.passes.respond(p.id);
+    const me = s.svc.as(id).queries;
+
+    expect(await denied(me.verify(p.id, { revisedVersion: 2, revisedText: 'walked quickly' })), 'verify').toBe(!has('edit.read') || !has('edit.run'));
+    expect(await denied(me.verification(p.id)), 'read').toBe(!has('edit.read'));
+    const done = await s.ana.queries.verify(p.id, { revisedVersion: 2, revisedText: 'walked quickly' });
+    expect(done.map((r) => r.result)).toEqual(['made']);
+  });
+});
+
+describe('what a gate sees of editorial passes, behind the permission check', () => {
+  it.each(ROLE_KEYS)('%s: reads the facts with task.read', async (key) => {
+    const s = await studio();
+    await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
+    await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
+    const id = key === 'owner' ? 'ana' : await s.person(`P-${key}`, key);
+    const has = (c: string) => key === 'owner' || new Set(defaultRole(key).capabilities).has(c);
+    const p = await s.ana.passes.create({ projectId: 'p1', kind: 'line', fileId: 'f1', editorId: 'ana' });
+    await s.ana.passes.start(p.id);
+    const me = s.svc.as(id).work;
+    expect(await denied(me.editorialFacts(['p1'])), 'read').toBe(!has('task.read'));
+    if (has('task.read')) expect(await me.editorialFacts(['p1'])).toEqual({ closed: [], live: ['line'], unansweredQueries: 0 });
   });
 });

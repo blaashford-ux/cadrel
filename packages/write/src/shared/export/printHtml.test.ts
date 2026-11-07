@@ -41,6 +41,19 @@ describe('pageCss', () => {
   });
 });
 
+describe('printCss heading font', () => {
+  it('headings, sub-headings and the book title use the heading font; body text keeps the body font', () => {
+    const css = printCss(book((d) => { d.export.pdf.font = 'Literata'; d.export.pdf.headingFont = 'Marcellus'; }), layout());
+    expect(css).toContain('body { margin: 0; font-family: "Literata", serif;');
+    expect(css).toContain('h1 { font-family: "Marcellus", serif;');
+    expect(css).toContain('h2.sub, h3.sub, h4.sub, h5.sub, h6.sub { font-family: "Marcellus", serif;');
+    expect(css).toContain('p.booktitle { text-align: center; font-family: "Marcellus", serif;');
+  });
+  it('an empty heading font follows the body font', () => {
+    expect(printCss(book((d) => (d.export.pdf.font = 'Lora')), layout())).toContain('h1 { font-family: "Lora", serif;');
+  });
+});
+
 describe('printCss options', () => {
   it('chapters break to a recto by default, to any page when off', () => {
     expect(printCss(book(), layout())).toContain('section.body { break-before: right; }');
