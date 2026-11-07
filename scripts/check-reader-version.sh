@@ -2,7 +2,7 @@
 # Validates Cadrel Reader's version file (packages/reader/VERSION). Reader is released apart from Cadrel, under tags reader-vX.Y.Z.
 #   scripts/check-reader-version.sh            format only (MAJOR.MINOR.FIX)
 #   scripts/check-reader-version.sh --newer    also require it to be higher than every released reader-vX.Y.Z tag, when this change
-#                                              touches Reader (packages/reader or the Write code Reader is built from)
+#                                              touches Reader (packages/reader, the Write code Reader is built from, or the Android layer both apps share)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -15,7 +15,7 @@ fi
 if [ "${1:-}" = "--newer" ]; then
   # What this change brings in: against the PR's base, or (a push to main) against the first parent of the merge.
   base="HEAD^1"; [ -n "${GITHUB_BASE_REF:-}" ] && base="origin/${GITHUB_BASE_REF}"
-  if changed="$(git diff --name-only "$base" HEAD 2>/dev/null)" && ! grep -qE '^(packages/reader/|packages/write/)' <<<"$changed"; then
+  if changed="$(git diff --name-only "$base" HEAD 2>/dev/null)" && ! grep -qE '^(packages/reader/|packages/write/|packages/android-native/)' <<<"$changed"; then
     echo "Reader is untouched by this change, so its version need not be raised." >&2
     echo "$version"; exit 0
   fi

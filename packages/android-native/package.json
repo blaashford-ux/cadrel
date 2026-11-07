@@ -1,0 +1,10 @@
+{
+  "name": "@cadrel/android-native",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The native Android layer shared by Cadrel Write and Cadrel Reader: plugins, and the script that turns a Capacitor project into a signed app",
+  "scripts": {
+    "test": "vitest run"
+  }
+}

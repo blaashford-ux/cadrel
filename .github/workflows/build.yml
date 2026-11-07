@@ -6,6 +6,10 @@ name: build
 #   windows  builds the Windows installers (Cadrel, and Cadrel Reader which is released apart from it), smoke-tests the installed
 #            layout, and attaches the installers to the run for one day (not on pull requests, to stay within the storage quota): Actions tab -> the run
 #            -> Artifacts -> Cadrel-windows-installer and CadrelReader-windows-installer
+#   android  builds the Android apps (Cadrel Write and Cadrel Reader) from packages/android-native and checks the APK (package, version, signature,
+#            plugins). Off pull requests it attaches the APK for one day (Cadrel-android-apk, CadrelReader-android-apk), which release.yml publishes.
+#            Signed with the release key when the ANDROID_KEYSTORE_* secrets exist (docs/ANDROID.md), otherwise with Android's debug key and
+#            attached as ...-apk-debug, which is never published.
 on:
   pull_request:
     branches: [main, dev]
@@ -151,3 +155,80 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           compression-level: 0 # installers are already compressed
+
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [write, reader]
+    env:
+      # Same rule as the Windows builds: a build that is not of `main` reports "<version>-dev.<run number>" (also its Android version code).
+      CADREL_DEV_BUILD: ${{ (github.base_ref || github.ref_name) != 'main' && format('dev.{0}', github.run_number) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+        with:
+          # The action's default list names a "tools" package that Google no longer publishes, which fails the step. The runner already has the SDK;
+          # the action's real job here is accepting its licences, so Gradle can fetch the platform and build tools it needs.
+          packages: platform-tools
+      - run: npm ci
+      - name: Release key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/cadrel-release.keystore"
+            echo "file=$RUNNER_TEMP/cadrel-release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with the debug key. This APK can be tried on a phone but is never published (docs/ANDROID.md)."
+          fi
+      - name: Prepare the Android project
+        id: prep
+        run: node packages/android-native/prepare.mjs ${{ matrix.app }}
+      - name: Build the APK
+        working-directory: ${{ steps.prep.outputs.app_dir }}/android
+        env:
+          CADREL_KEYSTORE_FILE: ${{ steps.key.outputs.file }}
+          CADREL_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CADREL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CADREL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # With the real key present, never fall back to the debug key if something is wrong with it.
+          CADREL_REQUIRE_RELEASE_KEY: ${{ steps.key.outputs.file != '' && '1' || '' }}
+        run: |
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/apk/${{ steps.prep.outputs.apk }}"
+      - name: Check the APK (package, version, signature, plugins)
+        env:
+          APK: ${{ runner.temp }}/apk/${{ steps.prep.outputs.apk }}
+          VERSION: ${{ steps.prep.outputs.version }}
+          CODE: ${{ steps.prep.outputs.version_code }}
+        run: |
+          bt="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n1)"
+          "$bt/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/certs.txt"
+          echo "Register this key's SHA-1 with the Android OAuth client in Google Cloud (docs/ANDROID.md):"
+          grep -i "SHA-1 digest" "$RUNNER_TEMP/certs.txt" || true
+          "$bt/aapt2" dump badging "$APK" > "$RUNNER_TEMP/badging.txt"
+          grep -E "^package:|launchable-activity|uses-permission" "$RUNNER_TEMP/badging.txt"
+          grep -q "versionCode='$CODE' versionName='$VERSION'" "$RUNNER_TEMP/badging.txt" || { echo "::error::The APK's version is not $VERSION ($CODE)."; exit 1; }
+          grep -q "launchable-activity" "$RUNNER_TEMP/badging.txt" || { echo "::error::The APK has no launcher activity."; exit 1; }
+          grep -q "REQUEST_INSTALL_PACKAGES" "$RUNNER_TEMP/badging.txt" || { echo "::error::The APK cannot open Android's installer (needed to update itself)."; exit 1; }
+          for plugin in AppUpdatePlugin DriveAuthPlugin ExternalBrowserPlugin; do
+            unzip -p "$APK" 'classes*.dex' | grep -aq "nativeplugins/$plugin" || { echo "::error::$plugin is not in the APK."; exit 1; }
+          done
+          echo "APK checks passed."
+      # Only release.yml needs the APK (it publishes it); a pull request run builds and checks it but stores nothing.
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: ${{ matrix.app == 'write' && 'Cadrel' || 'CadrelReader' }}-android-apk${{ steps.key.outputs.file == '' && '-debug' || '' }}
+          path: ${{ runner.temp }}/apk/*.apk
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0 # an APK is already compressed
