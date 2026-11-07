@@ -172,6 +172,10 @@ jobs:
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 21 }
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's default list names a "tools" package that Google no longer publishes, which fails the step. The runner already has the SDK;
+          # the action's real job here is accepting its licences, so Gradle can fetch the platform and build tools it needs.
+          packages: platform-tools
       - run: npm ci
       - name: Release key
         id: key
