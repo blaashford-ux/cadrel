@@ -213,6 +213,9 @@ interface ModuleManifest {
 | `capture` | loopback ingest server, token, Chrome extension | BookScout `server`, `extension` |
 | `text` | extraction, OCR, text statistics | BookScout `text` |
 | `sales` (module: **Finance**) | KDP import, royalties, splits, payments, payouts; moves out of Market in M1 | BookScout `library/sales` |
+| `studio-client` | The app's side of a Studio's server (signed requests, joining by invitation, the vault, the project tree), with no Electron or Node, used by the desktop shell and the phone app | new |
+| `write-mobile` | **Cadrel Write for Android**: Write's editor on the phone with a Studio's projects and files (vault check-out / check-in, offline, conflicts kept), joining and switching Studios. Imports `@cadrel/write`. See [packages/write-mobile/README.md](../packages/write-mobile/README.md) | new |
+| `android-native` | The native Android layer shared by Cadrel Write and Cadrel Reader: three Capacitor plugins (update, Google Drive sign-in, external browser) and the script that turns a generated Capacitor project into the signed app. See [ANDROID.md](ANDROID.md) | new |
 | `studio` | the project tree and notes store (one file, shared by the app and the AI server), Write notes reader | new |
 | `mcp` | one server, actor-scoped, tools registered by modules | BookScout `mcp` |
 | `mod-*` | one UI package per further module | new |

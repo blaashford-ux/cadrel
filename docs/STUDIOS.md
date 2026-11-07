@@ -53,6 +53,10 @@ There are no passwords, no email and no Cloudflare credentials for anyone but th
 
 The protocol is `@cadrel/kernel` `studioProtocol`; the server is `@cadrel/worker` `studio.ts`.
 
+## Phones
+
+**Cadrel Write for Android** is a member of a Studio like a computer is: it joins from an invitation link (`cadrel://join?...`) the same way, with its own key pair made on the phone, and appears among the Studio's members under the name the person gave. It works only with the Studio's **vault**: the text files of the projects the person's roles let them see, checked out and checked in as new versions (the lock is held only for the moment of saving), with changes that clash kept as separate files. It cannot make, rename or delete projects or files. The owner removes a phone by removing the member, as for any other; the phone then says it is no longer accepted. See [packages/write-mobile/README.md](../packages/write-mobile/README.md).
+
 ## The records and the vault on the server
 
 A built Studio can keep everything on its server: the people, roles and teams, the catalogue, tasks, sign-offs, decisions, the vault and the project tree. Then **everyone uses it there, the owner too**, and the server decides what each person may do.

@@ -24,6 +24,10 @@ Builds are always downloadable without a release: open the run in the **Actions*
 3. Open a PR `dev` → `main`. The `build` check must pass (including the version check). Merge it.
 4. The `release` workflow publishes `vX.Y.Z`.
 
+## Android apps
+
+Cadrel Write's and Cadrel Reader's Android apps are APKs attached to the releases above: `Cadrel-<version>.apk` to Cadrel's (`vX.Y.Z`) and `CadrelReader-<version>.apk` to Reader's (`reader-vX.Y.Z`), listed in each release's `SHA256SUMS.txt`. They are only attached when the build was signed with the release key (secrets `ANDROID_KEYSTORE_*`); set up once, see [ANDROID.md](ANDROID.md), which also says what to do about the key.
+
 ## Cadrel Reader is released separately
 
 Cadrel Reader (the beta readers' app, `packages/reader`) has its own version file, tags and installer, so it can be updated without a Cadrel release and the other way round. See [VERSIONING.md](VERSIONING.md).

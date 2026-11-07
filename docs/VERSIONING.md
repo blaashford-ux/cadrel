@@ -22,7 +22,7 @@ Examples: `0.1.0` → `0.1.1` (a bug fix) → `0.2.0` (a new capability, fix res
 
 **Cadrel Reader** (`packages/reader`, the app beta readers install) is released apart from Cadrel, so either can be updated without the other. Its version lives in [`packages/reader/VERSION`](../packages/reader/VERSION) and follows the same rules (three numbers, only upward, one part per release). Its tags are `reader-vX.Y.Z` (and `reader-vX.Y.Z-dev.N` for development builds), and `scripts/check-reader-version.sh` is its `check-version.sh`.
 
-- A change that touches `packages/reader` or `packages/write` (the code Reader is built from) must raise Reader's version before it merges to `main`. A change that touches neither leaves it alone.
+- A change that touches `packages/reader`, `packages/write` (the code Reader is built from) or `packages/android-native` (the Android layer both apps share) must raise Reader's version before it merges to `main`. A change that touches neither leaves it alone.
 - A change that touches only `packages/reader`, the docs or Markdown files is not a release of Cadrel, so Cadrel's `VERSION` does not need to rise (a change to `packages/write` or anything else still does).
 - Reader's releases are never marked "latest" on GitHub, because that is Cadrel's. Reader finds its own releases by their `reader-v` tag.
 
