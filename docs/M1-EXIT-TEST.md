@@ -78,14 +78,14 @@ On "Dragon Rider" (the series):
 
 ## 7. The vault and Files (first time in Electron)
 
-- [ ] **Files** opens and says where the working folder is (`<Cadrel folder>\<Studio>\Vault`). **Open the folder** opens it in Explorer.
-- [ ] Copy `chapter-1.md` and `cover.psd` (any image/binary) into the folder. Files lists both as **Not in the vault**.
-- [ ] **Add to the vault** for both. They show **Latest**, version 1. In Explorer, right-click one → Properties: **Read-only** is ticked. Try to edit and save it in an editor: Windows refuses.
-- [ ] **Check out** `chapter-1.md`: state "Checked out by you", the file is writable. Edit it and save. Files shows "changed".
+- [ ] **Files** opens and says where the working folder is: the Projects folder (`<Cadrel folder>\<Studio>\Projects`), the same one Write uses. **Open the folder** opens it in Explorer. A line says files are saved to the Studio automatically.
+- [ ] Copy `chapter-1.md` and `cover.psd` (any image/binary) into a project's folder. Within about 15 seconds (or press **Sync now**) Files lists both as **Saved**, version 1; nothing was added by hand. Neither is read-only. A file put loose in the Projects folder, outside any project, is listed as **Not in a project** and is not saved.
+- [ ] Edit and save `chapter-1.md` (in Write or any editor). It becomes version 2 by itself, with the comment "Saved automatically".
+- [ ] **Check out** `chapter-1.md`: state "Checked out by you". Edit it and save: Files shows "changed" and no new version is made until you check it in.
 - [ ] **Check in…** with a comment. It becomes version 2, read-only again. Expand the file → **Versions** lists both with your comment. **Save a copy** of version 1 as `chapter-1-v1.md`: it appears beside the file with the old text.
 - [ ] Check out and check in with **no change**: no new version is made.
 - [ ] Check out, edit, then **Undo check-out**: the edit is gone and the file is back to the vault's version.
-- [ ] Remove the read-only flag in Explorer, edit `cover.psd` outside Cadrel, save. Files says **Changed without a check-out** and **Get latest** reports it as left alone. **Discard changes** restores the vault's copy.
+- [ ] Edit `cover.psd` outside Cadrel, save. Files says **Changed, saving**, then it is a new version by itself. (If someone else has it checked out, it waits and says so.) **Discard changes** restores the vault's copy.
 - [ ] **Uses and used by:** on `chapter-1.md`, add a reference to `cover.psd` (latest). Open `cover.psd`: it shows `chapter-1.md` under Used by. Check out and check in a new version of the cover: the reference's owner shows "newer version exists" and **Update to it** works.
 - [ ] **Data card:** add fields "Licence" and "Trim size" to the cover, Save card, reopen: they are kept.
 - [ ] **Force release** is offered (**Release…**) only on a lock held by someone else, so it cannot be tried with one person. Confirm there is no Release button on your own checked-out file. Releasing between two people is covered by tests and is exercised for real in M2.

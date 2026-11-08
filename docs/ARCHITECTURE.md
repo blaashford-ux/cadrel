@@ -235,6 +235,8 @@ Both repos are copied in at a pinned commit (recorded in `docs/PROVENANCE.md`), 
   exports\
 ```
 
+> **0.8:** the vault's working folder is the Projects folder (`<Studio>\Projects`), not a separate `vault\` folder, and files are saved to it automatically; see [STUDIOS.md](STUDIOS.md).
+
 The vault folder is an ordinary folder: Explorer, Photoshop and Word open its files. Read-only attributes show lock state. It must not be inside OneDrive or Dropbox (the app warns, as MDEdit does). The MDEdit project template becomes the book folder template.
 
 ## 7. The assistant (MCP)

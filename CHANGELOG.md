@@ -2,6 +2,15 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.8.0 (one folder: your projects are the vault, saved automatically)
+
+- **The Projects folder is the vault.** The vault used to have a folder of its own (`<Studio>\Vault`) beside Projects, so a manuscript had to be copied there and added by hand, and the phone saw nothing until it was. Now there is one folder. Whatever you write in a project is saved to the Studio as a new version automatically, changes made elsewhere (another computer, the phone) come in, and files other people or the phone create appear. You never add a file or check one out; *Check out* stays for when you want a file to yourself for a while.
+- **Nothing is lost.** If the same version was changed in two places, both are kept: the other copy is in place and yours sits beside it as `Name (changes <date> <computer>).md`. A file someone checked out on purpose waits and says so. Files are no longer read-only.
+- **How it works:** a quick look at the folder every 15 seconds (sizes and times only, no network) and a full pass when something changed, when the window gets focus, and every 3 minutes (so the Studio's server is not read more than before). On quit, what was written in the last seconds is saved first. Cadrel's own folders (`.cadrel`), `Exports`, `Trash`, temporary files and anything loose in the Projects folder outside a project are never saved. Files over 95 MB are listed and left alone.
+- **Moving over.** The first run copies what the old `Vault\` folder held into the Projects folder, never overwriting; a file that differs stays in the old folder and both versions are kept. The old folder is left in place. What the vault knows about each copy now lives in the Studio's own folder, not in Projects.
+- **Files page:** says all this, shows how saving is going, has **Sync now**, and lists kept copies. The phone is unchanged: it already read the vault, so your projects now appear on it.
+- Tested with the real vault on a records file (new, edited, newer-elsewhere, both-changed, held, moved-over); not yet with a real Studio server and a phone.
+
 ## 0.7.4 (fix: the Studio's server could not be upgraded to get Link a phone)
 
 - **Upgrade the server is offered when the server's code is older, not only its database.** 0.7.3's *Link a phone* needs new Studio server code, but with no database change the app saw nothing to upgrade ("Upgrade the server (up to date)") and the server answered "running an older version". The server now reports a `workerRevision` in `/v1/info` and the app offers an upgrade when it is behind (a server that reports none counts as older). Open Studio Manager → *Upgrade the server* once after installing this.

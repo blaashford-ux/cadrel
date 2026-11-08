@@ -95,6 +95,18 @@ export interface VaultOptions {
   now?: () => Date;
   /** Whether the person holds a capability (the service answers). Without one everything is allowed (tests, a Studio with one person). */
   can?: (capability: string) => Promise<boolean>;
+  /**
+   * Where this computer keeps what it knows about the working folder (which version each copy is based on, kept-aside copies). Default: a
+   * `.cadrel-vault` folder inside the working folder. Cadrel keeps it outside, so the folder holds nothing but the person's own files.
+   */
+  stateDir?: string;
+  /**
+   * Whether a file nobody is editing is read-only on disk (the default, as in a classic vault). Off, files stay writable and a change is
+   * saved as a new version by `saveChanges`, with no check-out to remember.
+   */
+  readOnlyWhenIdle?: boolean;
+  /** Paths (relative, "/" separated) that are never the vault's business: tool folders, temporary files, exports. Not listed as untracked. */
+  ignore?: (rel: string) => boolean;
 }
 
 interface LocalState {
@@ -119,6 +131,12 @@ export class LocalVault {
   private now(): string {
     return (this.o.now?.() ?? new Date()).toISOString();
   }
+  private get idleWritable(): boolean {
+    return this.o.readOnlyWhenIdle === false;
+  }
+  private get stateFolder(): string {
+    return this.o.stateDir ?? path.join(this.o.dir, STATE_DIR);
+  }
   private abs(rel: string): string {
     return path.join(this.o.dir, ...rel.split('/'));
   }
@@ -136,12 +154,12 @@ export class LocalVault {
 
   private async state(): Promise<LocalState> {
     if (this.mem) return this.mem;
-    const raw = await fsp.readFile(path.join(this.o.dir, STATE_DIR, 'state.json'), 'utf8').then((t) => JSON.parse(t) as Partial<LocalState>, () => ({}) as Partial<LocalState>);
+    const raw = await fsp.readFile(path.join(this.stateFolder, 'state.json'), 'utf8').then((t) => JSON.parse(t) as Partial<LocalState>, () => ({}) as Partial<LocalState>);
     this.mem = { files: raw.files && typeof raw.files === 'object' ? raw.files : {}, orphans: Array.isArray(raw.orphans) ? raw.orphans : [] };
     return this.mem;
   }
   private async save(): Promise<void> {
-    const dir = path.join(this.o.dir, STATE_DIR);
+    const dir = this.stateFolder;
     await fsp.mkdir(dir, { recursive: true });
     const f = path.join(dir, 'state.json');
     await fsp.writeFile(`${f}.tmp`, JSON.stringify(this.mem, null, 2));
@@ -211,6 +229,7 @@ export class LocalVault {
     for (const e of entries) {
       if (e.name === STATE_DIR || e.name.endsWith('.tmp')) continue;
       const rel = dir ? `${dir}/${e.name}` : e.name;
+      if (this.o.ignore?.(rel)) continue;
       if (e.isDirectory()) out.push(...(await this.walk(rel)));
       else if (e.isFile() && cleanVaultPath(rel).ok) out.push(rel);
     }
@@ -246,19 +265,19 @@ export class LocalVault {
   // ---- changing ------------------------------------------------------------------------------------------------------------
 
   /** Puts a file from the working folder into the vault as version 1, with this person as the author. It is left read-only, like any file nobody is editing. */
-  async add(rel: string, comment = 'First version'): Promise<VaultEntry> {
+  async add(rel: string, comment = 'First version', projectId?: string | null): Promise<VaultEntry> {
     const p = this.clean(rel);
     await this.allow(p, 'write');
     const bytes = (await this.readLocal(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the working folder.'));
     const content = await bytes;
     if (await this.fileAt(p)) throw new VaultError('exists', 'A file with that name is already in the vault.');
     const hash = await this.o.blobs.put(content);
-    const added = await this.store.addFile({ path: p, hash, size: content.length, comment, machine: this.o.machine });
+    const added = await this.store.addFile({ path: p, hash, size: content.length, comment, machine: this.o.machine, ...(projectId ? { projectId } : {}) });
     if (!added.ok) throw new VaultError(added.reason === 'exists' ? 'exists' : added.reason === 'locked' ? 'locked' : 'not-holder', added.reason === 'exists' ? 'A file with that name is already in the vault.' : added.reason === 'locked' ? 'That file is locked.' : 'The first version could not be saved.');
     const st = await this.state();
     st.files[p] = { fileId: added.id, version: added.version, hash };
     await this.save();
-    await this.setWritable(p, false);
+    await this.setWritable(p, this.idleWritable);
     return this.status(p);
   }
 
@@ -303,7 +322,7 @@ export class LocalVault {
     const hash = sha256(content);
     if (st.files[p] && st.files[p]!.hash === hash) {
       await this.store.undoCheckOut({ fileId: file.id, machine: this.o.machine });
-      await this.setWritable(p, false);
+      await this.setWritable(p, this.idleWritable);
       return { ...(await this.status(p)), unchanged: true };
     }
     await this.o.blobs.put(content);
@@ -311,8 +330,62 @@ export class LocalVault {
     if (!r.ok) throw new VaultError('not-holder', 'Your lock on this file was removed, so this was not saved to the vault. Your copy is kept on your disk; use Get latest to see what is in the vault.');
     st.files[p] = { fileId: file.id, version: r.version, hash };
     await this.save();
-    await this.setWritable(p, false);
+    await this.setWritable(p, this.idleWritable);
     return { ...(await this.status(p)), unchanged: false };
+  }
+
+  /**
+   * Saves what is on disk as a new version without a visible check-out: the lock is taken and given back in one step. For a file edited in the
+   * working folder by Write or any other program. Nothing is ever lost:
+   *  - unchanged: nothing is done
+   *  - held: somebody else (or this person on another machine) has the file checked out; the copy on disk is left as it is
+   *  - conflict: a newer version was saved elsewhere since this copy was taken; this copy is kept beside it ("Name (changes 2026-11-10 Pixel).md")
+   *    and the newer version put in its place
+   *  - saved: a new version was made
+   */
+  async saveChanges(rel: string, comment = ''): Promise<{ outcome: 'unchanged' | 'held' | 'conflict' | 'saved'; version: number | null; savedAs?: string; heldBy?: string }> {
+    const p = this.clean(rel);
+    await this.allow(p, 'write');
+    const file = await ((await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.')));
+    const disk = (await this.readLocal(p)) ?? Promise.reject(new VaultError('not-found', 'The file is not in the working folder.'));
+    const content = await disk;
+    const st = await this.state();
+    const hash = sha256(content);
+    const local = st.files[p];
+    if (local && local.hash === hash) return { outcome: 'unchanged', version: local.version };
+    if (!local && hash === file.hash) {
+      st.files[p] = { fileId: file.id, version: file.currentVersion, hash };
+      await this.save();
+      return { outcome: 'unchanged', version: file.currentVersion };
+    }
+    if (file.lock) return { outcome: 'held', version: file.currentVersion, heldBy: file.lock.personId };
+    if (!local || local.version < file.currentVersion) {
+      const target = this.conflictName(p);
+      await this.writeLocal(await target, content, true);
+      await this.restoreCurrent(file);
+      return { outcome: 'conflict', version: file.currentVersion, savedAs: await target };
+    }
+    const took = await this.store.checkOut({ fileId: file.id, machine: this.o.machine });
+    if (!took.ok) return { outcome: 'held', version: file.currentVersion, ...(took.reason === 'locked' ? { heldBy: took.heldBy.personId } : {}) };
+    await this.o.blobs.put(content);
+    const r = await this.store.checkIn({ fileId: file.id, machine: this.o.machine, hash, size: content.length, comment: comment.trim() });
+    if (!r.ok) return { outcome: 'held', version: file.currentVersion };
+    st.files[p] = { fileId: file.id, version: r.version, hash };
+    await this.save();
+    return { outcome: 'saved', version: r.version };
+  }
+
+  /** "Name (changes 2026-11-10 Machine).ext", a name nothing in the working folder has. */
+  private async conflictName(rel: string): Promise<string> {
+    const dot = rel.lastIndexOf('.');
+    const slash = rel.lastIndexOf('/');
+    const stem = dot > slash ? rel.slice(0, dot) : rel;
+    const ext = dot > slash ? rel.slice(dot) : '';
+    const tag = `changes ${this.now().slice(0, 10)} ${this.o.machine.replace(/[^\w .-]/g, '').slice(0, 20)}`.trim();
+    for (let n = 0; ; n++) {
+      const cand = `${stem} (${tag}${n ? ` ${n + 1}` : ''})${ext}`;
+      if (!(await this.readLocal(cand))) return cand;
+    }
   }
 
   /** Gives up the changes: releases the lock and puts the vault's version back on disk. */
@@ -339,7 +412,7 @@ export class LocalVault {
   private async restoreCurrent(file: VaultFileRow): Promise<void> {
     const cur = (await this.store.versions(file.id))[0];
     if (!cur) return;
-    await this.writeLocal(file.path, await this.blob(cur.hash), false);
+    await this.writeLocal(file.path, await this.blob(cur.hash), this.idleWritable);
     const st = await this.state();
     st.files[file.path] = { fileId: file.id, version: cur.n, hash: cur.hash };
     await this.save();
@@ -363,7 +436,7 @@ export class LocalVault {
       if (e.status === 'not-local' && !(o.fetchMissing || wanted)) continue;
       if (e.status === 'latest' || f.currentVersion === 0) continue;
       const cur = (await this.store.versions(f.id))[0]!;
-      await this.writeLocal(f.path, await this.blob(cur.hash), false);
+      await this.writeLocal(f.path, await this.blob(cur.hash), this.idleWritable);
       st.files[f.path] = { fileId: f.id, version: cur.n, hash: cur.hash };
       updated.push(f.path);
     }

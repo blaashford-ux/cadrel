@@ -9,13 +9,13 @@ const clean = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error
 const kb = (n: number | null) => (n === null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
 const STATUS: Record<Entry['status'], { label: string; hint: string }> = {
-  untracked: { label: 'Not in the vault', hint: 'It is in your working folder but nobody else can see it yet.' },
+  untracked: { label: 'Not in a project', hint: 'It is not inside a project’s folder, so it is not saved to the Studio. Move it into a project’s folder, or add it here.' },
   'not-local': { label: 'Not downloaded', hint: 'It is in the vault; get it to work with it here.' },
-  latest: { label: 'Latest', hint: 'Your copy is the newest version and is read-only.' },
+  latest: { label: 'Saved', hint: 'Your copy is the newest version.' },
   'out-of-date': { label: 'Newer version available', hint: 'Get latest to update your copy.' },
-  'checked-out-by-me': { label: 'Checked out by you', hint: 'Only you can change it. Check it in to save a new version.' },
+  'checked-out-by-me': { label: 'Checked out by you', hint: 'Only you can change it, and it is not saved automatically while it is checked out. Check it in to save a new version.' },
   'checked-out-by-other': { label: 'Checked out', hint: 'Someone else is editing it. You can read your copy.' },
-  'modified-unprotected': { label: 'Changed without a check-out', hint: 'Your copy was changed outside a check-out, so it will not be overwritten. Discard the changes to get the vault’s version.' },
+  'modified-unprotected': { label: 'Changed, saving', hint: 'You changed it here. It is saved to the Studio as a new version automatically (within a minute); if someone else has it checked out it waits.' },
   missing: { label: 'Missing from your folder', hint: 'You have it checked out but the file is gone. Undo the check-out to get it back.' }
 };
 
@@ -58,7 +58,8 @@ export function Files() {
 
   return (
     <div className="files">
-      <p className="muted">Real files in your working folder, kept in the vault. A file nobody is editing is read-only; check it out to edit it (nobody else can then), check it in to save a new version. <button type="button" className="link" onClick={() => void api.openFolder()}>Open the folder</button> <span className="muted small">{s.dir}</span></p>
+      <p className="muted">These are your projects’ own files, in your Projects folder. Whatever you write in a project is saved to the Studio automatically, as a new version, and changes made elsewhere (another computer, the phone) come in. You never add or check out anything; <em>Check out</em> is only for when you want nobody else to change a file for a while. <button type="button" className="link" onClick={() => void api.openFolder()}>Open the folder</button> <span className="muted small">{s.dir}</span></p>
+      <SyncLine s={s} onNow={() => void run(() => api.syncNow(), 'Saved and brought up to date.')} />
       {s.offline && <div className="banner" role="status"><strong>The Studio cannot be reached.</strong> This is what was last known. Files you have checked out can still be edited here; check them in when you are back online. Check-out, check-in and Get latest need the connection.</div>}
       {s.kept.map((k) => (
         <div key={k.path} className="banner" role="alert">
@@ -76,7 +77,7 @@ export function Files() {
         <span className="muted small">{mine ? `${mine} checked out by you` : 'Nothing checked out by you'}</span>
       </div>
       {s.entries.length === 0 ? (
-        <div className="empty"><p><strong>No files yet.</strong></p><p className="muted">Put files in the working folder, then add them to the vault from here.</p></div>
+        <div className="empty"><p><strong>No files yet.</strong></p><p className="muted">Create a project and write in it, or put files in a project’s folder: they are saved to the Studio automatically.</p></div>
       ) : (
         <table className="table">
           <thead><tr><th>File</th><th>State</th><th className="num">Version</th><th className="num">Size</th><th /></tr></thead>
@@ -93,6 +94,29 @@ export function Files() {
         </section>
       )}
     </div>
+  );
+}
+
+function SyncLine({ s, onNow }: { s: Ready; onNow(): void }) {
+  const y = s.sync;
+  if (!y) return null;
+  const sum = y.summary;
+  const when = y.lastAt ? new Date(y.lastAt).toLocaleTimeString() : null;
+  return (
+    <>
+      <div className="row">
+        <span className={`sync-line s-${y.state}`} role="status">
+          {y.state === 'syncing' ? 'Saving to the Studio…' : y.state === 'offline' ? 'Not connected: what you write is kept here and saved later' : y.state === 'error' ? 'Some files could not be saved' : y.state === 'off' ? 'Not saving: this Studio’s files are kept by its owner' : 'Saved to the Studio automatically'}
+          {when && y.state !== 'off' ? <span className="muted small"> · last checked {when}{sum && (sum.added + sum.saved + sum.received > 0) ? ` · ${[sum.added && `${sum.added} added`, sum.saved && `${sum.saved} saved`, sum.received && `${sum.received} received`].filter(Boolean).join(', ')}` : ''}</span> : null}
+        </span>
+        <button type="button" onClick={onNow} disabled={y.state === 'syncing' || y.state === 'off'}>Sync now</button>
+      </div>
+      {y.message && y.state !== 'offline' && <div className="banner error" role="alert">{y.message}</div>}
+      {sum?.conflicts.map((c) => <div key={c.path} className="banner" role="status"><strong>{c.path} was changed in two places.</strong> Both are kept: the other computer’s version is in place, and what you had is <code>{c.savedAs}</code> beside it. Nothing was lost.</div>)}
+      {sum && sum.held.length > 0 && <div className="banner info" role="status">Waiting because someone has these checked out: {sum.held.join(', ')}. What you changed here is kept and is saved when they are checked in.</div>}
+      {sum && sum.tooLarge.length > 0 && <div className="banner info" role="status">Too large for the Studio’s file store (over 95 MB), so not saved: {sum.tooLarge.join(', ')}.</div>}
+      {sum && sum.errors.length > 0 && <ul className="plain">{sum.errors.slice(0, 5).map((e) => <li key={e.path}><code>{e.path}</code> <span className="muted small">{e.message}</span></li>)}</ul>}
+    </>
   );
 }
 

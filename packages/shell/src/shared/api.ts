@@ -800,9 +800,20 @@ export type VaultState =
       kept: { path: string; savedAs: string | null; removedBy: string; reason: string }[];
       /** Every copy kept aside on this computer. */
       orphans: { path: string; savedAs: string; removedBy: string; removedAt: string; reason: string; version: number }[];
+      /** How the Projects folder and the Studio are keeping in step (files are saved to the Studio automatically). */
+      sync: VaultSyncStatus | null;
     };
+/** What the automatic saving of the Projects folder is doing and has done. */
+export interface VaultSyncStatus {
+  state: 'off' | 'idle' | 'syncing' | 'offline' | 'error';
+  lastAt: number | null;
+  message: string | null;
+  summary: { added: number; saved: number; received: number; conflicts: { path: string; savedAs: string }[]; held: string[]; tooLarge: string[]; errors: { path: string; message: string }[] } | null;
+}
 export interface VaultApi {
   state(): Promise<VaultState>;
+  /** Saves what changed in the Projects folder to the Studio and brings in what changed there, now. */
+  syncNow(): Promise<VaultSyncStatus>;
   /** Puts a file from the working folder into the vault as its first version. */
   add(path: string, comment?: string): Promise<void>;
   checkOut(path: string): Promise<void>;

@@ -14,7 +14,12 @@ export class VaultHostError extends Error {}
 export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
 
 export class VaultHost {
-  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string }) {}
+  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; writableWhenIdle?: boolean }) {}
+
+  /** The vault itself, for what keeps the folder and the Studio in step. */
+  get localVault(): LocalVault | null {
+    return this.people.vault(this.where);
+  }
 
   private vault(): LocalVault {
     return this.people.vault(this.where) ?? (() => { throw new VaultHostError('The files of this Studio are kept by its owner.'); })();
@@ -29,7 +34,7 @@ export class VaultHost {
     const away = () => this.people.offline;
     // the rest also comes from the server: when it is away they are empty, not an error
     const [people, force, orphans] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans()]);
-    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, entries, kept, orphans, ...(away() ? { offline: true } : {}) };
+    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, entries, kept, orphans, sync: null, ...(away() ? { offline: true } : {}) };
   }
 
   async call(name: string, args: unknown[]): Promise<unknown> {

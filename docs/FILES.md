@@ -6,6 +6,8 @@ How Cadrel keeps a project's files, how it knows what each file *is*, and who ca
 
 **Status: design. None of this is built yet.** Today Write still keeps MDEdit's `.mdedit/project.json` and its Google Drive sync, and the shell's project tree only *links* a Write folder. What exists now is called out under [Where we are](#where-we-are).
 
+> **Built (0.8):** the vault's working folder is the Projects folder itself and files are saved to the Studio automatically (see [STUDIOS.md](STUDIOS.md), *One folder*). Explicit check-out remains for when someone wants a file to themselves.
+
 ## 1. Decided
 
 These come from the product owner and are not open for redesign here.
