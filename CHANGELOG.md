@@ -52,6 +52,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Not done:** a first build on a machine with the Android SDK (the first CI run is the first real compile of the Java plugins), an emulator smoke test, and registering each app's Android OAuth client in Google Cloud, without which *Connect Google Drive* fails on the phone.
 - `release.yml` now passes the repository's secrets to the build (`secrets: inherit`), which the Android signing key needs; the Windows build sees them too.
 
+## Cadrel Reader 0.10.1
+
+- No change for readers. Reader is built from the Cadrel Write code, which gained the phone's "Sign in as me" link for Studio owners in Cadrel 0.7.3, so its version rises with it (Reader does not use Studios).
+
 ## Cadrel Reader 0.10.0
 
 - **Cadrel Reader has its own icon.** It had borrowed Cadrel Write's; it is now an open book with a comment bubble, so the two apps can be told apart in the taskbar, the Start menu and the installer.
