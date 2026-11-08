@@ -10,7 +10,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **How it works:** a quick look at the folder every 15 seconds (sizes and times only, no network) and a full pass when something changed, when the window gets focus, and every 3 minutes (so the Studio's server is not read more than before). On quit, new files are saved first. Cadrel's own folders (`.cadrel`), `Exports`, `Trash`, temporary files and anything loose in the Projects folder outside a project are never saved. Files over 95 MB are listed and left alone.
 - **Moving over.** The first run copies what the old `Vault\` folder held into the Projects folder, never overwriting; a file that differs stays in the old folder and is listed as your unsaved change. The old folder is left in place. What the vault knows about each copy now lives in the Studio's own folder, not in Projects.
 - **Files page:** says all this, shows how syncing is going, has **Sync now** and **Save version…**. The phone's list is unchanged: it already read the vault, so your projects now appear on it.
-- **Not changed yet:** the phone still saves a version each time it syncs a file you edited there ("Edited on <phone>"), so it can still make more versions than you want.
+- **The phone works the same way.** It used to save a version each time it synced a file you edited there. Now an edit stays on the phone, listed under *Changes not saved as a version yet* (the cloud button shows how many), and is never overwritten by a newer version; **Save version** there makes one version. If the file moved on meanwhile, or someone holds it, both are kept. Hand-off between your devices is: save a version on one, then carry on in the other.
 - Tested with the real vault on a records file (new, edited several times, newer-elsewhere, both-changed, held, moved-over); not yet with a real Studio server and a phone.
 
 ## 0.7.4 (fix: the Studio's server could not be upgraded to get Link a phone)
@@ -66,6 +66,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Signing is a one-time setup.** `scripts/make-android-keystore.sh` makes the release key and lists the four secrets to create. Without them the build signs with the debug key and the APK is never published. **Losing the key means every installed copy must be uninstalled and reinstalled**, so it must be backed up.
 - **Not done:** a first build on a machine with the Android SDK (the first CI run is the first real compile of the Java plugins), an emulator smoke test, and registering each app's Android OAuth client in Google Cloud, without which *Connect Google Drive* fails on the phone.
 - `release.yml` now passes the repository's secrets to the build (`secrets: inherit`), which the Android signing key needs; the Windows build sees them too.
+
+## Cadrel Reader 0.10.2
+
+- No change for readers. Reader is built from the Cadrel Write code, which gained the phone's *Save version* in Cadrel 0.8.0, so its version rises with it.
 
 ## Cadrel Reader 0.10.1
 

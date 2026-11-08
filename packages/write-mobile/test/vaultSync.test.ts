@@ -52,38 +52,49 @@ describe('bringing a Studio’s project files to the phone', () => {
 });
 
 describe('writing on the phone', () => {
-  it('sends an edit as the next version and gives the lock back at once', async () => {
+  it('keeps an edit on the phone, listed as unsaved, and makes a version only when the person saves one (the lock is given back at once)', async () => {
     const s = await studio();
     await s.desk.add('Book 1/Draft.md', 'v1', 'pB1');
     const p = await s.phone('author', { device: 'Pixel 8' });
     await p.sync.syncNow();
-    await p.fs.writeText(`${ROOT}/Book 1/Draft.md`, 'v1 and more, written on the train');
-    expect(await p.sync.unsentCount()).toBe(1);
-    const st = await p.sync.syncNow();
-    expect(st.summary).toMatchObject({ uploaded: 1, conflicts: [], errors: [] });
-    expect(await s.desk.text('Book 1/Draft.md')).toBe('v1 and more, written on the train');
-    const [f] = await s.desk.list();
-    expect(f).toMatchObject({ currentVersion: 2, lock: null });
+    for (const text of ['v1 and more, written on the train', 'and a little more']) {
+      await p.fs.writeText(`${ROOT}/Book 1/Draft.md`, text);
+      expect(await p.sync.unsentCount()).toBe(1);
+      const st = await p.sync.syncNow();
+      expect(st.summary).toMatchObject({ uploaded: 0, conflicts: [], errors: [], unsaved: [{ name: 'Book 1/Draft.md' }] });
+    }
+    // nothing was sent: no version, nothing changed on the Studio, the phone's text untouched
+    expect(await s.desk.text('Book 1/Draft.md')).toBe('v1');
+    expect((await s.desk.list())[0]).toMatchObject({ currentVersion: 1, lock: null });
+    expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('and a little more');
+    // saving is the person's act, and makes exactly one version
+    const id = (await p.sync.getSyncStatus()).summary!.unsaved![0]!.id;
+    expect(await p.sync.saveVersion(id, 'Written on the train')).toMatchObject({ outcome: 'saved', version: 2 });
+    expect(await s.desk.text('Book 1/Draft.md')).toBe('and a little more');
+    expect((await s.desk.list())[0]).toMatchObject({ currentVersion: 2, lock: null });
     expect(await p.sync.unsentCount()).toBe(0);
-    // and nothing more happens on the next pass
-    expect((await p.sync.syncNow()).summary).toMatchObject({ uploaded: 0, downloaded: 0 });
+    expect((await p.sync.syncNow()).summary).toMatchObject({ uploaded: 0, downloaded: 0, unsaved: [] });
   });
 
-  it('keeps edits made with no connection, and sends them when the connection is back', async () => {
+  it('keeps edits made with no connection, and saves a version when the connection is back', async () => {
     const s = await studio();
     await s.desk.add('Book 1/Draft.md', 'v1', 'pB1');
     const p = await s.phone();
     await p.sync.syncNow();
+    const fileId = (await s.desk.list())[0]!.id;
     s.setOffline(true);
     await p.fs.writeText(`${ROOT}/Book 1/Draft.md`, 'written offline');
     const off = await p.sync.syncNow();
     expect(off.state).toBe('error');
     expect(off.message).toMatch(/No connection/);
     expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('written offline');
+    await expect(p.sync.saveVersion(fileId)).rejects.toThrow(/No connection/); // kept on the phone, to be saved when it is back
     s.setOffline(false);
     const on = await p.sync.syncNow();
     expect(on.state).toBe('idle');
-    expect(on.summary).toMatchObject({ uploaded: 1 });
+    expect(on.summary).toMatchObject({ uploaded: 0, unsaved: [{ name: 'Book 1/Draft.md' }] });
+    expect(await s.desk.text('Book 1/Draft.md')).toBe('v1');
+    expect(await p.sync.saveVersion(on.summary!.unsaved![0]!.id)).toMatchObject({ outcome: 'saved', version: 2 });
     expect(await s.desk.text('Book 1/Draft.md')).toBe('written offline');
   });
 
@@ -99,15 +110,15 @@ describe('writing on the phone', () => {
     expect(await s.desk.text('Book 1/Notes/Ideas.md')).toBe('# Ideas\n');
     const listed = (await s.owner.vault<{ path: string; projectId: string | null }[]>('list')).find((f) => f.path === 'Book 1/Notes/Ideas.md');
     expect(listed?.projectId).toBe('pB1');
-    // and it is tracked now: editing it sends a new version instead of adding it again
+    // and it is tracked now: editing it is an unsaved change, not a second file and not a version
     await p.fs.writeText(`${ROOT}/Book 1/Notes/Ideas.md`, '# Ideas\n\nmore');
-    expect((await p.sync.syncNow()).summary).toMatchObject({ uploaded: 1 });
+    expect((await p.sync.syncNow()).summary).toMatchObject({ uploaded: 0, unsaved: [{ name: 'Book 1/Notes/Ideas.md' }] });
     expect((await s.desk.list()).filter((f) => f.path.endsWith('Ideas.md'))).toHaveLength(1);
   });
 });
 
 describe('when the same file changed in two places', () => {
-  it('keeps both: the phone’s text as a conflict file (also sent to the Studio), and the Studio’s version in the original', async () => {
+  it('keeps both when a version is saved over a newer one: the phone’s text as a conflict file (also sent to the Studio), and the Studio’s version in the original', async () => {
     const s = await studio();
     await s.desk.add('Book 1/Draft.md', 'v1', 'pB1');
     const p = await s.phone('author', { device: 'Pixel 8' });
@@ -118,16 +129,17 @@ describe('when the same file changed in two places', () => {
     s.setOffline(false);
     await s.desk.save('Book 1/Draft.md', 'the desk’s version'); // meanwhile, a newer version
     const st = await p.sync.syncNow();
-    expect(st.summary!.conflicts).toHaveLength(1);
-    expect(st.summary!.errors).toEqual([]);
+    // the phone's edit is never overwritten by the newer version, and is not turned into a version by itself
+    expect(st.summary).toMatchObject({ conflicts: [], errors: [], unsaved: [{ name: 'Book 1/Draft.md' }] });
+    expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('the phone’s version');
+    // saving it keeps both
+    const r = await p.sync.saveVersion(st.summary!.unsaved![0]!.id);
+    expect(r.outcome).toBe('conflict');
     expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('the desk’s version');
-    const copy = st.summary!.conflicts[0]!;
-    expect(copy).toContain('Draft (conflict Pixel 8 2026-11-06).md');
-    expect(await p.fs.readText(copy)).toBe('the phone’s version');
-    // the phone's text reached the Studio as its own file, so nothing depends on the phone alone
+    const after = await p.sync.syncNow(); // sends the kept copy as a file of its own
+    expect(after.summary).toMatchObject({ errors: [] });
     expect(await s.desk.text('Book 1/Draft (conflict Pixel 8 2026-11-06).md')).toBe('the phone’s version');
     expect(await s.desk.text('Book 1/Draft.md')).toBe('the desk’s version');
-    expect(st.message).toMatch(/Both versions were kept/);
   });
 
   it('does the same when someone has the file checked out, and says who when the person tries to write in it', async () => {
@@ -138,9 +150,12 @@ describe('when the same file changed in two places', () => {
     await p.fs.writeText(`${ROOT}/Book 1/Draft.md`, 'phone edit');
     await s.desk.hold('Book 1/Draft.md');
     const st = await p.sync.syncNow();
-    expect(st.summary!.conflicts).toHaveLength(1);
+    expect(st.summary!.unsaved).toHaveLength(1);
+    expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('phone edit'); // kept as it is while held
+    expect((await p.sync.saveVersion(st.summary!.unsaved![0]!.id)).outcome).toBe('conflict');
     expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('v1');
-    expect(await s.desk.text('Book 1/Draft (conflict Pixel 8 2026-11-06).md')).toBe('phone edit');
+    await p.sync.syncNow();
+    expect(await s.desk.text('Book 1/Draft (conflict Pixel 8 2026-11-06).md').catch(() => s.desk.text(`Book 1/Draft (conflict ${'Phone'} 2026-11-06).md`))).toBe('phone edit');
     // while it is held, the editor is told before anything is typed into it
     expect(() => p.sync.assertWritable(`${ROOT}/Book 1/Draft.md`)).toThrow(/has this file checked out/);
     expect(() => p.sync.assertWritable(`${ROOT}/Book 1/Other.md`)).not.toThrow();

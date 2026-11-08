@@ -6,10 +6,11 @@
  *  - A project the person may see is a folder in the app's own storage, with the vault's text files (Markdown, plain text, Fountain) in it. The
  *    folder has the `.cadrel/project.json` Write expects, so the editor opens it like any project of its own.
  *  - Writing is just writing to those files, also with no connection. A pass (when there is a connection, soon after an edit, when the app comes
- *    to the front, and every minute while it is open) finds the files that changed, takes each one's lock, saves it as a new version and gives the
- *    lock back at once, so the phone never keeps a file from the desktop.
- *  - If the file moved on in the meantime (someone saved a newer version while the phone was offline), or someone holds it, the phone's text is kept
- *    as a separate "conflict" file and also sent to the Studio as a new file. Nothing is overwritten and nothing is lost; the person decides.
+ *    to the front, and every minute while it is open) brings in new versions and adds new files. It never makes a version of an edit: a change
+ *    stays on the phone, listed as unsaved, and is never overwritten, until the person saves a version (`saveVersion`), so history holds what they
+ *    chose to keep. Saving takes the file's lock, makes the version and gives the lock back at once, so the phone never keeps a file from the desktop.
+ *  - If the file moved on in the meantime (someone saved a newer version first), or someone holds it, the phone's text is kept as a separate
+ *    "conflict" file and also sent to the Studio as a new file. Nothing is overwritten and nothing is lost; the person decides.
  *  - New files in a project are added to the vault. The vault cannot rename or delete, so neither can the phone.
  *  - What the person may do is decided by the Studio's server on every call; the phone also asks up front (`canAt`) so it can say so in words.
  *
@@ -210,7 +211,7 @@ export class StudioSync implements SyncApi {
 
   private async pass(): Promise<SyncStatus> {
     const started = Date.now();
-    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0 };
+    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0, unsaved: [] };
     this.set({ state: 'syncing', message: null, progress: null });
     try {
       await this.run(sum);
@@ -414,9 +415,16 @@ export class StudioSync implements SyncApi {
       return;
     }
     if (await this.edited(e, abs)) {
-      await this.push(file, e, abs, local, me, sum);
-      const now = this.data.files[file.id];
-      if (now) guardLock(now);
+      if (!local.canWrite) {
+        // a role that cannot change this project can never save this edit: it is kept aside and the original put back
+        await this.rescue(abs, e);
+        guardLock(await this.download(file, local, e.project, e));
+        sum.errors.push({ path: file.path, message: 'You can read this project but not change it, so your edit was kept aside on this phone and the original restored.' });
+        return;
+      }
+      // changed here: left exactly as it is (even if a newer version exists) until the person saves a version
+      sum.unsaved!.push({ id: file.id, name: `${local.name}/${e.rel}` });
+      guardLock(e);
       return;
     }
     if (file.currentVersion > e.version || file.hash !== e.hash) {
@@ -428,7 +436,7 @@ export class StudioSync implements SyncApi {
   }
 
   /** Saves the phone's edit of a file as its next version, or keeps it as a conflict copy if the file has moved on or is held. */
-  private async push(file: VaultListing, e: SyncedFile, abs: string, local: LocalProject, me: { personId: string }, sum: SyncSummary): Promise<void> {
+  private async push(file: VaultListing, e: SyncedFile, abs: string, local: LocalProject, me: { personId: string }, sum: SyncSummary, comment = ''): Promise<void> {
     const text = await this.o.fs.readText(abs);
     const bytes = enc.encode(text);
     const hash = hex(await sha256(bytes));
@@ -461,7 +469,7 @@ export class StudioSync implements SyncApi {
     let ci: CheckInResult;
     try {
       await this.o.port.putBlob(hash, bytes);
-      ci = await this.o.port.vault<CheckInResult>('checkIn', { fileId: file.id, machine: this.o.machine, hash, size: bytes.length, comment: `Edited on ${this.o.device}` });
+      ci = await this.o.port.vault<CheckInResult>('checkIn', { fileId: file.id, machine: this.o.machine, hash, size: bytes.length, comment: comment.trim() || `Saved on ${this.o.device}` });
     } catch (err) {
       await release();
       throw err;
@@ -576,7 +584,34 @@ export class StudioSync implements SyncApi {
 
   // ---- what the app needs to know ----------------------------------------------------------------------------------------------
 
-  /** Whether any file has been changed here and not yet sent (the app says so, so a person knows to connect). */
+  /**
+   * Saves a file's changes as a new version: the person's act, never the clock's. The Studio decides who may; with no connection this says so
+   * and the change stays on the phone. `saved`: one new version; `conflict`: the file had moved on or someone holds it, so the phone's text is a
+   * file of its own beside it; `unchanged`: it was changed back to what the Studio has.
+   */
+  saveVersion = async (fileId: string, comment = ''): Promise<{ outcome: 'saved' | 'conflict' | 'unchanged'; version: number | null }> => {
+    await this.load();
+    const e = this.data.files[fileId];
+    if (!e || !this.data.projects[e.project]) throw new Error('That file is not on this phone.');
+    while (this.running) await this.running.catch(() => undefined); // never during a pass
+    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0 };
+    const before = e.version;
+    try {
+      const file = (await this.o.port.vault<VaultListing[]>('list')).find((f) => f.id === fileId);
+      if (!file) throw new Error('That file is no longer in the Studio, or your role cannot see it.');
+      await this.push(file, e, this.abs(e), this.data.projects[e.project]!, await this.o.port.me(), sum, comment);
+    } catch (err) {
+      if (err instanceof StudioOfflineError) throw new Error('No connection to the Studio. Your changes are kept on this phone; save a version when you are back online.');
+      throw isDenied(err) ? new Error('Your role in the Studio does not allow changing this file.') : err;
+    }
+    await this.save();
+    void this.syncNow();
+    if (sum.errors.length) throw new Error(sum.errors[0]!.message);
+    if (sum.conflicts.length) return { outcome: 'conflict', version: null };
+    return sum.uploaded > 0 ? { outcome: 'saved', version: this.data.files[fileId]?.version ?? null } : { outcome: 'unchanged', version: before };
+  };
+
+  /** Whether any file has been changed here and not yet saved as a version. */
   async unsentCount(): Promise<number> {
     await this.load();
     let n = 0;

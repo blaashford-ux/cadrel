@@ -75,6 +75,7 @@ export function StudioDialog({ status, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   useEscape(onClose);
   const reload = () => void api.studio!.list().then(setStudios);
   useEffect(reload, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -117,6 +118,30 @@ export function StudioDialog({ status, onClose }: Props) {
           <p className="muted small">
             Last pass: {plural(sum.uploaded, 'file')} saved to the Studio, {plural(sum.downloaded, 'file')} received.
           </p>
+        )}
+        {sum?.unsaved && sum.unsaved.length > 0 && api.studio?.saveVersion && (
+          <div className="sync-block">
+            <strong>Changes not saved as a version yet</strong>
+            <p className="muted small">They are safe on this phone and are never overwritten. A version is made only when you save one: do it when you finish, before you carry on in Cadrel on your computer.</p>
+            <ul className="sync-list">
+              {sum.unsaved.map((u) => (
+                <li key={u.id}>
+                  {u.name}{' '}
+                  <button
+                    type="button"
+                    disabled={working}
+                    onClick={() => void run(async () => {
+                      const r = await api.studio!.saveVersion!(u.id);
+                      setNotice(r.outcome === 'saved' ? `Saved as version ${r.version}.` : r.outcome === 'conflict' ? 'It had changed elsewhere, so both are kept: yours is a file named “conflict” beside it.' : 'Nothing had changed.');
+                    })}
+                  >
+                    Save version
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {notice && <p className="muted small" role="status">{notice}</p>}
+          </div>
         )}
         {sum && sum.conflicts.length > 0 && (
           <div className="sync-block">
