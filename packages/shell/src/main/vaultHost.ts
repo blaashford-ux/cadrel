@@ -11,7 +11,7 @@ import type { PeopleHost } from './people';
 export class VaultHostError extends Error {}
 
 /** The changes the page may ask for, by name. A list, so inherited names such as `constructor` are not reachable. */
-export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
+export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'saveChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
 
 export class VaultHost {
   constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; writableWhenIdle?: boolean }) {}

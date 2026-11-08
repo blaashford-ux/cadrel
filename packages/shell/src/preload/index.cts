@@ -60,6 +60,7 @@ const api: CadrelApi = {
     syncNow: () => studioCall('shell:vault:sync'),
     add: (path, comment) => studioCall('shell:vault:call', 'add', path, comment),
     checkOut: (path) => studioCall('shell:vault:call', 'checkOut', path),
+    saveVersion: (path, comment) => studioCall('shell:vault:call', 'saveChanges', path, comment),
     checkIn: (path, comment) => studioCall('shell:vault:call', 'checkIn', path, comment),
     undoCheckOut: (path) => studioCall('shell:vault:call', 'undoCheckOut', path),
     discardLocalChanges: (path) => studioCall('shell:vault:call', 'discardLocalChanges', path),

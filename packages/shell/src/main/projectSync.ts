@@ -3,9 +3,10 @@
  * "adds" a file to the vault and never checks anything out: they write, and this saves it.
  *
  *  - A new file in a project's folder is added to the vault, with the project it belongs to (so a role on one book sees that book's files).
- *  - A file changed in the folder, by Write or any other program, is saved as a new version.
  *  - A newer version saved elsewhere (another computer, the phone) is brought in; files this computer lacks are fetched.
- *  - Two changes to the same version: both are kept (the other copy sits beside the file, named "(changes <date> <computer>)"). Nothing is lost.
+ *  - A file changed in the folder, by Write or any other program, is NOT saved as a version: a version is made only when the person saves one
+ *    (Save version, or a check-in). Until then the change stays in the folder, listed as unsaved, and is never overwritten by a newer version.
+ *  - When it is saved and the same version was changed in two places, both are kept (`LocalVault.saveChanges`).
  *  - A file somebody has checked out on purpose is left alone, and said so.
  *
  * It looks at the folder every few seconds with nothing but file sizes and times (no network), and only does a full pass, which asks the
@@ -32,8 +33,9 @@ export function neverTracked(rel: string): boolean {
 
 export interface SyncSummary {
   added: number;
-  saved: number;
   received: number;
+  /** Files changed here and not yet saved as a version. They stay as they are until the person saves one. */
+  unsaved: string[];
   conflicts: { path: string; savedAs: string }[];
   /** Files somebody has checked out, whose changes here wait. */
   held: string[];
@@ -62,7 +64,7 @@ export interface ProjectSyncOptions {
   onStatus?(s: SyncStatus): void;
 }
 
-const empty = (): SyncSummary => ({ added: 0, saved: 0, received: 0, conflicts: [], held: [], tooLarge: [], errors: [] });
+const empty = (): SyncSummary => ({ added: 0, received: 0, unsaved: [], conflicts: [], held: [], tooLarge: [], errors: [] });
 
 export class ProjectSync {
   private status: SyncStatus = { state: 'idle', lastAt: null, message: null, summary: null };
@@ -176,7 +178,6 @@ export class ProjectSync {
     }
     this.set({ state: 'syncing', message: null });
     const sum = total;
-    const kept = sum.conflicts.length;
     try {
       const projects = await this.o.projects();
       const byFolder = new Map([...projects].map(([k, v]) => [k.toLowerCase(), v]));
@@ -195,10 +196,7 @@ export class ProjectSync {
               }
             }
           } else if (e.status === 'modified-unprotected') {
-            const r = await vault.saveChanges(e.path, 'Saved automatically');
-            if (r.outcome === 'saved') sum.saved++;
-            else if (r.outcome === 'conflict') sum.conflicts.push({ path: e.path, savedAs: r.savedAs! });
-            else if (r.outcome === 'held') sum.held.push(e.path);
+            sum.unsaved.push(e.path); // a version is made when the person saves one, never by the clock
           } else if (e.status === 'out-of-date') {
             const r = await vault.getLatest([e.path]);
             sum.received += r.updated.length;
@@ -220,7 +218,6 @@ export class ProjectSync {
         summary: sum,
         message: away ? 'No connection to the Studio. What you write is kept here and saved when it is back.' : sum.errors.length ? `${sum.errors.length} file${sum.errors.length === 1 ? '' : 's'} could not be saved.` : null
       });
-      if (sum.conflicts.length > kept) this.again = true; // the copies kept beside their files are new files to save
     } catch (e) {
       this.lastFull = this.now();
       if (this.o.offline?.() || (e as Error)?.name === 'StudioOfflineError') this.set({ state: 'offline', summary: sum, message: 'No connection to the Studio. What you write is kept here and saved when it is back.' });
