@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased
+## 0.7.3 (sign in on your phone as the owner)
 
 - **Sign in on your phone as yourself.** Studio Manager → *Your phone* → **Link a phone** makes a one-hour, one-use link. Paste it into Cadrel Write on the phone: no invitation to a new person and no name to give. The phone makes its own key and the Studio treats that key as the owner, so the owner's key never leaves the computer. Linked phones are listed and can be removed. No new schema version (a device is a `studio_meta` row, its link a reserved-role `invite`), so older apps keep working.
 
