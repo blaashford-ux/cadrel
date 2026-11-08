@@ -470,6 +470,11 @@ export interface Capabilities {
    * and nothing for writing, sharing or exporting is shown.
    */
   reader?: boolean;
+  /**
+   * Cadrel Write on the phone, connected to a Cadrel Studio: the projects and files are the Studio's (`StudioApi`), Studios are joined by invitation
+   * and switched between, and the project list is the Studio's (nothing here creates, renames or deletes a project).
+   */
+  studio?: boolean;
 }
 
 export const DESKTOP_CAPABILITIES: Capabilities = { export: true, windowChrome: true, folderPicker: true, launchFiles: true, fonts: true, importDocx: true, sync: true, review: true, update: true, ai: true, manageProjects: false };
@@ -479,6 +484,34 @@ export const READER_CAPABILITIES: Capabilities = { export: false, windowChrome: 
 export const READER_MOBILE_CAPABILITIES: Capabilities = { ...READER_CAPABILITIES, windowChrome: false };
 /** The phone: the editor and projects, nothing desktop-specific. */
 export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false, manageProjects: true };
+
+/** Cadrel Write on the phone, with the projects and files of a Cadrel Studio. Writing, no managing projects, no Drive, no export. */
+export const STUDIO_MOBILE_CAPABILITIES: Capabilities = { ...MOBILE_CAPABILITIES, sync: true, review: false, manageProjects: false, studio: true };
+
+/** A Studio this phone has joined. */
+export interface StudioInfo {
+  id: string;
+  name: string;
+  /** What the person is in this Studio ("Author", "Guest"…), as the Studio's server named it when they joined. */
+  role: string;
+  /** The name the person gave when they joined. */
+  me: string;
+  /** The owner's key, as XXXX-XXXX-XXXX-XXXX: what the invitation promised and the phone checks. */
+  fingerprint: string;
+  url: string;
+  active: boolean;
+}
+
+/** Joining Studios by invitation and switching between them. Only the phone app has this (`capabilities.studio`). */
+export interface StudioApi {
+  list(): Promise<StudioInfo[]>;
+  /** Joins from an invitation link (`cadrel://join?...`) and opens that Studio. Throws, in words, if the link is not right or the Studio is not the one it names. */
+  join(link: string, yourName: string): Promise<StudioInfo>;
+  /** Opens another Studio the phone has joined. */
+  switchTo(id: string): Promise<void>;
+  /** Forgets a Studio on this phone: its key and its copy of the files. Nothing on the Studio changes; the owner can remove the person there. */
+  leave(id: string): Promise<void>;
+}
 
 /**
  * What `Workspace` (the editor's state and logic) needs: the core, plus a few desktop extras it uses when present
@@ -492,7 +525,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type WriteApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities };
+export type WriteApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities; studio?: StudioApi };
 
 declare global {
   interface Window {

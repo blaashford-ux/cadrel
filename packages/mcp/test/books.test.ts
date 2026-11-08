@@ -153,6 +153,20 @@ describe('where files are saved: the series level or the Book', () => {
   });
 });
 
+describe('a manuscript kept in the series folder', () => {
+  it('book "series" reaches the Project’s own folder, even when one open Book would be the default', async () => {
+    const { call } = await connect();
+    mem.seed('/books/Dragon Bible/Manuscript/Book.md', '# One\n\nSeries folder text.\n');
+    closedIds.add(ids['Book 2: Ash']!);
+    closedIds.add(ids['Book 3: Cinder']!);
+    closedIds.delete(ids['Book 1: Ember']!);
+    expect((await call('read_chapter', { project: 'Dragon Rider', file: 'Manuscript/Book.md', chapter: 0 })).text).toContain('Ember text');
+    expect((await call('read_chapter', { project: 'Dragon Rider', book: 'series', file: 'Manuscript/Book.md', chapter: 0 })).text).toContain('Series folder text');
+    const note = await call('add_notes', { project: 'Dragon Rider', book: 'series', notes: [{ file: 'Manuscript/Book.md', kind: 'comment', quote: 'Series folder text', body: 'x' }] });
+    expect(note.isError).toBe(false);
+  });
+});
+
 describe('closed Books are read-only', () => {
   it('can be read, and nothing can be added to them, in notes, files or trackers', async () => {
     const { call } = await connect();

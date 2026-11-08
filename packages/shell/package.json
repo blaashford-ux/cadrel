@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/shell",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "description": "Cadrel: the studio suite",
   "main": "dist/main.mjs",
@@ -24,12 +24,13 @@
   "devDependencies": {
     "@cadrel/finance-desktop": "*",
     "@cadrel/kernel": "*",
-    "@cadrel/service": "*",
-    "@cadrel/store": "*",
     "@cadrel/market-desktop": "*",
     "@cadrel/market-library": "*",
     "@cadrel/market-mcp": "*",
+    "@cadrel/service": "*",
+    "@cadrel/store": "*",
     "@cadrel/studio": "*",
+    "@cadrel/studio-client": "*",
     "@cadrel/ui": "*",
     "@cadrel/write": "*",
     "@types/react": "^18.3.0",

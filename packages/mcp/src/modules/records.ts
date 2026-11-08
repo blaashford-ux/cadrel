@@ -5,6 +5,7 @@ import { PermissionDenied, type StudioService } from '@cadrel/service';
 import type { Studio } from '@cadrel/studio';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import type { McpModule } from '../server.js';
+import { STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 
 export const RECORDS_INSTRUCTIONS =
   'These tools read and (for tasks and sign-off requests) write the studio\'s shared records, as the person you are acting for, under the permissions their role gives them: a refusal comes back with its reason. ' +
@@ -50,7 +51,7 @@ function resolveProject(t: ProjectTree, ref: string): string {
     return path.length >= want.length && want.every((w, i) => path[path.length - want.length + i] === w);
   });
   if (hits.length === 1) return hits[0]!.id;
-  if (hits.length === 0) throw new Error(`There is no project "${ref}". Use studio_projects to see the names.`);
+  if (hits.length === 0) throw new Error(`There is no project "${ref}". Use studio_projects to see the names.${STUDIO_HINT}`);
   throw new Error(`More than one project matches "${ref}" (${hits.map((h) => pathOf(t, h.id)).join('; ')}). Use a fuller path or the id.`);
 }
 
@@ -296,7 +297,7 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
         if (a.project) {
           projectId = resolveProject(tree, a.project);
           const v = await as().visibleProjects(tree);
-          if (!v.all && !v.assigned.has(projectId)) throw new Error(`There is no project "${a.project}". Use studio_projects to see the names.`);
+          if (!v.all && !v.assigned.has(projectId)) throw new Error(`There is no project "${a.project}". Use studio_projects to see the names.${STUDIO_HINT}`);
         }
         await as().catalogue.linkProject(book.id, projectId);
         await viaAssistant('books_link_project', book.id);

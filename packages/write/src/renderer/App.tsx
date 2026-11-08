@@ -38,6 +38,7 @@ import { StatusBar } from './StatusBar';
 import { MobileBar } from './MobileBar';
 import { AboutDialog } from './AboutDialog';
 import { SyncDialog } from './SyncDialog';
+import { StudioDialog } from './StudioDialog';
 import { AiDialog } from './AiDialog';
 import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
@@ -1537,7 +1538,7 @@ export function App() {
       />
     )}
     {showAbout && <AboutDialog onClose={() => setShowAbout(false)} />}
-    {showSync && syncStatus && <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />}
+    {showSync && syncStatus && (caps.studio ? <StudioDialog status={syncStatus} onClose={() => setShowSync(false)} /> : <SyncDialog status={syncStatus} onClose={() => setShowSync(false)} />)}
     {showSettings && <SettingsDialog
         onSave={async (d) => {
           const ok = await ws.applyAppDefaults(d);

@@ -5,7 +5,7 @@
  */
 import { getProject, linksOf, pathOf, viewBooks, viewLevel, visibleTree, type Project, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import type { Studio } from '@cadrel/studio';
-import { AgentError } from '@cadrel/write/src/shared/agent/tools';
+import { AgentError, STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 import type { Earlier } from '@cadrel/write/src/shared/agent/trackers';
 import type { ProjectRef } from '@cadrel/write/mcp/server';
 
@@ -18,6 +18,9 @@ export interface ResolverOptions {
 }
 
 const lower = (s: string) => s.trim().toLowerCase();
+
+/** `book` values that mean the Project's own folder rather than one of its Books. */
+const SERIES_WORDS: ReadonlySet<string> = new Set(['series', 'project', '(series)']);
 
 /** A project by id, by path ("Dragon Rider / Book 1") or by a name that is unique; null if there is none, an AgentError if it is ambiguous. */
 export function findProject(t: ProjectTree, ref: string): Project | null {
@@ -93,15 +96,18 @@ export function makeProjectResolver(o: ResolverOptions): { resolve(ref: ProjectR
     const node = findNode(t, ref.project);
     if (!node) {
       // Not something in the project tree: a plain manuscript folder name from list_projects (or one not linked to a project yet).
-      if (ref.book) throw new AgentError(`There is no project "${ref.project}" to take a book from. Use studio_projects to see the Projects and their Books.`);
-      if ((await hidden()).has(ref.project)) throw new AgentError(`There is no project "${ref.project}". Use list_projects or studio_projects to see the projects you can work on.`);
+      if (ref.book) throw new AgentError(`There is no project "${ref.project}" to take a book from. Use studio_projects to see the Projects and their Books.${STUDIO_HINT}`);
+      if ((await hidden()).has(ref.project)) throw new AgentError(`There is no project "${ref.project}". Use list_projects or studio_projects to see the projects you can work on.${STUDIO_HINT}`);
       return ref.project;
     }
     const closed = await closedSet();
     const level = viewLevel(t, node.id);
     const open = level === 'project' ? viewBooks(t, node.id).filter((b) => !closed.has(b.id)) : [];
     let target: Project;
-    if (ref.book) {
+    if (ref.book && SERIES_WORDS.has(lower(ref.book)) && level === 'project' && folderOf(t, node.id) && !viewBooks(t, node.id).some((b) => lower(b.name) === lower(ref.book!))) {
+      // "series" names the Project's own folder, where a manuscript that is not a Book of its own (a first book, say) can live.
+      return folderOf(t, node.id)!;
+    } else if (ref.book) {
       if (level !== 'project') throw new AgentError(`"${node.name}" is a book, not a project, so there is no book to choose in it. Leave out book, or name the series.`);
       target = findBook(t, node, ref.book);
     } else if (level !== 'project') {

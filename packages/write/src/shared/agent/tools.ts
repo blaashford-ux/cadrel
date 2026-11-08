@@ -119,11 +119,11 @@ export async function projectDir(ctx: AgentContext, project: string): Promise<st
     const e = !badName(name) && holder?.isDirectory ? await child(ctx.fs, join(ctx.root, SHARED_WITH_ME), name) : undefined;
     const dir = join(join(ctx.root, SHARED_WITH_ME), name);
     if (e?.isDirectory && (await isCollaboration(ctx, dir))) return dir;
-    throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.`);
+    throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.${STUDIO_HINT}`);
   }
   if (typeof project !== 'string' || badName(project)) throw new AgentError(`"${project}" is not a project name. Use a name from list_projects.`);
   const e = await child(ctx.fs, ctx.root, project);
-  if (!e?.isDirectory) throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.`);
+  if (!e?.isDirectory) throw new AgentError(`There is no project called "${project}". Use list_projects to see the names.${STUDIO_HINT}`);
   return join(ctx.root, project);
 }
 
@@ -167,6 +167,9 @@ async function load(ctx: AgentContext, project: string, file: string): Promise<L
 }
 
 // ---- reading ---------------------------------------------------------------------------------
+
+/** Appended to "no such project": the assistant serves one Studio at a time, so a project of another Studio is simply not there. */
+export const STUDIO_HINT = ' If it is in a different Cadrel Studio, this connection cannot see it: the assistant is tied to the Studio that was active when it connected. Ask the author to switch to that Studio in Cadrel and restart the connection (or reconnect from the Extensions page).';
 
 export async function listProjects(ctx: AgentContext): Promise<{ project: string; status: string | null }[]> {
   const out: { project: string; status: string | null }[] = [];
