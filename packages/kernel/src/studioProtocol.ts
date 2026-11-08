@@ -123,10 +123,12 @@ export interface Invitation {
   fingerprint: string;
   /** What the owner calls the Studio: a suggestion for what to call it on the joiner's computer. */
   studioName?: string;
+  /** A link that adds the owner's own phone or computer (the person joining is the owner, so no name is asked), not a new person. */
+  device?: boolean;
 }
 
 export function invitationLink(i: Invitation): string {
-  return `cadrel://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}`;
+  return `cadrel://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}${i.device ? '&d=1' : ''}`;
 }
 
 export function parseInvitation(text: string): Invitation | null {
@@ -138,5 +140,5 @@ export function parseInvitation(text: string): Invitation | null {
   const fp = q.get('f') ?? '';
   if (!/^(https:\/\/[A-Za-z0-9.-]+|http:\/\/(127\.0\.0\.1|localhost))(:\d+)?(\/.*)?$/.test(url) || !/^[A-Za-z0-9_-]{16,64}$/.test(code) || !/^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(fp)) return null;
   const name = (q.get('n') ?? '').trim().slice(0, 60);
-  return { url: url.replace(/\/+$/, ''), code, fingerprint: fp, ...(name ? { studioName: name } : {}) };
+  return { url: url.replace(/\/+$/, ''), code, fingerprint: fp, ...(name ? { studioName: name } : {}), ...(q.get('d') === '1' ? { device: true } : {}) };
 }

@@ -29,7 +29,7 @@ export function createStudioApi(o: { registry: StudioRegistry; fs: FsPort; fetch
     join: async (link, yourName) => {
       await checkSigning();
       const j = await joinStudio({ link, yourName, fetchFn: o.fetchFn });
-      const studio: JoinedStudio = { id: j.studioId, name: j.studioName ?? 'Studio', url: j.url, fingerprint: j.fingerprint, role: j.role, me: yourName.trim(), key: j.key, joinedAt: new Date().toISOString() };
+      const studio: JoinedStudio = { id: j.studioId, name: j.studioName ?? 'Studio', url: j.url, fingerprint: j.fingerprint, role: j.role, me: yourName.trim() || (j.device ? 'You' : 'Studio member'), key: j.key, joinedAt: new Date().toISOString() };
       await o.registry.add(studio);
       o.reload();
       return info(studio, studio.id);

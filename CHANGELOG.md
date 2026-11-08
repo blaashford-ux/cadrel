@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.7.3 (sign in on your phone as the owner)
+
+- **Sign in on your phone as yourself.** Studio Manager → *Your phone* → **Link a phone** makes a one-hour, one-use link. Paste it into Cadrel Write on the phone: no invitation to a new person and no name to give. The phone makes its own key and the Studio treats that key as the owner, so the owner's key never leaves the computer. Linked phones are listed and can be removed. No new schema version (a device is a `studio_meta` row, its link a reserved-role `invite`), so older apps keep working.
+
 ## 0.7.1 (tweaks and fixes)
 
 - **A daily-target bar in Cadrel Write's status bar.** Next to the project total, a bar fills as today's words approach the day's target, and when you pass it the bar changes colour and the text says the target is beaten. The target is the Progress window's "Needed per day", worked out once and shared by both, so they always agree. Without a goal deadline there is no daily target and no bar.
@@ -47,6 +51,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **Signing is a one-time setup.** `scripts/make-android-keystore.sh` makes the release key and lists the four secrets to create. Without them the build signs with the debug key and the APK is never published. **Losing the key means every installed copy must be uninstalled and reinstalled**, so it must be backed up.
 - **Not done:** a first build on a machine with the Android SDK (the first CI run is the first real compile of the Java plugins), an emulator smoke test, and registering each app's Android OAuth client in Google Cloud, without which *Connect Google Drive* fails on the phone.
 - `release.yml` now passes the repository's secrets to the build (`secrets: inherit`), which the Android signing key needs; the Windows build sees them too.
+
+## Cadrel Reader 0.10.1
+
+- No change for readers. Reader is built from the Cadrel Write code, which gained the phone's "Sign in as me" link for Studio owners in Cadrel 0.7.3, so its version rises with it (Reader does not use Studios).
 
 ## Cadrel Reader 0.10.0
 

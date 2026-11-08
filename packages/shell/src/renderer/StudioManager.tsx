@@ -101,16 +101,24 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
   const [confirmMove, setConfirmMove] = useState(false);
   const [moving, setMoving] = useState(false);
   const [people, setPeople] = useState<StudioPeople | null>(null);
+  const [devices, setDevices] = useState<{ id: string; label: string; linkedAt: string }[]>([]);
+  const [deviceLink, setDeviceLink] = useState<string | null>(null);
+  const [deviceLabel, setDeviceLabel] = useState('');
   const [upToken, setUpToken] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const ready = studio.status === 'ready';
   const building = studio.status === 'provisioning';
   const behind = ready && studio.server !== null && studio.server.schema < STUDIO_SCHEMA_VERSION;
 
-  const loadPeople = () => void api.people(studio.id).then(setPeople, () => undefined);
+  const loadPeople = () => {
+    void api.people(studio.id).then(setPeople, () => undefined);
+    void api.devices(studio.id).then(setDevices, () => setDevices([]));
+  };
   useEffect(() => {
     setPeople(null);
     setLink(null);
+    setDeviceLink(null);
+    setDevices([]);
     setProject('');
     setConfirmMove(false);
     if (ready) loadPeople();
@@ -168,6 +176,28 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
               <p>Send this link to them. It works once, for 7 days, and is not shown again.</p>
               <div className="row"><input readOnly aria-label="Invitation link" className="grow" value={link} onFocus={(e) => e.currentTarget.select()} /><button type="button" onClick={() => void navigator.clipboard.writeText(link).then(() => setNote('Invitation link copied.'), () => undefined)}>Copy</button></div>
             </div>
+          )}
+          <h5>Your phone</h5>
+          <p className="muted small">Sign in to this Studio on your phone as yourself, the owner. Make a link here, open Cadrel Write on the phone and paste it: the phone makes its own key, so yours never leaves this computer. You can remove a phone below.</p>
+          <div className="row">
+            <input aria-label="Name for the phone" placeholder="Which phone? (a label only you see)" value={deviceLabel} onChange={(e) => setDeviceLabel(e.target.value)} />
+            <button type="button" onClick={() => void act(() => api.linkDevice(studio.id, deviceLabel), (r) => (setDeviceLink(r.link), setDeviceLabel(''), loadPeople()))}>Link a phone</button>
+          </div>
+          {deviceLink && (
+            <div className="banner info" role="status">
+              <p>Paste this link into Cadrel Write on your phone. It works once, for an hour, and is not shown again. Anyone who opens it first becomes you in this Studio, so send it only to yourself.</p>
+              <div className="row"><input readOnly aria-label="Phone link" className="grow" value={deviceLink} onFocus={(e) => e.currentTarget.select()} /><button type="button" onClick={() => void navigator.clipboard.writeText(deviceLink).then(() => setNote('Phone link copied.'), () => undefined)}>Copy</button></div>
+            </div>
+          )}
+          {devices.length > 0 && (
+            <ul className="studio-list" aria-label="Your linked phones">
+              {devices.map((d) => (
+                <li key={d.id}>
+                  <span className="grow-text"><strong>{d.label || 'Phone'}</strong> <span className="muted small">linked {d.linkedAt ? new Date(d.linkedAt).toLocaleDateString() : ''}</span></span>
+                  <button type="button" aria-label={`Remove ${d.label || 'phone'}`} onClick={() => void act(() => api.removeDevice(studio.id, d.id), setDevices)}>Remove</button>
+                </li>
+              ))}
+            </ul>
           )}
           {people && !people.reachable && <p className="muted small" role="status">Could not reach the Studio to list its people: {people.error}</p>}
           {people?.reachable && (

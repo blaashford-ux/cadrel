@@ -85,7 +85,7 @@ function JoinScreen({ initialLink, onCancel }: { initialLink: string; onCancel?:
     <div className="modal-backdrop">
       <div className="modal studio-dialog" role="dialog" aria-modal="true" aria-label="Join a Studio">
         <h3>Cadrel Write</h3>
-        <p className="modal-hint">Write in your Cadrel Studio’s projects. Paste the invitation link its owner sent you, and say what the Studio should call you.</p>
+        <p className="modal-hint">Write in your Cadrel Studio’s projects. Paste the invitation link its owner sent you, and say what the Studio should call you. If you own the Studio, paste the “Link a phone” link from your computer instead and you are signed in as yourself.</p>
         <StudioJoinForm initialLink={initialLink} onJoined={() => undefined} {...(onCancel ? { onCancel } : {})} />
       </div>
     </div>

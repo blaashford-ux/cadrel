@@ -39,6 +39,7 @@ describe('studio protocol', () => {
     const i = { url: 'https://cadrel-studio-abc.me.workers.dev', code: 'A'.repeat(22), fingerprint: '0123-4567-89AB-CDEF' };
     expect(parseInvitation(invitationLink(i))).toEqual(i);
     expect(parseInvitation(invitationLink({ ...i, studioName: 'Acme Books' }))).toEqual({ ...i, studioName: 'Acme Books' });
+    expect(parseInvitation(invitationLink({ ...i, device: true }))).toEqual({ ...i, device: true });
     expect(parseInvitation(`  ${invitationLink(i)}\n`)).toEqual(i);
     expect(parseInvitation(invitationLink({ ...i, url: 'http://insecure.example' }))).toBeNull();
     expect(parseInvitation(invitationLink({ ...i, url: 'http://127.0.0.1:8787/w/x' }))?.url).toBe('http://127.0.0.1:8787/w/x'); // a Studio on this computer

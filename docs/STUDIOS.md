@@ -49,6 +49,7 @@ There are no passwords, no email and no Cloudflare credentials for anyone but th
 - To **invite**, the owner picks a role (any but Owner) and an optional label. The Worker stores only a hash of a one-time code; the app shows the link `cadrel://join?s=<address>&c=<code>&f=<owner fingerprint>&n=<name>` once. It works once and expires after 7 days.
 - The invitee **joins** by pasting the link: Cadrel asks the address for `/v1/info` and refuses unless the owner fingerprint matches the link; only then does it make a key pair on that computer and register the public key with the code.
 - Every later request carries the key, a timestamp and a signature over method, path, time and body. The Worker refuses unsigned, stale (over 5 minutes) and replayed (a signature seen in the last 10 minutes) requests.
+- **Your own phone.** The owner makes a *Link a phone* link (`…&d=1`, one hour, one use). The phone makes its own key and the Worker keeps its public half as `device:<key>` in `studio_meta`; from then on it is the owner (no name asked, nothing added to the people) and the owner's own key never moves. The owner can list and remove linked devices (`/v1/devices`); a removed device cannot be linked again with the same key.
 - The owner can see members and pending invitations, cancel an invitation and remove a member. A removed key is refused for good and cannot rejoin.
 
 The protocol is `@cadrel/kernel` `studioProtocol`; the server is `@cadrel/worker` `studio.ts`.
@@ -83,7 +84,7 @@ A built Studio can keep everything on its server: the people, roles and teams, t
 - **The security policy page** (sign-in rules, who may invite) and **replicating the file store** to a second bucket.
 - **A signed installer.** The release workflow signs when the repository has the `CSC_LINK` and `CSC_KEY_PASSWORD` secrets (a code-signing certificate); without them it builds an unsigned installer and says so. There is no certificate yet.
 - **Updates from the Studio's server** (R2). Cadrel still updates from its GitHub releases.
-- **Recovery code** and a second owner device: lose the owner's computer and you lose the owner key.
+- **Recovery code**: lose every owner device and you lose the Studio. A linked phone is a second owner device, so link one.
 - **Folder rename follows Studio rename**, and **moving one Studio's folder** by itself (the Cadrel folder moves as a whole).
 - **A Studio's name on the server.** The server knows an id, not a name.
 - The provisioning code and everything on this page is tested against a stand-in for Cloudflare's API that runs the real Studio server (with SQLite behind D1 and a map behind R2); it has not been run against Cloudflare itself. D1 and R2 differ from the stand-in in limits (batch size, request size, time per request) that a large Studio could meet.
