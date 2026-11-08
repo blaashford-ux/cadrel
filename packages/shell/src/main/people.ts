@@ -175,20 +175,21 @@ export class PeopleHost {
    * The local vault for this Studio: the working folder `dir`, the contents of every version under `blobsDir`, this computer as `machine`.
    * Every operation is checked against what the person using the app may do with that kind of file. Null where this computer holds no records.
    */
-  vault(o: { dir: string; blobsDir: string; machine: string }): LocalVault | null {
+  vault(o: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; writableWhenIdle?: boolean }): LocalVault | null {
+    const mode = { ...(o.stateDir ? { stateDir: o.stateDir } : {}), ...(o.ignore ? { ignore: o.ignore } : {}), ...(o.writableWhenIdle ? { readOnlyWhenIdle: false } : {}) };
     if (this.remote && this.svc) {
       // on the server the rules are enforced there; the list already holds only what this person may read
       const key = `${o.dir}|${o.blobsDir}|${o.machine}`;
       if (this.remoteVault?.key !== key) {
         const store = new OfflineAwareStore(new RemoteVaultStore(this.remote), path.join(path.dirname(o.blobsDir), 'vault-list.json'));
-        const vault = new LocalVault({ store, blobs: new RemoteBlobs(this.remote, new DirBlobs(o.blobsDir)), dir: o.dir, personId: this.meId, machine: o.machine });
+        const vault = new LocalVault({ store, blobs: new RemoteBlobs(this.remote, new DirBlobs(o.blobsDir)), dir: o.dir, personId: this.meId, machine: o.machine, ...mode });
         this.remoteVault = { vault, store, key };
       }
       return this.remoteVault.vault;
     }
     if (!this.db || !this.svc) return null;
     const as = this.svc.as(this.meId);
-    return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c) });
+    return new LocalVault({ db: this.db, studioId: this.studioId, blobs: new DirBlobs(o.blobsDir), dir: o.dir, personId: this.meId, machine: o.machine, can: (c) => as.can(c), ...mode });
   }
 
   /**

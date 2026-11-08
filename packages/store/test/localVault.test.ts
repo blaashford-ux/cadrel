@@ -253,3 +253,73 @@ describe('references and data cards through the vault', () => {
     expect((await limited.references('book.epub')).length).toBe(1);
   });
 });
+
+describe('the vault in a folder people simply work in (writable, saved automatically)', () => {
+  const auto = (person: string, machine: string, extra: Partial<ConstructorParameters<typeof LocalVault>[0]> = {}) => {
+    const dir = path.join(root, `${person}-${machine}`);
+    return { dir, v: new LocalVault({ db, studioId: 's1', blobs, dir, personId: person, machine, now: clock, readOnlyWhenIdle: false, stateDir: path.join(root, `state-${person}-${machine}`), ...extra }) };
+  };
+
+  it('keeps files writable, keeps its own notes outside the folder, and hides what it is told to', async () => {
+    const a = auto('ana', 'pc', { ignore: (rel) => rel.split('/').some((p) => p.startsWith('.') || p === 'Exports') });
+    await put(a.dir, 'Book/ch1.md', 'one');
+    await put(a.dir, 'Book/.cadrel/project.json', '{}');
+    await put(a.dir, 'Book/Exports/book.epub', 'x');
+    expect((await a.v.list()).map((e) => e.path)).toEqual(['Book/ch1.md']);
+    await a.v.add('Book/ch1.md', 'Added automatically');
+    expect(await writable(a.dir, 'Book/ch1.md')).toBe(true);
+    expect((await fsp.readdir(a.dir)).sort()).toEqual(['Book']); // no state folder in the working folder
+    expect((await fsp.readdir(path.join(root, 'state-ana-pc')))).toEqual(['state.json']);
+  });
+
+  it('saves an edit as a new version with no check-out, and does nothing when nothing changed', async () => {
+    const a = auto('ana', 'pc');
+    await put(a.dir, 'ch1.md', 'one');
+    await a.v.add('ch1.md');
+    expect(await a.v.saveChanges('ch1.md')).toMatchObject({ outcome: 'unchanged', version: 1 });
+    await put(a.dir, 'ch1.md', 'two');
+    expect((await a.v.status('ch1.md')).status).toBe('modified-unprotected');
+    expect(await a.v.saveChanges('ch1.md', 'Autosaved')).toMatchObject({ outcome: 'saved', version: 2 });
+    expect(await a.v.status('ch1.md')).toMatchObject({ status: 'latest', version: 2, lock: null, modified: false });
+    expect(await writable(a.dir, 'ch1.md')).toBe(true);
+    expect(new TextDecoder().decode(await a.v.read('ch1.md', 1))).toBe('one');
+  });
+
+  it('leaves an edit alone while someone else has the file checked out', async () => {
+    const a = auto('ana', 'pc-a');
+    const b = auto('bo', 'pc-b');
+    await put(a.dir, 'ch1.md', 'one');
+    await a.v.add('ch1.md');
+    await b.v.getLatest(['ch1.md']);
+    await a.v.checkOut('ch1.md');
+    await put(b.dir, 'ch1.md', 'bo edit');
+    expect(await b.v.saveChanges('ch1.md')).toMatchObject({ outcome: 'held', heldBy: 'ana' });
+    expect(await text(b.dir, 'ch1.md')).toBe('bo edit'); // untouched
+  });
+
+  it('keeps both when two computers changed the same version: the newer version is put in place and the other copy is kept beside it', async () => {
+    const a = auto('ana', 'pc-a');
+    const b = auto('ana', 'pc-b');
+    await put(a.dir, 'ch1.md', 'one');
+    await a.v.add('ch1.md');
+    await b.v.getLatest(['ch1.md']);
+    await put(a.dir, 'ch1.md', 'from a');
+    expect((await a.v.saveChanges('ch1.md')).outcome).toBe('saved');
+    await put(b.dir, 'ch1.md', 'from b');
+    const r = await b.v.saveChanges('ch1.md');
+    expect(r).toMatchObject({ outcome: 'conflict', version: 2 });
+    expect(r.savedAs).toMatch(/^ch1 \(changes 2026-11-10 pc-b\)\.md$/);
+    expect(await text(b.dir, 'ch1.md')).toBe('from a');
+    expect(await text(b.dir, r.savedAs!)).toBe('from b');
+    // the kept copy is an ordinary file nobody has in the vault yet, so it is saved like any new file
+    expect((await b.v.list()).find((e) => e.path === r.savedAs)?.status).toBe('untracked');
+  });
+
+  it('adds a file with the project it belongs to, so a role on one project sees its files', async () => {
+    const a = auto('ana', 'pc');
+    await put(a.dir, 'Book/ch1.md', 'one');
+    await a.v.add('Book/ch1.md', 'Added automatically', 'proj1');
+    const row = (await new LocalVault({ db, studioId: 's1', blobs, dir: a.dir, personId: 'ana', machine: 'pc', stateDir: path.join(root, 'x') }).card('Book/ch1.md'));
+    expect(row.projectId).toBe('proj1');
+  });
+});

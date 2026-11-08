@@ -556,6 +556,7 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .sync-btn { position: relative; }
 .sync-btn.s-error, .sync-btn.s-confirm { color: var(--danger); }
 .sync-btn .sync-dot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.sync-btn .unsaved-badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: var(--bg, #000); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; box-sizing: border-box; }
 .sync-btn.s-syncing .sync-dot { animation: sync-pulse 1s ease-in-out infinite; }
 .sync-btn.s-error .sync-dot, .sync-btn.s-confirm .sync-dot { background: var(--danger); }
 @keyframes sync-pulse { 50% { opacity: 0.25; } }

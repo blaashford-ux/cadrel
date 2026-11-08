@@ -1044,7 +1044,7 @@ export function App() {
         onSave={() => void ws.save()}
         canSave={activeDirty}
         find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
-        sync={caps.sync && syncStatus ? { state: syncStatus.state, onOpen: () => setShowSync(true) } : undefined}
+        sync={caps.sync && syncStatus ? { state: syncStatus.state, unsaved: syncStatus.summary?.unsaved?.length ?? 0, onOpen: () => setShowSync(true) } : undefined}
         onAbout={() => setShowAbout(true)}
       />
     )}

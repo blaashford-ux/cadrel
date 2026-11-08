@@ -40,6 +40,8 @@ import { Editorial } from './editorial';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
+import { ProjectSync, neverTracked } from './projectSync';
+import { migrateVaultFolder } from './vaultMigration';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
@@ -99,6 +101,8 @@ let updater: Updater;
 /** A verified installer to start once the app has exited. */
 let installerToRun: string | null = null;
 let manager: ProjectManager;
+/** Keeps the Projects folder and the Studio's vault the same thing: files are saved to the Studio as they are written. */
+let projectSync: ProjectSync | null = null;
 let stages: ProjectStages;
 /** Set when the active Studio's records are on its server: the way to it, and whether this person owns it. */
 let serverLink: { client: StudioClient; owner: boolean; studioId: string } | null = null;
@@ -425,6 +429,42 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
   if (syncFocus) app.off('browser-window-focus', syncFocus);
   syncFocus = () => { if (Date.now() - lastTick >= MIN_REFRESH_GAP_MS) void tick(); };
   app.on('browser-window-focus', syncFocus);
+}
+
+/**
+ * The vault works in the Projects folder itself: nothing is added by hand and nothing is checked out. What the vault knows about the folder is kept in the
+ * Studio's own folder, not in the Projects folder.
+ */
+function vaultWhere() {
+  return { dir: projectsFolder(), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname(), stateDir: path.join(studioDir, 'vault-state'), ignore: neverTracked, writableWhenIdle: true };
+}
+
+/** The folders in the Projects folder that are projects, and the project each belongs to. */
+async function projectFolders(): Promise<Map<string, string | null>> {
+  const { projects } = await writeFolders().listFolders();
+  const tree = (await studio.studio.read()).tree;
+  const owner = new Map<string, string>();
+  for (const p of tree.projects) {
+    const l = linksOf(tree, p.id, 'write')[0];
+    if (l) owner.set(l.ref.toLowerCase(), p.id);
+  }
+  return new Map(projects.map((f) => [f.name, owner.get(f.name.toLowerCase()) ?? null]));
+}
+
+/** Brings the old Vault folder's files across (once) and starts saving the Projects folder to the Studio as it changes. */
+async function startProjectSync(): Promise<void> {
+  projectSync?.stop();
+  const where = vaultWhere();
+  const note = await migrateVaultFolder({ oldDir: path.join(studioFolder(), 'Vault'), newDir: where.dir, stateDir: where.stateDir, marker: path.join(studioDir, 'vault-one-folder.json') }).catch(() => null);
+  if (note) updateLog(`vault folder moved into Projects: ${note.copied} copied, ${note.same} already there, ${note.differing.length} differ and stay in the old Vault folder`);
+  projectSync = new ProjectSync({
+    vault: () => new VaultHost(peopleHost, where).localVault,
+    dir: where.dir,
+    projects: projectFolders,
+    offline: () => peopleHost.offline,
+    onStatus: (s) => { if (win && !win.isDestroyed()) win.webContents.send('shell:vault:sync', s); }
+  });
+  if (!TEST || process.env.CADREL_TEST_PROJECT_SYNC) projectSync.start();
 }
 
 /** Moving anything out from under the editor with changes unsaved would lose them. */
@@ -1047,13 +1087,17 @@ function registerShellIpc(): void {
   manageLike('stages:close', async (bookId: string) => stages.closeBook(String(bookId)));
   manageLike('stages:reopen', async (bookId: string, to: string) => stages.reopenBook(String(bookId), String(to)));
   manageLike('stages:clear', async (projectId: string) => stages.clearStage(String(projectId)));
-  const vaultHost = () => new VaultHost(peopleHost, { dir: path.join(studioFolder(), 'Vault'), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname() });
-  manageLike('vault:state', async () => vaultHost().state());
+  const vaultHost = () => new VaultHost(peopleHost, vaultWhere());
+  manageLike('vault:state', async () => {
+    const s = await vaultHost().state();
+    return s.available ? { ...s, sync: projectSync?.current() ?? null } : s;
+  });
+  manageLike('vault:sync', async () => (projectSync ? projectSync.sync() : { state: 'off', lastAt: null, message: null, summary: null }));
   manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
   manageLike('vault:history', async (p: string) => vaultHost().history(String(p)));
   manageLike('vault:detail', async (p: string) => vaultHost().detail(String(p)));
   manageLike('vault:open', async () => {
-    const dir = path.join(studioFolder(), 'Vault');
+    const dir = projectsFolder();
     await fsp.mkdir(dir, { recursive: true });
     if (!TEST) await shell.openPath(dir);
   });
@@ -1587,6 +1631,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     if (serverLink) startServerSync(serverLink);
     stages = new ProjectStages(studio, () => peopleHost.workflows, () => peopleHost.work);
     manager = new ProjectManager(studio, writeFolders(), stages);
+    void startProjectSync();
     scope = new ScopeHost({
       tree: () => studio.tree(),
       hidden: () => studio.hiddenLinks(),
@@ -1688,12 +1733,21 @@ function retireAssistantServers(): void {
 }
 
 let finalSyncStarted = false;
+let finalVaultStarted = false;
 let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
   if (installerToRun) retireAssistantServers();
   void write?.flush();
   void settings?.flush();
+  // New files written in the last few seconds are saved to the Studio before this goes (at most 8 s), while the Studio is still open.
+  // Settings are flushed first, so a wait here can never cost a setting. Not in tests, where nothing is syncing.
+  if (!smokeArg && projectSync && !finalVaultStarted && (!TEST || process.env.CADREL_TEST_PROJECT_SYNC)) {
+    finalVaultStarted = true;
+    e.preventDefault();
+    void Promise.race([(async () => { await write?.flush(); projectSync?.stop(); await projectSync?.sync(); })().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 8000))]).finally(() => app.quit());
+    return;
+  }
   void peopleHost.close();
   write?.stop();
   // Close Market's capture server first and wait for it, so port 47321 is released before this process goes and the next start never finds it taken.

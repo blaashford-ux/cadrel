@@ -9,13 +9,13 @@ const clean = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error
 const kb = (n: number | null) => (n === null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`);
 
 const STATUS: Record<Entry['status'], { label: string; hint: string }> = {
-  untracked: { label: 'Not in the vault', hint: 'It is in your working folder but nobody else can see it yet.' },
+  untracked: { label: 'Not in a project', hint: 'It is not inside a project’s folder, so it is not saved to the Studio. Move it into a project’s folder, or add it here.' },
   'not-local': { label: 'Not downloaded', hint: 'It is in the vault; get it to work with it here.' },
-  latest: { label: 'Latest', hint: 'Your copy is the newest version and is read-only.' },
+  latest: { label: 'Saved', hint: 'Your copy is the newest version.' },
   'out-of-date': { label: 'Newer version available', hint: 'Get latest to update your copy.' },
-  'checked-out-by-me': { label: 'Checked out by you', hint: 'Only you can change it. Check it in to save a new version.' },
+  'checked-out-by-me': { label: 'Checked out by you', hint: 'Only you can change it, and it is not saved automatically while it is checked out. Check it in to save a new version.' },
   'checked-out-by-other': { label: 'Checked out', hint: 'Someone else is editing it. You can read your copy.' },
-  'modified-unprotected': { label: 'Changed without a check-out', hint: 'Your copy was changed outside a check-out, so it will not be overwritten. Discard the changes to get the vault’s version.' },
+  'modified-unprotected': { label: 'Changed, not saved as a version', hint: 'You changed it here. The change is in your folder only until you press Save version, which makes it a new version for everyone. Nothing is saved automatically.' },
   missing: { label: 'Missing from your folder', hint: 'You have it checked out but the file is gone. Undo the check-out to get it back.' }
 };
 
@@ -33,12 +33,13 @@ export function Files() {
     return () => window.removeEventListener('focus', load);
   }, [load]);
 
-  const run = async <T,>(job: () => Promise<T>, ok?: string): Promise<{ ok: true; value: T } | { ok: false }> => {
+  const run = async <T,>(job: () => Promise<T>, ok?: string | ((v: T) => string | null)): Promise<{ ok: true; value: T } | { ok: false }> => {
     setError(null);
     setNote(null);
     try {
       const value = await job();
-      if (ok) setNote(ok);
+      const said = typeof ok === 'function' ? ok(value) : ok;
+      if (said) setNote(said);
       await load();
       return { ok: true, value };
     } catch (e) {
@@ -58,7 +59,8 @@ export function Files() {
 
   return (
     <div className="files">
-      <p className="muted">Real files in your working folder, kept in the vault. A file nobody is editing is read-only; check it out to edit it (nobody else can then), check it in to save a new version. <button type="button" className="link" onClick={() => void api.openFolder()}>Open the folder</button> <span className="muted small">{s.dir}</span></p>
+      <p className="muted">These are your projects’ own files, in your Projects folder. New files in a project are saved to the Studio automatically, and new versions made elsewhere (another computer, the phone) come in. What you change stays in your folder until you press <em>Save version</em>: only that, or a check-in, makes a new version, so history holds what you chose to keep. <em>Check out</em> is for when you want nobody else to change a file for a while. <button type="button" className="link" onClick={() => void api.openFolder()}>Open the folder</button> <span className="muted small">{s.dir}</span></p>
+      <SyncLine s={s} onNow={() => void run(() => api.syncNow(), 'Saved and brought up to date.')} />
       {s.offline && <div className="banner" role="status"><strong>The Studio cannot be reached.</strong> This is what was last known. Files you have checked out can still be edited here; check them in when you are back online. Check-out, check-in and Get latest need the connection.</div>}
       {s.kept.map((k) => (
         <div key={k.path} className="banner" role="alert">
@@ -76,7 +78,7 @@ export function Files() {
         <span className="muted small">{mine ? `${mine} checked out by you` : 'Nothing checked out by you'}</span>
       </div>
       {s.entries.length === 0 ? (
-        <div className="empty"><p><strong>No files yet.</strong></p><p className="muted">Put files in the working folder, then add them to the vault from here.</p></div>
+        <div className="empty"><p><strong>No files yet.</strong></p><p className="muted">Create a project and write in it, or put files in a project’s folder: they are saved to the Studio automatically.</p></div>
       ) : (
         <table className="table">
           <thead><tr><th>File</th><th>State</th><th className="num">Version</th><th className="num">Size</th><th /></tr></thead>
@@ -96,11 +98,35 @@ export function Files() {
   );
 }
 
-type Run = <T>(job: () => Promise<T>, ok?: string) => Promise<{ ok: true; value: T } | { ok: false }>;
+function SyncLine({ s, onNow }: { s: Ready; onNow(): void }) {
+  const y = s.sync;
+  if (!y) return null;
+  const sum = y.summary;
+  const when = y.lastAt ? new Date(y.lastAt).toLocaleTimeString() : null;
+  return (
+    <>
+      <div className="row">
+        <span className={`sync-line s-${y.state}`} role="status">
+          {y.state === 'syncing' ? 'Saving to the Studio…' : y.state === 'offline' ? 'Not connected: what you write is kept here and saved later' : y.state === 'error' ? 'Some files could not be saved' : y.state === 'off' ? 'Not saving: this Studio’s files are kept by its owner' : 'Saved to the Studio automatically'}
+          {when && y.state !== 'off' ? <span className="muted small"> · last checked {when}{sum && (sum.added + sum.received > 0) ? ` · ${[sum.added && `${sum.added} added`, sum.received && `${sum.received} received`].filter(Boolean).join(', ')}` : ''}</span> : null}
+        </span>
+        <button type="button" onClick={onNow} disabled={y.state === 'syncing' || y.state === 'off'}>Sync now</button>
+      </div>
+      {y.message && y.state !== 'offline' && <div className="banner error" role="alert">{y.message}</div>}
+      {sum && sum.unsaved.length > 0 && <div className="banner info" role="status"><strong>{sum.unsaved.length === 1 ? '1 file has' : `${sum.unsaved.length} files have`} changes that are not saved as a version yet.</strong> They are safe in your folder and are never overwritten. Press <em>Save version</em> on a file when you want its changes kept in the history and shared.</div>}
+      {sum?.conflicts.map((c) => <div key={c.path} className="banner" role="status"><strong>{c.path} was changed in two places.</strong> Both are kept: the other computer’s version is in place, and what you had is <code>{c.savedAs}</code> beside it. Nothing was lost.</div>)}
+      {sum && sum.held.length > 0 && <div className="banner info" role="status">Waiting because someone has these checked out: {sum.held.join(', ')}. What you changed here is kept and is saved when they are checked in.</div>}
+      {sum && sum.tooLarge.length > 0 && <div className="banner info" role="status">Too large for the Studio’s file store (over 95 MB), so not saved: {sum.tooLarge.join(', ')}.</div>}
+      {sum && sum.errors.length > 0 && <ul className="plain">{sum.errors.slice(0, 5).map((e) => <li key={e.path}><code>{e.path}</code> <span className="muted small">{e.message}</span></li>)}</ul>}
+    </>
+  );
+}
+
+type Run = <T>(job: () => Promise<T>, ok?: string | ((v: T) => string | null)) => Promise<{ ok: true; value: T } | { ok: false }>;
 
 function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: (id: string) => string; run: Run; open: boolean; onOpen: () => void }) {
   const [comment, setComment] = useState('');
-  const [mode, setMode] = useState<'in' | 'force' | null>(null);
+  const [mode, setMode] = useState<'in' | 'save' | 'force' | null>(null);
   const [reason, setReason] = useState('');
   const st = STATUS[e.status];
   const holder = e.lock ? (e.lock.personId === s.me ? 'you, on another computer' : nameOf(e.lock.personId)) : null;
@@ -120,6 +146,7 @@ function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: 
           {(e.status === 'latest' || e.status === 'not-local' || e.status === 'out-of-date') && <button type="button" className="primary" onClick={() => void run(() => api.checkOut(e.path))}>Check out</button>}
           {e.status === 'checked-out-by-me' && <button type="button" className="primary" onClick={() => setMode(mode === 'in' ? null : 'in')}>Check in…</button>}
           {(e.status === 'checked-out-by-me' || e.status === 'missing') && <button type="button" onClick={() => { if (!e.modified || window.confirm(`Discard your changes to ${e.path}?`)) void run(() => api.undoCheckOut(e.path)); }}>Undo check-out</button>}
+          {e.status === 'modified-unprotected' && <button type="button" className="primary" onClick={() => setMode(mode === 'save' ? null : 'save')}>Save version…</button>}
           {e.status === 'modified-unprotected' && <button type="button" onClick={() => { if (window.confirm(`Discard the changes to your copy of ${e.path}? They cannot be recovered.`)) void run(() => api.discardLocalChanges(e.path)); }}>Discard changes</button>}
           {s.may.force && e.lock && !(e.lock.personId === s.me && e.lock.machine === s.machine) && <button type="button" className="quiet" onClick={() => setMode(mode === 'force' ? null : 'force')}>Release…</button>}
         </td>
@@ -129,6 +156,25 @@ function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: 
           <form className="row" onSubmit={(ev) => (ev.preventDefault(), void run(() => api.checkIn(e.path, comment), 'Saved.').then((r) => r.ok && (setMode(null), setComment(''))))}>
             <input aria-label="What changed" placeholder="What changed (optional)" value={comment} onChange={(ev) => setComment(ev.target.value)} autoFocus />
             <button type="submit" className="primary">Check in</button>
+            <button type="button" className="quiet" onClick={() => setMode(null)}>Cancel</button>
+          </form>
+        </td></tr>
+      )}
+      {mode === 'save' && (
+        <tr><td colSpan={5}>
+          <form
+            className="row"
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              void run(() => api.saveVersion(e.path, comment), (r) => r.outcome === 'saved' ? `Saved as version ${r.version}.` : r.outcome === 'conflict' ? `A newer version was saved elsewhere, so both are kept: yours is ${r.savedAs}, beside the file.` : r.outcome === 'held' ? 'Someone has this file checked out, so nothing was saved. Your changes are kept here.' : 'Nothing had changed.').then((r) => {
+                if (!r.ok) return;
+                setMode(null);
+                setComment('');
+              });
+            }}
+          >
+            <input aria-label="What changed" placeholder="What changed (optional)" value={comment} onChange={(ev) => setComment(ev.target.value)} autoFocus />
+            <button type="submit" className="primary">Save version</button>
             <button type="button" className="quiet" onClick={() => setMode(null)}>Cancel</button>
           </form>
         </td></tr>
