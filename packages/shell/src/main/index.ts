@@ -1738,15 +1738,16 @@ let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
   if (installerToRun) retireAssistantServers();
-  // What was written in the last few seconds is saved to the Studio before this goes (at most 8 s), while the Studio is still open.
-  if (!smokeArg && projectSync && !finalVaultStarted) {
+  void write?.flush();
+  void settings?.flush();
+  // New files written in the last few seconds are saved to the Studio before this goes (at most 8 s), while the Studio is still open.
+  // Settings are flushed first, so a wait here can never cost a setting. Not in tests, where nothing is syncing.
+  if (!smokeArg && projectSync && !finalVaultStarted && (!TEST || process.env.CADREL_TEST_PROJECT_SYNC)) {
     finalVaultStarted = true;
     e.preventDefault();
     void Promise.race([(async () => { await write?.flush(); projectSync?.stop(); await projectSync?.sync(); })().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 8000))]).finally(() => app.quit());
     return;
   }
-  void write?.flush();
-  void settings?.flush();
   void peopleHost.close();
   write?.stop();
   // Close Market's capture server first and wait for it, so port 47321 is released before this process goes and the next start never finds it taken.
