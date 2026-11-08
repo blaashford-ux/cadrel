@@ -70,7 +70,7 @@ export function sanitizeStudios(raw: unknown): Data {
       fingerprint: typeof o.fingerprint === 'string' && /^[0-9A-F]{4}(-[0-9A-F]{4}){3}$/.test(o.fingerprint) ? o.fingerprint : null,
       tokenKept: o.tokenKept === true,
       resources: sanitizeResources(o.resources),
-      server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number } : null,
+      server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number, ...(int(server.revision) !== null ? { revision: server.revision as number } : {}) } : null,
       // a Studio the person joined has its records on its server and nowhere else
       recordsOnServer: o.role === 'member' || o.recordsOnServer === true
     });

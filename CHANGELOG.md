@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.7.4 (fix: the Studio's server could not be upgraded to get Link a phone)
+
+- **Upgrade the server is offered when the server's code is older, not only its database.** 0.7.3's *Link a phone* needs new Studio server code, but with no database change the app saw nothing to upgrade ("Upgrade the server (up to date)") and the server answered "running an older version". The server now reports a `workerRevision` in `/v1/info` and the app offers an upgrade when it is behind (a server that reports none counts as older). Open Studio Manager → *Upgrade the server* once after installing this.
+
 ## 0.7.3 (sign in on your phone as the owner)
 
 - **Sign in on your phone as yourself.** Studio Manager → *Your phone* → **Link a phone** makes a one-hour, one-use link. Paste it into Cadrel Write on the phone: no invitation to a new person and no name to give. The phone makes its own key and the Studio treats that key as the owner, so the owner's key never leaves the computer. Linked phones are listed and can be removed. No new schema version (a device is a `studio_meta` row, its link a reserved-role `invite`), so older apps keep working.

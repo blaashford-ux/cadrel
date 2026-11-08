@@ -307,7 +307,7 @@ export interface StudioEntry {
   /** What was built in the owner's Cloudflare account, so a build that stopped can be finished and an upgrade knows where to go. */
   resources: { worker: string; d1Id: string | null; d1Name: string; bucket: string } | null;
   /** The versions the Studio's server last reported, and the ones in this app; an upgrade is offered when the app's are newer. */
-  server: { api: number; schema: number } | null;
+  server: { api: number; schema: number; revision?: number } | null;
   /** The Studio's records (people, roles, catalogue, work, files) are on its server and this computer uses them there. Always so for a Studio the person joined. */
   recordsOnServer: boolean;
 }

@@ -3,7 +3,7 @@
  * the Worker holds no one's secret, only public keys. The owner's key is set when the Studio is built; members join with an invitation the
  * owner made. Nothing here reads or writes the Studio's files: that comes with the vault.
  */
-import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, verifyRequest } from '@cadrel/kernel';
+import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
 import { ensureSchema } from './schema';
 import { admitMember, personIdFor, readTree } from './records';
 import { d1Db, readVersions } from './d1';
@@ -79,7 +79,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
 
   // Public: what a person joining needs to check they are at the Studio they were told about.
   if (method === 'GET' && path === '/v1/info') {
-    return json({ studioId: env.STUDIO_ID, ownerFingerprint: await fingerprint(env.OWNER_KEY), apiVersion: STUDIO_API_VERSION, schemaVersion });
+    return json({ studioId: env.STUDIO_ID, ownerFingerprint: await fingerprint(env.OWNER_KEY), apiVersion: STUDIO_API_VERSION, schemaVersion, workerRevision: STUDIO_WORKER_REVISION });
   }
 
   const binary = method === 'PUT' && /^\/v1\/(blobs|captures)\//.test(path);

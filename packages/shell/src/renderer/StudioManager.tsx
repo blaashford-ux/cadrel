@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ROLE_KEYS, STUDIO_SCHEMA_VERSION, defaultRole } from '@cadrel/kernel';
+import { ROLE_KEYS, STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION, defaultRole } from '@cadrel/kernel';
 import type { StudioEntry, StudioPeople, StudiosView } from '../shared/api';
 import { useStudios } from './useStudios';
 
@@ -108,7 +108,7 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
   const [confirmRemove, setConfirmRemove] = useState(false);
   const ready = studio.status === 'ready';
   const building = studio.status === 'provisioning';
-  const behind = ready && studio.server !== null && studio.server.schema < STUDIO_SCHEMA_VERSION;
+  const behind = ready && studio.server !== null && (studio.server.schema < STUDIO_SCHEMA_VERSION || (studio.server.revision ?? 0) < STUDIO_WORKER_REVISION);
 
   const loadPeople = () => {
     void api.people(studio.id).then(setPeople, () => undefined);
