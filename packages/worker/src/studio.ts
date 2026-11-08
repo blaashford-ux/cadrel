@@ -204,12 +204,12 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     });
     return json({ devices });
   }
-  const delDevice = /^\/v1\/devices\/([\w-]+)$/.exec(path);
+  const delDevice = /^\/v1\/devices\/([\w-]+)$/.exec(path)?.[1];
   if (method === 'DELETE' && delDevice) {
-    const r = await env.DB.prepare('DELETE FROM studio_meta WHERE key = ?').bind(deviceKey(delDevice[1])).run();
+    const r = await env.DB.prepare('DELETE FROM studio_meta WHERE key = ?').bind(deviceKey(delDevice)).run();
     if (!(r.meta.changes ?? 0)) return fail(404, 'There is no such linked device.');
     // A removed phone must not be linkable again with a link that was already spent, and cannot rejoin as a member under the same key.
-    await env.DB.prepare("INSERT OR IGNORE INTO member (id, public_key, name, role, joined_at, revoked_at) VALUES (?, ?, 'Removed device', 'guest', ?, ?)").bind(randomId('m'), delDevice[1], iso(now), iso(now)).run();
+    await env.DB.prepare("INSERT OR IGNORE INTO member (id, public_key, name, role, joined_at, revoked_at) VALUES (?, ?, 'Removed device', 'guest', ?, ?)").bind(randomId('m'), delDevice, iso(now), iso(now)).run();
     return json({ ok: true });
   }
   if (method === 'GET' && path === '/v1/members') {
