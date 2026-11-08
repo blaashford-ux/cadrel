@@ -328,6 +328,13 @@ export interface StudioInvite {
   expiresAt: string;
 }
 
+/** A device (a phone) the owner linked to a Studio. */
+export interface StudioDevice {
+  id: string;
+  label: string;
+  linkedAt: string;
+}
+
 /** What the Studio's own server says about itself, when it can be reached. */
 export interface StudioPeople {
   reachable: boolean;
@@ -374,6 +381,11 @@ export interface StudiosApi {
   restoreServer(id: string): Promise<{ rows: number } | null>;
   /** Moves the Studio in use to its server: its records, the vault's files and its projects. Cadrel restarts into it. */
   moveRecords(id: string): Promise<{ rows: number; files: number; missing: string[]; view: StudiosView }>;
+  /** A one-hour, one-use link that signs the owner's phone in as the owner. Shown once. */
+  linkDevice(id: string, label: string): Promise<{ link: string; expiresAt: string }>;
+  /** The owner's own devices that are linked to this Studio. */
+  devices(id: string): Promise<StudioDevice[]>;
+  removeDevice(id: string, deviceId: string): Promise<StudioDevice[]>;
   revokeInvite(id: string, inviteId: string): Promise<StudioPeople>;
   removeMember(id: string, memberId: string): Promise<StudioPeople>;
   /** Accepts an invitation link someone sent: checks the Studio is the one named, joins it and adds it to this computer's list. */

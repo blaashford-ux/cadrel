@@ -984,6 +984,23 @@ function registerShellIpc(): void {
       await fsp.rm(copy, { force: true });
     }
   });
+  // The owner's phone: a one-hour link that signs another device in as the owner (it keeps its own key; this computer's key is never copied).
+  manageLike('studios:linkDevice', async (id: string, label: string) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    if (e.role !== 'owner') throw new Error('Only the owner of a Studio can link a phone to it.');
+    return client.linkDevice(String(label ?? '').slice(0, 80), e.name);
+  });
+  manageLike('studios:devices', async (id: string) => {
+    adminOnly();
+    return (await clientFor(String(id))).client.devices();
+  });
+  manageLike('studios:removeDevice', async (id: string, deviceId: string) => {
+    adminOnly();
+    const { client } = await clientFor(String(id));
+    await client.removeDevice(String(deviceId));
+    return client.devices();
+  });
   manageLike('studios:revokeInvite', async (id: string, inviteId: string) => {
     adminOnly();
     const { client } = await clientFor(String(id));

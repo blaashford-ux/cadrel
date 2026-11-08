@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased
+
+- **Sign in on your phone as yourself.** Studio Manager → *Your phone* → **Link a phone** makes a one-hour, one-use link. Paste it into Cadrel Write on the phone: no invitation to a new person and no name to give. The phone makes its own key and the Studio treats that key as the owner, so the owner's key never leaves the computer. Linked phones are listed and can be removed. No new schema version (a device is a `studio_meta` row, its link a reserved-role `invite`), so older apps keep working.
+
 ## 0.7.1 (tweaks and fixes)
 
 - **A daily-target bar in Cadrel Write's status bar.** Next to the project total, a bar fills as today's words approach the day's target, and when you pass it the bar changes colour and the text says the target is beaten. The target is the Progress window's "Needed per day", worked out once and shared by both, so they always agree. Without a goal deadline there is no daily target and no bar.

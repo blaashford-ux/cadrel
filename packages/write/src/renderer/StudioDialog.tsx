@@ -14,13 +14,15 @@ const ago = (ms: number | null, now = Date.now()): string => {
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const nameOf = (p: string) => p.slice(p.lastIndexOf('/') + 1);
 
-/** Paste an invitation link and say who you are: joins a Cadrel Studio. Used on the first screen and in the Studio dialog. */
+/** Paste an invitation link and say who you are: joins a Cadrel Studio (or, with the owner's own link, signs this phone in as the owner). Used on the first screen and in the Studio dialog. */
 export function StudioJoinForm({ onJoined, onCancel, initialLink = '' }: { onJoined(studio: StudioInfo): void; onCancel?: () => void; initialLink?: string }) {
   const [link, setLink] = useState(initialLink);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const ready = link.trim().length > 0 && name.trim().length > 0 && !busy;
+  // A link made with "Link a phone" on the owner's computer makes this phone the owner: no name to give, it is already theirs.
+  const device = /^cadrel:\/\/join\?(?:.*&)?d=1(?:&|$)/i.test(link.trim());
+  const ready = link.trim().length > 0 && (device || name.trim().length > 0) && !busy;
   const join = async () => {
     setBusy(true);
     setError(null);
@@ -44,14 +46,18 @@ export function StudioJoinForm({ onJoined, onCancel, initialLink = '' }: { onJoi
         Invitation link
         <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="cadrel://join?…" autoCapitalize="off" autoCorrect="off" spellCheck={false} inputMode="url" />
       </label>
-      <label>
-        Your name
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="What the Studio should call you" autoComplete="name" />
-      </label>
+      {device ? (
+        <p className="modal-hint">This link signs this phone in as you, the Studio’s owner, the same as on your computer.</p>
+      ) : (
+        <label>
+          Your name
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="What the Studio should call you" autoComplete="name" />
+        </label>
+      )}
       {error && <div className="modal-error" role="alert">{error}</div>}
       <div className="modal-actions">
         {onCancel && <button type="button" onClick={onCancel}>Cancel</button>}
-        <button type="submit" className="primary" disabled={!ready}>{busy ? 'Joining…' : 'Join this Studio'}</button>
+        <button type="submit" className="primary" disabled={!ready}>{busy ? 'Joining…' : device ? 'Sign in as me' : 'Join this Studio'}</button>
       </div>
     </form>
   );

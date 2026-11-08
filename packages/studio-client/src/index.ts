@@ -193,7 +193,7 @@ export class StudioClient {
  * Joins a Studio from an invitation link: checks the Studio at that address really belongs to the owner the link names, then registers a
  * new key made here. Nothing is sent to an address that did not first prove who owns it.
  */
-export async function joinStudio(o: { link: string; yourName: string; fetchFn: typeof fetch }): Promise<{ url: string; fingerprint: string; role: string; studioId: string; studioName: string | null; key: KeyPair }> {
+export async function joinStudio(o: { link: string; yourName: string; fetchFn: typeof fetch }): Promise<{ url: string; fingerprint: string; role: string; studioId: string; studioName: string | null; key: KeyPair; device: boolean }> {
   const inv = parseInvitation(o.link);
   if (!inv) throw new StudioApiError('That is not a Cadrel invitation link. It starts with cadrel://join');
   let info: { studioId: string; ownerFingerprint: string; apiVersion: number };
@@ -204,6 +204,6 @@ export async function joinStudio(o: { link: string; yourName: string; fetchFn: t
   }
   if (info.ownerFingerprint !== inv.fingerprint) throw new StudioApiError('That address does not belong to the owner the invitation names, so nothing was sent. Ask for a new invitation.');
   const key = await generateKeyPair();
-  const joined = await new StudioClient({ url: inv.url, key, fetchFn: o.fetchFn }).request<{ role: string; studioId: string }>('POST', '/v1/join', { code: inv.code, name: o.yourName.trim() });
-  return { url: inv.url, fingerprint: inv.fingerprint, role: joined.role, studioId: joined.studioId, studioName: inv.studioName ?? null, key };
+  const joined = await new StudioClient({ url: inv.url, key, fetchFn: o.fetchFn }).request<{ role: string; studioId: string }>('POST', '/v1/join', inv.device ? { code: inv.code } : { code: inv.code, name: o.yourName.trim() });
+  return { url: inv.url, fingerprint: inv.fingerprint, role: joined.role, studioId: joined.studioId, studioName: inv.studioName ?? null, key, device: inv.device === true };
 }

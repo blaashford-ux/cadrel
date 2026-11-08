@@ -71,6 +71,39 @@ describe('the Studio server', () => {
     expect((await call('GET', '/v1/me', bob)).status).toBe(403);
   });
 
+  it('links the owner\'s phone as the owner with its own key, once, with no name, and can take it away again', async () => {
+    const { owner, call } = await studio();
+    const phone = await generateKeyPair();
+    const link = await call('POST', '/v1/devices', owner, { label: 'My phone' });
+    expect(link.status).toBe(201);
+    // not a person's invitation: it is not listed with them
+    expect((await call('GET', '/v1/invites', owner)).body.invites).toHaveLength(0);
+    const joined = await call('POST', '/v1/join', phone, { code: link.body.code });
+    expect(joined.status).toBe(200);
+    expect(joined.body).toMatchObject({ role: 'owner', studioId: 'st1' });
+    expect((await call('GET', '/v1/me', phone)).body).toMatchObject({ kind: 'owner', role: 'owner' });
+    expect((await call('GET', '/v1/devices', owner)).body.devices).toMatchObject([{ id: phone.publicKey, label: 'My phone' }]);
+    // the phone is the owner (it can invite), a stranger cannot reuse the spent link, and no one joined as a member
+    expect((await call('POST', '/v1/invites', phone, { role: 'author', label: 'x' })).status).toBe(201);
+    expect((await call('POST', '/v1/join', await generateKeyPair(), { code: link.body.code })).status).toBe(410);
+    expect((await call('GET', '/v1/members', owner)).body.members).toHaveLength(0);
+    // a person who is not the owner cannot make a link or list the devices
+    const alice = await generateKeyPair();
+    const inv = await call('POST', '/v1/invites', owner, { role: 'author', label: 'Alice' });
+    await call('POST', '/v1/join', alice, { code: inv.body.code, name: 'Alice' });
+    expect((await call('POST', '/v1/devices', alice, { label: 'x' })).status).toBe(403);
+    // removing the phone shuts it out
+    expect((await call('DELETE', `/v1/devices/${phone.publicKey}`, owner)).status).toBe(200);
+    expect((await call('GET', '/v1/me', phone)).status).toBe(403);
+  });
+
+  it('refuses an expired phone link', async () => {
+    const { owner, call, tick } = await studio();
+    const link = await call('POST', '/v1/devices', owner, { label: 'Old' });
+    tick(2 * 60 * 60 * 1000);
+    expect((await call('POST', '/v1/join', await generateKeyPair(), { code: link.body.code })).status).toBe(410);
+  });
+
   it('only the owner administers: members and strangers cannot invite, list or remove', async () => {
     const { owner, call } = await studio();
     const alice = await generateKeyPair();

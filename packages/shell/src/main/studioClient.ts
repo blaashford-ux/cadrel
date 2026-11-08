@@ -18,6 +18,17 @@ export class StudioClient extends BaseClient {
     const r = await this.request<{ code: string; expiresAt: string }>('POST', '/v1/invites', { role, label, ...(grant.projectId ? { projectId: grant.projectId } : {}), ...(grant.days ? { days: grant.days } : {}) });
     return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName }), expiresAt: r.expiresAt }; // an owner's key is the Studio's key
   }
+  /** A one-hour, one-use link that makes another device of the owner's (a phone) the owner too, with its own key. The code is shown once. */
+  async linkDevice(label: string, studioName: string): Promise<{ link: string; expiresAt: string }> {
+    const r = await this.request<{ code: string; expiresAt: string }>('POST', '/v1/devices', { label });
+    return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName, device: true }), expiresAt: r.expiresAt };
+  }
+  async devices(): Promise<{ id: string; label: string; linkedAt: string }[]> {
+    return (await this.request<{ devices: { id: string; label: string; linkedAt: string }[] }>('GET', '/v1/devices')).devices;
+  }
+  removeDevice(id: string) {
+    return this.request('DELETE', `/v1/devices/${encodeURIComponent(id)}`);
+  }
   revokeInvite(id: string) {
     return this.request('DELETE', `/v1/invites/${encodeURIComponent(id)}`);
   }
