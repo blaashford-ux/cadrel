@@ -35,7 +35,7 @@ Every step first looks for what an earlier try made, so pressing Provision again
 
 **The token** is used for this and dropped. *Keep this token on this computer* stores it encrypted with the operating system's store (Electron `safeStorage`; DPAPI on Windows), only for upgrades, and **Forget it** deletes it. If the computer has no secure store the token is not kept.
 
-**Upgrade** uploads the Worker again. It never goes backwards: a Studio whose schema or API is newer than the app's is left alone and the message says to update Cadrel.
+**Upgrade** uploads the Worker again. It is offered when the Studio's schema is older than the app's, or its `workerRevision` (`STUDIO_WORKER_REVISION` in `@cadrel/kernel`, reported by `/v1/info`) is: raise the revision whenever the Worker gains something an older one lacks without a schema change. It never goes backwards: a Studio whose schema or API is newer than the app's is left alone and the message says to update Cadrel.
 
 ### One Studio for every build
 

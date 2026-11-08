@@ -40,7 +40,7 @@ export interface Build {
 export interface Built {
   url: string;
   resources: NonNullable<StudioEntry['resources']>;
-  server: { api: number; schema: number };
+  server: { api: number; schema: number; revision: number };
 }
 
 /** The names of what a Studio is made of in Cloudflare. Letters, digits and dashes only: the Worker's name becomes part of its address. */
@@ -145,15 +145,15 @@ export class Cloudflare {
   }
 
   /** Waits for the new Worker to answer as the Studio it was told it is (a fresh Worker can take a little while to be reachable). */
-  async waitUntilAnswering(url: string, expected: string, tries = 20): Promise<{ api: number; schema: number }> {
+  async waitUntilAnswering(url: string, expected: string, tries = 20): Promise<{ api: number; schema: number; revision: number }> {
     this.say('Waiting for the Studio to answer…');
     let last = 'it did not answer';
     for (let i = 0; i < tries; i++) {
       try {
         const res = await this.o.fetchFn(`${url}/v1/info`);
         if (res.ok) {
-          const info = (await res.json()) as { ownerFingerprint?: string; apiVersion?: number; schemaVersion?: number };
-          if (info.ownerFingerprint === expected) return { api: info.apiVersion ?? 0, schema: info.schemaVersion ?? 0 };
+          const info = (await res.json()) as { ownerFingerprint?: string; apiVersion?: number; schemaVersion?: number; workerRevision?: number };
+          if (info.ownerFingerprint === expected) return { api: info.apiVersion ?? 0, schema: info.schemaVersion ?? 0, revision: info.workerRevision ?? 0 };
           last = 'it answered, but as a different Studio';
           break;
         }

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, readdir } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { fingerprint, generateKeyPair, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION } from '@cadrel/kernel';
+import { fingerprint, generateKeyPair, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION } from '@cadrel/kernel';
 import { ACCOUNT, TOKEN, fakeCloudflare } from './fakeCloudflare';
 import { buildStudio, Cloudflare, CloudflareError, namesFor, upgradeStudio } from '../src/main/cloudflare';
 import { Secrets, SecretsError } from '../src/main/secrets';
@@ -25,7 +25,7 @@ describe('building a Studio in Cloudflare', () => {
     expect(n.worker).toBe('cadrel-studio-sabc123def4');
     expect(built.url).toBe(`https://${n.worker}.me.workers.dev`);
     expect(built.resources).toEqual({ worker: n.worker, d1Id: 'uuid-1', d1Name: n.d1, bucket: n.bucket });
-    expect(built.server).toEqual({ api: STUDIO_API_VERSION, schema: STUDIO_SCHEMA_VERSION });
+    expect(built.server).toEqual({ api: STUDIO_API_VERSION, schema: STUDIO_SCHEMA_VERSION, revision: STUDIO_WORKER_REVISION });
     expect([...cf.buckets]).toEqual([n.bucket]);
     expect(cf.workers.get(n.worker)!.bindings).toEqual(expect.arrayContaining([{ type: 'd1', name: 'DB', id: 'uuid-1' }, { type: 'r2_bucket', name: 'FILES', bucket_name: n.bucket }, { type: 'plain_text', name: 'OWNER_KEY', text: key.publicKey }]));
     expect(steps).toEqual(expect.arrayContaining([expect.stringMatching(/database/), expect.stringMatching(/file store/), expect.stringMatching(/server/)]));

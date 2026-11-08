@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fingerprint, generateKeyPair, signRequest, STUDIO_SCHEMA_VERSION, type KeyPair } from '@cadrel/kernel';
+import { fingerprint, generateKeyPair, signRequest, STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION, type KeyPair } from '@cadrel/kernel';
 import worker, { type Env } from '../src/index';
 import { MIGRATIONS } from '../src/migrations';
 import { fakeD1 } from './d1fake';
@@ -45,7 +45,7 @@ describe('the Studio server', () => {
     const { owner, call, env } = await studio();
     const info = await call('GET', '/v1/info', null);
     expect(info.status).toBe(200);
-    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 16 });
+    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 16, workerRevision: STUDIO_WORKER_REVISION });
     const health = await worker.fetch(new Request('https://studio.test/v1/health'), env);
     expect(health.status).toBe(200);
   });
