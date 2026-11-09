@@ -18,6 +18,8 @@ interface Props {
   onNav?(nav: SceneNav | null): void;
   /** The file line this chapter starts on, so the gutter shows file-wide line numbers. */
   firstLine: number;
+  /** The file is checked in (or someone else has it): it can be read and selected but not changed. */
+  readOnly?: boolean;
 }
 
 /** Plain-text editing of one chapter's exact Markdown: nothing is reformatted. */
@@ -70,7 +72,7 @@ function lineTops(ta: HTMLTextAreaElement): { tops: number[]; lineHeight: number
   return { tops, lineHeight, bottom };
 }
 
-export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstLine }: Props) {
+export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstLine, readOnly }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const [marks, setMarks] = useState<LineMark[]>([]);
   const marksRef = useRef<LineMark[]>([]);
@@ -253,6 +255,7 @@ export function SourceEditor({ raw, draft, onChange, savedVersion, onNav, firstL
         spellCheck
         aria-label="Chapter Markdown source"
         defaultValue={draft ?? raw}
+        readOnly={readOnly === true}
         onInput={(e) => report(e.currentTarget.value)}
         onScroll={(e) => setScroll(e.currentTarget.scrollTop)}
       />

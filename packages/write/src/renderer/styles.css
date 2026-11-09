@@ -796,3 +796,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .pane.rw-left .head-actions, .pane.rw-right .head-actions { flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
 .pane.rw-left .head-actions button, .pane.rw-right .head-actions button { padding: 3px 8px; font-size: 12.5px; }
 .rw-chip { margin-left: 8px; vertical-align: middle; font-weight: 500; white-space: nowrap; }
+
+/* Check out / check in, where files are kept in a Studio's vault */
+.banner.file-lock { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.banner.file-lock .file-lock-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; flex: 1; }
+.banner.file-lock .file-lock-form input { flex: 1; min-width: 160px; }
+.banner.file-lock.lock-free, .banner.file-lock.lock-other { background: var(--surface-2, var(--surface)); }
+.banner.file-lock.lock-unprotected { border-left: 3px solid var(--danger); }
+.banner.file-lock .file-lock-error { color: var(--danger); }

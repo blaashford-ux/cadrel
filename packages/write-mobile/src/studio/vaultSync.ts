@@ -1,16 +1,22 @@
 /**
  * Keeps a Studio's project files on the phone in step with the Studio's vault.
  *
- * The vault is check-out / check-in: one person holds a file at a time, and every check-in is a new version. The phone works with it like this:
+ * The vault is check-out / check-in: one person holds a file at a time, and every check-in is a new version. The phone works with it the same way
+ * the computer does: **check a file out, edit it, check it in**. Only a check-in makes a version; nothing local is ever versioned.
  *
  *  - A project the person may see is a folder in the app's own storage, with the vault's text files (Markdown, plain text, Fountain) in it. The
  *    folder has the `.cadrel/project.json` Write expects, so the editor opens it like any project of its own.
- *  - Writing is just writing to those files, also with no connection. A pass (when there is a connection, soon after an edit, when the app comes
- *    to the front, and every minute while it is open) brings in new versions and adds new files. It never makes a version of an edit: a change
- *    stays on the phone, listed as unsaved, and is never overwritten, until the person saves a version (`saveVersion`), so history holds what they
- *    chose to keep. Saving takes the file's lock, makes the version and gives the lock back at once, so the phone never keeps a file from the desktop.
- *  - If the file moved on in the meantime (someone saved a newer version first), or someone holds it, the phone's text is kept as a separate
- *    "conflict" file and also sent to the Studio as a new file. Nothing is overwritten and nothing is lost; the person decides.
+ *  - A file nobody has checked out is read-only here: the editor refuses before anything is typed (`assertWritable`). Checking it out
+ *    (`checkOut`) takes the Studio's lock for this phone; editing then works, also with no connection; checking it in (`checkIn`) makes the version
+ *    and gives the lock back. A file held on the computer (or by someone else) can be read, and changed once they have checked it in.
+ *  - A pass (when there is a connection, soon after an edit, when the app comes to the front, and every minute while it is open) brings in new
+ *    versions and adds new files (a file made here stays checked out to the person who made it). It never touches a file this phone has checked
+ *    out, and never makes a version of anything.
+ *  - A file changed here with no check-out (only possible from an older version of this app) is left exactly as it is and listed; the person can
+ *    check it out keeping the changes.
+ *  - **Notes** (`.cadrel/review/*.json`) travel with the project's files but are not checked out: they are merged with the Studio's copy (each
+ *    note by its id, the newer wins, replies united) and saved at most every couple of minutes, so notes made on the phone and on the computer
+ *    both end up on both.
  *  - New files in a project are added to the vault. The vault cannot rename or delete, so neither can the phone.
  *  - What the person may do is decided by the Studio's server on every call; the phone also asks up front (`canAt`) so it can say so in words.
  *
@@ -18,7 +24,8 @@
  */
 import { cleanVaultPath, hex, sha256, type CheckInResult, type CheckOutResult, type AddFileResult, type Project, type ProjectTree, type VaultListing } from '@cadrel/kernel';
 import { StudioApiError, StudioOfflineError } from '@cadrel/studio-client';
-import type { SyncApi, SyncStatus, SyncSummary } from '@cadrel/write/src/shared/api';
+import type { FileLock, FileLockApi, SyncApi, SyncStatus, SyncSummary } from '@cadrel/write/src/shared/api';
+import { mergeReviewText } from '@cadrel/write/src/shared/review/comments';
 import { errorCode, type FsPort } from '@cadrel/write/src/shared/fsPort';
 import { conflictName, safeName, uniqueName } from './names';
 
@@ -34,6 +41,10 @@ export interface StudioPort {
 
 /** The files the phone edits: text. The vault may hold more; those stay on the Studio. */
 export const TEXT_FILE = /\.(md|markdown|txt|fountain)$/i;
+/** A project's notes: not a file to check out, but kept in step by merging. */
+export const NOTES_FILE = /(^|\/)\.cadrel\/review\/[^/]+\.json$/i;
+/** The least time between two saves of the same notes file, so a flurry of notes is one version. */
+const NOTES_EVERY_MS = 2 * 60_000;
 const NO_PROJECT = '_';
 const PROJECT_DIR = '.cadrel';
 
@@ -50,6 +61,8 @@ export interface SyncedFile {
   hash: string;
   /** The hash of the text as the phone last read it from storage: if it still is, the file has not been edited here. */
   base: string;
+  /** This phone has the file checked out (it holds the Studio's lock): it can be edited, also with no connection, until it is checked in. */
+  held?: boolean;
   mtimeMs: number;
   size: number;
 }
@@ -103,7 +116,9 @@ export class StudioSync implements SyncApi {
   private again = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private poll: ReturnType<typeof setInterval> | null = null;
-  private lockedBy = new Map<string, string>();
+  /** Who has each file, as the last pass saw it: what the editor and the check-out button say. */
+  private views = new Map<string, { mine: boolean; by: string | null; since: string | null; version: number }>();
+  private notesPushedAt = new Map<string, number>();
   private revoked = false;
 
   constructor(private readonly o: StudioSyncOptions) {}
@@ -145,13 +160,22 @@ export class StudioSync implements SyncApi {
     return null;
   }
 
+  /** The file this path is, if the phone has it from the Studio. */
+  private fileAtPath(path: string): SyncedFile | null {
+    const p = path.replace(/\\/g, '/');
+    return Object.values(this.data.files).find((e) => this.data.projects[e.project] && this.abs(e) === p) ?? null;
+  }
+
   /** Throws, in words, if the person may not change this file (or add one here). Everything else is allowed, with or without a connection. */
   assertWritable(path: string): void {
     const at = this.projectOf(path);
     if (!at) return;
     if (!at.project.canWrite) throw new Error('You can read this project, but your role in the Studio does not let you change it.');
-    const holder = this.lockedBy.get(path.replace(/\\/g, '/'));
-    if (holder) throw new Error(`${holder} has this file checked out. You can read it, and change it once they have checked it in.`);
+    const e = this.fileAtPath(path);
+    if (!e || NOTES_FILE.test(e.rel)) return; // a file not made yet, or notes: written as usual
+    if (e.held || this.views.get(e.id)?.mine) return;
+    const by = this.views.get(e.id)?.by;
+    throw new Error(by ? `${by} has this file checked out. You can read it, and change it once they have checked it in.` : 'This file is checked in. Check it out to edit it.');
   }
 
   // ---- the status the app shows ------------------------------------------------------------------------------------------------
@@ -211,7 +235,7 @@ export class StudioSync implements SyncApi {
 
   private async pass(): Promise<SyncStatus> {
     const started = Date.now();
-    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0, unsaved: [] };
+    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0, checkedOut: [], unprotected: [] };
     this.set({ state: 'syncing', message: null, progress: null });
     try {
       await this.run(sum);
@@ -248,14 +272,14 @@ export class StudioSync implements SyncApi {
     const names = new Map<string, string>();
     for (const p of await port.rpc<{ id: string; name: string }[]>(['people', 'list'], []).catch(() => [])) names.set(p.id, p.name);
 
-    const remote = listing.filter((f) => TEXT_FILE.test(f.path));
+    const remote = listing.filter((f) => TEXT_FILE.test(f.path) || NOTES_FILE.test(f.path));
     const nonText = listing.length - remote.length;
     if (nonText > 0) sum.skipped.push({ path: '(images and other files)', reason: `${nonText} file${nonText === 1 ? ' is' : 's are'} not text, so ${nonText === 1 ? 'it stays' : 'they stay'} on the Studio` });
 
     await this.syncProjects(tree, remote);
     await this.mkdir(this.o.root);
 
-    this.lockedBy.clear();
+    this.views.clear();
     const seen = new Set<string>();
     let done = 0;
     const total = remote.length;
@@ -394,15 +418,16 @@ export class StudioSync implements SyncApi {
     const local = this.data.projects[projectId]!;
     const e = this.data.files[file.id];
 
-    const holder = file.lock && !(file.lock.personId === me.personId && file.lock.machine === this.o.machine) ? file.lock : null;
-    const guardLock = (entry: SyncedFile) => {
-      if (holder) this.lockedBy.set(this.abs(entry), names.get(holder.personId) ?? 'Someone');
-    };
+    // who has it: this phone (it holds the lock), someone else, or nobody
+    const mine = !!file.lock && file.lock.personId === me.personId && file.lock.machine === this.o.machine;
+    const holder = file.lock && !mine ? file.lock : null;
+    this.views.set(file.id, { mine, by: holder ? (holder.personId === me.personId ? 'you, on another device' : names.get(holder.personId) ?? 'someone') : null, since: file.lock?.since ?? null, version: file.currentVersion });
+    if (e && !!e.held !== mine) e.held = mine; // the Studio's word: a lock taken here is kept, one taken away (released by an administrator) is gone
 
     if (!e) {
       const target = `${this.projectDir(local)}/${this.relOf(local, file.path)}`;
       if (await this.stat(target)) await this.keepAsConflict(target, sum); // a file of the same name made here first: it is kept as a conflict copy
-      guardLock(await this.download(file, local, projectId));
+      await this.download(file, local, projectId);
       sum.downloaded++;
       return;
     }
@@ -410,29 +435,60 @@ export class StudioSync implements SyncApi {
     const abs = this.abs(e);
     if (!(await this.stat(abs))) {
       // deleted on the phone: the vault cannot delete, so the file comes back
-      guardLock(await this.download(file, local, projectId, e));
+      await this.download(file, local, projectId, e);
       sum.downloaded++;
       return;
     }
-    if (await this.edited(e, abs)) {
+    const edited = await this.edited(e, abs);
+    if (NOTES_FILE.test(e.rel)) {
+      if (edited) await this.syncNotes(file, e, abs, local, me, sum);
+      else if (file.currentVersion > e.version || file.hash !== e.hash) {
+        await this.download(file, local, projectId, e);
+        sum.downloaded++;
+      }
+      return;
+    }
+    if (mine) {
+      // this phone has it checked out: what is in it is the person's, whatever the Studio has
+      sum.checkedOut!.push({ id: file.id, name: `${local.name}/${e.rel}`, path: abs, changed: edited });
+      return;
+    }
+    if (edited) {
       if (!local.canWrite) {
         // a role that cannot change this project can never save this edit: it is kept aside and the original put back
         await this.rescue(abs, e);
-        guardLock(await this.download(file, local, e.project, e));
+        await this.download(file, local, e.project, e);
         sum.errors.push({ path: file.path, message: 'You can read this project but not change it, so your edit was kept aside on this phone and the original restored.' });
         return;
       }
-      // changed here: left exactly as it is (even if a newer version exists) until the person saves a version
-      sum.unsaved!.push({ id: file.id, name: `${local.name}/${e.rel}` });
-      guardLock(e);
+      // changed here with no check-out: left exactly as it is, even if a newer version exists; never versioned, never overwritten
+      sum.unprotected!.push({ id: file.id, name: `${local.name}/${e.rel}`, path: abs });
       return;
     }
     if (file.currentVersion > e.version || file.hash !== e.hash) {
-      guardLock(await this.download(file, local, projectId, e));
+      await this.download(file, local, projectId, e);
       sum.downloaded++;
-      return;
     }
-    guardLock(e);
+  }
+
+  /**
+   * Notes changed here. If the Studio has a newer copy (notes made on the computer) the two are merged first, so neither side's notes are lost; the
+   * merged file is then saved as the next version, at most every couple of minutes. Not notes after all (unreadable): both are kept.
+   */
+  private async syncNotes(file: VaultListing, e: SyncedFile, abs: string, local: LocalProject, me: { personId: string }, sum: SyncSummary): Promise<void> {
+    const behind = file.currentVersion > e.version;
+    if (!behind && this.now().getTime() - (this.notesPushedAt.get(file.id) ?? 0) < NOTES_EVERY_MS) return;
+    if (behind) {
+      const bytes = file.hash ? await this.o.port.getBlob(file.hash) : null;
+      const remoteText = bytes ? dec.decode(bytes) : '';
+      const merged = mergeReviewText(await this.o.fs.readText(abs), remoteText);
+      if (merged === null) return this.conflict(file, e, abs, local, sum);
+      await this.o.fs.writeText(abs, merged);
+      // the merged copy is a change on top of the Studio's newest notes
+      Object.assign(e, { version: file.currentVersion, hash: file.hash ?? '', base: await hashOf(remoteText) });
+    }
+    await this.push(file, e, abs, local, me, sum, 'Notes');
+    this.notesPushedAt.set(file.id, this.now().getTime());
   }
 
   /** Saves the phone's edit of a file as its next version, or keeps it as a conflict copy if the file has moved on or is held. */
@@ -513,9 +569,9 @@ export class StudioSync implements SyncApi {
     const tracked = new Set(Object.values(this.data.files).map((f) => this.abs(f)));
     for (const [projectId, local] of Object.entries(this.data.projects)) {
       const dir = this.projectDir(local);
-      for (const rel of await this.walk(dir, '')) {
+      for (const rel of [...(await this.walk(dir, '')), ...(await this.noteFiles(dir))]) {
         const abs = `${dir}/${rel}`;
-        if (tracked.has(abs) || !TEXT_FILE.test(rel)) continue;
+        if (tracked.has(abs) || !(TEXT_FILE.test(rel) || NOTES_FILE.test(rel))) continue;
         if (!local.canWrite) {
           sum.skipped.push({ path: abs, reason: 'you can read this project but not add to it' });
           continue;
@@ -528,6 +584,12 @@ export class StudioSync implements SyncApi {
         }
       }
     }
+  }
+
+  /** The project's notes files (`.cadrel/review/*.json`), which `walk` does not look at (it skips the project's own hidden folders). */
+  private async noteFiles(dir: string): Promise<string[]> {
+    const names = await this.o.fs.readdir(`${dir}/.cadrel/review`).catch(() => []);
+    return names.filter((n) => n.isFile && /\.json$/i.test(n.name)).map((n) => `.cadrel/review/${n.name}`);
   }
 
   private async walk(dir: string, rel: string): Promise<string[]> {
@@ -578,40 +640,147 @@ export class StudioSync implements SyncApi {
       return;
     }
     const s = (await this.stat(at)) ?? { mtimeMs: 0, size: 0 };
-    this.data.files[r.id] = { id: r.id, path, project: projectId, rel: atRel, version: r.version, hash, base: await hashOf(text), mtimeMs: s.mtimeMs, size: s.size };
+    const entry: SyncedFile = { id: r.id, path, project: projectId, rel: atRel, version: r.version, hash, base: await hashOf(text), mtimeMs: s.mtimeMs, size: s.size };
+    this.data.files[r.id] = entry;
     sum.uploaded++;
+    // a file made here stays checked out to its author, who goes on writing in it; notes are never checked out
+    if (!NOTES_FILE.test(atRel)) {
+      const co = await this.o.port.vault<CheckOutResult>('checkOut', { fileId: r.id, machine: this.o.machine }).catch(() => null);
+      if (co?.ok) {
+        entry.held = true;
+        this.views.set(r.id, { mine: true, by: null, since: this.now().toISOString(), version: r.version });
+      }
+    }
   }
 
   // ---- what the app needs to know ----------------------------------------------------------------------------------------------
 
-  /**
-   * Saves a file's changes as a new version: the person's act, never the clock's. The Studio decides who may; with no connection this says so
-   * and the change stays on the phone. `saved`: one new version; `conflict`: the file had moved on or someone holds it, so the phone's text is a
-   * file of its own beside it; `unchanged`: it was changed back to what the Studio has.
-   */
-  saveVersion = async (fileId: string, comment = ''): Promise<{ outcome: 'saved' | 'conflict' | 'unchanged'; version: number | null }> => {
-    await this.load();
-    const e = this.data.files[fileId];
-    if (!e || !this.data.projects[e.project]) throw new Error('That file is not on this phone.');
-    while (this.running) await this.running.catch(() => undefined); // never during a pass
-    const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0 };
-    const before = e.version;
+  // ---- check out, edit, check in ---------------------------------------------------------------------------------------------
+
+  /** What the editor shows for a file: checked in (read-only), checked out by this phone, or someone else's. Files the Studio does not have are written as usual. */
+  private async lockOf(e: SyncedFile): Promise<FileLock> {
+    if (NOTES_FILE.test(e.rel)) return { kind: 'unmanaged' };
+    const v = this.views.get(e.id);
+    const edited = await this.edited(e, this.abs(e)).catch(() => false);
+    if (e.held || v?.mine) return { kind: 'mine', version: e.version, since: v?.since ?? '', changed: edited };
+    if (v?.by) return { kind: 'other', version: v.version, by: v.by, since: v.since ?? '' };
+    if (edited) return { kind: 'unprotected', version: e.version };
+    return { kind: 'free', version: e.version };
+  }
+
+  private known(path: string): SyncedFile {
+    const e = this.fileAtPath(path);
+    if (!e) throw new Error('That file is not one of the Studio’s files on this phone.');
+    return e;
+  }
+
+  /** What the Studio says about one file right now. A phone with no connection says so in words: check-out and check-in need one. */
+  private async listed(e: SyncedFile): Promise<VaultListing> {
     try {
-      const file = (await this.o.port.vault<VaultListing[]>('list')).find((f) => f.id === fileId);
+      const file = (await this.o.port.vault<VaultListing[]>('list')).find((f) => f.id === e.id);
       if (!file) throw new Error('That file is no longer in the Studio, or your role cannot see it.');
-      await this.push(file, e, this.abs(e), this.data.projects[e.project]!, await this.o.port.me(), sum, comment);
+      return file;
     } catch (err) {
-      if (err instanceof StudioOfflineError) throw new Error('No connection to the Studio. Your changes are kept on this phone; save a version when you are back online.');
-      throw isDenied(err) ? new Error('Your role in the Studio does not allow changing this file.') : err;
+      if (err instanceof StudioOfflineError) throw new Error('No connection to the Studio. Check-out and check-in need one; what you have checked out can still be edited.');
+      throw err;
     }
+  }
+
+  /**
+   * Takes the file to edit it: the Studio's lock is taken for this phone, and the newest version is the one to start from. With `keepChanges`, a
+   * file that was changed here with no check-out is taken as it is, if it is still based on the newest version.
+   */
+  private checkOutFile = async (path: string, o: { keepChanges?: boolean } = {}): Promise<FileLock> => {
+    await this.load();
+    const e = this.known(path);
+    const local = this.data.projects[e.project]!;
+    if (!local.canWrite) throw new Error('You can read this project, but your role in the Studio does not let you change it.');
+    const before = await this.listed(e);
+    const me = await this.o.port.me();
+    if (before.lock && !(before.lock.personId === me.personId && before.lock.machine === this.o.machine)) {
+      const by = before.lock.personId === me.personId ? 'you, on another device' : 'someone else';
+      throw new Error(`${by[0]!.toUpperCase()}${by.slice(1)} has this file checked out. You can read it, and change it once it has been checked in.`);
+    }
+    const edited = await this.edited(e, this.abs(e));
+    if (edited && !o.keepChanges) throw new Error('This copy was changed without checking it out, so it is left as it is. Check it out keeping your changes, or ask for the Studio’s version to be fetched again.');
+    const release = () => this.o.port.vault('undoCheckOut', { fileId: e.id, machine: this.o.machine }).catch(() => undefined);
+    const co = await this.o.port.vault<CheckOutResult>('checkOut', { fileId: e.id, machine: this.o.machine });
+    if (!co.ok) throw new Error('Someone has just checked this file out. Try again when they have checked it in.');
+    if (edited && co.baseVersion !== e.version) {
+      await release();
+      throw new Error('A newer version was saved since this copy was taken, so your changes cannot be checked out onto it. They are kept as they are.');
+    }
+    if (!edited) {
+      const now = (await this.listed(e)) ?? before; // the lock is ours: nobody can change the file now, so this is the version to start from
+      if (now.currentVersion !== e.version || now.hash !== e.hash) await this.download(now, local, e.project, e);
+    }
+    e.held = true;
+    this.views.set(e.id, { mine: true, by: null, since: this.now().toISOString(), version: co.baseVersion });
     await this.save();
-    void this.syncNow();
-    if (sum.errors.length) throw new Error(sum.errors[0]!.message);
-    if (sum.conflicts.length) return { outcome: 'conflict', version: null };
-    return sum.uploaded > 0 ? { outcome: 'saved', version: this.data.files[fileId]?.version ?? null } : { outcome: 'unchanged', version: before };
+    return this.lockOf(e);
   };
 
-  /** Whether any file has been changed here and not yet saved as a version. */
+  /** Saves what is in the file as a new version and gives the lock back. Nothing changed: the lock is given back and no version is made. */
+  private checkInFile = async (path: string, comment = ''): Promise<FileLock> => {
+    await this.load();
+    const e = this.known(path);
+    const file = await this.listed(e);
+    const me = await this.o.port.me();
+    if (!file.lock || file.lock.personId !== me.personId || file.lock.machine !== this.o.machine) {
+      e.held = false;
+      throw new Error('You do not have this file checked out here, so there is nothing to check in.');
+    }
+    const abs = this.abs(e);
+    const text = await this.o.fs.readText(abs);
+    const bytes = enc.encode(text);
+    const hash = hex(await sha256(bytes));
+    try {
+      if (hash === file.hash) {
+        await this.o.port.vault('undoCheckOut', { fileId: e.id, machine: this.o.machine });
+      } else {
+        await this.o.port.putBlob(hash, bytes);
+        const ci = await this.o.port.vault<CheckInResult>('checkIn', { fileId: e.id, machine: this.o.machine, hash, size: bytes.length, comment: comment.trim() || `Checked in from ${this.o.device}` });
+        if (!ci.ok) throw new Error('Your check-out was taken away, so this was not saved to the Studio. Your copy is kept on this phone.');
+        const s = (await this.stat(abs)) ?? { mtimeMs: e.mtimeMs, size: e.size };
+        Object.assign(e, { version: ci.version, hash, base: await hashOf(text), mtimeMs: s.mtimeMs, size: s.size });
+      }
+    } catch (err) {
+      if (err instanceof StudioOfflineError) throw new Error('No connection to the Studio, so nothing was checked in. The file stays checked out here and can still be edited.');
+      throw isDenied(err) ? new Error('Your role in the Studio does not allow changing this file.') : err;
+    }
+    e.held = false;
+    this.views.set(e.id, { mine: false, by: null, since: null, version: e.version });
+    await this.save();
+    void this.syncNow();
+    return this.lockOf(e);
+  };
+
+  /** Gives the lock back without a new version; this phone's copy goes back to the newest version. */
+  private undoCheckOutFile = async (path: string): Promise<FileLock> => {
+    await this.load();
+    const e = this.known(path);
+    const file = await this.listed(e);
+    await this.o.port.vault('undoCheckOut', { fileId: e.id, machine: this.o.machine });
+    await this.download(file, this.data.projects[e.project]!, e.project, e);
+    e.held = false;
+    this.views.set(e.id, { mine: false, by: null, since: null, version: file.currentVersion });
+    await this.save();
+    return this.lockOf(e);
+  };
+
+  /** What the editor's Check out / Check in buttons use. */
+  readonly fileLock: FileLockApi = {
+    state: async (path) => {
+      await this.load();
+      const e = this.fileAtPath(path);
+      return e ? this.lockOf(e) : { kind: 'unmanaged' };
+    },
+    checkOut: (path, o) => this.checkOutFile(path, o),
+    checkIn: (path, comment) => this.checkInFile(path, comment),
+    undoCheckOut: (path) => this.undoCheckOutFile(path)
+  };
+
+  /** How many files are changed here: the ones this phone has checked out, and any changed without a check-out. */
   async unsentCount(): Promise<number> {
     await this.load();
     let n = 0;

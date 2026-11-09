@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { flattenMarkdown } from '../shared/agent/flatten';
 import { locateAnchor } from '../shared/review/comments';
-import type { MenuAction, SyncStatus } from '../shared/api';
+import type { FileLock, MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
 import { collectOrphans, findNode } from '../shared/tree';
 import { countWords } from '../shared/words';
@@ -47,6 +47,8 @@ import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
 import { appName } from './appName';
 import { useShowAllManuscripts, useWriteScope } from './useWriteScope';
+import { useFileLocks } from './useFileLocks';
+import { FileLockBar } from './FileLockBar';
 import { folderInScope, hiddenFolders, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
 import { SharingHome } from './SharingHome';
 import type { SharedProject } from '../shared/review/share';
@@ -189,6 +191,27 @@ export function App() {
   const closedHere = !!projectPath && scopedFolderOf(projectPath, folders)?.closed === true;
   /** Nothing here can be changed: Cadrel Reader, a project shared for review, or a closed Book. */
   const locked = isReviewer || closedHere;
+  // Where the files are kept in a Studio's vault, a file is read-only until it is checked out (and a check-in is what makes a version).
+  const fileLocks = useFileLocks(window.cadrelWrite.fileLock, s.tabs.map((t) => t.file));
+  const [lockBusy, setLockBusy] = useState(false);
+  const [lockError, setLockError] = useState<{ file: string; message: string } | null>(null);
+  /** Runs a check-out / check-in for a file, then looks at the file again (a check-out may bring in a newer version). Its refusal is shown on the file. */
+  const lockAct = async (file: string, job: (api: NonNullable<typeof window.cadrelWrite.fileLock>) => Promise<FileLock>, before?: () => Promise<boolean>) => {
+    const api = window.cadrelWrite.fileLock;
+    if (!api) return;
+    setLockBusy(true);
+    setLockError(null);
+    try {
+      if (before && !(await before())) throw new Error('Saving the file failed, so it was not checked in.');
+      await fileLocks.act(file, () => job(api));
+      await ws.checkFile(file);
+    } catch (e) {
+      setLockError({ file, message: cleanError(e) });
+      void fileLocks.refresh(file);
+    } finally {
+      setLockBusy(false);
+    }
+  };
   /** Nothing in the tree can be changed (new, rename, delete, move): Cadrel Reader or a closed Book. */
   const noEdit = caps.reader === true || closedHere;
   // Rewrite mode (desktop only): an original and its rewrite, side by side, scrolling together.
@@ -1044,7 +1067,7 @@ export function App() {
         onSave={() => void ws.save()}
         canSave={activeDirty}
         find={activeTab ? { open: find.open, onToggle: () => (find.open ? closeFind() : openFind(false)) } : undefined}
-        sync={caps.sync && syncStatus ? { state: syncStatus.state, unsaved: syncStatus.summary?.unsaved?.length ?? 0, onOpen: () => setShowSync(true) } : undefined}
+        sync={caps.sync && syncStatus ? { state: syncStatus.state, unsaved: syncStatus.summary?.checkedOut?.length ?? 0, onOpen: () => setShowSync(true) } : undefined}
         onAbout={() => setShowAbout(true)}
       />
     )}
@@ -1236,7 +1259,10 @@ export function App() {
             const inPair = rwShown && !page && !!rwPair && (tab.file === rwPair.original || tab.file === rwPair.rewrite);
             const isOriginal = inPair && tab.file === rwPair!.original;
             /** In rewrite mode the original is there to be read: it cannot be changed from its pane. */
-            const paneLocked = locked || isOriginal;
+            const fileLock = fileLocks.lock(tab.file);
+            /** Checked in, someone else's, or changed without a check-out: it can be read but not changed. */
+            const lockedByVault = !!fileLock && (fileLock.kind === 'free' || fileLock.kind === 'other' || fileLock.kind === 'unprotected');
+            const paneLocked = locked || isOriginal || lockedByVault;
             const rwLink = rewriteOk ? ws.rewriteLinkFor(tab.file) : null;
             const dirty = tab.draft !== null;
             const report = reportOf(doc);
@@ -1261,6 +1287,18 @@ export function App() {
                     {basename(tab.file)} was deleted or moved. Saving will recreate it.{' '}
                     <button onClick={() => ws.resolveConflict(tab.id, 'dismiss')}>Dismiss</button>
                   </div>
+                )}
+                {fileLock && fileLock.kind !== 'unmanaged' && (
+                  <FileLockBar
+                    lock={fileLock}
+                    name={basename(tab.file)}
+                    busy={lockBusy}
+                    error={lockError?.file === tab.file ? lockError.message : null}
+                    onCheckOut={(keep) => void lockAct(tab.file, (a) => a.checkOut(tab.file, { keepChanges: keep }))}
+                    onCheckIn={(comment) => void lockAct(tab.file, (a) => a.checkIn(tab.file, comment), () => ws.save(tab.id))}
+                    onUndo={() => void lockAct(tab.file, (a) => a.undoCheckOut(tab.file))}
+                    onRelease={window.cadrelWrite.fileLock?.release ? (reason) => void lockAct(tab.file, (a) => a.release!(tab.file, reason)) : undefined}
+                  />
                 )}
                 <div className="pane-top">
                 <div className="editor-head">
@@ -1376,7 +1414,7 @@ export function App() {
                 </div>
                 {tab.mode === 'visual' || isOriginal ? (
                   <Editor
-                    key={`${tab.id}@${tab.reloadKey}@v${isOriginal ? 'ro' : ''}`}
+                    key={`${tab.id}@${tab.reloadKey}@v${isOriginal ? 'ro' : ''}${lockedByVault ? 'L' : ''}`}
                     initial={chapter.raw}
                     restore={tab.draft}
                     onChange={(md) => ws.setDraft(tab.id, md)}
@@ -1402,6 +1440,7 @@ export function App() {
                     savedVersion={tab.saved?.version ?? 0}
                     onNav={(n) => registerNav(tab.id, n)}
                     firstLine={firstRowOf(doc, tab.chapter, 'source')}
+                    readOnly={paneLocked}
                   />
                 )}
               </section>

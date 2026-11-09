@@ -107,6 +107,8 @@ export interface VaultOptions {
   readOnlyWhenIdle?: boolean;
   /** Paths (relative, "/" separated) that are never the vault's business: tool folders, temporary files, exports. Not listed as untracked. */
   ignore?: (rel: string) => boolean;
+  /** Files that are always writable, never protected or checked out: things the app itself keeps in step by merging (a project's notes). */
+  alwaysWritable?: (rel: string) => boolean;
 }
 
 interface LocalState {
@@ -133,6 +135,9 @@ export class LocalVault {
   }
   private get idleWritable(): boolean {
     return this.o.readOnlyWhenIdle === false;
+  }
+  private idle(rel: string): boolean {
+    return this.idleWritable || this.o.alwaysWritable?.(rel) === true;
   }
   private get stateFolder(): string {
     return this.o.stateDir ?? path.join(this.o.dir, STATE_DIR);
@@ -277,7 +282,7 @@ export class LocalVault {
     const st = await this.state();
     st.files[p] = { fileId: added.id, version: added.version, hash };
     await this.save();
-    await this.setWritable(p, this.idleWritable);
+    await this.setWritable(p, this.idle(p));
     return this.status(p);
   }
 
@@ -285,14 +290,23 @@ export class LocalVault {
    * Takes the file for editing: refused while someone else holds it. If the local copy is old or missing the newest version is fetched first
    * (a check-out is always of the newest), and a local copy someone changed outside a check-out is refused rather than overwritten.
    */
-  async checkOut(rel: string): Promise<VaultEntry> {
+  async checkOut(rel: string, o: { keepChanges?: boolean } = {}): Promise<VaultEntry> {
     const p = this.clean(rel);
     await this.allow(p, 'write');
     const f = (await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.'));
     const file = await f;
     const st = await this.state();
     const e = await this.entry(file, st);
-    if (e.status === 'modified-unprotected') throw new VaultError('conflict', 'The copy on disk was changed without checking it out. Save it elsewhere or discard those changes first; it will not be overwritten.');
+    if (e.status === 'modified-unprotected') {
+      // Changed on disk with no check-out (something got round the read-only, or it was edited before check-out was how files are changed): with
+      // `keepChanges` the person takes the file as it is, if it is still based on the newest version; otherwise it is never overwritten.
+      if (!o.keepChanges) throw new VaultError('conflict', 'The copy on disk was changed without checking it out. Check it out keeping your changes, or discard them; it will not be overwritten.');
+      if (e.localVersion !== null && e.version !== null && e.localVersion < e.version) throw new VaultError('conflict', 'A newer version was saved since this copy was taken, so your changes cannot be checked out onto it. They are kept as they are; save them under another name, then discard.');
+      const took = await this.store.checkOut({ fileId: file.id, machine: this.o.machine });
+      if (!took.ok) throw new VaultError(took.reason === 'locked' ? 'locked' : 'not-found', took.reason === 'locked' ? `${took.heldBy.personId === this.o.personId ? 'You have' : 'Someone else has'} this file checked out.` : 'That file is not in the vault.');
+      await this.setWritable(p, true);
+      return this.status(p);
+    }
     const r = await this.store.checkOut({ fileId: file.id, machine: this.o.machine });
     if (!r.ok) {
       if (r.reason === 'locked') throw new VaultError('locked', `${r.heldBy.personId === this.o.personId ? 'You have' : 'Someone else has'} this file checked out${r.heldBy.personId === this.o.personId ? ' on another machine' : ''} (since ${r.heldBy.since.slice(0, 10)}).`);
@@ -322,7 +336,7 @@ export class LocalVault {
     const hash = sha256(content);
     if (st.files[p] && st.files[p]!.hash === hash) {
       await this.store.undoCheckOut({ fileId: file.id, machine: this.o.machine });
-      await this.setWritable(p, this.idleWritable);
+      await this.setWritable(p, this.idle(p));
       return { ...(await this.status(p)), unchanged: true };
     }
     await this.o.blobs.put(content);
@@ -330,7 +344,7 @@ export class LocalVault {
     if (!r.ok) throw new VaultError('not-holder', 'Your lock on this file was removed, so this was not saved to the vault. Your copy is kept on your disk; use Get latest to see what is in the vault.');
     st.files[p] = { fileId: file.id, version: r.version, hash };
     await this.save();
-    await this.setWritable(p, this.idleWritable);
+    await this.setWritable(p, this.idle(p));
     return { ...(await this.status(p)), unchanged: false };
   }
 
@@ -388,6 +402,25 @@ export class LocalVault {
     }
   }
 
+  /**
+   * Treats the newest version as what this copy is based on, leaving the copy on disk exactly as it is. For a file the app keeps in step by merging
+   * (a project's notes): after merging the newest version into the copy, the merged copy is then a change on top of it, which saves as one version.
+   */
+  async adoptCurrent(rel: string): Promise<void> {
+    const p = this.clean(rel);
+    const file = await ((await this.fileAt(p)) ?? Promise.reject(new VaultError('not-found', 'That file is not in the vault.')));
+    if (file.currentVersion === 0 || !file.hash) return;
+    const st = await this.state();
+    st.files[p] = { fileId: file.id, version: file.currentVersion, hash: file.hash };
+    await this.save();
+  }
+
+  /** Makes the copies of these files read-only where nobody has them checked out for editing here (the classic vault; no-op when files stay writable). */
+  async protect(rels: string[]): Promise<void> {
+    if (this.idleWritable) return;
+    for (const r of rels) if (!this.o.alwaysWritable?.(r)) await this.setWritable(this.clean(r), false);
+  }
+
   /** Gives up the changes: releases the lock and puts the vault's version back on disk. */
   async undoCheckOut(rel: string): Promise<VaultEntry> {
     const p = this.clean(rel);
@@ -412,7 +445,7 @@ export class LocalVault {
   private async restoreCurrent(file: VaultFileRow): Promise<void> {
     const cur = (await this.store.versions(file.id))[0];
     if (!cur) return;
-    await this.writeLocal(file.path, await this.blob(cur.hash), this.idleWritable);
+    await this.writeLocal(file.path, await this.blob(cur.hash), this.idle(file.path));
     const st = await this.state();
     st.files[file.path] = { fileId: file.id, version: cur.n, hash: cur.hash };
     await this.save();
@@ -436,7 +469,7 @@ export class LocalVault {
       if (e.status === 'not-local' && !(o.fetchMissing || wanted)) continue;
       if (e.status === 'latest' || f.currentVersion === 0) continue;
       const cur = (await this.store.versions(f.id))[0]!;
-      await this.writeLocal(f.path, await this.blob(cur.hash), this.idleWritable);
+      await this.writeLocal(f.path, await this.blob(cur.hash), this.idle(f.path));
       st.files[f.path] = { fileId: f.id, version: cur.n, hash: cur.hash };
       updated.push(f.path);
     }

@@ -323,3 +323,51 @@ describe('the vault in a folder people simply work in (writable, saved automatic
     expect(row.projectId).toBe('proj1');
   });
 });
+
+describe('check-out is how a file is changed (read-only otherwise), and notes files are exempt', () => {
+  const classic = (person: string, machine: string, extra: Partial<ConstructorParameters<typeof LocalVault>[0]> = {}) => {
+    const dir = path.join(root, `${person}-${machine}`);
+    return { dir, v: new LocalVault({ db, studioId: 's1', blobs, dir, personId: person, machine, now: clock, stateDir: path.join(root, `state-${person}-${machine}`), alwaysWritable: (rel) => rel.includes('/.cadrel/review/'), ...extra }) };
+  };
+
+  it('protects files nobody has checked out, but never a notes file', async () => {
+    const a = classic('ana', 'pc');
+    await put(a.dir, 'Book/ch1.md', 'one');
+    await put(a.dir, 'Book/.cadrel/review/owner.json', '{}');
+    await a.v.add('Book/ch1.md');
+    await a.v.add('Book/.cadrel/review/owner.json');
+    await a.v.protect(['Book/ch1.md', 'Book/.cadrel/review/owner.json']);
+    expect(await writable(a.dir, 'Book/ch1.md')).toBe(false);
+    expect(await writable(a.dir, 'Book/.cadrel/review/owner.json')).toBe(true);
+    await a.v.checkOut('Book/ch1.md');
+    expect(await writable(a.dir, 'Book/ch1.md')).toBe(true);
+    await a.v.checkIn('Book/ch1.md');
+    expect(await writable(a.dir, 'Book/ch1.md')).toBe(false); // read-only again after a check-in
+  });
+
+  it('lets a person take a file they changed without checking it out, keeping their changes, and check it in as one new version', async () => {
+    const a = classic('ana', 'pc', { readOnlyWhenIdle: false });
+    await put(a.dir, 'ch1.md', 'one');
+    await a.v.add('ch1.md');
+    await put(a.dir, 'ch1.md', 'edited before check-out');
+    expect(await code(a.v.checkOut('ch1.md'))).toBe('conflict'); // never silently overwritten
+    expect(await text(a.dir, 'ch1.md')).toBe('edited before check-out');
+    expect((await a.v.checkOut('ch1.md', { keepChanges: true })).status).toBe('checked-out-by-me');
+    expect(await text(a.dir, 'ch1.md')).toBe('edited before check-out');
+    expect(await a.v.checkIn('ch1.md', 'Chapter one')).toMatchObject({ unchanged: false, version: 2 });
+    expect((await a.v.history('ch1.md')).map((v) => v.comment)).toEqual(['Chapter one', 'First version']);
+  });
+
+  it('refuses to check changes out onto a version that is no longer the newest, and leaves them as they are', async () => {
+    const a = classic('ana', 'pc-a', { readOnlyWhenIdle: false });
+    const b = classic('ana', 'pc-b', { readOnlyWhenIdle: false });
+    await put(a.dir, 'ch1.md', 'one');
+    await a.v.add('ch1.md');
+    await b.v.getLatest(['ch1.md']);
+    await put(a.dir, 'ch1.md', 'two');
+    await a.v.saveChanges('ch1.md');
+    await put(b.dir, 'ch1.md', 'b edit on version 1');
+    expect(await code(b.v.checkOut('ch1.md', { keepChanges: true }))).toBe('conflict');
+    expect(await text(b.dir, 'ch1.md')).toBe('b edit on version 1');
+  });
+});

@@ -48,6 +48,13 @@ const api: WriteApi = {
   listReviews: (project) => ipcRenderer.invoke('review:list', project),
   saveReview: (project, id, text) => ipcRenderer.invoke('review:save', project, id, text),
   deleteReview: (project, id) => ipcRenderer.invoke('review:delete', project, id),
+  fileLock: {
+    state: (p) => ipcRenderer.invoke('files:state', p),
+    checkOut: (p, o) => ipcRenderer.invoke('files:checkOut', p, o),
+    checkIn: (p, comment) => ipcRenderer.invoke('files:checkIn', p, comment),
+    undoCheckOut: (p) => ipcRenderer.invoke('files:undo', p),
+    release: (p, reason) => ipcRenderer.invoke('files:release', p, reason)
+  },
   getAiServer: () => ipcRenderer.invoke('ai:server'),
   exportAiKit: () => ipcRenderer.invoke('ai:exportKit'),
   getAiRemote: () => ipcRenderer.invoke('ai:remote:get'),
