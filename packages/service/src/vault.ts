@@ -28,11 +28,28 @@ export class VaultAs implements VaultStore {
     if (this.o.hasBlob && !(await this.o.hasBlob(hash))) throw new Error('The file’s contents have not been uploaded yet.');
   }
   /** The file, if this person may read it: one they may not read is reported as absent, not as forbidden, so its existence is not given away. */
-  private async file(fileId: string, level: 'read' | 'write' = 'read'): Promise<VaultListing> {
-    const f = (await this.store.list()).find((x) => x.id === fileId);
-    if (!f || !(await this.may(f, 'read'))) throw new Error('That file is not in the vault.');
-    if (level === 'write') await this.need(f, 'write');
-    return f;
+  private async file(fileId: string, level: 'read' | 'write' = 'read'): Promise<Pick<VaultListing, 'path' | 'projectId'>> {
+    // this file's own row, not the whole vault: every call that names a file comes through here, and a vault of a few hundred files made each one slow
+    const row = await this.o.db.first<{ path: string; projectId: string | null }>(
+      'SELECT f.path AS path, c.project_id AS projectId FROM vault_file f LEFT JOIN file_card c ON c.file_id = f.id WHERE f.studio_id = ? AND f.id = ?',
+      [this.o.studioId, fileId]
+    );
+    if (!row || !(await this.may(row, 'read'))) throw new Error('That file is not in the vault.');
+    if (level === 'write') await this.need(row, 'write');
+    return row;
+  }
+
+  /** Whether this person may read at least one of these files, looking at those files only (not the whole vault). Used to serve a version's contents. */
+  async mayReadAny(fileIds: string[]): Promise<boolean> {
+    for (let i = 0; i < fileIds.length; i += 50) {
+      const ids = fileIds.slice(i, i + 50); // the database accepts a limited number of values in one query
+      const rows = await this.o.db.all<{ path: string; projectId: string | null }>(
+        `SELECT f.path AS path, c.project_id AS projectId FROM vault_file f LEFT JOIN file_card c ON c.file_id = f.id WHERE f.studio_id = ? AND f.id IN (${ids.map(() => '?').join(',')})`,
+        [this.o.studioId, ...ids]
+      );
+      for (const r of rows) if (await this.may(r, 'read')) return true;
+    }
+    return false;
   }
 
   async list(): Promise<VaultListing[]> {

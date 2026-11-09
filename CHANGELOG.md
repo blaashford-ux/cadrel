@@ -2,6 +2,11 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.8.1 (fix: the phone could not sync a large vault)
+
+- **The Studio's server no longer checks the whole vault for every file it serves.** Downloading one file's contents made the server list and permission-check every file in the Studio first, and so did every call that named a file (check-out, check-in, versions, references). With the hundreds of files that 0.8.0's automatic saving puts in the vault, the phone's first sync (it downloads each file) asked for hundreds of these and the Studio answered "status 503". Now each call looks only at the file it is about, and contents are checked against the files that hold them, in batches. Same rules about who may read what; covered by tests, including 60 files holding the same contents.
+- Raises the Studio server revision to 2, so Studio Manager offers **Upgrade the server**: press it once after installing (the fix is in the server's code, not only in the apps).
+
 ## 0.8.0 (one folder: your projects are the vault)
 
 - **The Projects folder is the vault.** The vault used to have a folder of its own (`<Studio>\Vault`) beside Projects, so a manuscript had to be copied there and added by hand, and the phone saw nothing until it was. Now there is one folder. New files in a project are saved to the Studio automatically, versions made elsewhere (another computer, the phone) come in, and files other people or the phone create appear. You never add a file to the vault.

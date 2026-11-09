@@ -126,8 +126,8 @@ export async function serverRoutes(request: Request, env: ServerEnv, who: { kind
     if (method === 'GET') {
       // only contents of a version of a file this person may read
       const holders = await db.all<{ id: string }>('SELECT DISTINCT file_id AS id FROM file_version WHERE hash = ?', [hash]);
-      const readable = new Set((await new VaultAs({ db, studioId: env.STUDIO_ID, personId, as }).list()).map((f) => f.id));
-      if (!holders.some((h) => readable.has(h.id))) return fail(404, 'There is no such file.');
+      // asked of those files only: listing and checking the whole vault for every download made a vault of a few hundred files too slow to serve
+      if (!(await new VaultAs({ db, studioId: env.STUDIO_ID, personId, as }).mayReadAny(holders.map((h) => h.id)))) return fail(404, 'There is no such file.');
       const obj = await env.FILES.get(blobKey(hash));
       if (!obj) return fail(404, 'There is no such file.');
       return new Response(await obj.arrayBuffer(), { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'no-store' } });
