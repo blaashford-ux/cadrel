@@ -1737,10 +1737,20 @@ function retireAssistantServers(): void {
 
 let finalSyncStarted = false;
 let finalVaultStarted = false;
+let writesSettled = false;
 let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
   if (installerToRun) retireAssistantServers();
+  // What was just changed (the page, the colours, the folders) is written to disk in the background; the process must not go before those writes
+  // have finished, or a slow disk loses the last change. Wait for them (at most 3 s), then go on.
+  if (!writesSettled) {
+    writesSettled = true;
+    e.preventDefault();
+    const pending = [write?.flush(), settings?.flush(), studioSettings?.flush(), studios?.flush()].map((p) => Promise.resolve(p).catch(() => undefined));
+    void Promise.race([Promise.all(pending), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+    return;
+  }
   void write?.flush();
   void settings?.flush();
   // New files written in the last few seconds are saved to the Studio before this goes (at most 8 s), while the Studio is still open.

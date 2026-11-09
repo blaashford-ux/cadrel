@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.9.1 (fix: a setting changed just before closing could be lost)
+
+- **Closing Cadrel now waits for what was just changed to be written to disk** (at most three seconds). Settings (the page you were on, colours, folders) and the Studio list are saved in the background, and the app could go before the last write finished on a slow disk, so a change made just before closing was sometimes not there at the next start. It showed up as a restart test that failed now and then on the build machines.
+
 ## 0.9.0 (check out, edit, check in; notes travel with the project)
 
 - **A file is changed by checking it out, and only a check-in makes a version.** This replaces 0.8's "unsaved changes → Save version". A file is read-only until you check it out. **Write** shows the state above the editor: *Checked in · read-only* with **Check out to edit**; *Checked out by you* with **Check in…** (a comment, optional) and **Undo check-out**; or *Checked out by Ann* (read-only). The editor cannot be typed in until the file is checked out. The Files page has the same buttons. Nothing local is ever versioned: saving while a file is checked out writes the file, and the version is made at the check-in.
