@@ -17,7 +17,7 @@ interface Props {
   find?: { open: boolean; onToggle(): void };
   /** Opens About (version and updates). */
   onAbout?(): void;
-  /** `unsaved`: files changed here and not yet saved as a version (Cadrel Studio): the cloud shows a mark so it is not forgotten. */
+  /** `unsaved`: files checked out on this device (Cadrel Studio): the cloud shows a count so a check-in is not forgotten. */
   sync?: { state: 'off' | 'idle' | 'syncing' | 'error' | 'confirm'; unsaved?: number; onOpen(): void };
 }
 
@@ -45,7 +45,7 @@ export function MobileBar({ title, dirty, showFiles, onFiles, onHome, onSave, ca
         </button>
       )}
       {sync && (
-        <button type="button" className={`mb-btn sync-btn s-${sync.state}`} aria-label={sync.unsaved ? `${sync.unsaved} file${sync.unsaved === 1 ? '' : 's'} with changes not saved as a version` : `Google Drive sync: ${sync.state === 'off' ? 'not connected' : sync.state}`} onClick={sync.onOpen}>
+        <button type="button" className={`mb-btn sync-btn s-${sync.state}`} aria-label={sync.unsaved ? `${sync.unsaved} file${sync.unsaved === 1 ? '' : 's'} checked out on this phone` : `Google Drive sync: ${sync.state === 'off' ? 'not connected' : sync.state}`} onClick={sync.onOpen}>
           <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M7 18a4 4 0 0 1-.6-7.96A6 6 0 0 1 18 9.5a4.25 4.25 0 0 1-.5 8.5H7Z" />
             {sync.state === 'off' && <path d="m4 4 16 16" />}

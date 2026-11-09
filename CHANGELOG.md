@@ -2,6 +2,21 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.9.0 (check out, edit, check in; notes travel with the project)
+
+- **A file is changed by checking it out, and only a check-in makes a version.** This replaces 0.8's "unsaved changes → Save version". A file is read-only until you check it out. **Write** shows the state above the editor: *Checked in · read-only* with **Check out to edit**; *Checked out by you* with **Check in…** (a comment, optional) and **Undo check-out**; or *Checked out by Ann* (read-only). The editor cannot be typed in until the file is checked out. The Files page has the same buttons. Nothing local is ever versioned: saving while a file is checked out writes the file, and the version is made at the check-in.
+- **New files** in a project are added to the Studio and **stay checked out to you**, so you go on writing in them; their first check-in is their next version.
+- **The phone works the same way.** The editor refuses until you check a file out, offers **Check out**, and **Check in…** (needs a connection; editing a file you have checked out needs none). A file checked out on the computer can be read on the phone, and changed once it is checked in there. The cloud button shows how many files are checked out on the phone, and its dialog lists them with **Check in**: save a version on one device before you carry on in the other.
+- **Notes travel with the project.** A project's notes (`.cadrel/review/*.json`, where Write keeps them) are synced through the Studio on the computer and on the phone, merged by note (each by its id, the newer wins, replies united, deletions kept), so notes made on either end up on both. They are not checked out and not listed as files; they are saved at most every couple of minutes so a flurry of notes is one version, not twenty.
+- **Changes made without a check-out** (from 0.8, or a program that ignores read-only) are left exactly as they are, never versioned and never overwritten, and listed: **Check out, keeping my changes** takes the file as it is (refused if a newer version exists, so nothing is lost).
+- Files made read-only by this are made so on the first pass after upgrading; nothing is deleted.
+- Not changed: the Studio's server, so there is nothing to upgrade there.
+- Tested with the real vault and server code (desktop, phone, notes merge, offline, held by the other device) and the bar's states; not yet on a real Studio and phone.
+
+## Cadrel Reader 0.10.3
+
+- No change for readers. Reader is built from the Cadrel Write code, which gained the Check out / Check in bar and the notes merge in Cadrel 0.9.0, so its version rises with it (Reader keeps no files in a Studio's vault).
+
 ## 0.8.1 (fix: the phone could not sync a large vault)
 
 - **The Studio's server no longer checks the whole vault for every file it serves.** Downloading one file's contents made the server list and permission-check every file in the Studio first, and so did every call that named a file (check-out, check-in, versions, references). With the hundreds of files that 0.8.0's automatic saving puts in the vault, the phone's first sync (it downloads each file) asked for hundreds of these and the Studio answered "status 503". Now each call looks only at the file it is about, and contents are checked against the files that hold them, in batches. Same rules about who may read what; covered by tests, including 60 files holding the same contents.

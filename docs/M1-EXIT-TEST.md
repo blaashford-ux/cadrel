@@ -79,9 +79,9 @@ On "Dragon Rider" (the series):
 ## 7. The vault and Files (first time in Electron)
 
 - [ ] **Files** opens and says where the working folder is: the Projects folder (`<Cadrel folder>\<Studio>\Projects`), the same one Write uses. **Open the folder** opens it in Explorer. A line says new files are saved to the Studio automatically and that only **Save version** (or a check-in) makes a version.
-- [ ] Copy `chapter-1.md` and `cover.psd` (any image/binary) into a project's folder. Within about 15 seconds (or press **Sync now**) Files lists both as **Saved**, version 1; nothing was added by hand. Neither is read-only. A file put loose in the Projects folder, outside any project, is listed as **Not in a project** and is not saved.
-- [ ] Edit and save `chapter-1.md` (in Write or any editor), several times. Files says **Changed, not saved as a version** and still shows version 1: no version is made by itself. **Save version…** with a comment makes exactly one (version 2).
-- [ ] **Check out** `chapter-1.md`: state "Checked out by you". Edit it and save: Files shows "changed" and no new version is made until you check it in.
+- [ ] Copy `chapter-1.md` and `cover.psd` (any image/binary) into a project's folder. Within about 15 seconds (or press **Sync now**) Files lists both, version 1, **checked out by you** (a file made here stays yours to write in). A file put loose in the Projects folder, outside any project, is listed as **Not in a project** and is not added.
+- [ ] **Check in…** `chapter-1.md`: it becomes **Checked in** and read-only (Explorer → Properties: Read-only is ticked); nothing changed, so no new version. In **Write**, open it: the bar above the editor says *Checked in · read-only* and the editor cannot be typed in. **Check out to edit**, type, save: the bar says *Checked out by you · changed*. **Check in…** with a comment: version 2, read-only again.
+- [ ] Edit and save the file several times while it is checked out: no version is made until the check-in. (Nothing local is ever versioned.)
 - [ ] **Check in…** with a comment. It becomes version 2, read-only again. Expand the file → **Versions** lists both with your comment. **Save a copy** of version 1 as `chapter-1-v1.md`: it appears beside the file with the old text.
 - [ ] Check out and check in with **no change**: no new version is made.
 - [ ] Check out, edit, then **Undo check-out**: the edit is gone and the file is back to the vault's version.

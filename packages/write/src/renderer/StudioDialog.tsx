@@ -119,28 +119,42 @@ export function StudioDialog({ status, onClose }: Props) {
             Last pass: {plural(sum.uploaded, 'file')} saved to the Studio, {plural(sum.downloaded, 'file')} received.
           </p>
         )}
-        {sum?.unsaved && sum.unsaved.length > 0 && api.studio?.saveVersion && (
+        {sum?.checkedOut && sum.checkedOut.length > 0 && api.fileLock && (
           <div className="sync-block">
-            <strong>Changes not saved as a version yet</strong>
-            <p className="muted small">They are safe on this phone and are never overwritten. A version is made only when you save one: do it when you finish, before you carry on in Cadrel on your computer.</p>
+            <strong>Checked out on this phone</strong>
+            <p className="muted small">Nobody else can change these until you check them in. Check them in when you finish, before you carry on in Cadrel on your computer: that is what makes the new version.</p>
             <ul className="sync-list">
-              {sum.unsaved.map((u) => (
+              {sum.checkedOut.map((u) => (
                 <li key={u.id}>
-                  {u.name}{' '}
+                  {u.name}{u.changed ? ' · changed' : ''}{' '}
                   <button
                     type="button"
                     disabled={working}
                     onClick={() => void run(async () => {
-                      const r = await api.studio!.saveVersion!(u.id);
-                      setNotice(r.outcome === 'saved' ? `Saved as version ${r.version}.` : r.outcome === 'conflict' ? 'It had changed elsewhere, so both are kept: yours is a file named “conflict” beside it.' : 'Nothing had changed.');
+                      await api.fileLock!.checkIn(u.path);
+                      setNotice(`${u.name} is checked in.`);
                     })}
                   >
-                    Save version
+                    Check in
                   </button>
                 </li>
               ))}
             </ul>
             {notice && <p className="muted small" role="status">{notice}</p>}
+          </div>
+        )}
+        {sum?.unprotected && sum.unprotected.length > 0 && api.fileLock && (
+          <div className="sync-block">
+            <strong>Changed without a check-out</strong>
+            <p className="muted small">These are left exactly as they are and never overwritten. Check one out keeping your changes, then check it in to make a version.</p>
+            <ul className="sync-list">
+              {sum.unprotected.map((u) => (
+                <li key={u.id}>
+                  {u.name}{' '}
+                  <button type="button" disabled={working} onClick={() => void run(async () => { await api.fileLock!.checkOut(u.path, { keepChanges: true }); })}>Check out, keeping my changes</button>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {sum && sum.conflicts.length > 0 && (

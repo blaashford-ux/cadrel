@@ -370,8 +370,9 @@ export interface SyncSummary {
   rootCreated: boolean;
   /** How long the pass took. */
   durationMs: number;
-  /** Cadrel Studio: files changed here and not yet saved as a version. They stay as they are until the person saves one. */
-  unsaved?: { id: string; name: string }[];
+  /** Cadrel Studio: the files this device has checked out (with `changed` when they differ from the version they were taken from), and any changed here with no check-out. */
+  checkedOut?: { id: string; name: string; path: string; changed: boolean }[];
+  unprotected?: { id: string; name: string; path: string }[];
 }
 
 export interface SyncStatus {
@@ -535,8 +536,6 @@ export interface StudioApi {
   list(): Promise<StudioInfo[]>;
   /** Joins from an invitation link (`cadrel://join?...`) and opens that Studio. Throws, in words, if the link is not right or the Studio is not the one it names. */
   join(link: string, yourName: string): Promise<StudioInfo>;
-  /** Saves what changed in a file as a new version, the only thing that makes one (edits wait on the phone until then). If the file moved on meanwhile, both are kept. */
-  saveVersion?(fileId: string, comment?: string): Promise<{ outcome: 'saved' | 'conflict' | 'unchanged'; version: number | null }>;
   /** Opens another Studio the phone has joined. */
   switchTo(id: string): Promise<void>;
   /** Forgets a Studio on this phone: its key and its copy of the files. Nothing on the Studio changes; the owner can remove the person there. */

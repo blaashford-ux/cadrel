@@ -157,7 +157,8 @@ async function start(): Promise<void> {
     onSyncStatus: sync.onSyncStatus,
     ...reviews,
     ...androidUpdates(),
-    studio: { ...studio, saveVersion: sync.saveVersion },
+    studio,
+    fileLock: sync.fileLock,
     capabilities: STUDIO_MOBILE_CAPABILITIES
   } satisfies WriteApi;
 

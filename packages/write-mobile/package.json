@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/write-mobile",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Cadrel Write for Android: the writing interface on its own, connected to a Cadrel Studio. Imports @cadrel/write; shares the Studio client with the desktop app.",
   "private": true,
   "type": "module",
