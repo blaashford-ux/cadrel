@@ -214,6 +214,18 @@ describe('the Studio server: the vault', () => {
     expect((await s.send('GET', '/v1/blobs/' + 'a'.repeat(64), s.owner)).status).toBe(404);
   });
 
+  it('serves contents held by many files (checked in batches), to someone who may read one of them, and refuses those who may read none', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    const guest = await s.join('guest', 'Gus', { projectId: 'pB2' });
+    // 60 files with the same contents: the same hash is held by more files than one batch of the check looks at
+    for (let i = 0; i < 59; i++) await addFile(s, s.owner, `b1/same-${i}.md`, 'shared text', 'pB1');
+    expect((await s.get(s.owner, 'shared text')).status).toBe(200);
+    expect((await s.get(guest.key, 'shared text')).status).toBe(404); // the guest may read Book 2 only
+    await addFile(s, s.owner, 'b2/same.md', 'shared text', 'pB2'); // the 60th, in the guest's project
+    expect((await s.get(guest.key, 'shared text')).text).toBe('shared text');
+  });
+
   it('keeps references and data cards, and shows only the files a person may read', async () => {
     const s = await server();
     await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
