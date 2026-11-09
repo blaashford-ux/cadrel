@@ -11,10 +11,10 @@ import type { PeopleHost } from './people';
 export class VaultHostError extends Error {}
 
 /** The changes the page may ask for, by name. A list, so inherited names such as `constructor` are not reachable. */
-export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'saveChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
+export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
 
 export class VaultHost {
-  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; writableWhenIdle?: boolean }) {}
+  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; alwaysWritable?: (rel: string) => boolean; writableWhenIdle?: boolean }) {}
 
   /** The vault itself, for what keeps the folder and the Studio in step. */
   get localVault(): LocalVault | null {
@@ -30,7 +30,8 @@ export class VaultHost {
     if (!v) return { available: false, reason: 'The files of this Studio are kept by its owner.' };
     await fsp.mkdir(this.where.dir, { recursive: true });
     const kept = await v.keepOrphansAside().catch(() => []); // a lock removed from under this person: their copy is put aside before anything else (needs the server)
-    const entries = await v.list(); // when the Studio's server cannot be reached this is what was last known, and `offline` says so
+    const entries = (await v.list()).filter((e) => !/(^|\/)\.cadrel\//.test(e.path)); // a project's notes travel with its files but are not files to manage here
+    // when the Studio's server cannot be reached this is what was last known, and `offline` says so
     const away = () => this.people.offline;
     // the rest also comes from the server: when it is away they are empty, not an error
     const [people, force, orphans] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans()]);

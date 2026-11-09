@@ -40,8 +40,9 @@ import { Editorial } from './editorial';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
-import { ProjectSync, neverTracked } from './projectSync';
+import { ProjectSync, isNotesFile, vaultIgnores } from './projectSync';
 import { migrateVaultFolder } from './vaultMigration';
+import { createFileControl } from './fileLocks';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
@@ -436,7 +437,7 @@ function startServerSync(link: NonNullable<typeof serverLink>): void {
  * Studio's own folder, not in the Projects folder.
  */
 function vaultWhere() {
-  return { dir: projectsFolder(), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname(), stateDir: path.join(studioDir, 'vault-state'), ignore: neverTracked, writableWhenIdle: true };
+  return { dir: projectsFolder(), blobsDir: path.join(studioDir, 'vault-blobs'), machine: os.hostname(), stateDir: path.join(studioDir, 'vault-state'), ignore: vaultIgnores, alwaysWritable: isNotesFile };
 }
 
 /** The folders in the Projects folder that are projects, and the project each belongs to. */
@@ -1653,6 +1654,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       standalone: false,
       defaultRoot: projectsDefault,
       projectsFolder,
+      // files in a project are kept in the Studio's vault: read-only until checked out, and a check-in is what makes a version
+      files: createFileControl({ vault: () => new VaultHost(peopleHost, vaultWhere()).localVault, dir: projectsFolder, names: async () => new Map((await peopleHost.peopleList().catch(() => [])).map((p) => [p.id, p.name])), me: () => peopleHost.me, machine: () => os.hostname() }),
       templates: () => admin.templates(),
       projectStages: async () => (await stageByFolder()).all(),
       theme: { get: themeState, set: setTheme },

@@ -808,7 +808,7 @@ export interface VaultSyncStatus {
   state: 'off' | 'idle' | 'syncing' | 'offline' | 'error';
   lastAt: number | null;
   message: string | null;
-  summary: { added: number; received: number; unsaved: string[]; conflicts: { path: string; savedAs: string }[]; held: string[]; tooLarge: string[]; errors: { path: string; message: string }[] } | null;
+  summary: { added: number; received: number; unprotected: string[]; notesMerged: number; conflicts: { path: string; savedAs: string }[]; held: string[]; tooLarge: string[]; errors: { path: string; message: string }[] } | null;
 }
 export interface VaultApi {
   state(): Promise<VaultState>;
@@ -816,9 +816,8 @@ export interface VaultApi {
   syncNow(): Promise<VaultSyncStatus>;
   /** Puts a file from the working folder into the vault as its first version. */
   add(path: string, comment?: string): Promise<void>;
-  checkOut(path: string): Promise<void>;
-  /** Saves what changed in a file as a new version (the only thing besides a check-in that makes one). If a newer version was saved elsewhere meanwhile, both are kept. */
-  saveVersion(path: string, comment?: string): Promise<{ outcome: 'unchanged' | 'held' | 'conflict' | 'saved'; version: number | null; savedAs?: string; heldBy?: string }>;
+  /** Takes a file to edit it (nobody else can then). With `keepChanges`, a file that was changed without a check-out is taken as it is. */
+  checkOut(path: string, o?: { keepChanges?: boolean }): Promise<void>;
   /** Saves the file as a new version and releases it; nothing changed means it is released with no new version. */
   checkIn(path: string, comment?: string): Promise<{ unchanged: boolean }>;
   undoCheckOut(path: string): Promise<void>;

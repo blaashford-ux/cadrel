@@ -148,6 +148,13 @@ export function serializeReviewFile(f: ReviewFile): string {
   return JSON.stringify(f, null, 2) + '\n'
 }
 
+/** Two copies of the same notes file as text, merged; null when either is not a notes file (the caller then keeps both). */
+export function mergeReviewText(a: string, b: string): string | null {
+  const x = parseReviewFile(a)
+  const y = parseReviewFile(b)
+  return x && y ? serializeReviewFile(mergeReviewFiles(x, y)) : null
+}
+
 /**
  * Combines two copies of the same reviewer's file (the reviewer and the owner both write
  * to it). Items are matched by id; the newer `updatedAt` wins, and replies are united.

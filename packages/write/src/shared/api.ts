@@ -490,6 +490,32 @@ export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: 
 /** Cadrel Write on the phone, with the projects and files of a Cadrel Studio. Writing, no managing projects, no Drive, no export. */
 export const STUDIO_MOBILE_CAPABILITIES: Capabilities = { ...MOBILE_CAPABILITIES, sync: true, review: false, manageProjects: false, studio: true };
 
+/**
+ * How a file stands for this person, where its files are kept in a Studio's vault: a file is read-only until it is checked out, edited, and
+ * checked in as a new version. Only a check-in makes a version; nothing local is versioned.
+ */
+export type FileLock =
+  /** Not under check-out here (a file the vault has not taken yet, or a place that keeps none): written as usual. */
+  | { kind: 'unmanaged' }
+  /** Checked in: the newest version, read-only until checked out. */
+  | { kind: 'free'; version: number }
+  /** Checked out by this person on this device: editable; `changed` says it differs from the version it was taken from. */
+  | { kind: 'mine'; version: number; since: string; changed: boolean }
+  /** Checked out by someone else, or by this person on another device: readable only. */
+  | { kind: 'other'; version: number; by: string; since: string }
+  /** Changed here without a check-out (something got round the read-only): left as it is until checked out keeping the changes. */
+  | { kind: 'unprotected'; version: number | null };
+
+export interface FileLockApi {
+  state(path: string): Promise<FileLock>;
+  /** Takes the file to edit it. With `keepChanges`, a file that was changed without a check-out is taken as it is. */
+  checkOut(path: string, o?: { keepChanges?: boolean }): Promise<FileLock>;
+  /** Saves what is in the file as a new version and gives it up. Nothing changed: it is given up and no version is made. */
+  checkIn(path: string, comment?: string): Promise<FileLock>;
+  /** Gives it up without a new version; the copy goes back to the newest version. */
+  undoCheckOut(path: string): Promise<FileLock>;
+}
+
 /** A Studio this phone has joined. */
 export interface StudioInfo {
   id: string;
@@ -529,7 +555,7 @@ export type WorkspaceApi = CoreApi &
  * The full surface the renderer talks to. On the phone the `ExportApi` / `DesktopApi` parts are inert stubs and the
  * UI checks `capabilities` before showing anything that needs them.
  */
-export type WriteApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities; studio?: StudioApi };
+export type WriteApi = CoreApi & ExportApi & DesktopApi & SyncApi & ReviewSharingApi & UpdateApi & { capabilities: Capabilities; studio?: StudioApi; /** Check out / check in, where the files are kept in a Studio's vault. */ fileLock?: FileLockApi };
 
 declare global {
   interface Window {

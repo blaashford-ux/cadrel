@@ -38,7 +38,7 @@ import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 import { createReviewHost } from '../src/shared/review/host';
-import type { ReviewSharingApi } from '../src/shared/api';
+import type { FileLock, ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
 /**
@@ -48,6 +48,14 @@ import type { ReviewSharingApi } from '../src/shared/api';
 const revealInFolder = (p: string): void => {
   if (process.env.CADREL_TEST !== '1') shell.showItemInFolder(p);
 };
+
+/** Where files are kept in a Studio's vault: what the host knows about a file's check-out. Paths are the absolute paths Write uses. */
+export interface FileControl {
+  state(file: string): Promise<FileLock>;
+  checkOut(file: string, o?: { keepChanges?: boolean }): Promise<FileLock>;
+  checkIn(file: string, comment?: string): Promise<FileLock>;
+  undoCheckOut(file: string): Promise<FileLock>;
+}
 
 export interface WriteHost {
   /** The window that owns Write's view (the shell window, or Write's own window when standalone). */
@@ -77,6 +85,8 @@ export interface WriteHost {
    * When set, Write needs no first-run setup, and the folder is created if it is missing.
    */
   defaultRoot?: () => string;
+  /** When set, files are kept in a Studio's vault: they are read-only until checked out, and Write shows Check out / Check in (the host does the work). */
+  files?: FileControl;
   /** When set, the host decides where projects are kept, whatever Write's own Root Folder setting says (Cadrel's Projects folder). */
   projectsFolder?: () => string;
   /** When set, the project templates are the host's (Cadrel's Admin page governs them); Write's own are ignored and not editable. */
@@ -361,11 +371,20 @@ function registerIpc(): void {
   handle('ai:remote:reset', () => aiRemote.resetToken());
   handle('review:save', (_e, project: string, id: string, text: string) => reviews.save(reviewPath(project), id, text));
   handle('fs:statFile', (_e, p: string) => statStamp(inRoot(p)));
-  handle('fs:writeFile', (_e, p: string, content: string) => {
+  handle('fs:writeFile', async (_e, p: string, content: string) => {
     const full = inRoot(p);
     if (!isMarkdown(full)) throw new Error('Refusing to write a non-Markdown file');
+    // in a Studio's vault a file is changed by checking it out; this is the last guard, the editor is read-only until it is
+    const lock = host.files ? await host.files.state(full) : null;
+    if (lock && (lock.kind === 'free' || lock.kind === 'other' || lock.kind === 'unprotected')) {
+      throw new Error(lock.kind === 'other' ? `${lock.by} has this file checked out. You can read it, and change it once they have checked it in.` : 'This file is checked in. Check it out to change it.');
+    }
     return writeFileAtomic(full, content);
   });
+  handle('files:state', (_e, p: string) => (host.files ? host.files.state(inRoot(p)) : { kind: 'unmanaged' as const }));
+  handle('files:checkOut', (_e, p: string, o?: { keepChanges?: boolean }) => (host.files ? host.files.checkOut(inRoot(p), { keepChanges: o?.keepChanges === true }) : { kind: 'unmanaged' as const }));
+  handle('files:checkIn', (_e, p: string, comment?: string) => (host.files ? host.files.checkIn(inRoot(p), typeof comment === 'string' ? comment : '') : { kind: 'unmanaged' as const }));
+  handle('files:undo', (_e, p: string) => (host.files ? host.files.undoCheckOut(inRoot(p)) : { kind: 'unmanaged' as const }));
   handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)
   );

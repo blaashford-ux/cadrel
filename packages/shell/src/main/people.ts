@@ -175,8 +175,8 @@ export class PeopleHost {
    * The local vault for this Studio: the working folder `dir`, the contents of every version under `blobsDir`, this computer as `machine`.
    * Every operation is checked against what the person using the app may do with that kind of file. Null where this computer holds no records.
    */
-  vault(o: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; writableWhenIdle?: boolean }): LocalVault | null {
-    const mode = { ...(o.stateDir ? { stateDir: o.stateDir } : {}), ...(o.ignore ? { ignore: o.ignore } : {}), ...(o.writableWhenIdle ? { readOnlyWhenIdle: false } : {}) };
+  vault(o: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; alwaysWritable?: (rel: string) => boolean; writableWhenIdle?: boolean }): LocalVault | null {
+    const mode = { ...(o.stateDir ? { stateDir: o.stateDir } : {}), ...(o.ignore ? { ignore: o.ignore } : {}), ...(o.alwaysWritable ? { alwaysWritable: o.alwaysWritable } : {}), ...(o.writableWhenIdle ? { readOnlyWhenIdle: false } : {}) };
     if (this.remote && this.svc) {
       // on the server the rules are enforced there; the list already holds only what this person may read
       const key = `${o.dir}|${o.blobsDir}|${o.machine}`;
