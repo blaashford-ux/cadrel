@@ -1297,6 +1297,7 @@ export function App() {
                     onCheckOut={(keep) => void lockAct(tab.file, (a) => a.checkOut(tab.file, { keepChanges: keep }))}
                     onCheckIn={(comment) => void lockAct(tab.file, (a) => a.checkIn(tab.file, comment), () => ws.save(tab.id))}
                     onUndo={() => void lockAct(tab.file, (a) => a.undoCheckOut(tab.file))}
+                    onRelease={window.cadrelWrite.fileLock?.release ? (reason) => void lockAct(tab.file, (a) => a.release!(tab.file, reason)) : undefined}
                   />
                 )}
                 <div className="pane-top">

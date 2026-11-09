@@ -16,6 +16,8 @@ export function createFileControl(o: {
   names(): Promise<Map<string, string>>;
   me(): string;
   machine(): string;
+  /** Whether the person may take a lock from someone (`vault.force`). */
+  mayForce(): Promise<boolean>;
 }): FileControl {
   const relOf = (abs: string): string | null => {
     const r = path.relative(o.dir(), abs);
@@ -38,7 +40,7 @@ export function createFileControl(o: {
         const l = e.lock!;
         const mine = l.personId === o.me();
         const by = mine ? `you, on ${l.machine === o.machine() ? 'this computer' : l.machine}` : (await o.names()).get(l.personId) ?? 'someone';
-        return { kind: 'other', version: e.version ?? 0, by, since: l.since };
+        return { kind: 'other', version: e.version ?? 0, by, since: l.since, canRelease: await o.mayForce().catch(() => false) };
       }
       case 'modified-unprotected':
         return { kind: 'unprotected', version: e.localVersion };
@@ -64,6 +66,11 @@ export function createFileControl(o: {
     async checkIn(abs, comment) {
       const { rel, v } = need(abs);
       await v.checkIn(rel, comment ?? '');
+      return state(abs);
+    },
+    async release(abs, reason) {
+      const { rel, v } = need(abs);
+      await v.forceRelease(rel, reason);
       return state(abs);
     },
     async undoCheckOut(abs) {

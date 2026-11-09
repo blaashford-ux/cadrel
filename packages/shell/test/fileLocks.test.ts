@@ -14,7 +14,7 @@ const put = async (rel: string, text: string) => {
   await fsp.chmod(abs(rel), 0o644).catch(() => undefined);
   await fsp.writeFile(abs(rel), text);
 };
-const control = () => createFileControl({ vault: () => new VaultHost(host, where).localVault, dir: () => projects, names: async () => new Map(), me: () => host.me, machine: () => 'pc-a' });
+const control = (mayForce = true) => createFileControl({ vault: () => new VaultHost(host, where).localVault, dir: () => projects, names: async () => new Map(), me: () => host.me, machine: () => 'pc-a', mayForce: async () => mayForce });
 
 beforeEach(async () => {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-fl-'));
@@ -44,6 +44,24 @@ describe('Write’s check-out and check-in', () => {
     expect(await c.state(abs('Book/ch1.md'))).toMatchObject({ kind: 'mine', changed: true });
     expect(await c.checkIn(abs('Book/ch1.md'), 'Added a line')).toMatchObject({ kind: 'free', version: 2 });
     expect((await new VaultHost(host, where).localVault!.history('Book/ch1.md')).map((v) => v.comment)).toEqual(['Added a line', 'Added automatically']);
+  });
+
+  it('lets an administrator take the lock from a lost device, with a reason, and offers it only to someone who may', async () => {
+    await put('Book/ch1.md', 'one');
+    const sync = new ProjectSync({ vault: () => new VaultHost(host, where).localVault, dir: projects, projects: async () => new Map([['Book', null]]) });
+    await sync.sync();
+    const c = control();
+    await c.checkIn(abs('Book/ch1.md'));
+    // the person's other device (a lost phone) has it checked out
+    const lost = new VaultHost(host, { ...where, dir: path.join(dir, 'lost'), stateDir: path.join(dir, 'lost-state'), machine: 'phone-1', writableWhenIdle: true }).localVault!;
+    await lost.getLatest(undefined, { fetchMissing: true });
+    await lost.checkOut('Book/ch1.md');
+    expect(await c.state(abs('Book/ch1.md'))).toMatchObject({ kind: 'other', by: 'you, on phone-1', canRelease: true });
+    expect(await control(false).state(abs('Book/ch1.md'))).toMatchObject({ kind: 'other', canRelease: false });
+    await expect(c.release!(abs('Book/ch1.md'), '')).rejects.toThrow(/why/i); // a reason is required
+    expect(await c.release!(abs('Book/ch1.md'), 'The phone was lost')).toMatchObject({ kind: 'free' });
+    // it can be checked out again here
+    expect(await c.checkOut(abs('Book/ch1.md'))).toMatchObject({ kind: 'mine' });
   });
 
   it('gives up a check-out, putting the newest version back', async () => {

@@ -11,6 +11,8 @@ interface Props {
   /** Saves what is open in the file first, then checks it in with the person's words about it. */
   onCheckIn(comment: string): void;
   onUndo(): void;
+  /** An administrator takes the lock from the holder (a lost device), with a reason. */
+  onRelease?(reason: string): void;
 }
 
 const when = (iso: string) => {
@@ -22,9 +24,11 @@ const when = (iso: string) => {
  * Above an open file: who has it and what can be done. A file is read-only until it is checked out; a check-in is what makes a new version,
  * and nothing else does. Shown only where the files are kept in a Studio's vault.
  */
-export function FileLockBar({ lock, name, busy, error, onCheckOut, onCheckIn, onUndo }: Props) {
+export function FileLockBar({ lock, name, busy, error, onCheckOut, onCheckIn, onUndo, onRelease }: Props) {
   const [asking, setAsking] = useState(false);
   const [comment, setComment] = useState('');
+  const [releasing, setReleasing] = useState(false);
+  const [reason, setReason] = useState('');
   if (lock.kind === 'unmanaged') return null;
 
   return (
@@ -41,8 +45,28 @@ export function FileLockBar({ lock, name, busy, error, onCheckOut, onCheckIn, on
           <button type="button" className="primary" disabled={busy} onClick={() => onCheckOut(true)}>Check out, keeping my changes</button>
         </>
       )}
-      {lock.kind === 'other' && (
-        <span><strong>Checked out by {lock.by}</strong> since {when(lock.since)} · version {lock.version}. You can read it, and change it once they have checked it in.</span>
+      {lock.kind === 'other' && !releasing && (
+        <>
+          <span><strong>Checked out by {lock.by}</strong> since {when(lock.since)} · version {lock.version}. You can read it, and change it once they have checked it in.</span>
+          {lock.canRelease && onRelease && <>{' '}<button type="button" disabled={busy} onClick={() => setReleasing(true)}>Release…</button></>}
+        </>
+      )}
+      {lock.kind === 'other' && releasing && onRelease && (
+        <form
+          className="file-lock-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!reason.trim()) return;
+            onRelease(reason.trim());
+            setReleasing(false);
+            setReason('');
+          }}
+        >
+          <span><strong>{lock.by}</strong> has this file checked out. Releasing it means whatever they have not checked in is not in the vault; it is kept aside on their device, never deleted, and this is recorded.</span>{' '}
+          <input aria-label="Reason" placeholder="Why (for example, the phone was lost)" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus />{' '}
+          <button type="submit" className="danger" disabled={busy || !reason.trim()}>Release the lock</button>{' '}
+          <button type="button" disabled={busy} onClick={() => setReleasing(false)}>Cancel</button>
+        </form>
       )}
       {lock.kind === 'mine' && !asking && (
         <>

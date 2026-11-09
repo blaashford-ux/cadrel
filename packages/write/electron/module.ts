@@ -55,6 +55,8 @@ export interface FileControl {
   checkOut(file: string, o?: { keepChanges?: boolean }): Promise<FileLock>;
   checkIn(file: string, comment?: string): Promise<FileLock>;
   undoCheckOut(file: string): Promise<FileLock>;
+  /** An administrator takes the lock from whoever holds it. Refused unless they may. */
+  release(file: string, reason: string): Promise<FileLock>;
 }
 
 export interface WriteHost {
@@ -384,6 +386,7 @@ function registerIpc(): void {
   handle('files:state', (_e, p: string) => (host.files ? host.files.state(inRoot(p)) : { kind: 'unmanaged' as const }));
   handle('files:checkOut', (_e, p: string, o?: { keepChanges?: boolean }) => (host.files ? host.files.checkOut(inRoot(p), { keepChanges: o?.keepChanges === true }) : { kind: 'unmanaged' as const }));
   handle('files:checkIn', (_e, p: string, comment?: string) => (host.files ? host.files.checkIn(inRoot(p), typeof comment === 'string' ? comment : '') : { kind: 'unmanaged' as const }));
+  handle('files:release', (_e, p: string, reason: string) => (host.files ? host.files.release(inRoot(p), typeof reason === 'string' ? reason : '') : { kind: 'unmanaged' as const }));
   handle('files:undo', (_e, p: string) => (host.files ? host.files.undoCheckOut(inRoot(p)) : { kind: 'unmanaged' as const }));
   handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)

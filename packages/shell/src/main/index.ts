@@ -1655,7 +1655,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       defaultRoot: projectsDefault,
       projectsFolder,
       // files in a project are kept in the Studio's vault: read-only until checked out, and a check-in is what makes a version
-      files: createFileControl({ vault: () => new VaultHost(peopleHost, vaultWhere()).localVault, dir: projectsFolder, names: async () => new Map((await peopleHost.peopleList().catch(() => [])).map((p) => [p.id, p.name])), me: () => peopleHost.me, machine: () => os.hostname() }),
+      files: createFileControl({ vault: () => new VaultHost(peopleHost, vaultWhere()).localVault, dir: projectsFolder, names: async () => new Map((await peopleHost.peopleList().catch(() => [])).map((p) => [p.id, p.name])), me: () => peopleHost.me, machine: () => os.hostname(), mayForce: () => peopleHost.may('vault.force') }),
       templates: () => admin.templates(),
       projectStages: async () => (await stageByFolder()).all(),
       theme: { get: themeState, set: setTheme },

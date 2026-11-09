@@ -503,7 +503,7 @@ export type FileLock =
   /** Checked out by this person on this device: editable; `changed` says it differs from the version it was taken from. */
   | { kind: 'mine'; version: number; since: string; changed: boolean }
   /** Checked out by someone else, or by this person on another device: readable only. */
-  | { kind: 'other'; version: number; by: string; since: string }
+  | { kind: 'other'; version: number; by: string; since: string; /** The person may take the lock from them (an administrator: a lost device must not keep a file locked). */ canRelease?: boolean }
   /** Changed here without a check-out (something got round the read-only): left as it is until checked out keeping the changes. */
   | { kind: 'unprotected'; version: number | null };
 
@@ -515,6 +515,8 @@ export interface FileLockApi {
   checkIn(path: string, comment?: string): Promise<FileLock>;
   /** Gives it up without a new version; the copy goes back to the newest version. */
   undoCheckOut(path: string): Promise<FileLock>;
+  /** An administrator takes the lock from whoever holds it (a lost device), with a reason. Their unchecked-in work is kept aside on their device, never deleted. */
+  release?(path: string, reason: string): Promise<FileLock>;
 }
 
 /** A Studio this phone has joined. */
