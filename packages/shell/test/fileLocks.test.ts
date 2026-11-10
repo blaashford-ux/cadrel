@@ -14,7 +14,7 @@ const put = async (rel: string, text: string) => {
   await fsp.chmod(abs(rel), 0o644).catch(() => undefined);
   await fsp.writeFile(abs(rel), text);
 };
-const control = (mayForce = true) => createFileControl({ vault: () => new VaultHost(host, where).localVault, dir: () => projects, names: async () => new Map(), me: () => host.me, machine: () => 'pc-a', mayForce: async () => mayForce });
+const control = (mayForce = true) => createFileControl({ vault: () => new VaultHost(host, where).localVault, dir: () => projects, names: async () => new Map(), me: () => host.me, machine: () => 'pc-a', mayForce: async () => mayForce, betaNotes: async (id) => [{ personId: 'p-bea', name: 'Bea', text: id }] });
 
 beforeEach(async () => {
   dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-fl-'));
@@ -27,6 +27,22 @@ beforeEach(async () => {
 afterEach(async () => {
   await host.close();
   await fsp.rm(dir, { recursive: true, force: true });
+});
+
+describe('Write’s Manage Beta Read', () => {
+  it('has nothing on for a manuscript until the author turns chapters on, and keeps them', async () => {
+    await put('Book/ms.md', '# One\n\ntext');
+    const sync = new ProjectSync({ vault: () => new VaultHost(host, where).localVault, dir: projects, projects: async () => new Map([['Book', null]]) });
+    await sync.sync();
+    const c = control();
+    expect(await c.betaRead!(abs('Book/ms.md'))).toEqual({ level: 1, chapters: [] });
+    expect(await c.setBetaRead!(abs('Book/ms.md'), 1, ['One'])).toEqual({ level: 1, chapters: ['One'] });
+    expect(await c.betaRead!(abs('Book/ms.md'))).toEqual({ level: 1, chapters: ['One'] });
+    expect((await c.betaNotes!(abs('Book/ms.md'))).map((n) => n.name)).toEqual(['Bea']); // the Studio's answer for this file, reached by its vault id
+    expect(await c.betaNotes!(abs('Book/not-in-vault.md'))).toEqual([]);
+    expect(await c.betaRead!(abs('Book/not-in-vault.md'))).toBeNull(); // a file the vault does not hold has no beta read
+    expect(await c.betaRead!(path.join(dir, 'elsewhere.md'))).toBeNull();
+  });
 });
 
 describe('Write’s check-out and check-in', () => {

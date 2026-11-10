@@ -1655,7 +1655,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       defaultRoot: projectsDefault,
       projectsFolder,
       // files in a project are kept in the Studio's vault: read-only until checked out, and a check-in is what makes a version
-      files: createFileControl({ vault: () => new VaultHost(peopleHost, vaultWhere()).localVault, dir: projectsFolder, names: async () => new Map((await peopleHost.peopleList().catch(() => [])).map((p) => [p.id, p.name])), me: () => peopleHost.me, machine: () => os.hostname(), mayForce: () => peopleHost.may('vault.force') }),
+      files: createFileControl({ vault: () => new VaultHost(peopleHost, vaultWhere()).localVault, dir: projectsFolder, names: async () => new Map((await peopleHost.peopleList().catch(() => [])).map((p) => [p.id, p.name])), me: () => peopleHost.me, machine: () => os.hostname(), mayForce: () => peopleHost.may('vault.force'), betaNotes: (fileId) => peopleHost.betaNotes(fileId) }),
       templates: () => admin.templates(),
       projectStages: async () => (await stageByFolder()).all(),
       theme: { get: themeState, set: setTheme },
@@ -1737,10 +1737,20 @@ function retireAssistantServers(): void {
 
 let finalSyncStarted = false;
 let finalVaultStarted = false;
+let writesSettled = false;
 let marketStopped = false;
 app.on('before-quit', (e) => {
   quitting = true;
   if (installerToRun) retireAssistantServers();
+  // What was just changed (the page, the colours, the folders) is written to disk in the background; the process must not go before those writes
+  // have finished, or a slow disk loses the last change. Wait for them (at most 3 s), then go on.
+  if (!writesSettled) {
+    writesSettled = true;
+    e.preventDefault();
+    const pending = [write?.flush(), settings?.flush(), studioSettings?.flush(), studios?.flush()].map((p) => Promise.resolve(p).catch(() => undefined));
+    void Promise.race([Promise.all(pending), new Promise((resolve) => setTimeout(resolve, 3000))]).finally(() => app.quit());
+    return;
+  }
   void write?.flush();
   void settings?.flush();
   // New files written in the last few seconds are saved to the Studio before this goes (at most 8 s), while the Studio is still open.

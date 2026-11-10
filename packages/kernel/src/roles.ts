@@ -11,7 +11,7 @@ export interface Role {
   capabilities: string[];
 }
 
-export const ROLE_KEYS = ['owner', 'admin', 'director', 'series_lead', 'author', 'editor', 'art_director', 'artist', 'marketing', 'analyst', 'finance', 'guest'] as const;
+export const ROLE_KEYS = ['owner', 'admin', 'director', 'series_lead', 'author', 'editor', 'art_director', 'artist', 'marketing', 'analyst', 'finance', 'guest', 'beta_reader'] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
 const META: Record<RoleKey, { name: string; description: string }> = {
@@ -26,7 +26,8 @@ const META: Record<RoleKey, { name: string; description: string }> = {
   marketing: { name: 'Marketing', description: 'Plans and runs launches and campaigns.' },
   analyst: { name: 'Analyst', description: 'Market research and captures.' },
   finance: { name: 'Finance', description: 'Royalties, payments, costs and agreements.' },
-  guest: { name: 'Guest', description: 'Freelancer or reader with a scoped, expiring grant on specific books or files.' }
+  guest: { name: 'Guest', description: 'Freelancer with a scoped, expiring grant on specific books or files.' },
+  beta_reader: { name: 'Beta Reader', description: 'Reads the active manuscript of the projects they are given, in the chapters the author turns on, and leaves notes. Sees nothing else.' }
 };
 
 /**
@@ -35,19 +36,20 @@ const META: Record<RoleKey, { name: string; description: string }> = {
  */
 type Cell = Level | '-';
 export const DEFAULT_MATRIX: Record<RoleKey, Cell[]> = {
-  //             people settings audit force conf  cat   wflow tasks manu  edit  canon assets pre   launch market sales roy   biz   asst
-  owner:        ['M', 'M', 'R', 'A', 'A', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'W'],
-  admin:        ['M', 'M', 'R', 'A', 'A', 'M', 'M', 'M', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'W'],
-  director:     ['R', '-', 'R', '-', '-', 'M', 'M', 'M', 'R', 'A', 'R', 'A', 'R', 'A', 'R', 'R', 'R', 'M', 'W'],
-  series_lead:  ['-', '-', '-', '-', '-', 'W', '-', 'M', 'A', 'A', 'A', 'A', 'R', 'C', 'R', 'R', '-', '-', 'W'],
-  author:       ['-', '-', '-', '-', '-', 'R', '-', 'W', 'W', 'C', 'W', 'C', 'R', 'R', 'R', 'R', 'R', 'R', 'W'],
-  editor:       ['-', '-', '-', '-', '-', 'R', '-', 'W', 'W', 'M', 'W', 'R', 'W', '-', '-', '-', '-', '-', 'W'],
-  art_director: ['-', '-', '-', '-', '-', 'R', '-', 'M', 'R', '-', 'R', 'M', 'W', 'C', 'R', '-', '-', '-', 'W'],
-  artist:       ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', 'R', 'W', 'R', 'C', 'R', '-', '-', '-', 'W'],
-  marketing:    ['-', '-', '-', '-', '-', 'R', '-', 'M', 'R', '-', 'R', 'R', 'R', 'M', 'W', 'R', '-', '-', 'W'],
-  analyst:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', 'R', '-', 'R', 'M', 'R', '-', '-', 'W'],
-  finance:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', '-', '-', '-', '-', 'R', 'M', 'M', 'W'],
-  guest:        ['-', '-', '-', '-', '-', '-', '-', 'W', 'C', 'C', '-', 'C', '-', '-', '-', '-', '-', '-', '-']
+  //             people settings audit force conf  cat   wflow tasks manu  beta  edit  canon assets pre   launch market sales roy   biz   asst
+  owner:        ['M', 'M', 'R', 'A', 'A', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'M', 'W'],
+  admin:        ['M', 'M', 'R', 'A', 'A', 'M', 'M', 'M', 'R', '-', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'R', 'W'],
+  director:     ['R', '-', 'R', '-', '-', 'M', 'M', 'M', 'R', '-', 'A', 'R', 'A', 'R', 'A', 'R', 'R', 'R', 'M', 'W'],
+  series_lead:  ['-', '-', '-', '-', '-', 'W', '-', 'M', 'A', '-', 'A', 'A', 'A', 'R', 'C', 'R', 'R', '-', '-', 'W'],
+  author:       ['-', '-', '-', '-', '-', 'R', '-', 'W', 'W', '-', 'C', 'W', 'C', 'R', 'R', 'R', 'R', 'R', 'R', 'W'],
+  editor:       ['-', '-', '-', '-', '-', 'R', '-', 'W', 'W', '-', 'M', 'W', 'R', 'W', '-', '-', '-', '-', '-', 'W'],
+  art_director: ['-', '-', '-', '-', '-', 'R', '-', 'M', 'R', '-', '-', 'R', 'M', 'W', 'C', 'R', '-', '-', '-', 'W'],
+  artist:       ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', 'R', 'W', 'R', 'C', 'R', '-', '-', '-', 'W'],
+  marketing:    ['-', '-', '-', '-', '-', 'R', '-', 'M', 'R', '-', '-', 'R', 'R', 'R', 'M', 'W', 'R', '-', '-', 'W'],
+  analyst:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', '-', 'R', '-', 'R', 'M', 'R', '-', '-', 'W'],
+  finance:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', '-', '-', '-', '-', '-', 'R', 'M', 'M', 'W'],
+  guest:        ['-', '-', '-', '-', '-', '-', '-', 'W', 'C', '-', 'C', '-', 'C', '-', '-', '-', '-', '-', '-', '-'],
+  beta_reader:  ['-', '-', '-', '-', '-', '-', '-', '-', '-', 'C', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
 };
 
 export function defaultRole(key: RoleKey): Role {

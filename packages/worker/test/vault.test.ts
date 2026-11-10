@@ -56,7 +56,7 @@ async function addFile(s: Awaited<ReturnType<typeof server>>, key: KeyPair, path
 }
 
 describe('the Studio server: records', () => {
-  it('has the owner as a person with the Owner role, the twelve default roles, and answers the service’s calls as whoever signed', async () => {
+  it('has the owner as a person with the Owner role, the thirteen default roles, and answers the service’s calls as whoever signed', async () => {
     const s = await server();
     const me = await s.send('GET', '/v1/me', s.owner);
     const who = (await me.json()) as { personId: string; kind: string };
@@ -64,7 +64,7 @@ describe('the Studio server: records', () => {
     const people = await s.call(s.owner, ['people', 'list']);
     expect(people.status).toBe(200);
     expect(people.body.result.map((p: { id: string }) => p.id)).toEqual([who.personId]);
-    expect((await s.call(s.owner, ['people', 'roles'])).body.result).toHaveLength(12);
+    expect((await s.call(s.owner, ['people', 'roles'])).body.result).toHaveLength(13);
   });
 
   it('makes a member a person with the invited role, and the service refuses them what their role does not allow', async () => {
@@ -189,6 +189,61 @@ describe('the Studio server: the vault', () => {
     // the grant was for a week
     s.tick(8 * 24 * 60 * 60 * 1000);
     expect((await s.vault(guest.key, 'list')).body.result).toEqual([]);
+  });
+
+  it('a Beta Reader gets only the chapters switched on, only through beta reading, and keeps their own notes apart', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    const beta = (key: KeyPair, method: string, arg?: unknown) => s.send('POST', '/v1/beta', key, encodeValue({ method, args: [arg] })).then(async (r) => ({ status: r.status, body: decodeValue(await r.text()) as Record<string, any> }));
+    const text = '# One\n\nfirst chapter\n\n# Two\n\nsecret chapter\n\n# Three\n\nthird chapter\n';
+    expect((await addFile(s, s.owner, 'b1/ms.md', text, 'pB1')).body.result).toMatchObject({ ok: true });
+    const file = (await s.vault(s.owner, 'list')).body.result.find((f: { path: string }) => f.path === 'b1/ms.md');
+    const idle = await s.join('beta_reader', 'Bea'); // no project given: nothing
+    expect(idle.status).toBe(200);
+    const bea = await s.join('beta_reader', 'Bea Two', { projectId: 'pB1' });
+    const bob = await s.join('beta_reader', 'Bob', { projectId: 'pB2' }); // another project: nothing of pB1
+    // not set up yet: nothing is shared
+    expect((await beta(bea.key, 'files')).body.result).toEqual([]);
+    expect((await beta(bea.key, 'text', file.id)).status).toBe(403);
+    expect((await s.vault(s.owner, 'setBetaRead', { fileId: file.id, level: 1, chapters: ['One', 'Three'] })).body.result).toMatchObject({ chapters: ['One', 'Three'] });
+    // she sees the manuscript, reduced to the chapters that are on; the chapter that is off never reaches her
+    const files = (await beta(bea.key, 'files')).body.result;
+    expect(files).toMatchObject([{ fileId: file.id, path: 'b1/ms.md', chapters: 2 }]);
+    const got = (await beta(bea.key, 'text', file.id)).body.result;
+    expect(got.text).toContain('first chapter');
+    expect(got.text).toContain('third chapter');
+    expect(got.text).not.toContain('secret');
+    // the vault itself is closed to her: no list, no versions, no contents, no chapter settings
+    expect((await s.vault(bea.key, 'list')).body.result).toEqual([]);
+    expect((await s.vault(bea.key, 'versions', file.id)).status).toBe(422);
+    expect((await s.get(bea.key, text)).status).toBe(404);
+    expect((await s.vault(bea.key, 'setBetaRead', { fileId: file.id, level: 1, chapters: ['Two'] })).status).toBe(422);
+    // the others see nothing of it
+    for (const other of [idle, bob]) {
+      expect((await beta(other.key, 'files')).body.result).toEqual([]);
+      expect((await beta(other.key, 'text', file.id)).status).toBe(403);
+    }
+    // a chapter added later is off until switched on
+    await s.tick(1000);
+    const next = text + '\n# Four\n\nnew chapter\n';
+    const mine = (await s.vault(s.owner, 'checkOut', { fileId: file.id, machine: 'o' })).body.result;
+    expect(mine).toMatchObject({ ok: true });
+    expect(await s.put(s.owner, next)).toBe(200);
+    expect((await s.vault(s.owner, 'checkIn', { fileId: file.id, machine: 'o', hash: await hashOf(next), size: next.length, comment: '' })).body.result).toMatchObject({ ok: true });
+    const later = (await beta(bea.key, 'text', file.id)).body.result;
+    expect(later.version).toBe(2);
+    expect(later.text).not.toContain('new chapter');
+    // her notes are her own: she writes and reads them, the author reads all, nobody else reads hers
+    expect((await beta(bea.key, 'putNotes', { fileId: file.id, text: '{"notes":["one"]}' })).status).toBe(200);
+    expect((await beta(bea.key, 'notes', file.id)).body.result).toEqual({ text: '{"notes":["one"]}' });
+    expect((await beta(bob.key, 'putNotes', { fileId: file.id, text: 'x' })).status).toBe(403);
+    expect((await beta(bea.key, 'allNotes', file.id)).status).toBe(403);
+    expect((await beta(s.owner, 'allNotes', file.id)).body.result).toMatchObject([{ name: 'Bea Two', text: '{"notes":["one"]}' }]);
+    // turning it off closes it
+    await s.vault(s.owner, 'setBetaRead', { fileId: file.id, level: 1, chapters: [] });
+    expect((await beta(bea.key, 'text', file.id)).status).toBe(403);
+    // unknown names are refused
+    expect((await beta(bea.key, 'constructor')).status).toBe(400);
   });
 
   it('a project-scoped author may add and change files on their project only', async () => {

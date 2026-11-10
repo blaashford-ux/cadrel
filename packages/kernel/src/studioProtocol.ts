@@ -13,13 +13,13 @@
 /** Changes when the requests or answers change in a way an older app could not follow. */
 export const STUDIO_API_VERSION = 1;
 /** Changes when the Studio's database changes. Only ever added to: an older app must keep working on a newer database. */
-export const STUDIO_SCHEMA_VERSION = 16;
+export const STUDIO_SCHEMA_VERSION = 18;
 
 /**
  * Changes whenever the Studio's server code gains something an older server lacks, even with no change to the API or database above (a new
  * route, say). A server reports it in `/v1/info`; one that does not report it is older than every revision, so the app offers it an upgrade.
  */
-export const STUDIO_WORKER_REVISION = 2;
+export const STUDIO_WORKER_REVISION = 4;
 
 export const SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
 
@@ -133,12 +133,12 @@ export interface Invitation {
   device?: boolean;
 }
 
-export function invitationLink(i: Invitation): string {
-  return `cadrel://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}${i.device ? '&d=1' : ''}`;
+export function invitationLink(i: Invitation, scheme: 'cadrel' | 'cadrel-reader' = 'cadrel'): string {
+  return `${scheme}://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}${i.device ? '&d=1' : ''}`;
 }
 
 export function parseInvitation(text: string): Invitation | null {
-  const m = /^cadrel:\/\/join\?(.+)$/i.exec(text.trim());
+  const m = /^cadrel(?:-reader)?:\/\/join\?(.+)$/i.exec(text.trim());
   if (!m) return null;
   const q = new URLSearchParams(m[1]);
   const url = q.get('s') ?? '';

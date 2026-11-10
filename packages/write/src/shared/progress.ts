@@ -22,6 +22,12 @@ export interface Goal {
   startDate: string;
   /** Optional deadline. */
   targetDate: string | null;
+  /**
+   * The words the manuscript had when the goal began. It is the burn-down's fixed starting point: the steady-pace line runs from here on
+   * the start date to zero remaining on the deadline, and moves only when the start date, deadline or target changes (see `withBaseline`).
+   * Absent on a goal made before it was kept; the line then starts from the history, as it did.
+   */
+  startWords?: number;
 }
 
 export const emptyProgress = (): Progress => ({ version: 1, days: {} });
@@ -187,6 +193,27 @@ export function projectCompletion(goal: Goal, total: number, perDay: number, tod
   return { days, date, vsDeadline: goal.targetDate ? daysBetween(date, goal.targetDate) : null };
 }
 
+/** The manuscript's words at the start of the goal's first day, as the history shows it (0 when nothing was recorded that early). */
+export function baselineWords(p: Progress, goal: Pick<Goal, 'startDate'>): number {
+  const known = totalOn(p, addDays(goal.startDate, -1)) ?? p.days[goal.startDate]?.start ?? totalOn(p, goal.startDate);
+  if (known !== undefined && known !== null) return known;
+  // the goal began before anything was recorded: the first thing recorded is the nearest picture of where it started
+  const first = firstDay(p);
+  return first ? (p.days[first]?.start ?? 0) : 0;
+}
+
+/**
+ * The goal with its fixed burn-down baseline. The baseline is kept while the start date, deadline and target are the same as in `prev`, so the
+ * steady-pace line does not move as words are written or days pass; when any of the three changes it is taken afresh from the history (or, with
+ * none yet, from the current total). The daily target is not part of this: it is recalculated every day from what is left.
+ */
+export function withBaseline(prev: Goal | null | undefined, next: Goal, p: Progress | null, currentTotal: number | null): Goal {
+  const same = !!prev && prev.startWords !== undefined && prev.startDate === next.startDate && prev.targetDate === next.targetDate && prev.targetWords === next.targetWords;
+  if (same) return { ...next, startWords: prev!.startWords };
+  const fromHistory = p && Object.keys(p.days).length > 0 ? baselineWords(p, next) : currentTotal ?? 0;
+  return { ...next, startWords: Math.max(0, Math.round(fromHistory)) };
+}
+
 export interface BurnPoint {
   date: string;
   /** Words remaining at the end of the day (null before tracking and after today). */
@@ -197,7 +224,7 @@ export interface BurnPoint {
 
 /** The burn-down: words remaining by day against the ideal straight line from the goal's start to its deadline. */
 export function burnDown(p: Progress, goal: Goal, from: string, to: string, today: string): BurnPoint[] {
-  const startTotal = totalOn(p, addDays(goal.startDate, -1)) ?? p.days[goal.startDate]?.start ?? totalOn(p, goal.startDate) ?? 0;
+  const startTotal = goal.startWords ?? baselineWords(p, goal);
   const startRemaining = Math.max(0, goal.targetWords - startTotal);
   const span = goal.targetDate ? Math.max(1, daysBetween(goal.startDate, goal.targetDate) + 1) : 0;
   return dateRange(from, to).map((date) => {
@@ -252,5 +279,6 @@ export function sanitizeGoal(raw: unknown, today: string): Goal | null {
   if (!isNum(g.targetWords) || g.targetWords < 1) return null;
   const startDate = isDate(g.startDate) ? g.startDate : today;
   const targetDate = isDate(g.targetDate) && g.targetDate >= startDate ? g.targetDate : null;
-  return { targetWords: Math.min(10_000_000, Math.round(g.targetWords)), startDate, targetDate };
+  const startWords = isNum(g.startWords) && g.startWords >= 0 ? Math.round(g.startWords) : undefined;
+  return { targetWords: Math.min(10_000_000, Math.round(g.targetWords)), startDate, targetDate, ...(startWords !== undefined ? { startWords } : {}) };
 }

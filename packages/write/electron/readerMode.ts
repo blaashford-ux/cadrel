@@ -13,8 +13,6 @@ export const READER_BLOCKED_CHANNELS: readonly string[] = [
   'fonts:installed', 'fonts:preview',
   // making and managing the person's own projects
   'projects:create', 'projects:update', 'projects:rename', 'projects:duplicate', 'projects:delete', 'projects:convert', 'projects:addMissing', 'projects:move',
-  // being the author: sharing a project, inviting people, stopping
-  'review:shareStatus', 'review:invite', 'review:shareChapters', 'review:revoke', 'review:listShares', 'review:stop',
   // choosing any folder on the computer
   'dialog:pickFolder'
 ];

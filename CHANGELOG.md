@@ -2,6 +2,24 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (Progress: a fixed burn-down)
+
+- **The burn-down's steady-pace line is now fixed.** It runs from the words the manuscript had when the goal began, on the start date, to zero remaining on the deadline, and it moves **only if the start date, the deadline or the target word count changes**. Writing words, or the days passing, no longer shifts it, so *Words remaining* is measured against a line that means something. The **daily target** (the dashed horizontal line, *Needed per day*, the status-bar bar) is unchanged and is still recalculated each day from what is left and the days left.
+- The starting point is kept in the goal (`startWords`), set when you save the goal. A goal made before this gets its starting point the first time its Progress window is opened, from the history as the line was drawn before. If the goal began before anything was recorded, the first recorded total stands in for the start.
+
+## Unreleased (Beta Readers join the Studio; Cadrel Reader 0.11.0)
+
+- **A Beta Reader is a Studio role.** Invite them like anyone else (Studio Manager → People); the invitation for a Beta Reader is a `cadrel-reader://join?…` link that opens Cadrel Reader. They have **no access until given a project**: a studio-wide grant of the role is refused, and an invitation that names no project gives them nothing.
+- **Right-click the active manuscript → Manage Beta Read…** switches chapters on and off. A chapter that is off, and any chapter added later, is never sent: the Studio's server builds the text from the switched-on chapters only (`/v1/beta`), and a Beta Reader holds `beta.read` / `beta.comment`, not `manuscript.read`, so the vault, a file's versions and its contents are closed to them. Saved in the Studio (`beta_read`, `beta_note`; schema 18, server revision 4: press **Upgrade the server** once).
+- **Cadrel Reader reads through the Studio.** *Open invitation…* takes the link, joins with a key made on the device (sealed by the operating system's store on Windows), and puts the manuscript under *Shared with me* as a project, in the chapters the author has on. It brings down new versions and changes to the chapters on every refresh, and says when access has been withdrawn. Their notes travel back to the Studio, and the author's Write takes every reader's notes into the project's Notes panel (one review file per reader). Readers cannot see each other's notes. Android Reader works the same way.
+- **Google Drive review sharing is gone.** Removed: Write's **Notes → Share…** dialog and the Projects **Sharing** page, collaborator (edit) links, Google's file picker, the invitation page on GitHub Pages (and its workflow), and the Drive review code behind them. Cadrel Reader no longer opens Google Drive invitations (it says to ask for a Studio invitation), its home page and menu no longer mention Google Drive, and the phone apps no longer share. Google Drive *sync* of a person's own projects is separate and unchanged. People who edited a book with someone else through a Drive link: give them the Author role in the Studio instead.
+- Tested against the real Studio server code (a chapter that is off never reaches the reader; the vault is closed to them; notes kept apart; new versions and later changes to the chapters reach them; withdrawn access is reported). Not yet tried on a real Studio.
+
+## 0.9.1 (fixes: the assistant's edits of checked-in files, and a setting lost on closing)
+
+- **The assistant (Claude) can no longer fail with a bare "EPERM: operation not permitted" when it edits a file.** Since 0.9.0 a file is read-only until it is checked out, and Windows will not rename a new copy over a read-only file, so an edit of a checked-in file ended in that error. The assistant's write tools now notice first and say what to do: *"… is read-only in Cadrel (it is checked in, or someone else has it checked out), so nothing was changed. The author needs to check it out first: open it in Cadrel Write and press Check out to edit, or use the Files page. Then ask again."* Nothing is written, kept aside or left behind when it refuses; once you have checked the file out it is edited as before, and you check it in to keep the change as a new version (or undo the check-out to throw it away). New files the assistant makes are unaffected.
+- **Closing Cadrel now waits for what was just changed to be written to disk** (at most three seconds). Settings (the page you were on, colours, folders) and the Studio list are saved in the background, and the app could go before the last write finished on a slow disk, so a change made just before closing was sometimes not there at the next start. It showed up as a restart test that failed now and then on the build machines.
+
 ## 0.9.0 (check out, edit, check in; notes travel with the project)
 
 - **A file is changed by checking it out, and only a check-in makes a version.** This replaces 0.8's "unsaved changes → Save version". A file is read-only until you check it out. **Write** shows the state above the editor: *Checked in · read-only* with **Check out to edit**; *Checked out by you* with **Check in…** (a comment, optional) and **Undo check-out**; or *Checked out by Ann* (read-only). The editor cannot be typed in until the file is checked out. The Files page has the same buttons. Nothing local is ever versioned: saving while a file is checked out writes the file, and the version is made at the check-in.
@@ -13,6 +31,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Files made read-only by this are made so on the first pass after upgrading; nothing is deleted.
 - Not changed: the Studio's server, so there is nothing to upgrade there.
 - Tested with the real vault and server code (desktop, phone, notes merge, offline, held by the other device) and the bar's states; not yet on a real Studio and phone.
+
+## Cadrel Reader 0.10.4
+
+- No change for readers. Reader is built from the Cadrel Write code, whose assistant tools now explain a read-only file, so its version rises with it.
 
 ## Cadrel Reader 0.10.3
 

@@ -7,7 +7,7 @@
  * says so, and whatever a replace or edit overwrites is kept under `<project>/.cadrel/previous/` (the newest few copies).
  */
 import type { FsEntry } from '../fsPort';
-import { AgentError, badName, child, join, projectDir, serial, type AgentContext } from './tools';
+import { AgentError, assertNotReadOnly, badName, child, join, projectDir, serial, type AgentContext } from './tools';
 
 /** Files these tools will list, read and write. */
 export const TEXT_FILE = /\.(md|markdown|txt|json|html|csv)$/i;
@@ -86,6 +86,7 @@ async function ensureParent(ctx: AgentContext, abs: string): Promise<void> {
 
 /** Writes through a temporary file, so a crash can't leave half a file where a good one was. */
 async function atomicWrite(ctx: AgentContext, abs: string, content: string): Promise<void> {
+  await assertNotReadOnly(ctx, abs, abs.slice(abs.lastIndexOf('/') + 1));
   await ensureParent(ctx, abs);
   const tmp = `${abs}.${Math.floor(Math.random() * 1e9)}.tmp`;
   try {
@@ -199,6 +200,7 @@ export function writeProjectFile(ctx: AgentContext, project: string, file: strin
     let out = text;
     let previous: string | undefined;
     if (exists) {
+      await assertNotReadOnly(ctx, abs, rel); // before anything is kept aside
       const old = await ctx.fs.readText(abs);
       if (mode === 'append') out = old + (old === '' || old.endsWith('\n') ? '' : '\n') + text;
       else if (old !== text) {
@@ -221,6 +223,7 @@ export function editProjectFile(ctx: AgentContext, project: string, file: string
       if (!r.exists) throw new AgentError(`"${r.rel}" does not exist in "${project}". Use list_project_files to see the paths, or write_project_file to create it.`);
       return r;
     });
+    await assertNotReadOnly(ctx, abs, rel); // before anything is kept aside
     const old = await ctx.fs.readText(abs);
     let count = 0;
     for (let i = old.indexOf(oldText); i !== -1; i = old.indexOf(oldText, i + oldText.length)) count++;
@@ -255,6 +258,7 @@ export async function readJsonFile<T>(ctx: AgentContext, dir: string, rel: strin
 /** Saves a tracker file or a view the tools build (inside the project, never in a manuscript folder), keeping the version it replaces. */
 export async function saveToolFile(ctx: AgentContext, dir: string, rel: string, content: string): Promise<void> {
   const abs = `${dir}/${rel}`;
+  await assertNotReadOnly(ctx, abs, rel);
   const old = await ctx.fs.readText(abs).catch(() => null);
   if (old !== null && old !== content) await keepPrevious(ctx, dir, rel, old);
   await atomicWrite(ctx, abs, content);

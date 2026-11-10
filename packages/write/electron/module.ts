@@ -23,6 +23,8 @@ import { buildKit, KIT_FOLDER, WRITE_BRAND, type KitBrand } from '../src/shared/
 import { AiRemote } from './aiRemote';
 import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
+import { makeProjects } from '../src/shared/backend/projects';
+import { mergeReviewFiles, parseReviewFile, serializeReviewFile } from '../src/shared/review/comments';
 import { nodeFs } from './nodeFs';
 import { bundledFont, previewFile } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
@@ -31,14 +33,14 @@ import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpe
 import * as projects from './projects';
 import { existingFolder, SettingsStore } from './settings';
 import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
-import { pickInBrowser } from './pickerBrowser';
 import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, fetchReleaseFor, type UpdateInfo } from '../src/shared/update';
 import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
-import { createReviewHost } from '../src/shared/review/host';
-import type { FileLock, ReviewSharingApi } from '../src/shared/api';
+import { reviewOff } from '../src/shared/syncStub';
+import { createStudioReader } from '../src/shared/review/studioReader';
+import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
 /**
@@ -57,6 +59,11 @@ export interface FileControl {
   undoCheckOut(file: string): Promise<FileLock>;
   /** An administrator takes the lock from whoever holds it. Refused unless they may. */
   release(file: string, reason: string): Promise<FileLock>;
+  /** The chapters Beta Readers are sent for a manuscript; null when the file is not in the vault. */
+  betaRead?(file: string): Promise<BetaReadState | null>;
+  setBetaRead?(file: string, level: number, chapters: string[]): Promise<BetaReadState>;
+  /** Every beta reader's notes on a manuscript, to be taken into the project. */
+  betaNotes?(file: string): Promise<{ personId: string; name: string; text: string }[]>;
 }
 
 export interface WriteHost {
@@ -223,17 +230,56 @@ function reviewPath(p: string): string {
 }
 
 /** Sharing for review, built on the sync service's Google sign-in. */
-async function reviewHost(): Promise<ReviewSharingApi> {
-  const svc = await ensureSync();
-  return createReviewHost({
+/**
+ * The author's side of beta reading: every Beta Reader's notes on the active manuscript are taken into the project as that reader's review
+ * file, merged with what is already there, so they show in the Notes panel beside everyone else's. A reader's notes are theirs alone: this only
+ * adds to the project, and the Studio keeps nothing of the author's in the reader's file.
+ */
+async function takeBetaNotes(dir: string): Promise<{ changed: boolean; errors: string[] }> {
+  const out = { changed: false, errors: [] as string[] };
+  try {
+    const active = (await makeProjects(nodeFs).readMeta(dir))?.activeManuscript ?? null;
+    if (!active || !host.files?.betaNotes) return out;
+    const theirs = await host.files.betaNotes(path.join(dir, ...active.split('/')));
+    if (theirs.length === 0) return out;
+    const reviews = makeReviews(nodeFs);
+    const have = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
+    for (const n of theirs) {
+      const id = n.personId.replace(/[^A-Za-z0-9_-]/g, '');
+      if (!id) continue;
+      const incoming = parseReviewFile(n.text);
+      if (!incoming) continue;
+      const mine = parseReviewFile(have.get(id) ?? '');
+      const text = serializeReviewFile(mine ? mergeReviewFiles(incoming, mine) : incoming);
+      if (text !== have.get(id)) {
+        await reviews.save(dir, id, text);
+        out.changed = true;
+      }
+    }
+  } catch (e) {
+    out.errors.push(e instanceof Error ? e.message : String(e));
+  }
+  return out;
+}
+
+let studioReader: ReviewSharingApi | null = null;
+/** Cadrel Reader reads and comments through a Cadrel Studio (an invited Beta Reader), not through Google Drive. */
+function studioReaderHost(): ReviewSharingApi {
+  return (studioReader ??= createStudioReader({
     fs: nodeFs,
     root: projectsRoot(),
-    stateFile: path.join(dataDir, 'shares.json'),
-    drive: () => svc.driveApi(),
-    connected: () => svc.isConnected(),
-    accessToken: () => svc.accessToken(),
-    ...(host.reader ? { allowEdit: false, appName: 'Cadrel Reader' } : {})
-  });
+    stateFile: path.join(dataDir, 'studios.json'),
+    fetchFn: (input, init) => fetch(input, init),
+    // the private key is sealed by the operating system's store where there is one
+    seal: (plain) => (safeStorage.isEncryptionAvailable() ? `os:${safeStorage.encryptString(plain).toString('base64')}` : `plain:${plain}`),
+    unseal: (sealed) => (sealed.startsWith('os:') ? safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64')) : sealed.replace(/^plain:/, '')),
+    appName: 'Cadrel Reader'
+  }));
+}
+
+/** A reader's Studio; for the author's Write there is nothing to join (their beta readers' notes are taken in by `review:exchange`). */
+async function reviewHost(): Promise<ReviewSharingApi> {
+  return host.reader ? studioReaderHost() : reviewOff;
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -387,6 +433,11 @@ function registerIpc(): void {
   handle('files:checkOut', (_e, p: string, o?: { keepChanges?: boolean }) => (host.files ? host.files.checkOut(inRoot(p), { keepChanges: o?.keepChanges === true }) : { kind: 'unmanaged' as const }));
   handle('files:checkIn', (_e, p: string, comment?: string) => (host.files ? host.files.checkIn(inRoot(p), typeof comment === 'string' ? comment : '') : { kind: 'unmanaged' as const }));
   handle('files:release', (_e, p: string, reason: string) => (host.files ? host.files.release(inRoot(p), typeof reason === 'string' ? reason : '') : { kind: 'unmanaged' as const }));
+  handle('files:betaRead', (_e, p: string) => (host.files?.betaRead ? host.files.betaRead(inRoot(p)) : null));
+  handle('files:setBetaRead', (_e, p: string, level: number, chapters: string[]) => {
+    if (!host.files?.setBetaRead) throw new Error('Beta reading needs the Studio’s vault.');
+    return host.files.setBetaRead(inRoot(p), Number.isInteger(level) ? level : 1, Array.isArray(chapters) ? chapters.filter((k) => typeof k === 'string') : []);
+  });
   handle('files:undo', (_e, p: string) => (host.files ? host.files.undoCheckOut(inRoot(p)) : { kind: 'unmanaged' as const }));
   handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)
@@ -624,18 +675,14 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
-  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
-  handle('review:invite', async (_e, project: string, name: string, chapters?: { keys: string[]; level: number } | null, role?: 'edit') =>
-    (await reviewHost()).inviteReviewer(reviewPath(project), name, chapters, role === 'edit' ? 'edit' : undefined)
-  );
-  handle('review:shareChapters', async (_e, project: string, level: number) => (await reviewHost()).getShareChapters(reviewPath(project), level));
-  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
-  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(reviewPath(project)));
-  handle('review:listShares', async () => (await reviewHost()).listShares());
-  handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
+  handle('review:exchange', async (_e, project: string) => {
+    const dir = reviewPath(project);
+    const drive = await (await reviewHost()).exchangeReviews(dir);
+    if (host.reader || !host.files?.betaNotes) return drive;
+    const beta = await takeBetaNotes(dir);
+    return { ...drive, changed: drive.changed || beta.changed, errors: [...drive.errors, ...beta.errors] };
+  });
   handle('review:listShared', async () => (await reviewHost()).listShared());
-  handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
-  handle('review:pickInBrowser', (_e, url: unknown) => pickInBrowser(String(url), (u) => shell.openExternal(u)));
   handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
   // ---- Updating from the latest GitHub release ----
   handle('update:version', () => app.getVersion());

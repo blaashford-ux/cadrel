@@ -12,16 +12,8 @@ const api: WriteApi = {
     ipcRenderer.on('review:inviteLink', listener);
     return () => ipcRenderer.removeListener('review:inviteLink', listener);
   },
-  getShareStatus: (project) => ipcRenderer.invoke('review:shareStatus', project),
-  listShares: () => ipcRenderer.invoke('review:listShares'),
-  stopSharing: (project) => ipcRenderer.invoke('review:stop', project),
-  inviteReviewer: (project, name, chapters, role) => ipcRenderer.invoke('review:invite', project, name, chapters, role),
-  getShareChapters: (project, level) => ipcRenderer.invoke('review:shareChapters', project, level),
-  revokeReviewer: (project, id) => ipcRenderer.invoke('review:revoke', project, id),
   exchangeReviews: (project) => ipcRenderer.invoke('review:exchange', project),
   listShared: () => ipcRenderer.invoke('review:listShared'),
-  pickerToken: () => ipcRenderer.invoke('review:pickerToken'),
-  pickInBrowser: (url) => ipcRenderer.invoke('review:pickInBrowser', url),
   joinReview: (link, name) => ipcRenderer.invoke('review:join', link, name),
   getSyncStatus: () => ipcRenderer.invoke('sync:status'),
   connectSync: () => ipcRenderer.invoke('sync:connect'),
@@ -53,7 +45,9 @@ const api: WriteApi = {
     checkOut: (p, o) => ipcRenderer.invoke('files:checkOut', p, o),
     checkIn: (p, comment) => ipcRenderer.invoke('files:checkIn', p, comment),
     undoCheckOut: (p) => ipcRenderer.invoke('files:undo', p),
-    release: (p, reason) => ipcRenderer.invoke('files:release', p, reason)
+    release: (p, reason) => ipcRenderer.invoke('files:release', p, reason),
+    betaRead: (p) => ipcRenderer.invoke('files:betaRead', p),
+    setBetaRead: (p, level, chapters) => ipcRenderer.invoke('files:setBetaRead', p, level, chapters)
   },
   getAiServer: () => ipcRenderer.invoke('ai:server'),
   exportAiKit: () => ipcRenderer.invoke('ai:exportKit'),

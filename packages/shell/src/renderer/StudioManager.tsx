@@ -164,7 +164,7 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
             <input aria-label="Who the invitation is for" placeholder="Who is it for? (a label only you see)" value={label} onChange={(e) => setLabel(e.target.value)} />
             {projects.length > 0 && (
               <select aria-label="Where the role applies" value={project} onChange={(e) => setProject(e.target.value)}>
-                <option value="">Across the whole Studio</option>
+                <option value="">{role === 'beta_reader' ? 'No project yet (give them one later)' : 'Across the whole Studio'}</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>Only {p.name}</option>)}
               </select>
             )}

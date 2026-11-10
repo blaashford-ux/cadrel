@@ -23,8 +23,17 @@ describe('capability descriptions', () => {
   });
 });
 
+describe('Beta Readers', () => {
+  it('are given projects, never the whole studio', async () => {
+    await bootstrapStudio(db, ctx(), { id: 'owner1', name: 'Ana Reyes', email: 'ana@example.com' });
+    const bea = await createPerson(db, ctx(), { name: 'Bea', kind: 'guest' });
+    expect(await code(grantRole(db, ctx(), { subject: { kind: 'person', id: bea.id }, roleId: 'role_beta_reader', scope: STUDIO }))).toBe('refused');
+    expect(await code(grantRole(db, ctx(), { subject: { kind: 'person', id: bea.id }, roleId: 'role_beta_reader', scope: { kind: 'project', id: 'p1' } }))).toBe('ok');
+  });
+});
+
 describe('starting a studio', () => {
-  it('makes the twelve default roles and the first person as Owner, once', async () => {
+  it('makes the default roles and the first person as Owner, once', async () => {
     expect(await bootstrapStudio(db, ctx(), { id: 'owner1', name: 'Ana Reyes', email: 'ana@example.com' })).toEqual({ created: true });
     const roles = await listRoles(db, ctx());
     expect(roles).toHaveLength(ROLE_KEYS.length);

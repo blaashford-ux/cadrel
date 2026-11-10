@@ -6,7 +6,7 @@
  */
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
-import { VAULT_STORE_METHODS, type CheckInResult, type CheckOutResult, type DataCard, type FileRef, type FileVersion, type ForceResult, type Orphan, type VaultListing, type VaultStore, type AddFileResult } from '@cadrel/kernel';
+import { VAULT_STORE_METHODS, type CheckInResult, type CheckOutResult, type DataCard, type FileRef, type FileVersion, type ForceResult, type Orphan, type VaultListing, type VaultStore, type AddFileResult, type BetaRead } from '@cadrel/kernel';
 import type { StudioService } from '@cadrel/service';
 import { sha256, VaultError, type BlobStore } from '@cadrel/store';
 import { StudioApiError, StudioOfflineError, type StudioClient } from './studioClient';
@@ -51,6 +51,8 @@ export class RemoteVaultStore implements VaultStore {
   removeReference = (a: { fileId: string; refersToId: string }) => this.call<void>('removeReference', a);
   card = (fileId: string) => this.call<DataCard>('card', fileId);
   setCard = (a: Parameters<VaultStore['setCard']>[0]) => this.call<DataCard>('setCard', a);
+  betaRead = (fileId: string) => this.call<BetaRead>('betaRead', fileId);
+  setBetaRead = (a: Parameters<VaultStore['setBetaRead']>[0]) => this.call<BetaRead>('setBetaRead', a);
 }
 
 /**
@@ -114,6 +116,8 @@ export class OfflineAwareStore implements VaultStore {
   removeReference = (a: { fileId: string; refersToId: string }) => this.need(() => this.inner.removeReference(a));
   card = (fileId: string) => this.need(() => this.inner.card(fileId));
   setCard = (a: Parameters<VaultStore['setCard']>[0]) => this.need(() => this.inner.setCard(a));
+  betaRead = (fileId: string) => this.need(() => this.inner.betaRead(fileId));
+  setBetaRead = (a: Parameters<VaultStore['setBetaRead']>[0]) => this.need(() => this.inner.setBetaRead(a));
 }
 
 /** Contents kept in the Studio's file store, and a copy on this computer so a version is fetched once. */

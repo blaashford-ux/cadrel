@@ -15,7 +15,7 @@ export const nodeFs: FsPort = {
   async stat(p): Promise<FsStat | null> {
     try {
       const st = await fs.stat(p);
-      return { isDirectory: st.isDirectory(), isFile: st.isFile(), mtimeMs: st.mtimeMs, size: st.size };
+      return { isDirectory: st.isDirectory(), isFile: st.isFile(), mtimeMs: st.mtimeMs, size: st.size, ...(st.isFile() && (st.mode & 0o200) === 0 ? { readOnly: true } : {}) };
     } catch (e) {
       if (errorCode(e) === 'ENOENT' || errorCode(e) === 'ENOTDIR') return null;
       throw e;

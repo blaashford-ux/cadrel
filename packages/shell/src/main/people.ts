@@ -37,6 +37,10 @@ export class PeopleHost {
   private penScope: string[] | null = null;
   /** Set when the Studio's records are on its server: this computer's way to it. */
   private remote: StudioClient | null = null;
+  /** Every beta reader's notes on a manuscript in the Studio's vault (for whoever may write it). Empty where the records are not on a server. */
+  async betaNotes(fileId: string): Promise<{ personId: string; name: string; text: string }[]> {
+    return this.remote ? this.remote.beta('allNotes', fileId) : [];
+  }
   private editorial: EditorialOffline | null = null;
   private remoteVault: { vault: LocalVault; store: OfflineAwareStore; key: string } | null = null;
   private projects: (() => Promise<ProjectTree | null>) | null = null;

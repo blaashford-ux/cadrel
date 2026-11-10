@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import {
-  DbVaultStore, FileLinkError, type DataCard, type FileRef, cleanVaultPath, fileKind,
+  BetaReadError, DbVaultStore, FileLinkError, type BetaRead, type DataCard, type FileRef, cleanVaultPath, fileKind,
   type Db, type FileVersion, type VaultFileRow, type VaultStore
 } from '@cadrel/kernel';
 
@@ -535,6 +535,21 @@ export class LocalVault {
   async setCard(rel: string, fields: Record<string, string>, projectId?: string | null): Promise<DataCard> {
     const f = await this.known(rel, 'write');
     return this.linkWork(() => this.store.setCard({ fileId: f.id, fields, projectId: projectId ?? null }));
+  }
+
+  /** The chapters of a manuscript that Beta Readers are sent (none until some are switched on). Needs write access to the manuscript. */
+  async betaRead(rel: string): Promise<BetaRead> {
+    return this.store.betaRead((await this.known(rel, 'write')).id);
+  }
+  /** Replaces the chapters Beta Readers are sent; none turns beta reading of the file off. */
+  async setBetaRead(rel: string, level: number, chapters: string[]): Promise<BetaRead> {
+    const f = await this.known(rel, 'write');
+    try {
+      return await this.store.setBetaRead({ fileId: f.id, level, chapters });
+    } catch (e) {
+      if (e instanceof BetaReadError) throw new VaultError(e.code === 'not-found' ? 'not-found' : 'invalid', e.message);
+      throw e;
+    }
   }
 
   // ---- administration ------------------------------------------------------------------------------------------------------

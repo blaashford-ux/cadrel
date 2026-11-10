@@ -195,7 +195,6 @@ function readerTemplate(send: (a: MenuAction) => () => void, themeItem: (label: 
         { label: 'Switch Project…\tCtrl+K', click: send('switch-project') },
         { type: 'separator' },
         { label: 'Refresh\tF5', click: send('refresh') },
-        { label: 'Google Drive Sync…', click: send('sync') },
         { label: 'Settings…\tCtrl+,', click: send('settings') },
         { type: 'separator' },
         { label: 'Close Tab\tCtrl+W', click: send('close-tab') },

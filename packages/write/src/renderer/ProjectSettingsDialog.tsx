@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AppDefaults } from '../shared/appDefaults';
-import { localDate, sanitizeGoal } from '../shared/progress';
+import { localDate, sanitizeGoal, withBaseline } from '../shared/progress';
 import { goalFor, withGoal, type ProjectMeta, type ProjectsConfig } from '../shared/projects';
 import { ProjectDefaultsEditor } from './ProjectDefaultsEditor';
 import { Field, NumberField, TextArea, Toggle } from './formParts';
@@ -85,6 +85,11 @@ export function ProjectSettingsDialog({ path, config, onClose, onChanged }: Prop
     setSaving(true);
     setError(null);
     try {
+      if (finalGoal) {
+        // the burn-down's starting point stays as it was unless the start date, deadline or target changed
+        const [now, rec] = await Promise.all([window.cadrelWrite.getProjectMeta(path).catch(() => null), window.cadrelWrite.recordProgress(path).catch(() => null)]);
+        finalGoal = withBaseline(now ? goalFor(now) : null, finalGoal, rec?.progress ?? null, rec?.total ?? null);
+      }
       const saved = await window.cadrelWrite.updateProject(path, {
         notes: meta.notes,
         archived: meta.archived,

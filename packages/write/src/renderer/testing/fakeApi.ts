@@ -29,15 +29,8 @@ export class FakeApi implements WriteApi {
   confirmDeletes = syncOff.confirmDeletes;
   disconnectSync = syncOff.disconnectSync;
   onSyncStatus = syncOff.onSyncStatus;
-  getShareStatus = reviewOff.getShareStatus;
-  listShares = reviewOff.listShares;
-  stopSharing = reviewOff.stopSharing;
-  inviteReviewer = reviewOff.inviteReviewer;
-  getShareChapters = reviewOff.getShareChapters;
-  revokeReviewer = reviewOff.revokeReviewer;
   exchangeReviews = reviewOff.exchangeReviews;
   listShared = reviewOff.listShared;
-  pickerToken = reviewOff.pickerToken;
   joinReview = reviewOff.joinReview;
   files = new Map<string, { text: string; mtime: number }>();
   /** Folders that exist on disk (like a real file system, they survive deleting their files). */

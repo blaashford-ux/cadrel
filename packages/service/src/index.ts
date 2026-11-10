@@ -27,6 +27,7 @@ import {
 import { PermissionDenied } from './errors';
 export { PermissionDenied };
 export { VaultAs } from './vault';
+export { BetaAs, BETA_METHODS, MAX_BETA_NOTES, type BetaFile, type BetaNotes, type BetaText } from './beta';
 
 /** What the service needs to know about who may do what. Read on every call, so a role change takes effect at once. */
 export interface Access {

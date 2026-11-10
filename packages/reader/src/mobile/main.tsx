@@ -7,7 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { createRoot } from 'react-dom/client';
 import { READER_MOBILE_CAPABILITIES, type CoreApi, type WriteApi, type UpdateApi } from '@cadrel/write/src/shared/api';
-import { createReviewHost } from '@cadrel/write/src/shared/review/host';
+import { createStudioReader } from '@cadrel/write/src/shared/review/studioReader';
 import { withoutAuthorCalls } from '@cadrel/write/src/shared/readerApi';
 import { fetchReleaseFor, type UpdateProgress } from '@cadrel/write/src/shared/update';
 import { createCoreApi } from '@cadrel/write/src/shared/backend/coreApi';
@@ -19,7 +19,6 @@ import { createCapacitorFs, type FilesystemLike } from '@cadrel/write/src/mobile
 import { DialogHost, mobileDialogs } from '@cadrel/write/src/mobile/dialogs';
 import { AppUpdate } from '@cadrel/write/src/mobile/appUpdate';
 import { DriveAuth } from '@cadrel/write/src/mobile/driveAuth';
-import { pickInBrowser } from '@cadrel/write/src/mobile/externalBrowser';
 import { seededPreviewFs } from '@cadrel/write/src/mobile/sampleProject';
 import { desktopOnlyStubs } from '@cadrel/write/src/mobile/stubs';
 
@@ -50,7 +49,7 @@ async function start(): Promise<void> {
   });
   await backend.load();
 
-  // Google sign-in is what opens a shared project and sends comments back. In a browser preview a throwaway in-memory Drive stands in.
+  // Google sign-in is no longer how a project is opened (the Studio is); the sync service stays until Google Drive code is removed.
   const previewDrive = new FakeDrive();
   const sync = new SyncService({
     fs,
@@ -63,14 +62,14 @@ async function start(): Promise<void> {
   });
   await sync.load();
 
-  const reviews = createReviewHost({
+  // A Beta Reader reads and comments through the author's Cadrel Studio. The key made here stays in the app's private storage.
+  const reviews = createStudioReader({
     fs,
     root: ROOT,
-    stateFile: `${STATE}/shares.json`,
-    drive: () => sync.driveApi(),
-    connected: () => sync.isConnected(),
-    accessToken: () => sync.accessToken(),
-    allowEdit: false,
+    stateFile: `${STATE}/studios.json`,
+    fetchFn: (input, init) => fetch(input, init),
+    seal: (plain) => `plain:${plain}`,
+    unseal: (sealed) => sealed.replace(/^plain:/, ''),
     appName: 'Cadrel Reader'
   });
   const core: CoreApi = backend.api;
@@ -79,7 +78,6 @@ async function start(): Promise<void> {
     ...desktopOnlyStubs,
     ...bindSync(sync),
     ...reviews,
-    ...(native ? { pickInBrowser } : {}),
     ...androidUpdates(),
     capabilities: READER_MOBILE_CAPABILITIES
   } satisfies WriteApi);
