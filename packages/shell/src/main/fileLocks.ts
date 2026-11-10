@@ -18,6 +18,8 @@ export function createFileControl(o: {
   machine(): string;
   /** Whether the person may take a lock from someone (`vault.force`). */
   mayForce(): Promise<boolean>;
+  /** Every beta reader's notes on a vault file, where the Studio is on a server. */
+  betaNotes?(fileId: string): Promise<{ personId: string; name: string; text: string }[]>;
 }): FileControl {
   const relOf = (abs: string): string | null => {
     const r = path.relative(o.dir(), abs);
@@ -72,6 +74,13 @@ export function createFileControl(o: {
       const { rel, v } = need(abs);
       await v.forceRelease(rel, reason);
       return state(abs);
+    },
+    async betaNotes(abs) {
+      const rel = relOf(abs);
+      const v = o.vault();
+      if (!rel || !v || !o.betaNotes) return [];
+      const e = await v.status(rel).catch(() => null);
+      return e?.fileId ? o.betaNotes(e.fileId) : [];
     },
     async betaRead(abs) {
       const rel = relOf(abs);

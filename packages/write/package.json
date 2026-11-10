@@ -119,6 +119,8 @@
   "homepage": "https://github.com/blaashford-ux/cadrel",
   "private": true,
   "dependencies": {
+    "@cadrel/kernel": "*",
+    "@cadrel/studio-client": "*",
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.2",
     "@capacitor/filesystem": "^8.1.4"

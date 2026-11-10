@@ -17,6 +17,8 @@ export interface BetaFile {
   version: number;
   /** How many chapters are on, so an app can say "3 chapters". */
   chapters: number;
+  /** Changes whenever the reader's copy would: a new version, or the author switching chapters on or off. */
+  rev: string;
 }
 
 export interface BetaText {
@@ -25,6 +27,8 @@ export interface BetaText {
   version: number;
   /** Only the chapters switched on, in their original order. */
   text: string;
+  /** See `BetaFile.rev`. */
+  rev: string;
 }
 
 export interface BetaNotes {
@@ -75,8 +79,8 @@ export class BetaAs {
 
   /** The manuscripts this person is a beta reader of, with at least one chapter on. */
   async files(): Promise<BetaFile[]> {
-    const rows = await this.o.db.all<{ id: string; path: string; projectId: string | null; version: number; chapters: string }>(
-      `SELECT f.id AS id, f.path AS path, c.project_id AS projectId, f.current_version AS version, b.chapters AS chapters
+    const rows = await this.o.db.all<{ id: string; path: string; projectId: string | null; version: number; chapters: string; at: string }>(
+      `SELECT f.id AS id, f.path AS path, c.project_id AS projectId, f.current_version AS version, b.chapters AS chapters, b.updated_at AS at
          FROM beta_read b JOIN vault_file f ON f.id = b.file_id LEFT JOIN file_card c ON c.file_id = f.id
         WHERE f.studio_id = ? AND f.current_version > 0 ORDER BY f.path`,
       [this.o.studioId]
@@ -89,7 +93,7 @@ export class BetaAs {
       } catch {
         /* nothing on */
       }
-      if (n > 0 && fileKind(r.path) === 'manuscript' && (await this.o.as.canAt('beta.read', r.projectId))) out.push({ fileId: r.id, path: r.path, projectId: r.projectId, version: r.version, chapters: n });
+      if (n > 0 && fileKind(r.path) === 'manuscript' && (await this.o.as.canAt('beta.read', r.projectId))) out.push({ fileId: r.id, path: r.path, projectId: r.projectId, version: r.version, chapters: n, rev: `${r.version}:${r.at}` });
     }
     return out;
   }
@@ -100,7 +104,8 @@ export class BetaAs {
     const cfg = await getBetaRead(this.o.db, fileId);
     const whole = r.hash ? await this.o.readBlob(r.hash) : null;
     if (whole === null) throw new Error('That manuscript’s text is not available yet.');
-    return { fileId, path: r.path, version: r.version, text: this.o.select(whole, { keys: cfg.chapters, level: cfg.level }) };
+    const at = (await this.o.db.first<{ at: string }>('SELECT updated_at AS at FROM beta_read WHERE file_id = ?', [fileId]))?.at ?? '';
+    return { fileId, path: r.path, version: r.version, rev: `${r.version}:${at}`, text: this.o.select(whole, { keys: cfg.chapters, level: cfg.level }) };
   }
 
   /** This reader's own notes on a manuscript (empty text when they have none). */

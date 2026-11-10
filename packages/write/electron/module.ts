@@ -23,6 +23,8 @@ import { buildKit, KIT_FOLDER, WRITE_BRAND, type KitBrand } from '../src/shared/
 import { AiRemote } from './aiRemote';
 import { SKILLS } from '../mcp/skills.generated';
 import { makeReviews } from '../src/shared/backend/reviews';
+import { makeProjects } from '../src/shared/backend/projects';
+import { mergeReviewFiles, parseReviewFile, serializeReviewFile } from '../src/shared/review/comments';
 import { nodeFs } from './nodeFs';
 import { bundledFont, previewFile } from '../src/shared/export/fonts';
 import { listInstalledFonts } from './fonts';
@@ -38,6 +40,7 @@ import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 import { createReviewHost } from '../src/shared/review/host';
+import { createStudioReader } from '../src/shared/review/studioReader';
 import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
@@ -60,6 +63,8 @@ export interface FileControl {
   /** The chapters Beta Readers are sent for a manuscript; null when the file is not in the vault. */
   betaRead?(file: string): Promise<BetaReadState | null>;
   setBetaRead?(file: string, level: number, chapters: string[]): Promise<BetaReadState>;
+  /** Every beta reader's notes on a manuscript, to be taken into the project. */
+  betaNotes?(file: string): Promise<{ personId: string; name: string; text: string }[]>;
 }
 
 export interface WriteHost {
@@ -226,7 +231,55 @@ function reviewPath(p: string): string {
 }
 
 /** Sharing for review, built on the sync service's Google sign-in. */
+/**
+ * The author's side of beta reading: every Beta Reader's notes on the active manuscript are taken into the project as that reader's review
+ * file, merged with what is already there, so they show in the Notes panel beside everyone else's. A reader's notes are theirs alone: this only
+ * adds to the project, and the Studio keeps nothing of the author's in the reader's file.
+ */
+async function takeBetaNotes(dir: string): Promise<{ changed: boolean; errors: string[] }> {
+  const out = { changed: false, errors: [] as string[] };
+  try {
+    const active = (await makeProjects(nodeFs).readMeta(dir))?.activeManuscript ?? null;
+    if (!active || !host.files?.betaNotes) return out;
+    const theirs = await host.files.betaNotes(path.join(dir, ...active.split('/')));
+    if (theirs.length === 0) return out;
+    const reviews = makeReviews(nodeFs);
+    const have = new Map((await reviews.list(dir)).map((r) => [r.id, r.text]));
+    for (const n of theirs) {
+      const id = n.personId.replace(/[^A-Za-z0-9_-]/g, '');
+      if (!id) continue;
+      const incoming = parseReviewFile(n.text);
+      if (!incoming) continue;
+      const mine = parseReviewFile(have.get(id) ?? '');
+      const text = serializeReviewFile(mine ? mergeReviewFiles(incoming, mine) : incoming);
+      if (text !== have.get(id)) {
+        await reviews.save(dir, id, text);
+        out.changed = true;
+      }
+    }
+  } catch (e) {
+    out.errors.push(e instanceof Error ? e.message : String(e));
+  }
+  return out;
+}
+
+let studioReader: ReviewSharingApi | null = null;
+/** Cadrel Reader reads and comments through a Cadrel Studio (an invited Beta Reader), not through Google Drive. */
+function studioReaderHost(): ReviewSharingApi {
+  return (studioReader ??= createStudioReader({
+    fs: nodeFs,
+    root: projectsRoot(),
+    stateFile: path.join(dataDir, 'studios.json'),
+    fetchFn: (input, init) => fetch(input, init),
+    // the private key is sealed by the operating system's store where there is one
+    seal: (plain) => (safeStorage.isEncryptionAvailable() ? `os:${safeStorage.encryptString(plain).toString('base64')}` : `plain:${plain}`),
+    unseal: (sealed) => (sealed.startsWith('os:') ? safeStorage.decryptString(Buffer.from(sealed.slice(3), 'base64')) : sealed.replace(/^plain:/, '')),
+    appName: 'Cadrel Reader'
+  }));
+}
+
 async function reviewHost(): Promise<ReviewSharingApi> {
+  if (host.reader) return studioReaderHost();
   const svc = await ensureSync();
   return createReviewHost({
     fs: nodeFs,
@@ -638,7 +691,13 @@ function registerIpc(): void {
   );
   handle('review:shareChapters', async (_e, project: string, level: number) => (await reviewHost()).getShareChapters(reviewPath(project), level));
   handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
-  handle('review:exchange', async (_e, project: string) => (await reviewHost()).exchangeReviews(reviewPath(project)));
+  handle('review:exchange', async (_e, project: string) => {
+    const dir = reviewPath(project);
+    const drive = await (await reviewHost()).exchangeReviews(dir);
+    if (host.reader || !host.files?.betaNotes) return drive;
+    const beta = await takeBetaNotes(dir);
+    return { ...drive, changed: drive.changed || beta.changed, errors: [...drive.errors, ...beta.errors] };
+  });
   handle('review:listShares', async () => (await reviewHost()).listShares());
   handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
   handle('review:listShared', async () => (await reviewHost()).listShared());

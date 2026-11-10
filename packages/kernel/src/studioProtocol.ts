@@ -133,12 +133,12 @@ export interface Invitation {
   device?: boolean;
 }
 
-export function invitationLink(i: Invitation): string {
-  return `cadrel://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}${i.device ? '&d=1' : ''}`;
+export function invitationLink(i: Invitation, scheme: 'cadrel' | 'cadrel-reader' = 'cadrel'): string {
+  return `${scheme}://join?s=${encodeURIComponent(i.url)}&c=${encodeURIComponent(i.code)}&f=${encodeURIComponent(i.fingerprint)}${i.studioName ? `&n=${encodeURIComponent(i.studioName)}` : ''}${i.device ? '&d=1' : ''}`;
 }
 
 export function parseInvitation(text: string): Invitation | null {
-  const m = /^cadrel:\/\/join\?(.+)$/i.exec(text.trim());
+  const m = /^cadrel(?:-reader)?:\/\/join\?(.+)$/i.exec(text.trim());
   if (!m) return null;
   const q = new URLSearchParams(m[1]);
   const url = q.get('s') ?? '';

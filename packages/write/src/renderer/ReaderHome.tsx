@@ -29,7 +29,6 @@ export function sharedAsSummaries(shared: SharedProject[]): ProjectSummary[] {
 
 /** Cadrel Reader's first screen: the projects shared with you, and the way to open another invitation. */
 export function ReaderHome({ shared, sync, onOpen, onJoin, onConnect }: Props) {
-  const needsGoogle = sync !== null && !sync.connected;
   return (
     <main className="home" aria-label="Shared with me">
       <div className="home-inner">
@@ -44,11 +43,6 @@ export function ReaderHome({ shared, sync, onOpen, onJoin, onConnect }: Props) {
             </button>
           </div>
         </header>
-        {needsGoogle && (
-          <div className="banner info" role="status">
-            <span>Connect Google Drive so your comments reach the author.</span> <button type="button" onClick={onConnect}>Connect Google Drive</button>
-          </div>
-        )}
         {shared.length === 0 ? (
           <section className="empty-home">
             <h2>Nothing shared with you yet</h2>

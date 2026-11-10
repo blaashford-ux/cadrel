@@ -137,6 +137,10 @@ export class StudioClient {
       this.forget();
     }
   }
+  /** An operation of beta reading, as that person: the chapters switched on for them, and their own notes. */
+  async beta<T>(method: string, arg?: unknown): Promise<T> {
+    return this.wire<T>('/v1/beta', { method, args: [arg] });
+  }
   async putBlob(hash: string, bytes: Uint8Array): Promise<void> {
     const res = await this.send('PUT', `/v1/blobs/${hash}`, bytes, 'application/octet-stream');
     if (!res.ok) throw new StudioApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `The Studio answered with status ${res.status}.`, { status: res.status });

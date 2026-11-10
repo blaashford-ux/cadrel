@@ -16,7 +16,7 @@ export class StudioClient extends BaseClient {
   /** Makes an invitation and the link to send. The code is shown once: the Studio keeps only a hash of it. */
   async invite(role: string, label: string, studioName: string, grant: { projectId?: string | null; days?: number | null } = {}): Promise<{ link: string; expiresAt: string }> {
     const r = await this.request<{ code: string; expiresAt: string }>('POST', '/v1/invites', { role, label, ...(grant.projectId ? { projectId: grant.projectId } : {}), ...(grant.days ? { days: grant.days } : {}) });
-    return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName }), expiresAt: r.expiresAt }; // an owner's key is the Studio's key
+    return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName }, role === 'beta_reader' ? 'cadrel-reader' : 'cadrel'), expiresAt: r.expiresAt }; // an owner's key is the Studio's key; a Beta Reader's link opens Cadrel Reader
   }
   /** A one-hour, one-use link that makes another device of the owner's (a phone) the owner too, with its own key. The code is shown once. */
   async linkDevice(label: string, studioName: string): Promise<{ link: string; expiresAt: string }> {

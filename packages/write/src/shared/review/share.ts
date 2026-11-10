@@ -564,7 +564,7 @@ export class ReviewShare {
   }
 }
 
-function mergeFiles(remote: ReviewFile | null, local: ReviewFile | null, project: string, who: { id: string; name: string }): ReviewFile {
+export function mergeFiles(remote: ReviewFile | null, local: ReviewFile | null, project: string, who: { id: string; name: string }): ReviewFile {
   const base = newReviewFile(project, { id: who.id, name: who.name });
   const r = remote ?? base;
   return local ? mergeReviewFiles(r, local) : r;

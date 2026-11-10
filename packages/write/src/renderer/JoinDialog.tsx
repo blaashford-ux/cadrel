@@ -31,11 +31,18 @@ export function JoinDialog({ initialLink = '', onJoined, onClose }: Props) {
   useEscape(onClose);
   const api = window.cadrelWrite;
   const invite = parseInviteLink(link);
+  // A Cadrel Studio invitation (a Beta Reader's): no Google Drive step, the Studio gives the text and takes the notes.
+  const studioLink = /cadrel(?:-reader)?:\/\/join\?\S+/i.exec(link)?.[0] ?? null;
+  const readerApp = window.cadrelWrite.capabilities?.reader === true;
+  // Cadrel Reader reads through a Studio now; a Google Drive invitation from before cannot be opened by it.
+  const oldDrive = readerApp && !!invite && !studioLink;
+  const ready = !!studioLink || (!!invite && !readerApp);
   const app = appName();
   // Cadrel Reader reads and comments; an invitation to edit the manuscript belongs in Cadrel Write.
   const wrongApp = window.cadrelWrite.capabilities?.reader === true && invite?.role === 'edit';
 
   const start = async () => {
+    if (studioLink) return void finish(studioLink);
     if (!invite) return;
     setBusy(true);
     setError(null);
@@ -56,7 +63,7 @@ export function JoinDialog({ initialLink = '', onJoined, onClose }: Props) {
         });
         if (attempt.current !== mine) return;
         setWaiting(false);
-        if (outcome.done) await finish();
+        if (outcome.done) await finish(undefined);
         else if (!outcome.cancelled) {
           setError(`Google’s picker didn’t return the project’s files (asked for ${shortIds(need)}; it returned ${outcome.got.map(shortIds).join(' / ')}). Try the invitation link again, and tell the person who sent it if this keeps happening.`);
         }
@@ -70,11 +77,11 @@ export function JoinDialog({ initialLink = '', onJoined, onClose }: Props) {
     }
   };
 
-  const finish = async () => {
+  const finish = async (studio?: string) => {
     setToken(null);
     setBusy(true);
     try {
-      const shared = await api.joinReview(link, name);
+      const shared = await api.joinReview(studio ?? link, name);
       // Remember who this is on this device, so notes are signed with the reviewer's name.
       saveIdentity({ id: shared.reviewerId, name: name.trim() || 'Reviewer' });
       onJoined(shared);
@@ -100,27 +107,32 @@ export function JoinDialog({ initialLink = '', onJoined, onClose }: Props) {
           <PickerFrame
             token={token}
             ids={[invite.packageId, invite.commentsId]}
-            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish() : (setToken(null), setError(`Select both files so ${app} can open the project and save your notes.`)))}
+            onPicked={(ids) => (ids.includes(invite.packageId) && ids.includes(invite.commentsId) ? void finish(undefined) : (setToken(null), setError(`Select both files so ${app} can open the project and save your notes.`)))}
             onCancel={() => setToken(null)}
             onError={() => (setToken(null), setError('Couldn’t load Google’s file picker. Check your connection and try again.'))}
           />
         ) : (
           <>
-            <p className="modal-hint">Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how {app} is allowed to open this one project (and nothing else in your Drive).</p>
+            <p className="modal-hint">
+              {window.cadrelWrite.capabilities?.reader
+                ? <>Paste the invitation you were sent (or the whole message). {app} joins the author’s Studio with a key made on this computer, and shows you the chapters the author has opened to you. It never sees anything else.</>
+                : <>Paste the link you were sent (or the whole message). Google will ask you to select two files; that is how {app} is allowed to open this one project (and nothing else in your Drive).</>}
+            </p>
             <label>
               Invitation link
-              <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" autoFocus aria-invalid={link !== '' && !invite} />
+              <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" autoFocus aria-invalid={link !== '' && !ready} />
             </label>
             <label>
               Your name (shown on your notes)
               <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} />
             </label>
-            {link !== '' && !invite && <div className="modal-error" role="alert">That doesn’t look like a Cadrel invitation.</div>}
+            {link !== '' && !ready && !oldDrive && <div className="modal-error" role="alert">That doesn’t look like a Cadrel invitation.</div>}
+            {oldDrive && <div className="modal-error" role="alert">That is a Google Drive invitation, which {app} no longer opens. Ask the author to invite you to their Studio as a Beta Reader and send you the new link.</div>}
             {wrongApp && <div className="modal-error" role="alert">This invitation is to edit “{invite!.project}” with its author, which {app} can’t do: {app} is for reading and giving feedback. Open it in Cadrel Write, or ask the author for a reader invitation.</div>}
             {error && <div className="modal-error" role="alert">{error}</div>}
             <div className="modal-actions">
               <button type="button" onClick={onClose}>Cancel</button>
-              <button type="button" className="primary" disabled={!invite || busy || wrongApp} onClick={() => void start()}>
+              <button type="button" className="primary" disabled={!ready || busy || wrongApp} onClick={() => void start()}>
                 {busy ? 'Opening…' : 'Continue'}
               </button>
             </div>
