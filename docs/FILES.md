@@ -12,7 +12,7 @@ How Cadrel keeps a project's files, how it knows what each file *is*, and who ca
 
 These come from the product owner and are not open for redesign here.
 
-1. **Sharing inside Cadrel is Role-Based Access.** People signed in to Cadrel share through the vault and their roles (see PERMISSIONS.md). **Google Drive is for beta readers only**: people with no Cadrel account who need to read a manuscript and send comments back.
+1. **Sharing inside Cadrel is Role-Based Access.** People signed in to Cadrel share through the vault and their roles (see PERMISSIONS.md). **Beta readers are people in the Studio with the Beta Reader role**, given a project and the chapters the author switches on; they read in Cadrel Reader and their notes come back through the Studio (see PERMISSIONS.md). Google Drive is no longer used for sharing.
 2. **Project folders and files are local and synced by Cadrel.** Each person works on real files in a local folder; the vault (Cloudflare, later) keeps the master copies, versions and locks.
 3. **Pure text is `.md`.** Anything a person writes as prose (manuscript, outline, premise, character sheet, worldbuilding) is a Markdown file that any editor can open.
 4. **Cadrel, and every MCP tool, must know what kind of file each one is**: manuscript, worldbuilding, character, outline, premise, and so on. MDEdit does this only in part, in `project.json`; Cadrel may also use SQLite.
@@ -24,7 +24,7 @@ These come from the product owner and are not open for redesign here.
 |---|---|---|---|
 | **Team member** (employee, contractor with an account) | Cadrel sign-in; roles and scopes | whatever the roles give: check out and edit, comment, approve | the vault; Notes are native records |
 | **Freelancer / guest** | Cadrel account with the **Guest** role, scoped to books or files, expiring | read, comment, or edit exactly what was granted | the vault |
-| **Beta reader** (no account) | a **Google Drive review package** (a link to a read-and-comment copy), opened in **Cadrel Reader**, a separate, smaller app they install instead of the suite | read, comment and suggest; nothing else | their comments come back as a review file that is **imported into Notes** |
+| **Beta reader** (Beta Reader role in the Studio) | **Cadrel Reader**, a separate, smaller app they install instead of the suite, which joins the Studio from a `cadrel-reader://join` invitation and shows the active manuscript in the chapters the author switched on (**Manage Beta Read…**) | read, comment and suggest; nothing else | their notes go to the Studio and the author's Write takes them **into Notes**, one set per reader |
 
 What this removes from MDEdit's model once the vault exists:
 - **Drive as the way a team shares a project** (MDEdit's "collaborator" share with edit rights, and the *Shared With Me* folder). Colleagues are Cadrel people; there is nothing to share by link.
@@ -226,6 +226,6 @@ Adoption is **copy-on-read**: Cadrel scans a project folder and builds the catal
 1. **Folder layout mirrors the project tree.** *(Not built yet: in 0.2.0 each project is a flat folder `<Cadrel>/<Studio>/Projects/<project>`, linked to its place in the project tree by the Projects page. See docs/STUDIOS.md for the Studio folders.)* `<root>/<Series>/<Book>/…`; Cadrel moves a project's folder when the project moves. Write's project list becomes the book-level projects (projects that hold files), and "linking a Write folder" is replaced by projects owning their files.
 2. **A file's kind is stored in the catalog, with folder defaults.** Files stay pure Markdown; front matter is read only as a hint.
 3. **A solo author is a one-person studio on the Cadrel server**; their machines and, later, the phone app sync through it. Google Drive is not used for sync. Until the server exists, a solo author works on the local vault of one machine. The phone app waits for the server.
-4. **Beta readers use Drive review packages**; the file they return is imported into Notes as external notes.
+4. **Beta readers are Studio members with the Beta Reader role**; the server sends them only the chapters the author switched on and their notes are taken into Notes as each reader's own set.
 
 Still open (not blocking M1): when a book has several manuscript files, which one exports. The proposal in §4 is the file whose workflow state is *Current*, else the one the person picks, else the only one.

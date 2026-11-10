@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { splitChapters } from '../shared/chapters';
-import { chapterKeys } from '../shared/review/package';
+import { chapterKeys, splitChapters } from '../shared/chapters';
 import { useEscape } from './useEscape';
 
 interface Props {

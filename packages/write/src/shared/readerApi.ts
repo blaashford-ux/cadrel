@@ -1,13 +1,12 @@
 import type { WriteApi } from './api';
 
 /**
- * The calls Cadrel Reader never makes: writing files, making and managing projects, and sharing as an author. On Windows the module does not
+ * The calls Cadrel Reader never makes: writing files, making and managing projects. On Windows the module does not
  * register their channels (see electron/readerMode.ts); on the phone there is no channel to remove, so the same calls are replaced here.
  */
 export const READER_REFUSED_CALLS = [
   'writeFile', 'createFile', 'createFolder', 'renameNode', 'trashNode',
-  'createProject', 'updateProject', 'renameProject', 'duplicateProject', 'deleteProject', 'convertFolder', 'addMissingTemplateParts', 'moveProjects',
-  'getShareStatus', 'listShares', 'stopSharing', 'inviteReviewer', 'getShareChapters', 'revokeReviewer'
+  'createProject', 'updateProject', 'renameProject', 'duplicateProject', 'deleteProject', 'convertFolder', 'addMissingTemplateParts', 'moveProjects'
 ] as const satisfies readonly (keyof WriteApi)[];
 
 /** `api` with every call in `READER_REFUSED_CALLS` answering "Cadrel Reader can't do that" instead of doing it. */

@@ -10,7 +10,6 @@ interface Props {
   onRename(name: string): void;
   onClose(): void;
   /** Owner only: opens the sharing dialog. */
-  onShare?(): void;
   /** Desktop owner only: opens the dialog for connecting AI reviewers. */
   onAi?(): void;
   /** Ids of the notes that are in the open chapter's text; null when the file has only one chapter (then there is nothing to restrict). */
@@ -37,7 +36,7 @@ const readChapterOnly = (): boolean => {
   }
 };
 
-export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi, onGoTo, focus, inChapter, notice, request }: Props) {
+export function ReviewPanel({ state, me, role, onRename, onClose, onAi, onGoTo, focus, inChapter, notice, request }: Props) {
   const [draft, setDraft] = useState<{ anchor: Anchor; oneBlock: boolean } | null>(null);
   const [kind, setKind] = useState<'comment' | 'suggestion'>('comment');
   const [body, setBody] = useState('');
@@ -161,7 +160,6 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onShare, onAi,
       <div className="review-head">
         <h3>Notes</h3>
         {onAi && <button type="button" className="review-share" onClick={onAi} title="Let Claude, GPT or another AI app review your chapters">AI…</button>}
-        {onShare && <button type="button" className="review-share" onClick={onShare}>Share…</button>}
         <button type="button" aria-label="Close notes" onClick={onClose}>×</button>
       </div>
 

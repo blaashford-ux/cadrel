@@ -3,7 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 import { createRoot } from 'react-dom/client';
 import { MOBILE_CAPABILITIES, type CoreApi, type WriteApi, type UpdateApi } from '../shared/api';
-import { createReviewHost } from '../shared/review/host';
+import { reviewOff } from '../shared/syncStub';
 import { fetchLatestRelease, type UpdateProgress } from '../shared/update';
 import { createCoreApi } from '../shared/backend/coreApi';
 import type { FsPort } from '../shared/fsPort';
@@ -14,7 +14,6 @@ import { createCapacitorFs, type FilesystemLike } from './capacitorFs';
 import { DialogHost, mobileDialogs } from './dialogs';
 import { AppUpdate } from './appUpdate';
 import { DriveAuth } from './driveAuth';
-import { pickInBrowser } from './externalBrowser';
 import { seededPreviewFs } from './sampleProject';
 import { desktopOnlyStubs } from './stubs';
 
@@ -73,16 +72,8 @@ async function start(): Promise<void> {
   });
   await sync.load();
 
-  const reviews = createReviewHost({
-    fs,
-    root: ROOT,
-    stateFile: `${STATE}/shares.json`,
-    drive: () => sync.driveApi(),
-    connected: () => sync.isConnected(),
-    accessToken: () => sync.accessToken(),
-  });
   const core = onChange(backend.api, () => sync.syncSoon());
-  window.cadrelWrite = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviews, ...(native ? { pickInBrowser } : {}), ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies WriteApi;
+  window.cadrelWrite = { ...core, ...desktopOnlyStubs, ...bindSync(sync), ...reviewOff, ...androidUpdates(), capabilities: MOBILE_CAPABILITIES } satisfies WriteApi;
 
   // Keep the latest version available: on start, when the app comes back to the front, and every minute while it is open.
   const visible = () => document.visibilityState === 'visible';

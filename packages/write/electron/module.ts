@@ -33,13 +33,12 @@ import { defaultRootFolder, effectiveDefaults, sanitizeProjectsSettings, withOpe
 import * as projects from './projects';
 import { existingFolder, SettingsStore } from './settings';
 import { sanitizeThemeCustom, type ThemeCustom } from '../src/shared/theme';
-import { pickInBrowser } from './pickerBrowser';
 import { checkBeforeLaunch, downloadInstaller } from './update';
 import { fetchLatestRelease, fetchReleaseFor, type UpdateInfo } from '../src/shared/update';
 import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
-import { createReviewHost } from '../src/shared/review/host';
+import { reviewOff } from '../src/shared/syncStub';
 import { createStudioReader } from '../src/shared/review/studioReader';
 import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 
@@ -278,18 +277,9 @@ function studioReaderHost(): ReviewSharingApi {
   }));
 }
 
+/** A reader's Studio; for the author's Write there is nothing to join (their beta readers' notes are taken in by `review:exchange`). */
 async function reviewHost(): Promise<ReviewSharingApi> {
-  if (host.reader) return studioReaderHost();
-  const svc = await ensureSync();
-  return createReviewHost({
-    fs: nodeFs,
-    root: projectsRoot(),
-    stateFile: path.join(dataDir, 'shares.json'),
-    drive: () => svc.driveApi(),
-    connected: () => svc.isConnected(),
-    accessToken: () => svc.accessToken(),
-    ...(host.reader ? { allowEdit: false, appName: 'Cadrel Reader' } : {})
-  });
+  return host.reader ? studioReaderHost() : reviewOff;
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -685,12 +675,6 @@ function registerIpc(): void {
   handle('dialog:confirmRecover', (e, name: string) => confirmRecover(winOf(e), name));
   handle('dialog:confirmMarkEdited', (e, title: string) => confirmMarkEdited(winOf(e), title));
   // --- Google Drive sync ---
-  handle('review:shareStatus', async (_e, project: string) => (await reviewHost()).getShareStatus(reviewPath(project)));
-  handle('review:invite', async (_e, project: string, name: string, chapters?: { keys: string[]; level: number } | null, role?: 'edit') =>
-    (await reviewHost()).inviteReviewer(reviewPath(project), name, chapters, role === 'edit' ? 'edit' : undefined)
-  );
-  handle('review:shareChapters', async (_e, project: string, level: number) => (await reviewHost()).getShareChapters(reviewPath(project), level));
-  handle('review:revoke', async (_e, project: string, id: string) => (await reviewHost()).revokeReviewer(reviewPath(project), id));
   handle('review:exchange', async (_e, project: string) => {
     const dir = reviewPath(project);
     const drive = await (await reviewHost()).exchangeReviews(dir);
@@ -698,11 +682,7 @@ function registerIpc(): void {
     const beta = await takeBetaNotes(dir);
     return { ...drive, changed: drive.changed || beta.changed, errors: [...drive.errors, ...beta.errors] };
   });
-  handle('review:listShares', async () => (await reviewHost()).listShares());
-  handle('review:stop', async (_e, project: string) => (await reviewHost()).stopSharing(reviewPath(project)));
   handle('review:listShared', async () => (await reviewHost()).listShared());
-  handle('review:pickerToken', async () => (await reviewHost()).pickerToken());
-  handle('review:pickInBrowser', (_e, url: unknown) => pickInBrowser(String(url), (u) => shell.openExternal(u)));
   handle('review:join', async (_e, link: string, name: string) => (await reviewHost()).joinReview(link, name));
   // ---- Updating from the latest GitHub release ----
   handle('update:version', () => app.getVersion());

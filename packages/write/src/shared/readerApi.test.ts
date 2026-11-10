@@ -6,9 +6,9 @@ describe('Cadrel Reader’s API', () => {
   it('refuses every author call and leaves the rest alone', async () => {
     const readFile = vi.fn(async () => 'text');
     const writeFile = vi.fn(async () => ({}));
-    const api = withoutAuthorCalls({ readFile, writeFile, saveReview: vi.fn(), inviteReviewer: vi.fn() });
+    const api = withoutAuthorCalls({ readFile, writeFile, saveReview: vi.fn(), createProject: vi.fn() });
     await expect(api.writeFile()).rejects.toThrow(/Cadrel Reader/);
-    await expect(api.inviteReviewer()).rejects.toThrow(/can’t do that/);
+    await expect(api.createProject()).rejects.toThrow(/can’t do that/);
     expect(writeFile).not.toHaveBeenCalled();
     expect(await api.readFile()).toBe('text');
     expect(new Set(READER_REFUSED_CALLS).size).toBe(READER_REFUSED_CALLS.length);

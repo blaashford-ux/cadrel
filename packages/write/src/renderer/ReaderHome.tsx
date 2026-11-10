@@ -1,15 +1,11 @@
-import type { SharedProject } from '../shared/review/share';
+import type { SharedProject } from '../shared/review/sharedProject';
 import type { ProjectSummary } from '../shared/projects';
-import type { SyncStatus } from '../shared/api';
 import { Icon } from './Icon';
 
 interface Props {
   shared: SharedProject[];
-  /** Null until the first answer. */
-  sync: SyncStatus | null;
   onOpen(dir: string): void;
   onJoin(): void;
-  onConnect(): void;
 }
 
 /** The projects people shared with this reader, as the project switchers list them (they are not the reader's own projects). */
@@ -28,7 +24,7 @@ export function sharedAsSummaries(shared: SharedProject[]): ProjectSummary[] {
 }
 
 /** Cadrel Reader's first screen: the projects shared with you, and the way to open another invitation. */
-export function ReaderHome({ shared, sync, onOpen, onJoin, onConnect }: Props) {
+export function ReaderHome({ shared, onOpen, onJoin }: Props) {
   return (
     <main className="home" aria-label="Shared with me">
       <div className="home-inner">

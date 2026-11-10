@@ -10,7 +10,7 @@ import { createRoot } from 'react-dom/client';
 import { parseInvitation } from '@cadrel/kernel';
 import { StudioClient } from '@cadrel/studio-client';
 import { STUDIO_MOBILE_CAPABILITIES, type CoreApi, type StudioApi, type UpdateApi, type WriteApi } from '@cadrel/write/src/shared/api';
-import { createReviewHost } from '@cadrel/write/src/shared/review/host';
+import { reviewOff } from '@cadrel/write/src/shared/syncStub';
 import { fetchReleaseFor, type UpdateProgress } from '@cadrel/write/src/shared/update';
 import { createCoreApi } from '@cadrel/write/src/shared/backend/coreApi';
 import type { FsPort } from '@cadrel/write/src/shared/fsPort';
@@ -141,10 +141,6 @@ async function start(): Promise<void> {
   const sync = new StudioSync({ fs, port: client, root: studioRoot, stateFile: `${state}/sync.json`, machine: `phone-${registry.installId}`, device: deviceName() });
   await sync.load();
 
-  const noDrive = (): never => {
-    throw new Error('This app works with your Studio, not Google Drive.');
-  };
-  const reviews = createReviewHost({ fs, root: studioRoot, stateFile: `${state}/shares.json`, drive: noDrive, connected: () => false, accessToken: async () => noDrive() });
   const core = onChange(studioGuard(backend.api, sync), () => sync.syncSoon());
   window.cadrelWrite = {
     ...core,
@@ -155,7 +151,7 @@ async function start(): Promise<void> {
     confirmDeletes: sync.confirmDeletes,
     disconnectSync: sync.disconnectSync,
     onSyncStatus: sync.onSyncStatus,
-    ...reviews,
+    ...reviewOff,
     ...androidUpdates(),
     studio,
     fileLock: sync.fileLock,

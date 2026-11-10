@@ -2,26 +2,22 @@
 import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildInviteLink } from '../shared/review/link';
 import { JoinDialog } from './JoinDialog';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const link = buildInviteLink({ packageId: 'pkgFILE123', commentsId: 'cmtFILE456', reviewerId: 'rev12345', project: 'Book' });
+const studioLink = 'cadrel-reader://join?s=https%3A%2F%2Fstudio.example&c=abcdefghijklmnop&f=ABCD-ABCD-ABCD-ABCD&n=Acme';
+const shared = { reviewerId: 'rev12345', dir: '/x', project: 'Book' };
 let host: HTMLDivElement;
-const shared = { reviewerId: 'rev12345', dir: '/x', name: 'Book' };
-const joinReview = vi.fn(async () => shared);
+const joinReview = vi.fn(async (_link: string, _name: string) => shared);
 const onJoined = vi.fn();
-let rounds: (string[] | null)[];
-const pickInBrowser = vi.fn(async (_url: string) => rounds.shift() ?? null);
 
 beforeEach(() => {
   host = document.createElement('div');
   document.body.appendChild(host);
   joinReview.mockClear();
   onJoined.mockClear();
-  pickInBrowser.mockClear();
-  (window as unknown as { cadrelWrite: unknown }).cadrelWrite = { pickerToken: async () => 'tok', pickInBrowser, joinReview };
+  (window as unknown as { cadrelWrite: unknown }).cadrelWrite = { joinReview, capabilities: { reader: true } };
 });
 afterEach(() => host.remove());
 
@@ -29,82 +25,47 @@ const setValue = (el: HTMLInputElement, v: string) => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, v);
   el.dispatchEvent(new Event('input', { bubbles: true }));
 };
-const run = async () => {
+const open = async (initialLink = '') => {
   const root = createRoot(host);
-  await act(async () => root.render(createElement(JoinDialog, { onJoined, onClose: () => undefined })));
-  await act(async () => setValue(host.querySelector('input')!, link));
-  await act(async () => [...host.querySelectorAll('button')].find((b) => /Continue/.test(b.textContent ?? ''))!.click());
-  await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+  await act(async () => root.render(createElement(JoinDialog, { initialLink, onJoined, onClose: () => undefined })));
   return root;
 };
-const askedFor = (call: number) => new URLSearchParams(new URL(pickInBrowser.mock.calls[call][0]).hash.slice(1));
+const continueButton = () => [...host.querySelectorAll('button')].find((b) => /Continue/.test(b.textContent ?? ''))!;
 
-describe('JoinDialog with the picker in the browser', () => {
-  it('joins after one round when both files are picked', async () => {
-    rounds = [['cmtFILE456', 'pkgFILE123']];
-    await run();
-    expect(pickInBrowser).toHaveBeenCalledTimes(1);
-    expect(joinReview).toHaveBeenCalledTimes(1);
-    expect(onJoined).toHaveBeenCalledWith(shared);
-  });
-
-  it('asks for the other file when only one was picked, instead of sending the person back to the start', async () => {
-    rounds = [['pkgFILE123'], ['cmtFILE456']];
-    await run();
-    expect(pickInBrowser).toHaveBeenCalledTimes(2);
-    expect(askedFor(0).get('p')).toBe('pkgFILE123');
-    expect(askedFor(0).get('c')).toBe('cmtFILE456');
-    expect(askedFor(1).get('p')).toBe('cmtFILE456'); // only the missing file the second time
-    expect(askedFor(1).get('c')).toBe('');
-    expect(onJoined).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows what came back when Google keeps returning the wrong files', async () => {
-    rounds = [['aaaaaaaa'], ['aaaaaaaa'], ['aaaaaaaa'], ['aaaaaaaa']];
-    await run();
-    expect(onJoined).not.toHaveBeenCalled();
-    expect(host.querySelector('.modal-error')?.textContent).toContain('didn’t return the project’s files');
-  });
-
-  it('stays quiet when the picker is cancelled', async () => {
-    rounds = [null];
-    await run();
-    expect(onJoined).not.toHaveBeenCalled();
-    expect(host.querySelector('.modal-error')).toBeNull();
-  });
-});
-
-describe('JoinDialog in Cadrel Reader', () => {
-  const asReader = () => {
-    (window as unknown as { cadrelWrite: unknown }).cadrelWrite = { pickerToken: async () => 'tok', pickInBrowser, joinReview, capabilities: { reader: true } };
-  };
-  const open = async (initialLink: string) => {
-    const root = createRoot(host);
-    await act(async () => root.render(createElement(JoinDialog, { initialLink, onJoined, onClose: () => undefined })));
-    return root;
-  };
-  const continueButton = () => [...host.querySelectorAll('button')].find((b) => /Continue/.test(b.textContent ?? ''))!;
-
-  const studioLink = 'cadrel-reader://join?s=https%3A%2F%2Fstudio.example&c=abcdefghijklmnop&f=ABCD-ABCD-ABCD-ABCD&n=Acme';
-
-  it('starts with the Studio invitation the app was opened with, and joins without Google’s picker', async () => {
-    asReader();
+describe('the invitation dialog', () => {
+  it('starts with the invitation the app was opened with and joins the Studio', async () => {
     await open(studioLink);
     expect((host.querySelector('input') as HTMLInputElement).value).toBe(studioLink);
-    expect(continueButton().disabled).toBe(false);
     expect(host.textContent).toContain('joins the author’s Studio');
+    expect(continueButton().disabled).toBe(false);
     await act(async () => continueButton().click());
     await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
-    expect(pickInBrowser).not.toHaveBeenCalled();
     expect(joinReview).toHaveBeenCalledWith(studioLink, expect.any(String));
     expect(onJoined).toHaveBeenCalledWith(shared);
   });
 
-  it('says an old Google Drive invitation is not used any more', async () => {
-    asReader();
-    await open(link);
+  it('finds the link in a whole pasted message', async () => {
+    await open();
+    await act(async () => setValue(host.querySelector('input')!, `Hi Bea, please read my book: ${studioLink} thanks!`));
+    expect(continueButton().disabled).toBe(false);
+    await act(async () => continueButton().click());
+    await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+    expect(joinReview).toHaveBeenCalledWith(studioLink, expect.any(String));
+  });
+
+  it('refuses anything that is not a Cadrel invitation, including an old Google Drive link', async () => {
+    await open('https://blaashford-ux.github.io/cadrel/join/#v=1&p=a&c=b&r=cccc');
     expect(continueButton().disabled).toBe(true);
-    expect(host.textContent).toContain('Google Drive invitation');
-    expect(pickInBrowser).not.toHaveBeenCalled();
+    expect(host.querySelector('.modal-error')?.textContent).toMatch(/doesn’t look like a Cadrel invitation/);
+    expect(joinReview).not.toHaveBeenCalled();
+  });
+
+  it('says why when the Studio refuses', async () => {
+    joinReview.mockRejectedValueOnce(new Error('This invitation is for the role “author”, which Cadrel Reader can’t use.'));
+    await open(studioLink);
+    await act(async () => continueButton().click());
+    await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+    expect(host.querySelector('.modal-error')?.textContent).toMatch(/can’t use/);
+    expect(onJoined).not.toHaveBeenCalled();
   });
 });

@@ -14,7 +14,7 @@ import type { FsPort } from '../fsPort';
 import { toCompliantName } from '../sync/names';
 import { SHARED_WITH_ME } from '../sync/rules';
 import { parseReviewFile, serializeReviewFile } from './comments';
-import { mergeFiles, type SharedProject } from './share';
+import { mergeFiles, type SharedProject } from './sharedProject';
 
 /** Where a project that came from a Studio remembers it. */
 export const STUDIO_MARKER = '.cadrel/studio-share.json';
@@ -57,8 +57,6 @@ export interface StudioReaderOptions {
   unseal(text: string): string;
   appName?: string;
 }
-
-const REFUSED = 'Cadrel Reader is for reading and giving feedback, so it can’t do that.';
 
 export const isRevoked = (e: unknown): boolean => {
   const status = (e as { status?: number } | null)?.status;
@@ -141,17 +139,7 @@ export function createStudioReader(o: StudioReaderOptions): ReviewSharingApi {
     return out;
   };
 
-  const refused = () => Promise.reject(new Error(REFUSED));
-
   return {
-    getShareStatus: async () => ({ shared: false, publishedAt: null, reviewers: [] }),
-    listShares: async () => [],
-    stopSharing: refused,
-    inviteReviewer: refused,
-    getShareChapters: refused,
-    revokeReviewer: refused,
-    pickerToken: () => Promise.reject(new Error(`${app} doesn’t use Google Drive.`)),
-
     async joinReview(link, name) {
       const inv = parseInvitation(link);
       if (!inv) throw new StudioApiError('That is not a Cadrel invitation link. It starts with cadrel-reader://join');

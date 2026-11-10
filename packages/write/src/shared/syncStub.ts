@@ -13,19 +13,12 @@ export const syncOff: SyncApi = {
 };
 
 const off = async (): Promise<never> => {
-  throw new Error('Sharing for review needs Google Drive sync.');
+  throw new Error('Beta reading needs a Cadrel Studio.');
 };
 
 /** `ReviewSharingApi` for platforms without it. */
 export const reviewOff: ReviewSharingApi = {
-  getShareStatus: async () => ({ shared: false, publishedAt: null, reviewers: [] }),
-  listShares: async () => [],
-  stopSharing: off,
-  inviteReviewer: off,
-  getShareChapters: async () => ({ manuscript: null, chapters: [], selected: [] }),
-  revokeReviewer: off,
   exchangeReviews: async () => ({ changed: false, revoked: false, errors: [] }),
   listShared: async () => [],
-  pickerToken: off,
   joinReview: off,
 };

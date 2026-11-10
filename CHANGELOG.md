@@ -2,12 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (Beta Readers join the Studio)
+## Unreleased (Beta Readers join the Studio; Cadrel Reader 0.11.0)
 
 - **A Beta Reader is a Studio role.** Invite them like anyone else (Studio Manager → People); the invitation for a Beta Reader is a `cadrel-reader://join?…` link that opens Cadrel Reader. They have **no access until given a project**: a studio-wide grant of the role is refused, and an invitation that names no project gives them nothing.
 - **Right-click the active manuscript → Manage Beta Read…** switches chapters on and off. A chapter that is off, and any chapter added later, is never sent: the Studio's server builds the text from the switched-on chapters only (`/v1/beta`), and a Beta Reader holds `beta.read` / `beta.comment`, not `manuscript.read`, so the vault, a file's versions and its contents are closed to them. Saved in the Studio (`beta_read`, `beta_note`; schema 18, server revision 4: press **Upgrade the server** once).
 - **Cadrel Reader reads through the Studio.** *Open invitation…* takes the link, joins with a key made on the device (sealed by the operating system's store on Windows), and puts the manuscript under *Shared with me* as a project, in the chapters the author has on. It brings down new versions and changes to the chapters on every refresh, and says when access has been withdrawn. Their notes travel back to the Studio, and the author's Write takes every reader's notes into the project's Notes panel (one review file per reader). Readers cannot see each other's notes. Android Reader works the same way.
-- **Cadrel Reader no longer opens Google Drive invitations**, and its home page no longer asks to connect Google Drive. Cadrel Write's own Share… dialog is unchanged for now.
+- **Google Drive review sharing is gone.** Removed: Write's **Notes → Share…** dialog and the Projects **Sharing** page, collaborator (edit) links, Google's file picker, the invitation page on GitHub Pages (and its workflow), and the Drive review code behind them. Cadrel Reader no longer opens Google Drive invitations (it says to ask for a Studio invitation), its home page and menu no longer mention Google Drive, and the phone apps no longer share. Google Drive *sync* of a person's own projects is separate and unchanged. People who edited a book with someone else through a Drive link: give them the Author role in the Studio instead.
 - Tested against the real Studio server code (a chapter that is off never reaches the reader; the vault is closed to them; notes kept apart; new versions and later changes to the chapters reach them; withdrawn access is reported). Not yet tried on a real Studio.
 
 ## 0.9.1 (fixes: the assistant's edits of checked-in files, and a setting lost on closing)

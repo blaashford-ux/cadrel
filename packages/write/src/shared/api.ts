@@ -3,8 +3,7 @@ import type { Origin } from './export/layers';
 import type { BookDetails } from './export/model';
 import type { Progress } from './progress';
 import type { AiRemoteStatus, AiServerInfo } from './agent/config';
-import type { ChapterSelection } from './review/package';
-import type { ReviewerRecord, ShareChapters, ShareStatus, ShareSummary, SharedProject } from './review/share';
+import type { SharedProject } from './review/sharedProject';
 import type { UpdateInfo, UpdateProgress } from './update';
 import type { ProjectMeta, ProjectsConfig, ProjectsSettings, ProjectSummary, RootListing } from './projects';
 
@@ -404,40 +403,20 @@ export interface SyncApi {
   onSyncStatus(cb: (s: SyncStatus) => void): () => void;
 }
 
-/** Sharing a project with reviewers over Google Drive, and joining projects others have shared. */
+/**
+ * Beta reading through a Cadrel Studio. The author's side is Studio roles plus Write's Manage Beta Read (`FileLockApi`); this is the reader's:
+ * joining from an invitation, the manuscripts they were given, and exchanging notes. Where it is the author's Write, `exchangeReviews` takes
+ * the beta readers' notes into the project.
+ */
 export interface ReviewSharingApi {
-  getShareStatus(project: string): Promise<ShareStatus>;
-  /** Every project that currently has reviewers. */
-  listShares(): Promise<ShareSummary[]>;
-  /** Removes every reviewer of a project (their notes stay in it). */
-  stopSharing(project: string): Promise<void>;
-  /**
-   * Makes a private comments file for a new reviewer and returns their invitation link (also publishes the text).
-   * With `chapters`, the reviewer is given only those chapters of the manuscript.
-   * With `role: 'edit'` the person is a collaborator: they get an editable copy of those chapters, merged with the owner's text on every sync.
-   */
-  inviteReviewer(project: string, name: string, chapters?: ChapterSelection | null, role?: 'edit'): Promise<ReviewerRecord>;
-  /** The share manuscript's chapters (split at heading `level`) and which ones were ticked last time. */
-  getShareChapters(project: string, level: number): Promise<ShareChapters>;
-  /** Closes a reviewer's file; their notes stay in the project. */
-  revokeReviewer(project: string, reviewerId: string): Promise<void>;
-  /** Exchanges notes (and, for the owner, the latest text) with Drive for one open project. A no-op when nothing is shared. */
+  /** Exchanges notes (and, for a reader, the latest text) with the Studio for one open project. A no-op when nothing is shared. */
   exchangeReviews(project: string): Promise<{ changed: boolean; revoked: boolean; errors: string[] }>;
-  /** Projects other people shared with this person. */
+  /** Manuscripts a Studio's author opened to this person. */
   listShared(): Promise<SharedProject[]>;
-  /** An access token for Google's file picker, which gives Cadrel Write access to the files in an invitation. */
-  pickerToken(): Promise<string>;
-  /**
-   * Phone only: runs Google's file picker in the phone's own browser and returns the file ids picked (null when cancelled).
-   * Google's picker stays blank when embedded in the app's web view, so the app hands over to the browser and is called back.
-   * Absent where the picker can be embedded (the Windows app).
-   */
-  pickInBrowser?(url: string): Promise<string[] | null>;
-  /** Downloads the shared project into "Shared With Me" (after the picker has granted access). */
+  /** Joins a Studio from a `cadrel-reader://join` invitation and brings the first shared manuscript down into "Shared With Me". */
   joinReview(link: string, name: string): Promise<SharedProject>;
   /**
-   * Cadrel Reader: an invitation link the app was opened with (a `cadrel-reader:` link clicked in a message or on the invitation page),
-   * or null. Taking it clears it.
+   * Cadrel Reader: an invitation link the app was opened with (a `cadrel-reader:` link clicked in a message), or null. Taking it clears it.
    */
   takeInviteLink?(): Promise<string | null>;
   /** Cadrel Reader: called when an invitation link arrives while the app is already open. */
@@ -486,7 +465,7 @@ export const READER_CAPABILITIES: Capabilities = { export: false, windowChrome: 
 /** Cadrel Reader on the phone. */
 export const READER_MOBILE_CAPABILITIES: Capabilities = { ...READER_CAPABILITIES, windowChrome: false };
 /** The phone: the editor and projects, nothing desktop-specific. */
-export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: true, update: true, ai: false, manageProjects: true };
+export const MOBILE_CAPABILITIES: Capabilities = { export: false, windowChrome: false, folderPicker: false, launchFiles: false, fonts: false, importDocx: false, sync: true, review: false, update: true, ai: false, manageProjects: true };
 
 /** Cadrel Write on the phone, with the projects and files of a Cadrel Studio. Writing, no managing projects, no Drive, no export. */
 export const STUDIO_MOBILE_CAPABILITIES: Capabilities = { ...MOBILE_CAPABILITIES, sync: true, review: false, manageProjects: false, studio: true };

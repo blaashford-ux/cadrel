@@ -42,7 +42,6 @@ import { StudioDialog } from './StudioDialog';
 import { AiDialog } from './AiDialog';
 import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
-import { ShareDialog } from './ShareDialog';
 import { BetaReadDialog } from './BetaReadDialog';
 import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
@@ -51,8 +50,7 @@ import { useShowAllManuscripts, useWriteScope } from './useWriteScope';
 import { useFileLocks } from './useFileLocks';
 import { FileLockBar } from './FileLockBar';
 import { folderInScope, hiddenFolders, inScope, scopedFolderOf, scopedFolders } from '../shared/scope';
-import { SharingHome } from './SharingHome';
-import type { SharedProject } from '../shared/review/share';
+import type { SharedProject } from '../shared/review/sharedProject';
 import type { Anchor } from '../shared/review/comments';
 import { loadIdentity, saveIdentity, useReview } from './useReview';
 import { TitleBar } from './TitleBar';
@@ -165,7 +163,6 @@ export function App() {
     setZone(true);
     if (!fullscreen) window.cadrelWrite.windowControl('fullscreen');
   };
-  const [showShare, setShowShare] = useState(false);
   const [betaFile, setBetaFile] = useState<string | null>(null);
   const [showAi, setShowAi] = useState(false);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
@@ -173,18 +170,16 @@ export function App() {
   const [showJoin, setShowJoin] = useState(false);
   /** Cadrel Reader: an invitation link the app was opened with, to pre-fill the Open invitation dialog. */
   const [inviteLink, setInviteLink] = useState('');
-  const [showSharingHome, setShowSharingHome] = useState(false);
   const [shared, setShared] = useState<SharedProject[]>([]);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const [me, setMe] = useState(loadIdentity);
   const projectPath = s.project?.path ?? null;
   useEffect(() => setOpenedOrder((cur) => withOpened(cur, projectPath)), [projectPath]);
   const sameDir = (a: string, b: string) => a.replace(/\\/g, '/') === b.replace(/\\/g, '/');
-  /** Set when the open project was shared with this person: a reviewer can read and annotate it, a collaborator can edit it too. */
+  /** Set when the open project was shared with this person (a Beta Reader's): they can read and annotate it. */
   const sharedHere = projectPath ? shared.find((sp) => sameDir(sp.dir, projectPath)) : undefined;
-  const isCollaborator = sharedHere?.role === 'edit';
   // Cadrel Reader only ever shows other people's projects, read-only; elsewhere a project is read-only when it was shared with you.
-  const isReviewer = caps.reader === true || (sharedHere !== undefined && !isCollaborator);
+  const isReviewer = caps.reader === true || sharedHere !== undefined;
   const meHere = { id: sharedHere?.reviewerId ?? 'owner', name: me.name };
   // Inside Cadrel, Write shows only the manuscripts of the Project and Book Cadrel is showing (docs/UI-MODEL.md); a closed Book is read-only.
   const wscope = useWriteScope();
@@ -778,7 +773,6 @@ export function App() {
     shared,
     onOpenShared: (dir: string) => void openProject(dir),
     onJoin: caps.review ? () => setShowJoin(true) : undefined,
-    onSharing: caps.review ? () => setShowSharingHome(true) : undefined,
     onNew: manage ? () => setShowNewProject(true) : undefined,
     onOpenFolder: caps.folderPicker ? () => void ws.openFolder() : undefined,
     onChangeRoot: caps.folderPicker && manage ? () => void changeRoot() : undefined,
@@ -1086,20 +1080,10 @@ export function App() {
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
         )}
-        {started && !welcome && (showSharingHome && caps.review ? (
-          <SharingHome
-            config={pConfig}
-            listing={seenListing}
-            sync={syncStatus}
-            onBack={() => setShowSharingHome(false)}
-            onConnect={() => setShowSync(true)}
-          />
+        {started && !welcome && (caps.reader ? (
+          <ReaderHome shared={shared} onOpen={(dir) => void openProject(dir)} onJoin={() => setShowJoin(true)} />
         ) : (
-          caps.reader ? (
-            <ReaderHome shared={shared} sync={syncStatus} onOpen={(dir) => void openProject(dir)} onJoin={() => setShowJoin(true)} onConnect={() => setShowSync(true)} />
-          ) : (
-            <ProjectsHome {...homeProps} />
-          )
+          <ProjectsHome {...homeProps} />
         ))}
       </div>
     ) : (
@@ -1498,7 +1482,6 @@ export function App() {
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}
           request={noteRequest}
-          onShare={caps.review && !sharedHere && !caps.reader ? () => setShowShare(true) : undefined}
           onAi={caps.ai && !isReviewer ? () => setShowAi(true) : undefined}
           onGoTo={goToNote}
           focus={noteFocus}
@@ -1556,19 +1539,6 @@ export function App() {
     {showAi && projectPath && <AiDialog project={projectPath} projectName={s.project?.meta.name ?? ''} onClose={() => setShowAi(false)} />}
     {betaFile && (
       <BetaReadDialog file={betaFile} fileName={betaFile.slice(betaFile.search(/[^\\/]*$/))} level={s.chapterLevel} onClose={() => setBetaFile(null)} />
-    )}
-    {showShare && projectPath && (
-      <ShareDialog
-        project={projectPath}
-        projectName={s.project?.meta.name ?? ''}
-        manuscript={s.project?.meta.activeManuscript ?? null}
-        sync={syncStatus}
-        onConnect={() => {
-          setShowShare(false);
-          setShowSync(true);
-        }}
-        onClose={() => setShowShare(false)}
-      />
     )}
     {showJoin && (
       <JoinDialog

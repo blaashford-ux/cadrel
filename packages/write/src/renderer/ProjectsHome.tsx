@@ -3,7 +3,7 @@ import { StageChip } from './StageChip';
 import { goalFor, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { ContextMenu, type MenuItem } from './ContextMenu';
 import { Icon } from './Icon';
-import type { SharedProject } from '../shared/review/share';
+import type { SharedProject } from '../shared/review/sharedProject';
 import { justLongPressed, longPressProps } from './longPress';
 import { scopedFolderOf, type ScopedFolder } from '../shared/scope';
 
@@ -30,8 +30,6 @@ interface Props {
   shared?: SharedProject[];
   onOpenShared?(dir: string): void;
   onJoin?(): void;
-  /** Opens the Sharing page (where sharing is available). */
-  onSharing?(): void;
 }
 
 export function timeAgo(ms: number | null, now = Date.now()): string {
@@ -122,11 +120,6 @@ export function ProjectsHome(p: Props) {
             {p.onOpenFolder && (
               <button type="button" onClick={p.onOpenFolder} title="Open any folder of Markdown files, even outside the Root Folder (Ctrl+O)">
                 Open Folder…
-              </button>
-            )}
-            {p.onSharing && (
-              <button type="button" onClick={p.onSharing} title="Projects you've shared for review, and their links">
-                Sharing
               </button>
             )}
             {p.onNew && (
