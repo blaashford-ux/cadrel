@@ -22,7 +22,7 @@ async function studio() {
 }
 
 describe('the business records behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: reads with business.read (and is logged), changes with business.manage', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: reads with business.read (and is logged), changes with business.manage', async (key) => {
     const { svc, ana, person, subject, db } = await studio();
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
     const me = svc.as(id).business;

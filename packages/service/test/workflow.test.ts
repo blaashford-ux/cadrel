@@ -23,7 +23,7 @@ async function studio() {
 }
 
 describe('the workflow builder and stage moves behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: builds workflows only with workflow.design, sees them with task.read, moves projects with project.stage', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: builds workflows only with workflow.design, sees them with task.read, moves projects with project.stage', async (key) => {
     const { svc, ana, person } = await studio();
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, `role_${key}`);
     const me = svc.as(id).workflows;

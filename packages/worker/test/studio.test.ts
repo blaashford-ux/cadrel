@@ -25,7 +25,7 @@ async function studio() {
 
 describe('the Studio server', () => {
   it('keeps the migrations in the worker identical to the files Wrangler applies', () => {
-    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql', '0007_work.sql', '0008_book_project.sql', '0009_file_links.sql', '0010_business.sql', '0011_server.sql', '0012_brief.sql', '0013_edit_pass.sql', '0014_edit_query.sql', '0015_edit_decision.sql', '0016_edit_verification.sql', '0017_beta_read.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
+    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql', '0007_work.sql', '0008_book_project.sql', '0009_file_links.sql', '0010_business.sql', '0011_server.sql', '0012_brief.sql', '0013_edit_pass.sql', '0014_edit_query.sql', '0015_edit_decision.sql', '0016_edit_verification.sql', '0017_beta_read.sql', '0018_beta_note.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
   });
 
   it('says which database step failed instead of a bare 500', async () => {
@@ -34,7 +34,7 @@ describe('the Studio server', () => {
     env.DB = { ...real, prepare: (q: string) => real.prepare(q), batch: async () => { throw new Error('D1_ERROR: no such table: nope'); } } as unknown as D1Database;
     const r = await worker.fetch(new Request('https://studio.test/v1/info'), env);
     expect(r.status).toBe(503);
-    expect(((await r.json()) as { error: string }).error).toMatch(/database step 1 of 17 failed: D1_ERROR: no such table: nope/);
+    expect(((await r.json()) as { error: string }).error).toMatch(/database step 1 of 18 failed: D1_ERROR: no such table: nope/);
   });
 
   it('reports a schema version equal to the number of migrations', () => {
@@ -45,7 +45,7 @@ describe('the Studio server', () => {
     const { owner, call, env } = await studio();
     const info = await call('GET', '/v1/info', null);
     expect(info.status).toBe(200);
-    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 17, workerRevision: STUDIO_WORKER_REVISION });
+    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 18, workerRevision: STUDIO_WORKER_REVISION });
     const health = await worker.fetch(new Request('https://studio.test/v1/health'), env);
     expect(health.status).toBe(200);
   });

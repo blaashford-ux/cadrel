@@ -34,8 +34,8 @@ describe('beta reading chapters', () => {
 });
 
 describe('the Beta Reader role', () => {
-  it('can read and comment on manuscripts and holds nothing else', () => {
+  it('reads and comments only through beta reading, never on manuscripts as such', () => {
     const caps = defaultRole('beta_reader').capabilities;
-    expect(caps.sort()).toEqual(['manuscript.comment', 'manuscript.read']);
+    expect(caps.sort()).toEqual(['beta.comment', 'beta.read']);
   });
 });

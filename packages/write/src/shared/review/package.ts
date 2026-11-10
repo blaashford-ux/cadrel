@@ -1,4 +1,4 @@
-import { joinChapters, splitChapters, type MarkdownDoc } from '../chapters';
+import { selectChapters, splitChapters, type ChapterSelection } from '../chapters';
 import type { FsPort } from '../fsPort';
 import { classify } from '../sync/rules';
 
@@ -14,36 +14,7 @@ export interface ReviewPackage {
 
 const MAX_FILES = 600;
 
-/** The chapters of a manuscript a reviewer may see, by key (see `chapterKeys`), and the heading level that splits it. */
-export interface ChapterSelection {
-  keys: string[];
-  level: number;
-}
-
-/** Key of the text before the first chapter heading. */
-export const PREAMBLE_KEY = '\u0000front';
-
-/**
- * A stable key for each chapter: its title, with " (2)", " (3)" … for a title that repeats. Moving a chapter keeps its key;
- * renaming it makes it a new chapter.
- */
-export function chapterKeys(doc: MarkdownDoc): { key: string; title: string }[] {
-  const seen = new Map<string, number>();
-  return doc.chapters.map((c) => {
-    if (c.isPreamble) return { key: PREAMBLE_KEY, title: '' };
-    const n = (seen.get(c.title) ?? 0) + 1;
-    seen.set(c.title, n);
-    return { key: n === 1 ? c.title : `${c.title} (${n})`, title: c.title };
-  });
-}
-
-/** The manuscript text reduced to the selected chapters (in their original order). */
-export function selectChapters(text: string, sel: ChapterSelection): string {
-  const doc = splitChapters(text, sel.level);
-  const want = new Set(sel.keys);
-  const keys = chapterKeys(doc);
-  return joinChapters({ ...doc, chapters: doc.chapters.filter((_, i) => want.has(keys[i].key)) });
-}
+export { PREAMBLE_KEY, chapterKeys, selectChapters, type ChapterSelection } from '../chapters';
 
 async function walkProse(fs: FsPort, dir: string, keep: (rel: string) => boolean, read: (rel: string, text: string) => string = (_r, t) => t): Promise<{ path: string; text: string }[]> {
   const files: { path: string; text: string }[] = [];

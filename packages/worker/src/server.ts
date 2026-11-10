@@ -5,12 +5,14 @@
  *
  *   POST /v1/call    { path: ['catalogue', 'books'], args: [...] }   the service's calls, as the signed-in person
  *   POST /v1/vault   { method: 'checkOut', args: [{...}] }           the vault's operations, as the signed-in person
+ *   POST /v1/beta    { method: 'text', args: [fileId] }               beta reading: the chapters switched on, and a reader's own notes
  *   PUT  /v1/blobs/<sha256>  (the file's bytes)                       a version's contents, stored by their hash
  *   GET  /v1/blobs/<sha256>                                           ...and read back, only by someone who may read a file that has them
  *   GET  /v1/tree  /  PUT /v1/tree                                    the project tree: each person sees their own projects; the owner publishes it
  */
 import { sanitizeTree, sha256, hex, visibleTree, VAULT_STORE_METHODS } from '@cadrel/kernel';
-import { VaultAs, decodeValue, encodeError, encodeValue } from '@cadrel/service';
+import { BETA_METHODS, BetaAs, VaultAs, decodeValue, encodeError, encodeValue } from '@cadrel/service';
+import { selectChapters } from '@cadrel/write/src/shared/chapters';
 import { readTree, serviceFor, writeTree, type RecordsEnv } from './records';
 import { captureRoutes, isCaptureRoute } from './captures';
 
@@ -32,7 +34,7 @@ const failed = (e: unknown) => {
   return w ? respond(JSON.stringify(w), w.kind === 'PermissionDenied' ? 403 : 422) : fail(500, 'The Studio could not do that.');
 };
 
-export const isServerRoute = (path: string): boolean => isCaptureRoute(path) || path === '/v1/call' || path === '/v1/vault' || path === '/v1/tree' || /^\/v1\/blobs\/[0-9a-f]{64}$/.test(path);
+export const isServerRoute = (path: string): boolean => isCaptureRoute(path) || path === '/v1/call' || path === '/v1/vault' || path === '/v1/beta' || path === '/v1/tree' || /^\/v1\/blobs\/[0-9a-f]{64}$/.test(path);
 
 const blobKey = (hash: string) => `blobs/${hash.slice(0, 2)}/${hash}`;
 
@@ -105,6 +107,31 @@ export async function serverRoutes(request: Request, env: ServerEnv, who: { kind
     const vault = new VaultAs({ db, studioId: env.STUDIO_ID, personId, as, now: () => new Date(now), hasBlob: async (hash) => !!env.FILES && !!(await env.FILES.head(blobKey(hash))) });
     try {
       return ok(await (vault as unknown as Record<string, (a: unknown) => Promise<unknown>>)[name]!(arg));
+    } catch (e) {
+      return failed(e);
+    }
+  }
+
+  if (path === '/v1/beta' && method === 'POST') {
+    let req: { method?: unknown; args?: unknown };
+    try {
+      req = decodeValue(String(body)) as typeof req;
+    } catch {
+      return fail(400, 'The request was not understood.');
+    }
+    const name = typeof req.method === 'string' ? req.method : '';
+    if (!(BETA_METHODS as readonly string[]).includes(name)) return fail(400, 'That is not something beta reading does.');
+    const arg = Array.isArray(req.args) ? req.args[0] : undefined;
+    const beta = new BetaAs({
+      db, studioId: env.STUDIO_ID, personId, as, now: () => new Date(now),
+      readBlob: async (hash) => {
+        const obj = env.FILES ? await env.FILES.get(blobKey(hash)) : null;
+        return obj ? new TextDecoder().decode(await obj.arrayBuffer()) : null;
+      },
+      select: (text, sel) => selectChapters(text, sel)
+    });
+    try {
+      return ok(await (beta as unknown as Record<string, (a: unknown) => Promise<unknown>>)[name]!(arg));
     } catch (e) {
       return failed(e);
     }

@@ -84,9 +84,9 @@ export function splitChapters(source: string, levelIn = 1): MarkdownDoc {
   let i = 0;
 
   // YAML front matter belongs to the preamble; '#' comments inside it are not headings.
-  if (lines.length > 0 && /^---[ \t]*$/.test(lines[0].text)) {
+  if (lines.length > 0 && /^---[ \t]*$/.test(lines[0]!.text)) {
     for (let j = 1; j < lines.length; j++) {
-      if (/^(?:---|\.\.\.)[ \t]*$/.test(lines[j].text)) {
+      if (/^(?:---|\.\.\.)[ \t]*$/.test(lines[j]!.text)) {
         i = j + 1;
         break;
       }
@@ -95,7 +95,7 @@ export function splitChapters(source: string, levelIn = 1): MarkdownDoc {
 
   let fence: { char: string; len: number } | null = null;
   for (; i < lines.length; i++) {
-    const line = lines[i].text;
+    const line = lines[i]!.text;
 
     if (fence) {
       const close = new RegExp(`^ {0,3}${fence.char === '`' ? '`' : '~'}{${fence.len},}[ \\t]*$`);
@@ -104,19 +104,19 @@ export function splitChapters(source: string, levelIn = 1): MarkdownDoc {
     }
 
     const open = FENCE_OPEN.exec(line);
-    if (open && !(open[1][0] === '`' && open[2].includes('`'))) {
-      fence = { char: open[1][0], len: open[1].length };
+    if (open && !(open[1]![0] === '`' && open[2]!.includes('`'))) {
+      fence = { char: open[1]![0]!, len: open[1]!.length };
       continue;
     }
 
     const atx = ATX.exec(line);
     if (atx) {
-      starts.push({ offset: lines[i].start, title: stripClosingHashes(atx[1] ?? '') });
+      starts.push({ offset: lines[i]!.start, title: stripClosingHashes(atx[1] ?? '') });
       continue;
     }
 
     // Setext: a one-line paragraph followed by ===
-    const prev = i > 0 ? lines[i - 1].text : '';
+    const prev = i > 0 ? lines[i - 1]!.text : '';
     const startsParagraph = i === 0 || prev.trim() === '' || ANY_ATX.test(prev);
     if (
       setext &&
@@ -124,20 +124,20 @@ export function splitChapters(source: string, levelIn = 1): MarkdownDoc {
       line.trim() !== '' &&
       !BLOCK_STARTER.test(line) &&
       i + 1 < lines.length &&
-      setext.test(lines[i + 1].text)
+      setext.test(lines[i + 1]!.text)
     ) {
-      starts.push({ offset: lines[i].start, title: line.trim() });
+      starts.push({ offset: lines[i]!.start, title: line.trim() });
       i++; // skip the underline
     }
   }
 
   const chapters: Chapter[] = [];
-  const firstOffset = starts.length ? starts[0].offset : text.length;
+  const firstOffset = starts.length ? starts[0]!.offset : text.length;
   if (firstOffset > 0 || starts.length === 0) {
     chapters.push({ title: '', isPreamble: true, raw: text.slice(0, firstOffset) });
   }
   starts.forEach((s, k) => {
-    const end = k + 1 < starts.length ? starts[k + 1].offset : text.length;
+    const end = k + 1 < starts.length ? starts[k + 1]!.offset : text.length;
     chapters.push({ title: s.title, isPreamble: false, raw: text.slice(s.offset, end) });
   });
 
@@ -157,12 +157,12 @@ export function joinChapters(doc: MarkdownDoc): string {
  */
 export function updateChapter(doc: MarkdownDoc, index: number, newRaw: string): MarkdownDoc {
   if (index < 0 || index >= doc.chapters.length) throw new RangeError(`No chapter at index ${index}`);
-  const trailing = /(?:\r\n|\r|\n)*$/.exec(doc.chapters[index].raw)![0];
+  const trailing = /(?:\r\n|\r|\n)*$/.exec(doc.chapters[index]!.raw)![0];
   const isLast = index === doc.chapters.length - 1;
   const body = newRaw.replace(/(?:\r\n|\r|\n)+$/, '').replace(/\r\n|\r|\n/g, doc.eol);
   // A non-last chapter must end in a newline so the next heading starts its own line.
   const raw = body === '' ? trailing : body + (trailing || (isLast ? '' : doc.eol));
-  const old = doc.chapters[index];
+  const old = doc.chapters[index]!;
   const title = old.isPreamble ? '' : (splitChapters(raw, doc.level).chapters.find((c) => !c.isPreamble)?.title ?? old.title);
   const chapters = doc.chapters.slice();
   chapters[index] = { ...old, title, raw };
@@ -190,7 +190,7 @@ function withSeparators(doc: MarkdownDoc, raws: string[]): string[] {
 function rebuild(doc: MarkdownDoc, raws: string[], keepFinalNewline: boolean): MarkdownDoc {
   const fixed = withSeparators(doc, raws);
   if (!keepFinalNewline && fixed.length > 0) {
-    fixed[fixed.length - 1] = fixed[fixed.length - 1].replace(/(?:\r\n|\r|\n)+$/, '');
+    fixed[fixed.length - 1] = fixed[fixed.length - 1]!.replace(/(?:\r\n|\r|\n)+$/, '');
   }
   return { ...splitChapters(doc.bom + fixed.join(''), doc.level), bom: doc.bom };
 }
@@ -200,7 +200,7 @@ function indexAtOffset(doc: MarkdownDoc, offset: number): number {
   let pos = 0;
   for (let i = 0; i < doc.chapters.length; i++) {
     if (pos === offset) return i;
-    pos += doc.chapters[i].raw.length;
+    pos += doc.chapters[i]!.raw.length;
   }
   return Math.max(0, doc.chapters.length - 1);
 }
@@ -229,7 +229,7 @@ export function moveChapter(doc: MarkdownDoc, index: number, delta: -1 | 1): { d
   const first = doc.chapters[0]?.isPreamble ? 1 : 0;
   if (index < first || index >= doc.chapters.length || target < first || target >= doc.chapters.length) return null;
   const raws = doc.chapters.map((c) => c.raw);
-  [raws[index], raws[target]] = [raws[target], raws[index]];
+  [raws[index], raws[target]] = [raws[target]!, raws[index]!];
   const next = rebuild(doc, raws, hadFinalNewline(doc));
   return { doc: next, index: indexAtOffset(next, startOf(doc, raws, target)) };
 }
@@ -250,3 +250,35 @@ export function mapChapters(doc: MarkdownDoc, fn: (raw: string, index: number) =
     hadFinalNewline(doc)
   );
 }
+
+/** The chapters of a manuscript a reviewer may see, by key (see `chapterKeys`), and the heading level that splits it. */
+export interface ChapterSelection {
+  keys: string[];
+  level: number;
+}
+
+/** Key of the text before the first chapter heading. */
+export const PREAMBLE_KEY = '\u0000front';
+
+/**
+ * A stable key for each chapter: its title, with " (2)", " (3)" … for a title that repeats. Moving a chapter keeps its key;
+ * renaming it makes it a new chapter.
+ */
+export function chapterKeys(doc: MarkdownDoc): { key: string; title: string }[] {
+  const seen = new Map<string, number>();
+  return doc.chapters.map((c) => {
+    if (c.isPreamble) return { key: PREAMBLE_KEY, title: '' };
+    const n = (seen.get(c.title) ?? 0) + 1;
+    seen.set(c.title, n);
+    return { key: n === 1 ? c.title : `${c.title} (${n})`, title: c.title };
+  });
+}
+
+/** The manuscript text reduced to the selected chapters (in their original order). */
+export function selectChapters(text: string, sel: ChapterSelection): string {
+  const doc = splitChapters(text, sel.level);
+  const want = new Set(sel.keys);
+  const keys = chapterKeys(doc);
+  return joinChapters({ ...doc, chapters: doc.chapters.filter((_, i) => want.has(keys[i]!.key)) });
+}
+

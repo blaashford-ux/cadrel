@@ -12,7 +12,7 @@ export const RECORD_TABLES = [
   'person', 'pen_name', 'pen_name_person', 'team', 'team_member', 'role', 'role_capability', 'assignment', 'capability_seen',
   'workflow', 'workflow_stage', 'workflow_transition', 'workflow_transition_role',
   'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision', 'brief', 'brief_version',
-  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card', 'beta_read', 'edit_pass', 'edit_query', 'edit_decision', 'edit_verification',
+  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card', 'beta_read', 'beta_note', 'edit_pass', 'edit_query', 'edit_decision', 'edit_verification',
   'contribution', 'credit', 'rights', 'revenue_share', 'audit'
 ] as const;
 

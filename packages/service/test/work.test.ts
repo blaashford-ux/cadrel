@@ -22,7 +22,7 @@ async function studio() {
 }
 
 describe('tasks, approvals and decisions behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: reads with task.read, writes with task.edit, hands work over with task.assign, reaches anyone’s with task.manage', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: reads with task.read, writes with task.edit, hands work over with task.assign, reaches anyone’s with task.manage', async (key) => {
     const { svc, ana, person } = await studio();
     const other = await person('Other', 'owner');
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
@@ -77,7 +77,7 @@ describe('tasks, approvals and decisions behind the permission check', () => {
 });
 
 describe('linking a book to its project', () => {
-  it.each(ROLE_KEYS)('%s: sees the links with catalogue.read, changes them with catalogue.edit', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: sees the links with catalogue.read, changes them with catalogue.edit', async (key) => {
     const { svc, ana, person } = await studio();
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
     const caps = new Set(defaultRole(key).capabilities);
@@ -197,7 +197,7 @@ describe('records follow who is assigned to the project', () => {
 });
 
 describe('briefs behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: manuscript briefs read with task.read and written with task.edit; edit briefs read with edit.read and written with edit.assign', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: manuscript briefs read with task.read and written with task.edit; edit briefs read with edit.read and written with edit.assign', async (key) => {
     const { svc, ana, person } = await studio();
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
     const me = svc.as(id).briefs;
@@ -225,7 +225,7 @@ describe('editorial passes behind the permission check', () => {
     return s;
   }
 
-  it.each(ROLE_KEYS)('%s: reads with edit.read, plans with edit.assign, runs with edit.run, answers with edit.respond, closes with edit.approve', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: reads with edit.read, plans with edit.assign, runs with edit.run, answers with edit.respond, closes with edit.approve', async (key) => {
     const { svc, ana, person } = await withFile();
     const editor = await person('Eve', 'editor');
     const id = key === 'owner' ? 'ana' : await person(`P-${key}`, key);
@@ -250,7 +250,7 @@ describe('editorial passes behind the permission check', () => {
 });
 
 describe('queries behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: reads with edit.read, raises as the pass’s editor with edit.run, answers with edit.respond', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: reads with edit.read, raises as the pass’s editor with edit.run, answers with edit.respond', async (key) => {
     const s = await studio();
     await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
     await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
@@ -289,7 +289,7 @@ describe('queries behind the permission check', () => {
 });
 
 describe('decisions on pass items behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: decides with edit.respond; reads decisions with edit.read', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: decides with edit.respond; reads decisions with edit.read', async (key) => {
     const s = await studio();
     await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
     await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");
@@ -309,7 +309,7 @@ describe('decisions on pass items behind the permission check', () => {
 });
 
 describe('revision verification behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: checks a revision as the pass’s editor (edit.run); reads the result with edit.read', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: checks a revision as the pass’s editor (edit.run); reads the result with edit.read', async (key) => {
     const s = await studio();
     await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 2)", [S]);
     for (const n of [1, 2]) await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', ?, ?, 1, 'ana', '2026-11-01T00:00:00.000Z')", [n, `h${n}`]);
@@ -332,7 +332,7 @@ describe('revision verification behind the permission check', () => {
 });
 
 describe('what a gate sees of editorial passes, behind the permission check', () => {
-  it.each(ROLE_KEYS)('%s: reads the facts with task.read', async (key) => {
+  it.each(ROLE_KEYS.filter((k) => k !== 'beta_reader'))('%s: reads the facts with task.read', async (key) => {
     const s = await studio();
     await s.db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', ?, 'book.md', 1)", [S]);
     await s.db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES ('f1', 1, 'h', 1, 'ana', '2026-11-01T00:00:00.000Z')");

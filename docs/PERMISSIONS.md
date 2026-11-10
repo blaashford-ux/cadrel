@@ -84,7 +84,8 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 | Catalogue: IP, series, books, editions | M | M | M | W | R | R | R | R | R | R | R | — | — |
 | Workflow design (states, transitions) | M | M | M | — | — | — | — | — | — | — | — | — | — |
 | Tasks and deadlines | M | M | M | M | W | W | M | W | M | W | W | W | — |
-| Manuscripts | M | R | R | A | W | W | R | — | R | — | — | C | C |
+| Manuscripts | M | R | R | A | W | W | R | — | R | — | — | C | — |
+| Beta reading (only the chapters switched on) | M | — | — | — | — | — | — | — | — | — | — | — | C |
 | Editorial passes and queries | M | R | A | A | C | M | — | — | — | — | — | C | — |
 | Canon / series bible | M | R | R | A | W | W | R | R | R | — | — | — | — |
 | Assets, art, covers | M | R | A | A | C | R | M | W | R | R | — | C | — |
@@ -104,7 +105,7 @@ Notes on the defaults:
 - **Author** sees royalties and agreements for their *own* books and contract only.
 - **Finance and My Books.** The *Royalties, payments, payouts* row governs the Finance module and the Finance sections of a book's page in My Books. Until agreements exist (M7) an Author's own-books-only access cannot be enforced, so an Author is shown no Finance figures.
 - **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant).
-- **Beta Reader** is invited to the Studio like anyone else and has **no access until it is given a project**: a Beta Reader role on a project shows that project's *active manuscript* and nothing else of it (no tasks, briefs, canon, assets). Which **chapters** they see is switched per manuscript by the author (right-click the active manuscript in Write → *Manage Beta Read…*); a chapter that is switched off, and any chapter added later until it is switched on, is never sent to them. They comment and suggest (`manuscript.comment`) and cannot change the text.
+- **Beta Reader** is invited to the Studio like anyone else and has **no access until it is given a project**: a Beta Reader role on a project shows that project's *active manuscript* and nothing else of it (no tasks, briefs, canon, assets). Which **chapters** they see is switched per manuscript by the author (right-click the active manuscript in Write → *Manage Beta Read…*); the server builds the text from the switched-on chapters only, so a chapter that is off, and any chapter added later until it is switched on, never leaves the server. They hold `beta.read` and `beta.comment`, not `manuscript.read`, so they cannot reach the manuscript or its versions through the vault, only through that filtered view; their notes are kept apart from the author's until the author's Write takes them in.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
 
 ## 5. Flexible by design: what admins can configure
