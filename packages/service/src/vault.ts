@@ -4,7 +4,7 @@
  * card names, or at the studio when it names none. So a guest given one project sees that project's files and nothing else, an Author who
  * may write manuscripts cannot change an asset, and only `vault.force` takes a lock from someone. The person is fixed when this is made.
  */
-import { DbVaultStore, cleanVaultPath, fileKind, type AddFileResult, type CheckInResult, type CheckOutResult, type DataCard, type Db, type FileRef, type FileVersion, type ForceResult, type Orphan, type VaultListing, type VaultStore } from '@cadrel/kernel';
+import { DbVaultStore, cleanVaultPath, fileKind, type AddFileResult, type CheckInResult, type CheckOutResult, type BetaRead, type DataCard, type Db, type FileRef, type FileVersion, type ForceResult, type Orphan, type VaultListing, type VaultStore } from '@cadrel/kernel';
 import { PermissionDenied } from './errors';
 import type { StudioAs } from './index';
 
@@ -130,5 +130,15 @@ export class VaultAs implements VaultStore {
     // moving a file to another project needs the right to write there too
     if (a.projectId !== undefined && a.projectId !== f.projectId) await this.need({ path: f.path, projectId: a.projectId }, 'write');
     return this.store.setCard(a);
+  }
+  /** Who may see or change which chapters Beta Readers get: whoever may write the manuscript (the author), never a beta reader. */
+  async betaRead(fileId: string): Promise<BetaRead> {
+    await this.file(fileId, 'write');
+    return this.store.betaRead(fileId);
+  }
+  async setBetaRead(a: { fileId: string; level: number; chapters: string[] }): Promise<BetaRead> {
+    const f = await this.file(a.fileId, 'write');
+    if (fileKind(f.path) !== 'manuscript') throw new Error('Only a manuscript can be shared for beta reading.');
+    return this.store.setBetaRead(a);
   }
 }

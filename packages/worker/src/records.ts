@@ -62,9 +62,11 @@ export async function admitMember(env: RecordsEnv, m: { id: string; name: string
   const db = d1Db(env.DB);
   const c = ctxAt(env, now);
   const there = await db.first<{ id: string }>('SELECT id FROM person WHERE id = ? AND studio_id = ?', [m.id, env.STUDIO_ID]);
-  if (!there) await createPerson(db, c, { id: m.id, name: m.name, kind: m.role === 'guest' ? 'guest' : 'employee' });
+  if (!there) await createPerson(db, c, { id: m.id, name: m.name, kind: m.role === 'guest' || m.role === 'beta_reader' ? 'guest' : 'employee' });
   const roleId = `role_${m.role}`;
   const scope = grant.scopeKind === 'project' && grant.scopeId ? { kind: 'project' as const, id: grant.scopeId } : { kind: 'studio' as const, id: env.STUDIO_ID };
+  // a Beta Reader has no access until the owner gives them a project
+  if (m.role === 'beta_reader' && scope.kind === 'studio') return;
   const held = await db.first<{ id: string }>('SELECT id FROM assignment WHERE studio_id = ? AND subject_kind = ? AND subject_id = ? AND role_id = ? AND scope_kind = ? AND scope_id = ?', [env.STUDIO_ID, 'person', m.id, roleId, scope.kind, scope.id]);
   if (!held) await grantRole(db, c, { subject: { kind: 'person', id: m.id }, roleId, scope, expiresAt: grant.expiresAt });
 }

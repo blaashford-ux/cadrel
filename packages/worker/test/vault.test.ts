@@ -56,7 +56,7 @@ async function addFile(s: Awaited<ReturnType<typeof server>>, key: KeyPair, path
 }
 
 describe('the Studio server: records', () => {
-  it('has the owner as a person with the Owner role, the twelve default roles, and answers the service’s calls as whoever signed', async () => {
+  it('has the owner as a person with the Owner role, the thirteen default roles, and answers the service’s calls as whoever signed', async () => {
     const s = await server();
     const me = await s.send('GET', '/v1/me', s.owner);
     const who = (await me.json()) as { personId: string; kind: string };
@@ -64,7 +64,7 @@ describe('the Studio server: records', () => {
     const people = await s.call(s.owner, ['people', 'list']);
     expect(people.status).toBe(200);
     expect(people.body.result.map((p: { id: string }) => p.id)).toEqual([who.personId]);
-    expect((await s.call(s.owner, ['people', 'roles'])).body.result).toHaveLength(12);
+    expect((await s.call(s.owner, ['people', 'roles'])).body.result).toHaveLength(13);
   });
 
   it('makes a member a person with the invited role, and the service refuses them what their role does not allow', async () => {
@@ -189,6 +189,26 @@ describe('the Studio server: the vault', () => {
     // the grant was for a week
     s.tick(8 * 24 * 60 * 60 * 1000);
     expect((await s.vault(guest.key, 'list')).body.result).toEqual([]);
+  });
+
+  it('a Beta Reader sees nothing until given a project, reads there, and cannot change what chapters are shared', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    const reader = await s.join('beta_reader', 'Bea');
+    expect(reader.status).toBe(200);
+    expect((await addFile(s, s.owner, 'b1/ch1.md', 'one', 'pB1')).body.result).toMatchObject({ ok: true });
+    // no project given: no access at all
+    expect((await s.vault(reader.key, 'list')).body.result).toEqual([]);
+    const mine = await s.join('beta_reader', 'Bea Two', { projectId: 'pB1' });
+    const file = (await s.vault(mine.key, 'list')).body.result.find((f: { path: string }) => f.path === 'b1/ch1.md');
+    expect(file).toBeTruthy();
+    // she may read the project's manuscript but cannot write it, nor see or change its beta-read chapters
+    expect((await s.vault(mine.key, 'checkOut', { fileId: file.id, machine: 'b' })).status).toBe(403);
+    expect((await s.vault(mine.key, 'setBetaRead', { fileId: file.id, level: 1, chapters: ['One'] })).status).toBe(403);
+    expect((await s.vault(mine.key, 'betaRead', file.id)).status).toBe(403);
+    // the author sets them
+    expect((await s.vault(s.owner, 'setBetaRead', { fileId: file.id, level: 1, chapters: ['One'] })).body.result).toMatchObject({ chapters: ['One'] });
+    expect((await s.vault(s.owner, 'betaRead', file.id)).body.result).toMatchObject({ level: 1, chapters: ['One'] });
   });
 
   it('a project-scoped author may add and change files on their project only', async () => {

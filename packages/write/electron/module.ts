@@ -38,7 +38,7 @@ import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 import { createReviewHost } from '../src/shared/review/host';
-import type { FileLock, ReviewSharingApi } from '../src/shared/api';
+import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
 /**
@@ -57,6 +57,9 @@ export interface FileControl {
   undoCheckOut(file: string): Promise<FileLock>;
   /** An administrator takes the lock from whoever holds it. Refused unless they may. */
   release(file: string, reason: string): Promise<FileLock>;
+  /** The chapters Beta Readers are sent for a manuscript; null when the file is not in the vault. */
+  betaRead?(file: string): Promise<BetaReadState | null>;
+  setBetaRead?(file: string, level: number, chapters: string[]): Promise<BetaReadState>;
 }
 
 export interface WriteHost {
@@ -387,6 +390,11 @@ function registerIpc(): void {
   handle('files:checkOut', (_e, p: string, o?: { keepChanges?: boolean }) => (host.files ? host.files.checkOut(inRoot(p), { keepChanges: o?.keepChanges === true }) : { kind: 'unmanaged' as const }));
   handle('files:checkIn', (_e, p: string, comment?: string) => (host.files ? host.files.checkIn(inRoot(p), typeof comment === 'string' ? comment : '') : { kind: 'unmanaged' as const }));
   handle('files:release', (_e, p: string, reason: string) => (host.files ? host.files.release(inRoot(p), typeof reason === 'string' ? reason : '') : { kind: 'unmanaged' as const }));
+  handle('files:betaRead', (_e, p: string) => (host.files?.betaRead ? host.files.betaRead(inRoot(p)) : null));
+  handle('files:setBetaRead', (_e, p: string, level: number, chapters: string[]) => {
+    if (!host.files?.setBetaRead) throw new Error('Beta reading needs the Studio’s vault.');
+    return host.files.setBetaRead(inRoot(p), Number.isInteger(level) ? level : 1, Array.isArray(chapters) ? chapters.filter((k) => typeof k === 'string') : []);
+  });
   handle('files:undo', (_e, p: string) => (host.files ? host.files.undoCheckOut(inRoot(p)) : { kind: 'unmanaged' as const }));
   handle('fs:createFile', (_e, dir: string, name: string, content?: string) =>
     createFile(inRoot(dir, { allowRoot: true }), name, content)

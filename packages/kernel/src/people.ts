@@ -371,7 +371,10 @@ export async function grantRole(db: Db, c: Ctx, input: { subject: { kind: 'perso
     if (p!.deactivatedAt) fail('conflict', 'That person is deactivated.');
   } else if (subject?.kind === 'team') await team(db, c, subject.id);
   else fail('invalid', 'Give the role to a person or a team.');
-  if (!(await getRole(db, c, roleId))) fail('not-found', 'That role is not there.');
+  const role = await getRole(db, c, roleId);
+  if (!role) fail('not-found', 'That role is not there.');
+  // a Beta Reader has no access until given a project: a studio-wide grant would hand them every manuscript
+  if (role!.templateKey === 'beta_reader' && scope?.kind === 'studio') fail('refused', 'A Beta Reader is given projects, not the whole studio. Choose the project they are to read.');
   if (!scope || !['studio', 'project', 'file'].includes(scope.kind) || typeof scope.id !== 'string' || !scope.id) fail('invalid', 'Say where the role applies: the studio, a project or a file.');
   const expiresAt = input.expiresAt ?? null;
   if (expiresAt !== null && (typeof expiresAt !== 'string' || Number.isNaN(Date.parse(expiresAt)))) fail('invalid', 'That expiry is not a date.');

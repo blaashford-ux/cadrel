@@ -21,13 +21,13 @@ async function open(owned = true, dir?: string) {
 }
 
 describe('the people and roles of this computer’s Studio', () => {
-  it('starts an owned Studio with the twelve default roles and this person as its Owner', async () => {
+  it('starts an owned Studio with the thirteen default roles and this person as its Owner', async () => {
     const { h } = await open();
     const s = await h.state();
     if (!s.available) throw new Error('expected people to be available');
     expect(s.people.map((p) => p.name)).toEqual(['Ana Reyes']);
     expect(s.me).toBe(s.people[0]!.id);
-    expect(s.roles).toHaveLength(12);
+    expect(s.roles).toHaveLength(13);
     expect(s.roles.find((r) => r.id === 'role_owner')).toMatchObject({ all: true, holders: 1 });
     expect(s.may).toEqual({ people: true, teams: true, roles: true });
     expect(s.assignments).toHaveLength(1);
@@ -46,7 +46,7 @@ describe('the people and roles of this computer’s Studio', () => {
     expect(s.me).toBe(first.me);
     expect(s.people.map((p) => p.name)).toEqual(['Ana Reyes', 'Bo Lin']);
     expect(s.teams.map((t) => t.name)).toEqual(['Editors']);
-    expect(s.roles).toHaveLength(12); // not made twice
+    expect(s.roles).toHaveLength(13); // not made twice
   });
 
   it('changes things as the Owner: a person, a custom role, a grant, and explains the result', async () => {
@@ -97,7 +97,7 @@ describe('the workflow builder on this computer', () => {
     if (!s.available) throw new Error('expected workflows');
     expect(s.may).toBe(true);
     expect(s.workflows.map((w) => [w.name, w.defaultFor])).toEqual([['Writing and publishing', ['project', 'subproject']]]);
-    expect(s.roles).toHaveLength(12);
+    expect(s.roles).toHaveLength(13);
     const w = (await h.workflowCall('create', { name: 'Audio', copyFrom: s.workflows[0]!.id })) as { id: string };
     await h.workflowCall('setDefault', w.id, ['project']);
     const after = await h.workflowState();

@@ -6,6 +6,7 @@
  */
 import { acknowledgeOrphans, addVaultFile, checkIn, checkOut, fileVersions, forceRelease, listVaultFiles, pendingOrphans, undoCheckOut, type CheckInResult, type CheckOutResult, type Db, type FileVersion, type ForceResult, type VaultFileRow } from './vault';
 import { addReference, getCard, referencesOf, removeReference, setCard, setReferenceVersion, whereUsed, type DataCard, type FileRef } from './fileLinks';
+import { getBetaRead, setBetaRead, type BetaRead } from './betaRead';
 import { newRecordId } from './ids';
 
 export type Orphan = { fileId: string; machine: string; baseVersion: number; removedBy: string; removedAt: string; reason: string };
@@ -36,10 +37,14 @@ export interface VaultStore {
   removeReference(a: { fileId: string; refersToId: string }): Promise<void>;
   card(fileId: string): Promise<DataCard>;
   setCard(a: { fileId: string; fields: Record<string, string>; projectId?: string | null }): Promise<DataCard>;
+  /** The chapters of a manuscript file that Beta Readers are sent (none until the author switches some on). */
+  betaRead(fileId: string): Promise<BetaRead>;
+  /** Replaces the chapters Beta Readers are sent; an empty list turns beta reading of the file off. */
+  setBetaRead(a: { fileId: string; level: number; chapters: string[] }): Promise<BetaRead>;
 }
 
 /** The names a caller (the server's dispatcher, a remote client) may use on a `VaultStore`. A list, so inherited names are not reachable. */
-export const VAULT_STORE_METHODS = ['list', 'versions', 'addFile', 'checkOut', 'checkIn', 'undoCheckOut', 'forceRelease', 'orphans', 'acknowledgeOrphans', 'references', 'whereUsed', 'addReference', 'setReferenceVersion', 'removeReference', 'card', 'setCard'] as const;
+export const VAULT_STORE_METHODS = ['list', 'versions', 'addFile', 'checkOut', 'checkIn', 'undoCheckOut', 'forceRelease', 'orphans', 'acknowledgeOrphans', 'references', 'whereUsed', 'addReference', 'setReferenceVersion', 'removeReference', 'card', 'setCard', 'betaRead', 'setBetaRead'] as const;
 
 /** The vault on a records file, with no permission checks of its own: the caller (the local vault, or the server's `VaultAs`) makes them. */
 export class DbVaultStore implements VaultStore {
@@ -105,5 +110,11 @@ export class DbVaultStore implements VaultStore {
   }
   setCard(a: { fileId: string; fields: Record<string, string>; projectId?: string | null }): Promise<DataCard> {
     return setCard(this.o.db, { ...a, actor: this.o.personId, now: this.now() });
+  }
+  betaRead(fileId: string): Promise<BetaRead> {
+    return getBetaRead(this.o.db, fileId);
+  }
+  setBetaRead(a: { fileId: string; level: number; chapters: string[] }): Promise<BetaRead> {
+    return setBetaRead(this.o.db, { ...a, actor: this.o.personId, now: this.now() });
   }
 }

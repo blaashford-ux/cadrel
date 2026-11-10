@@ -18,7 +18,7 @@ const denied = (p: Promise<unknown>) => p.then(() => false, (e) => e instanceof 
 
 // what each default role may do in the catalogue, from docs/PERMISSIONS.md: M creates and archives, W edits, R reads, - nothing
 const LEVEL: Record<RoleKey, 'M' | 'W' | 'R' | '-'> = {
-  owner: 'M', admin: 'M', director: 'M', series_lead: 'W', author: 'R', editor: 'R', art_director: 'R', artist: 'R', marketing: 'R', analyst: 'R', finance: 'R', guest: '-'
+  owner: 'M', admin: 'M', director: 'M', series_lead: 'W', author: 'R', editor: 'R', art_director: 'R', artist: 'R', marketing: 'R', analyst: 'R', finance: 'R', guest: '-', beta_reader: '-'
 };
 
 describe('the catalogue behind the permission check', () => {

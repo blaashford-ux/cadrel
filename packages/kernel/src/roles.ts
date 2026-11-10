@@ -11,7 +11,7 @@ export interface Role {
   capabilities: string[];
 }
 
-export const ROLE_KEYS = ['owner', 'admin', 'director', 'series_lead', 'author', 'editor', 'art_director', 'artist', 'marketing', 'analyst', 'finance', 'guest'] as const;
+export const ROLE_KEYS = ['owner', 'admin', 'director', 'series_lead', 'author', 'editor', 'art_director', 'artist', 'marketing', 'analyst', 'finance', 'guest', 'beta_reader'] as const;
 export type RoleKey = (typeof ROLE_KEYS)[number];
 
 const META: Record<RoleKey, { name: string; description: string }> = {
@@ -26,7 +26,8 @@ const META: Record<RoleKey, { name: string; description: string }> = {
   marketing: { name: 'Marketing', description: 'Plans and runs launches and campaigns.' },
   analyst: { name: 'Analyst', description: 'Market research and captures.' },
   finance: { name: 'Finance', description: 'Royalties, payments, costs and agreements.' },
-  guest: { name: 'Guest', description: 'Freelancer or reader with a scoped, expiring grant on specific books or files.' }
+  guest: { name: 'Guest', description: 'Freelancer with a scoped, expiring grant on specific books or files.' },
+  beta_reader: { name: 'Beta Reader', description: 'Reads the active manuscript of the projects they are given, in the chapters the author turns on, and leaves notes. Sees nothing else.' }
 };
 
 /**
@@ -47,7 +48,8 @@ export const DEFAULT_MATRIX: Record<RoleKey, Cell[]> = {
   marketing:    ['-', '-', '-', '-', '-', 'R', '-', 'M', 'R', '-', 'R', 'R', 'R', 'M', 'W', 'R', '-', '-', 'W'],
   analyst:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', 'R', '-', 'R', 'M', 'R', '-', '-', 'W'],
   finance:      ['-', '-', '-', '-', '-', 'R', '-', 'W', '-', '-', '-', '-', '-', '-', '-', 'R', 'M', 'M', 'W'],
-  guest:        ['-', '-', '-', '-', '-', '-', '-', 'W', 'C', 'C', '-', 'C', '-', '-', '-', '-', '-', '-', '-']
+  guest:        ['-', '-', '-', '-', '-', '-', '-', 'W', 'C', 'C', '-', 'C', '-', '-', '-', '-', '-', '-', '-'],
+  beta_reader:  ['-', '-', '-', '-', '-', '-', '-', '-', 'C', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-']
 };
 
 export function defaultRole(key: RoleKey): Role {

@@ -29,6 +29,20 @@ afterEach(async () => {
   await fsp.rm(dir, { recursive: true, force: true });
 });
 
+describe('Write’s Manage Beta Read', () => {
+  it('has nothing on for a manuscript until the author turns chapters on, and keeps them', async () => {
+    await put('Book/ms.md', '# One\n\ntext');
+    const sync = new ProjectSync({ vault: () => new VaultHost(host, where).localVault, dir: projects, projects: async () => new Map([['Book', null]]) });
+    await sync.sync();
+    const c = control();
+    expect(await c.betaRead!(abs('Book/ms.md'))).toEqual({ level: 1, chapters: [] });
+    expect(await c.setBetaRead!(abs('Book/ms.md'), 1, ['One'])).toEqual({ level: 1, chapters: ['One'] });
+    expect(await c.betaRead!(abs('Book/ms.md'))).toEqual({ level: 1, chapters: ['One'] });
+    expect(await c.betaRead!(abs('Book/not-in-vault.md'))).toBeNull(); // a file the vault does not hold has no beta read
+    expect(await c.betaRead!(path.join(dir, 'elsewhere.md'))).toBeNull();
+  });
+});
+
 describe('Write’s check-out and check-in', () => {
   it('walks a file through checked in, check out, edit, check in, with one new version', async () => {
     await put('Book/ch1.md', 'one');

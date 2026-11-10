@@ -74,27 +74,27 @@ Defaults are created as ordinary roles marked "default". Each has **Reset to def
 
 **Legend:** `M` manage (create, edit, configure) · `A` approve / decide · `W` write · `C` comment and respond only · `R` read · `—` none. "Own" roles (Author, Editor, Artist, Guest) apply within the books or files they are assigned; the others apply across the scope they are given (usually the studio).
 
-| Area | Owner | Admin | Director | Series Lead | Author | Editor | Art Dir | Artist | Marketing | Analyst | Finance | Guest |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| People, teams, roles | M | M | R | — | — | — | — | — | — | — | — | — |
-| Security policy, studio settings | M | M | — | — | — | — | — | — | — | — | — | — |
-| Audit log | R | R | R | — | — | — | — | — | — | — | — | — |
-| Force check-out (`vault.force`) | A | A | — | — | — | — | — | — | — | — | — | — |
-| Confidential projects (`confidential.access`) | A | A | — | — | — | — | — | — | — | — | — | — |
-| Catalogue: IP, series, books, editions | M | M | M | W | R | R | R | R | R | R | R | — |
-| Workflow design (states, transitions) | M | M | M | — | — | — | — | — | — | — | — | — |
-| Tasks and deadlines | M | M | M | M | W | W | M | W | M | W | W | W |
-| Manuscripts | M | R | R | A | W | W | R | — | R | — | — | C |
-| Editorial passes and queries | M | R | A | A | C | M | — | — | — | — | — | C |
-| Canon / series bible | M | R | R | A | W | W | R | R | R | — | — | — |
-| Assets, art, covers | M | R | A | A | C | R | M | W | R | R | — | C |
-| Preflight | M | R | R | R | R | W | W | R | R | — | — | — |
-| Launch and marketing | M | R | A | C | R | — | C | C | M | R | — | — |
-| Market research | M | R | R | R | R | — | R | R | W | M | — | — |
-| Sales (aggregates) | M | R | R | R | R | — | — | — | R | R | R | — |
-| Royalties, payments, payouts | M | R | R | — | R | — | — | — | — | — | M | — |
-| Contracts, credits, rights, revenue shares, costs | M | R | M | — | R | — | — | — | — | — | M | — |
-| Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — |
+| Area | Owner | Admin | Director | Series Lead | Author | Editor | Art Dir | Artist | Marketing | Analyst | Finance | Guest | Beta Reader |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| People, teams, roles | M | M | R | — | — | — | — | — | — | — | — | — | — |
+| Security policy, studio settings | M | M | — | — | — | — | — | — | — | — | — | — | — |
+| Audit log | R | R | R | — | — | — | — | — | — | — | — | — | — |
+| Force check-out (`vault.force`) | A | A | — | — | — | — | — | — | — | — | — | — | — |
+| Confidential projects (`confidential.access`) | A | A | — | — | — | — | — | — | — | — | — | — | — |
+| Catalogue: IP, series, books, editions | M | M | M | W | R | R | R | R | R | R | R | — | — |
+| Workflow design (states, transitions) | M | M | M | — | — | — | — | — | — | — | — | — | — |
+| Tasks and deadlines | M | M | M | M | W | W | M | W | M | W | W | W | — |
+| Manuscripts | M | R | R | A | W | W | R | — | R | — | — | C | C |
+| Editorial passes and queries | M | R | A | A | C | M | — | — | — | — | — | C | — |
+| Canon / series bible | M | R | R | A | W | W | R | R | R | — | — | — | — |
+| Assets, art, covers | M | R | A | A | C | R | M | W | R | R | — | C | — |
+| Preflight | M | R | R | R | R | W | W | R | R | — | — | — | — |
+| Launch and marketing | M | R | A | C | R | — | C | C | M | R | — | — | — |
+| Market research | M | R | R | R | R | — | R | R | W | M | — | — | — |
+| Sales (aggregates) | M | R | R | R | R | — | — | — | R | R | R | — | — |
+| Royalties, payments, payouts | M | R | R | — | R | — | — | — | — | — | M | — | — |
+| Contracts, credits, rights, revenue shares, costs | M | R | M | — | R | — | — | — | — | — | M | — | — |
+| Assistant (MCP) | W | W | W | W | W | W | W | W | W | W | W | — | — |
 
 Notes on the defaults:
 - **Tasks, sign-offs and decisions** use the Tasks and deadlines row: Read sees them; Write (`task.edit`) makes and changes tasks assigned to you, asks for sign-offs and records decisions; Manage-level roles can also hand work to others (`task.assign`), reach anyone's task and withdraw anyone's request (`task.manage`). Answering a sign-off is not a capability: only the people it names can, whatever they hold. Decisions can be added by anyone who may write them and never changed or removed by anyone.
@@ -103,7 +103,8 @@ Notes on the defaults:
 - **Admin** runs the studio's setup (people, roles, security, workflows, vault) and **can see everything**, including finance, contracts and confidential projects. It differs from Owner only in that it cannot create or change Owners and cannot be given more than the Owner holds. Because Admin reads all data, reads of finance and contract data are logged for admins too.
 - **Author** sees royalties and agreements for their *own* books and contract only.
 - **Finance and My Books.** The *Royalties, payments, payouts* row governs the Finance module and the Finance sections of a book's page in My Books. Until agreements exist (M7) an Author's own-books-only access cannot be enforced, so an Author is shown no Finance figures.
-- **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant). Beta readers with no account do not get a role at all: they read and comment through a Google Drive review package (see [FILES.md](FILES.md)). Guest: a scoped, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant.
+- **Guest** is the freelancer role (a Cadrel account with a narrow, expiring grant on specific books or files, no studio-wide visibility, no people directory, no assistant).
+- **Beta Reader** is invited to the Studio like anyone else and has **no access until it is given a project**: a Beta Reader role on a project shows that project's *active manuscript* and nothing else of it (no tasks, briefs, canon, assets). Which **chapters** they see is switched per manuscript by the author (right-click the active manuscript in Write → *Manage Beta Read…*); a chapter that is switched off, and any chapter added later until it is switched on, is never sent to them. They comment and suggest (`manuscript.comment`) and cannot change the text.
 - Two things the matrix cannot show: **workflow state** can narrow any cell (a manuscript in *Approved* is read-only to Authors and Editors), and **data cards** can restrict individual metadata fields (for example only Marketing edits blurb and keywords).
 
 ## 5. Flexible by design: what admins can configure

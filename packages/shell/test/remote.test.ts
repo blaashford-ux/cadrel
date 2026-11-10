@@ -286,7 +286,7 @@ describe('backing up and restoring a server Studio’s records', () => {
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 16 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 17 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 

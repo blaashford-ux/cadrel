@@ -43,6 +43,7 @@ import { AiDialog } from './AiDialog';
 import { chapterForNote } from './noteChapter';
 import { ReviewPanel } from './ReviewPanel';
 import { ShareDialog } from './ShareDialog';
+import { BetaReadDialog } from './BetaReadDialog';
 import { JoinDialog } from './JoinDialog';
 import { ReaderHome, sharedAsSummaries } from './ReaderHome';
 import { appName } from './appName';
@@ -165,6 +166,7 @@ export function App() {
     if (!fullscreen) window.cadrelWrite.windowControl('fullscreen');
   };
   const [showShare, setShowShare] = useState(false);
+  const [betaFile, setBetaFile] = useState<string | null>(null);
   const [showAi, setShowAi] = useState(false);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
   const [noteRequest, setNoteRequest] = useState<{ id: number; kind: 'comment' | 'suggestion'; sel: { anchor: Anchor; oneBlock: boolean } } | null>(null);
@@ -659,7 +661,8 @@ export function App() {
         ? [
             active
               ? { label: 'Clear Active Manuscript', onClick: () => void ws.setActiveManuscript(null) }
-              : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) }
+              : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) },
+            ...(active && window.cadrelWrite.fileLock?.betaRead ? [{ label: 'Manage Beta Read…', onClick: () => setBetaFile(row.path) }] : [])
           ]
         : [];
       const link = rewriteOk && !noEdit ? ws.rewriteLinkFor(row.path) : null;
@@ -1551,6 +1554,9 @@ export function App() {
     </div>
     )}
     {showAi && projectPath && <AiDialog project={projectPath} projectName={s.project?.meta.name ?? ''} onClose={() => setShowAi(false)} />}
+    {betaFile && (
+      <BetaReadDialog file={betaFile} fileName={betaFile.slice(betaFile.search(/[^\\/]*$/))} level={s.chapterLevel} onClose={() => setBetaFile(null)} />
+    )}
     {showShare && projectPath && (
       <ShareDialog
         project={projectPath}

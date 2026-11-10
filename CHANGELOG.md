@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (Beta Readers join the Studio)
+
+- **A Beta Reader is a Studio role.** Invite them like anyone else (Studio Manager → People); they have **no access until given a project**. A studio-wide grant of the role is refused, and an invitation that names no project gives them nothing, so they cannot see a manuscript by accident. With a project they read that project's manuscript and can comment, and nothing else of it.
+- **Right-click the active manuscript → Manage Beta Read…** switches chapters on and off for Beta Readers. A chapter that is off, and any chapter added later, is never sent; the choice is saved in the Studio (`beta_read`, schema 17, server revision 3, so **Upgrade the server** once). Needs the right to write the manuscript.
+- Not yet: Cadrel Reader joining a Studio and reading the chapters (the server will serve only the switched-on chapters to a Beta Reader), and removing the old Google Drive **Share…** dialog. Until then Drive sharing still works as before.
+
 ## 0.9.1 (fixes: the assistant's edits of checked-in files, and a setting lost on closing)
 
 - **The assistant (Claude) can no longer fail with a bare "EPERM: operation not permitted" when it edits a file.** Since 0.9.0 a file is read-only until it is checked out, and Windows will not rename a new copy over a read-only file, so an edit of a checked-in file ended in that error. The assistant's write tools now notice first and say what to do: *"… is read-only in Cadrel (it is checked in, or someone else has it checked out), so nothing was changed. The author needs to check it out first: open it in Cadrel Write and press Check out to edit, or use the Files page. Then ask again."* Nothing is written, kept aside or left behind when it refuses; once you have checked the file out it is edited as before, and you check it in to keep the change as a new version (or undo the check-out to throw it away). New files the assistant makes are unaffected.

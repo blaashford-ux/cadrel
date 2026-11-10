@@ -53,7 +53,9 @@ const api: WriteApi = {
     checkOut: (p, o) => ipcRenderer.invoke('files:checkOut', p, o),
     checkIn: (p, comment) => ipcRenderer.invoke('files:checkIn', p, comment),
     undoCheckOut: (p) => ipcRenderer.invoke('files:undo', p),
-    release: (p, reason) => ipcRenderer.invoke('files:release', p, reason)
+    release: (p, reason) => ipcRenderer.invoke('files:release', p, reason),
+    betaRead: (p) => ipcRenderer.invoke('files:betaRead', p),
+    setBetaRead: (p, level, chapters) => ipcRenderer.invoke('files:setBetaRead', p, level, chapters)
   },
   getAiServer: () => ipcRenderer.invoke('ai:server'),
   exportAiKit: () => ipcRenderer.invoke('ai:exportKit'),

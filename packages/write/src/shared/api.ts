@@ -517,6 +517,16 @@ export interface FileLockApi {
   undoCheckOut(path: string): Promise<FileLock>;
   /** An administrator takes the lock from whoever holds it (a lost device), with a reason. Their unchecked-in work is kept aside on their device, never deleted. */
   release?(path: string, reason: string): Promise<FileLock>;
+  /** Beta reading (where the file is in a Studio's vault): the chapters Beta Readers are sent. `null` when the file is not in the vault. */
+  betaRead?(path: string): Promise<BetaReadState | null>;
+  /** Replaces the chapters Beta Readers are sent (the chapter heading level they were ticked at, and the keys that are on). */
+  setBetaRead?(path: string, level: number, chapters: string[]): Promise<BetaReadState>;
+}
+
+/** The chapters of a manuscript that Beta Readers may read: the keys switched on (every other chapter, and any added later, is off). */
+export interface BetaReadState {
+  level: number;
+  chapters: string[];
 }
 
 /** A Studio this phone has joined. */

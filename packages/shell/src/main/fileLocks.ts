@@ -73,6 +73,20 @@ export function createFileControl(o: {
       await v.forceRelease(rel, reason);
       return state(abs);
     },
+    async betaRead(abs) {
+      const rel = relOf(abs);
+      const v = o.vault();
+      if (!rel || !v) return null;
+      const e = await v.status(rel).catch(() => null);
+      if (!e || e.status === 'untracked') return null;
+      const r = await v.betaRead(rel);
+      return { level: r.level, chapters: r.chapters };
+    },
+    async setBetaRead(abs, level, chapters) {
+      const { rel, v } = need(abs);
+      const r = await v.setBetaRead(rel, level, chapters);
+      return { level: r.level, chapters: r.chapters };
+    },
     async undoCheckOut(abs) {
       const { rel, v } = need(abs);
       await v.undoCheckOut(rel);
