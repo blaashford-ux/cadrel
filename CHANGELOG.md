@@ -2,8 +2,9 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## 0.9.1 (fix: a setting changed just before closing could be lost)
+## 0.9.1 (fixes: the assistant's edits of checked-in files, and a setting lost on closing)
 
+- **The assistant (Claude) can no longer fail with a bare "EPERM: operation not permitted" when it edits a file.** Since 0.9.0 a file is read-only until it is checked out, and Windows will not rename a new copy over a read-only file, so an edit of a checked-in file ended in that error. The assistant's write tools now notice first and say what to do: *"… is read-only in Cadrel (it is checked in, or someone else has it checked out), so nothing was changed. The author needs to check it out first: open it in Cadrel Write and press Check out to edit, or use the Files page. Then ask again."* Nothing is written, kept aside or left behind when it refuses; once you have checked the file out it is edited as before, and you check it in to keep the change as a new version (or undo the check-out to throw it away). New files the assistant makes are unaffected.
 - **Closing Cadrel now waits for what was just changed to be written to disk** (at most three seconds). Settings (the page you were on, colours, folders) and the Studio list are saved in the background, and the app could go before the last write finished on a slow disk, so a change made just before closing was sometimes not there at the next start. It showed up as a restart test that failed now and then on the build machines.
 
 ## 0.9.0 (check out, edit, check in; notes travel with the project)
@@ -17,6 +18,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Files made read-only by this are made so on the first pass after upgrading; nothing is deleted.
 - Not changed: the Studio's server, so there is nothing to upgrade there.
 - Tested with the real vault and server code (desktop, phone, notes merge, offline, held by the other device) and the bar's states; not yet on a real Studio and phone.
+
+## Cadrel Reader 0.10.4
+
+- No change for readers. Reader is built from the Cadrel Write code, whose assistant tools now explain a read-only file, so its version rises with it.
 
 ## Cadrel Reader 0.10.3
 

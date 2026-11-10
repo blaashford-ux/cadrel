@@ -5,7 +5,7 @@ import { errorCode, fsError, type FsEntry, type FsPort, type FsStat } from './fs
  * part of the first segment). Modification times come from a counter, so they are deterministic.
  */
 export class MemoryFs implements FsPort {
-  private files = new Map<string, { text: string; mtimeMs: number }>();
+  private files = new Map<string, { text: string; mtimeMs: number; readOnly?: boolean }>();
   private dirs = new Set<string>(['']);
   clock = 1;
 
@@ -19,6 +19,12 @@ export class MemoryFs implements FsPort {
     const p = this.norm(path);
     this.mkdirp(this.parent(p));
     this.files.set(p, { text, mtimeMs: this.tick() });
+  }
+
+  /** Test helper: makes a file read-only (or writable again), as Cadrel does to a file nobody has checked out. */
+  setReadOnly(path: string, readOnly: boolean): void {
+    const f = this.files.get(this.norm(path));
+    if (f) f.readOnly = readOnly;
   }
 
   private mkdirp(p: string): void {
@@ -53,7 +59,7 @@ export class MemoryFs implements FsPort {
   async stat(path: string): Promise<FsStat | null> {
     const p = this.norm(path);
     const f = this.files.get(p);
-    if (f) return { isDirectory: false, isFile: true, mtimeMs: f.mtimeMs, size: new TextEncoder().encode(f.text).length };
+    if (f) return { isDirectory: false, isFile: true, mtimeMs: f.mtimeMs, size: new TextEncoder().encode(f.text).length, ...(f.readOnly ? { readOnly: true } : {}) };
     if (this.isDir(p)) return { isDirectory: true, isFile: false, mtimeMs: 0, size: 0 };
     return null;
   }

@@ -19,6 +19,8 @@ export interface FsStat {
   isFile: boolean;
   mtimeMs: number;
   size: number;
+  /** The file cannot be written to: in Cadrel, a file that is checked in (or that someone else has checked out) is read-only until it is checked out. */
+  readOnly?: boolean;
 }
 
 export interface FsPort {

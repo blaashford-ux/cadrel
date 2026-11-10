@@ -597,8 +597,21 @@ async function allowed(ctx: AgentContext, what: keyof AiAccess, doing: string): 
   if (a[what] !== true) throw new AgentError(`The author has not allowed AI tools to ${doing}, so nothing was changed. ${SETTINGS_HINT} Until then, leave your suggestions with add_notes.`);
 }
 
+/**
+ * Refuses, in words, to change a file that is read-only. In Cadrel a file is read-only until the author checks it out (Write's "Check out to edit", or
+ * the Files page), and the system will not rename a new copy over a read-only file, which used to surface as a bare "EPERM: operation not permitted".
+ * Nothing is touched: this is asked before anything is written, kept aside or moved.
+ */
+export async function assertNotReadOnly(ctx: AgentContext, abs: string, rel: string): Promise<void> {
+  const st = await ctx.fs.stat(abs).catch(() => null);
+  if (st?.isFile && st.readOnly) {
+    throw new AgentError(`"${rel}" is read-only in Cadrel (it is checked in, or someone else has it checked out), so nothing was changed. The author needs to check it out first: open it in Cadrel Write and press "Check out to edit", or use the Files page. Then ask again. When they are happy with the change they check it in to keep it as a new version, or undo the check-out to discard it.`);
+  }
+}
+
 /** Writes through a temporary file so a crash cannot leave half a manuscript. */
 async function replaceText(ctx: AgentContext, abs: string, text: string): Promise<void> {
+  await assertNotReadOnly(ctx, abs, abs.slice(abs.lastIndexOf('/') + 1));
   const tmp = `${abs}.${Math.floor(Math.random() * 1e9)}.tmp`;
   try {
     await ctx.fs.writeText(tmp, text);

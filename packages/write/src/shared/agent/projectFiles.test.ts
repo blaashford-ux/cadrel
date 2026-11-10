@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryFs } from '../memoryFs';
 import { editProjectFile, listProjectFiles, readProjectFile, writeProjectFile, fileKind } from './projectFiles';
-import { AgentError, type AgentContext } from './tools';
+import { AgentError, editFile, type AgentContext } from './tools';
 
 const setup = () => {
   const fs = new MemoryFs();
@@ -113,5 +113,46 @@ describe('project files', () => {
     expect(await fs.readText('/books/Novel/Outline.md')).toBe('# Outline\n\nChapter 1: B\nChapter 2: A\n');
     expect((await fs.readdir('/books/Novel/.cadrel/previous')).length).toBe(1);
     await fails(editProjectFile(ctx, 'Novel', 'Manuscript/Book.md', 'Text', 'Other'), /manuscript or exports/);
+  });
+
+  describe('a file Cadrel keeps read-only (checked in, or checked out by someone else)', () => {
+    const FILE = '/books/Novel/Characters/Mira.md';
+
+    it('is not replaced: the assistant is told to have the author check it out, and nothing is written, kept aside or left behind', async () => {
+      const { fs, ctx } = setup();
+      fs.setReadOnly(FILE, true);
+      await fails(writeProjectFile(ctx, 'Novel', 'Characters/Mira.md', '# Mira, rewritten\n', 'replace'), /read-only in Cadrel[\s\S]*Check out to edit/);
+      await fails(editProjectFile(ctx, 'Novel', 'Characters/Mira.md', 'Mira', 'Mirabel'), /read-only in Cadrel/);
+      expect(await fs.readText(FILE)).toBe('# Mira\n');
+      expect(await fs.readdir('/books/Novel/.cadrel').then((l) => l.map((e) => e.name))).toEqual(['project.json']); // no "previous" copy, no temp file
+      expect((await fs.readdir('/books/Novel/Characters')).map((e) => e.name)).toEqual(['Mira.md']);
+    });
+
+    it('is changed as before once the author has checked it out (it is writable again)', async () => {
+      const { fs, ctx } = setup();
+      fs.setReadOnly(FILE, true);
+      await fails(editProjectFile(ctx, 'Novel', 'Characters/Mira.md', 'Mira', 'Mirabel'), /read-only/);
+      fs.setReadOnly(FILE, false);
+      await editProjectFile(ctx, 'Novel', 'Characters/Mira.md', 'Mira', 'Mirabel');
+      expect(await fs.readText(FILE)).toBe('# Mirabel\n');
+    });
+
+    it('does not stop new files being made beside it', async () => {
+      const { fs, ctx } = setup();
+      fs.setReadOnly(FILE, true);
+      await writeProjectFile(ctx, 'Novel', 'Characters/Warren Strand.md', '# Warren Strand\n');
+      expect(await fs.readText('/books/Novel/Characters/Warren Strand.md')).toBe('# Warren Strand\n');
+    });
+
+    it('also holds for editing a manuscript file, which needs its own permission first', async () => {
+      const { fs, ctx } = setup();
+      const allowed: AgentContext = { ...ctx, access: async () => ({ createFiles: true, editFiles: true, suggestKeywords: false }) };
+      fs.setReadOnly('/books/Novel/Manuscript/Book.md', true);
+      await fails(editFile(allowed, 'Novel', 'Manuscript/Book.md', [{ old_text: 'Text.', new_text: 'Changed.' }]), /read-only in Cadrel/);
+      expect(await fs.readText('/books/Novel/Manuscript/Book.md')).toBe('# One\n\nText.\n');
+      fs.setReadOnly('/books/Novel/Manuscript/Book.md', false);
+      await editFile(allowed, 'Novel', 'Manuscript/Book.md', [{ old_text: 'Text.', new_text: 'Changed.' }]);
+      expect(await fs.readText('/books/Novel/Manuscript/Book.md')).toBe('# One\n\nChanged.\n');
+    });
   });
 });
