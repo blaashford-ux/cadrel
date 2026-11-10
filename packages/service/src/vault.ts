@@ -41,21 +41,22 @@ export class VaultAs implements VaultStore {
 
   /** Whether this person may read at least one of these files, looking at those files only (not the whole vault). Used to serve a version's contents. */
   async mayReadAny(fileIds: string[]): Promise<boolean> {
+    if (!fileIds.length) return false;
+    const mayAt = await this.o.as.checkerAt(); // the tree and the permissions are read once, not once per file
     for (let i = 0; i < fileIds.length; i += 50) {
       const ids = fileIds.slice(i, i + 50); // the database accepts a limited number of values in one query
       const rows = await this.o.db.all<{ path: string; projectId: string | null }>(
         `SELECT f.path AS path, c.project_id AS projectId FROM vault_file f LEFT JOIN file_card c ON c.file_id = f.id WHERE f.studio_id = ? AND f.id IN (${ids.map(() => '?').join(',')})`,
         [this.o.studioId, ...ids]
       );
-      for (const r of rows) if (await this.may(r, 'read')) return true;
+      if (rows.some((r) => mayAt(this.cap(r.path, 'read'), r.projectId))) return true;
     }
     return false;
   }
 
   async list(): Promise<VaultListing[]> {
-    const out: VaultListing[] = [];
-    for (const f of await this.store.list()) if (await this.may(f, 'read')) out.push(f);
-    return out;
+    const mayAt = await this.o.as.checkerAt(); // once for the whole vault: a check per file read the project tree again for every file
+    return (await this.store.list()).filter((f) => mayAt(this.cap(f.path, 'read'), f.projectId));
   }
   async versions(fileId: string): Promise<FileVersion[]> {
     await this.file(fileId);

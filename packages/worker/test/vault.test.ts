@@ -281,6 +281,23 @@ describe('the Studio server: the vault', () => {
     expect((await s.get(guest.key, 'shared text')).text).toBe('shared text');
   });
 
+  it('lists and serves files with a fixed number of database queries, however many files there are (a query per file exceeded the Worker’s CPU limit)', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    const guest = await s.join('guest', 'Gus', { projectId: 'pB1' });
+    for (let i = 0; i < 40; i++) await addFile(s, s.owner, `b1/f-${i}.md`, `text ${i}`, 'pB1');
+    await addFile(s, s.owner, 'b2/other.md', 'other', 'pB2');
+    let queries = 0;
+    const prepare = s.env.DB.prepare.bind(s.env.DB);
+    s.env.DB.prepare = ((sql: string) => (queries++, prepare(sql))) as typeof s.env.DB.prepare;
+    const listed = await s.vault(guest.key, 'list');
+    expect(listed.body.result).toHaveLength(40); // the guest's project only
+    expect(queries).toBeLessThan(15); // was one per file (41 and more)
+    queries = 0;
+    expect((await s.get(guest.key, 'text 7')).text).toBe('text 7');
+    expect(queries).toBeLessThan(15);
+  });
+
   it('keeps references and data cards, and shows only the files a person may read', async () => {
     const s = await server();
     await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));

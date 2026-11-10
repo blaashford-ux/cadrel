@@ -372,6 +372,27 @@ export class StudioAs {
     return explain(await this.context(), capability, { path }).allowed;
   }
 
+  /**
+   * `canAt` for many files at once: the project tree and the permission context are loaded once, and each (capability, project) is decided once.
+   * Calling `canAt` per file read the tree from the database and rebuilt the context every time, which made listing a vault of a few hundred
+   * files exceed the Worker's CPU limit. The answer is as of the moment this is called.
+   */
+  async checkerAt(): Promise<(capability: string, projectId?: string | null) => boolean> {
+    const tree = (await this.o.projects?.()) ?? null;
+    const ctx = await this.context();
+    const decided = new Map<string, boolean>();
+    return (capability, projectId) => {
+      const key = `${capability}\u0000${projectId ?? ''}`;
+      let allowed = decided.get(key);
+      if (allowed === undefined) {
+        const path = tree && projectId ? this.projectPath(tree, projectId) : this.studioPath();
+        allowed = explain(ctx, capability, { path }).allowed;
+        decided.set(key, allowed);
+      }
+      return allowed;
+    };
+  }
+
   /** The path to a project in the permission check: the studio, the projects above it, and it. */
   private projectPath(tree: ProjectTree, projectId: string): ScopeRef[] {
     return [...this.studioPath(), ...ancestorsOf(tree, projectId).map((p) => ({ kind: 'project' as const, id: p.id })), { kind: 'project', id: projectId }];
