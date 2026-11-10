@@ -2,6 +2,11 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (Progress: a fixed burn-down)
+
+- **The burn-down's steady-pace line is now fixed.** It runs from the words the manuscript had when the goal began, on the start date, to zero remaining on the deadline, and it moves **only if the start date, the deadline or the target word count changes**. Writing words, or the days passing, no longer shifts it, so *Words remaining* is measured against a line that means something. The **daily target** (the dashed horizontal line, *Needed per day*, the status-bar bar) is unchanged and is still recalculated each day from what is left and the days left.
+- The starting point is kept in the goal (`startWords`), set when you save the goal. A goal made before this gets its starting point the first time its Progress window is opened, from the history as the line was drawn before. If the goal began before anything was recorded, the first recorded total stands in for the start.
+
 ## Unreleased (Beta Readers join the Studio; Cadrel Reader 0.11.0)
 
 - **A Beta Reader is a Studio role.** Invite them like anyone else (Studio Manager → People); the invitation for a Beta Reader is a `cadrel-reader://join?…` link that opens Cadrel Reader. They have **no access until given a project**: a studio-wide grant of the role is refused, and an invitation that names no project gives them nothing.

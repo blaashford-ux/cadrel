@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addDays, averageWritten, burnDown, dailySeries, dateRange, daysBetween, daysLeft, emptyProgress, isDate, localDate, mergeProgress, projectCompletion,
-  recordSnapshot, requiredPerDay, sanitizeGoal, sanitizeProgress, summarize, totalOn, writtenOn, type Goal, type Progress
+  addDays, averageWritten, baselineWords, burnDown, dailySeries, dateRange, daysBetween, daysLeft, emptyProgress, isDate, localDate, mergeProgress, projectCompletion,
+  recordSnapshot, requiredPerDay, sanitizeGoal, sanitizeProgress, summarize, totalOn, withBaseline, writtenOn, type Goal, type Progress
 } from './progress';
 
 const build = (rows: [string, number][]): Progress => rows.reduce((p, [d, t]) => recordSnapshot(p, d, t), emptyProgress());
@@ -127,6 +127,43 @@ describe('goal maths', () => {
     expect(s.eta5.days).toBe(Math.ceil(76000 / s.avg5));
     expect(s.requiredPerDay).toBe(Math.ceil(76000 / 88));
     expect(s.done).toBe(false);
+  });
+});
+
+describe('the burn-down baseline', () => {
+  const p = build([['2026-10-01', 1000], ['2026-10-02', 1200], ['2026-10-03', 1500]]);
+  const goal: Goal = { targetWords: 11000, startDate: '2026-10-01', targetDate: '2026-10-10' };
+  it('is the words at the start, kept in the goal, and the steady-pace line does not move as words are written', () => {
+    const g = withBaseline(null, goal, p, 1500);
+    expect(g.startWords).toBe(1000);
+    const early = burnDown(build([['2026-10-01', 1000]]), g, '2026-10-01', '2026-10-10', '2026-10-01').map((x) => x.ideal);
+    const later = burnDown(p, g, '2026-10-01', '2026-10-10', '2026-10-03').map((x) => x.ideal);
+    expect(later).toEqual(early);
+    expect(later[0]).toBe(9000); // 10000 to go over ten days, after the first
+    expect(later[9]).toBe(0);
+  });
+  it('is kept while the start date, deadline and target are the same, whatever the total is now', () => {
+    const g = withBaseline(null, goal, p, 1500);
+    expect(withBaseline(g, { ...goal }, build([['2026-10-01', 1000], ['2026-10-05', 9000]]), 9000).startWords).toBe(1000);
+  });
+  it('is taken afresh when the start date, the deadline or the target changes', () => {
+    const g = withBaseline(null, goal, p, 1500);
+    expect(withBaseline(g, { ...goal, targetWords: 12000 }, p, 1500).startWords).toBe(1000);
+    expect(withBaseline(g, { ...goal, startDate: '2026-10-03' }, p, 1500).startWords).toBe(1200);
+    expect(withBaseline(g, { ...goal, targetDate: '2026-10-20' }, p, 1500).startWords).toBe(1000);
+  });
+  it('uses the current total when nothing has been recorded, and the first record when the goal began before tracking', () => {
+    expect(withBaseline(null, goal, emptyProgress(), 4321).startWords).toBe(4321);
+    expect(baselineWords(build([['2026-10-05', 700]]), { startDate: '2026-10-01' })).toBe(700);
+  });
+  it('is carried through sanitizeGoal', () => {
+    expect(sanitizeGoal({ ...goal, startWords: 1000.4 }, '2026-10-05')).toMatchObject({ startWords: 1000 });
+    expect(sanitizeGoal({ ...goal, startWords: -5 }, '2026-10-05')?.startWords).toBeUndefined();
+  });
+  it('leaves the daily target dynamic: it follows what is left and the days left', () => {
+    const g = withBaseline(null, goal, p, 1500);
+    expect(requiredPerDay(g, 1500, '2026-10-03')).toBe(Math.ceil(9500 / 8));
+    expect(requiredPerDay(g, 5000, '2026-10-06')).toBe(Math.ceil(6000 / 5));
   });
 });
 

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { addDays, burnDown, dailySeries, dateRange, firstDay, localDate, type Goal, type Progress, type Summary, type Projection } from '../shared/progress';
-import { goalFor, type ProjectMeta } from '../shared/projects';
+import { useEffect, useMemo, useState } from 'react';
+import { addDays, burnDown, dailySeries, dateRange, firstDay, localDate, withBaseline, type Goal, type Progress, type Summary, type Projection } from '../shared/progress';
+import { goalFor, withGoal, type ProjectMeta } from '../shared/projects';
 import { useEscape } from './useEscape';
 
 interface Props {
@@ -41,6 +41,16 @@ export function ProgressDialog({ project, progress, summary, onClose, onSetGoal 
   const fileName = manuscript ? manuscript.split('/').pop() : null;
   const p = progress?.progress ?? null;
   const total = progress?.total ?? 0;
+
+  // A goal made before the burn-down's starting point was kept gets it now, once, so the steady-pace line stops depending on the history.
+  const needsBaseline = !!goal && goal.startWords === undefined && !!p && progress?.manuscript === project.meta.activeManuscript;
+  useEffect(() => {
+    if (!needsBaseline || !goal || !p || window.cadrelWrite.capabilities?.reader) return;
+    const fixed = withBaseline(null, { ...goal, startWords: undefined }, p, total);
+    void window.cadrelWrite
+      .updateProject(project.path, (({ goal: g, manuscriptGoals }) => ({ goal: g, manuscriptGoals }))(withGoal(project.meta, fixed)))
+      .catch(() => undefined);
+  }, [needsBaseline]);
 
   const dates = useMemo(() => {
     if (!p) return [];
