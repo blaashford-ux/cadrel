@@ -11,6 +11,7 @@ import { factsFor } from './projectFacts';
 import { BriefCard } from './BriefCard';
 import { WorkCard } from './WorkCard';
 import { Associations } from './Associations';
+import { ProjectPeople } from './ProjectPeople';
 import { useScope } from './useScope';
 
 const api = window.cadrel.studio;
@@ -357,6 +358,8 @@ function Detail({ p, studio, overview, act, onGo, onSelect, openDialog }: { p: P
           </ul>
         )}
       </section>
+
+      <ProjectPeople p={p} tree={tree} />
 
       <Associations p={p} studio={studio} overview={overview} act={act} onGo={onGo} onSelect={onSelect} />
 
