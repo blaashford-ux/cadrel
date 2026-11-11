@@ -97,6 +97,8 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
   const [deviceLink, setDeviceLink] = useState<string | null>(null);
   const [deviceLabel, setDeviceLabel] = useState('');
   const [upToken, setUpToken] = useState('');
+  const [mailFrom, setMailFrom] = useState(studio.mailFrom ?? '');
+  const [mailToken, setMailToken] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const ready = studio.status === 'ready';
   const building = studio.status === 'provisioning';
@@ -142,6 +144,20 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
         <>
           <h5>People</h5>
           <p className="muted small">You are the Owner. Invite people, and give them roles on projects, on the <strong>People</strong> page.</p>
+          <h5>Invitation email</h5>
+          {studio.mailFrom ? (
+            <p className="muted small">The Studio emails invitations itself, from <strong>{studio.mailFrom}</strong>: on the People page, <em>Send email</em> sends one in a click.</p>
+          ) : (
+            <p className="muted small">Off. Invitations can still be copied, or written into your own mail app. To have the Studio send them itself, give it an address to send from. This needs <strong>Cloudflare Email Service</strong> (a beta, on the Workers Paid plan) with a domain you have onboarded there (Cloudflare dashboard → Compute → Email Service → Email Sending → Onboard Domain), and an address on that domain.</p>
+          )}
+          <div className="row">
+            <input aria-label="Address to send invitations from" type="email" placeholder="invites@yourdomain.com" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} />
+            {!studio.tokenKept && <input aria-label="Cloudflare API token to change this" type="password" placeholder="Cloudflare API token (not kept)" value={mailToken} onChange={(e) => setMailToken(e.target.value)} autoComplete="off" />}
+            <button type="button" disabled={!mailFrom.trim() || mailFrom.trim() === studio.mailFrom || (!studio.tokenKept && !mailToken.trim())} onClick={() => void act(() => api.setMail(studio.id, { from: mailFrom.trim(), ...(studio.tokenKept ? {} : { token: mailToken }) }), () => (setMailToken(''), setNote('The Studio can now email invitations.')))}>{studio.mailFrom ? 'Change address' : 'Turn on'}</button>
+            {studio.mailFrom && <button type="button" disabled={!studio.tokenKept && !mailToken.trim()} onClick={() => void act(() => api.setMail(studio.id, { from: null, ...(studio.tokenKept ? {} : { token: mailToken }) }), () => (setMailToken(''), setMailFrom(''), setNote('Invitation email is off.')))}>Turn off</button>}
+          </div>
+          <p className="muted small">Turning it on or off uploads the Studio’s server again, with or without the email permission. If Cloudflare says the address cannot send, nothing changes.</p>
+
           <h5>Your phone</h5>
           <p className="muted small">Sign in to this Studio on your phone as yourself, the owner. Make a link here, open Cadrel Write on the phone and paste it: the phone makes its own key, so yours never leaves this computer. You can remove a phone below.</p>
           <div className="row">

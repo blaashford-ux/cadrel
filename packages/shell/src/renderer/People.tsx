@@ -76,6 +76,8 @@ function Invite({ studio, people, emails, reload }: { studio: StudioEntry; peopl
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [made, setMade] = useState<{ link: string; to: string; who: string } | null>(null);
+  const [sendNow, setSendNow] = useState(true);
+  const serverMail = !!studio.mailFrom; // the Studio's own server sends the email (turned on in Studio Manager)
 
   const run = async (job: () => Promise<void>) => {
     setBusy(true);
@@ -91,14 +93,25 @@ function Invite({ studio, people, emails, reload }: { studio: StudioEntry; peopl
   };
   const copy = (text: string) => navigator.clipboard.writeText(text).then(() => setNote('Invitation link copied.'), () => setNote('Could not copy: select the link and copy it.'));
   const mail = (to: string, link: string) => run(async () => (await api.emailInvite(studio.id, { to, link }), setNote('Your mail app has opened with the invitation. Press Send there.')));
+  /** The Studio's server emails it, to the address on the person's record. A failure leaves the link to be copied or sent from the mail app. */
+  const sendFromStudio = async (link: string, to: string) => {
+    try {
+      await api.sendInviteEmail(studio.id, { link });
+      setNote(`Emailed to ${to}.`);
+    } catch (e) {
+      setError(`The invitation was made, but the email did not send: ${clean(e)} You can copy the link, or open it in your mail app.`);
+    }
+  };
 
   const create = () =>
     run(async () => {
       const r = await api.invitePerson(studio.id, { name: name.trim(), email: email.trim(), opens });
       setMade({ link: r.link, to: email.trim(), who: name.trim() });
+      const to = email.trim();
       setName('');
       setEmail('');
       reload();
+      if (serverMail && sendNow && looksLikeEmail(to)) await sendFromStudio(r.link, to);
     });
   /** A fresh link for someone already invited: the old link's code is not kept anywhere, so it cannot be shown again. The old one is cancelled once the new one exists. */
   const renew = (inviteId: string, personId: string, who: string) =>
@@ -107,6 +120,7 @@ function Invite({ studio, people, emails, reload }: { studio: StudioEntry; peopl
       await api.revokeInvite(studio.id, inviteId);
       setMade({ link: r.link, to: emails[personId] ?? '', who });
       reload();
+      if (serverMail && sendNow && looksLikeEmail(emails[personId] ?? '')) await sendFromStudio(r.link, emails[personId] as string);
     });
 
   const pending = people?.invites ?? [];
@@ -126,8 +140,9 @@ function Invite({ studio, people, emails, reload }: { studio: StudioEntry; peopl
           <option value="studio">Opens in Cadrel (authors, co-authors)</option>
           <option value="reader">Opens in Cadrel Reader (readers)</option>
         </select>
-        <button type="submit" disabled={busy || !name.trim()}>Create invitation</button>
+        <button type="submit" disabled={busy || !name.trim()}>{serverMail && sendNow && looksLikeEmail(email) ? 'Create and email invitation' : 'Create invitation'}</button>
       </form>
+      {serverMail && <label className="check small"><input type="checkbox" checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} /> Email it as soon as it is made (from {studio.mailFrom}), to the address above</label>}
       {error && <div className="banner error" role="alert">{error} <button type="button" className="link" onClick={() => setError(null)}>Dismiss</button></div>}
       {made && (
         <div className="banner info" role="status">
@@ -135,7 +150,8 @@ function Invite({ studio, people, emails, reload }: { studio: StudioEntry; peopl
           <div className="row">
             <input readOnly aria-label="Invitation link" className="grow" value={made.link} onFocus={(e) => e.currentTarget.select()} />
             <button type="button" onClick={() => void copy(made.link)}>Copy link</button>
-            {looksLikeEmail(made.to) && <button type="button" disabled={busy} onClick={() => void mail(made.to, made.link)}>Email it to {made.to}</button>}
+            {serverMail && looksLikeEmail(made.to) && <button type="button" disabled={busy} onClick={() => void run(() => sendFromStudio(made.link, made.to))}>Send email to {made.to}</button>}
+            {looksLikeEmail(made.to) && <button type="button" disabled={busy} onClick={() => void mail(made.to, made.link)}>Open in my mail app</button>}
             <button type="button" className="link" onClick={() => setMade(null)}>Done</button>
           </div>
         </div>

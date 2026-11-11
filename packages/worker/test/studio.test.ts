@@ -45,7 +45,7 @@ describe('the Studio server', () => {
     const { owner, call, env } = await studio();
     const info = await call('GET', '/v1/info', null);
     expect(info.status).toBe(200);
-    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 19, workerRevision: STUDIO_WORKER_REVISION });
+    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 19, workerRevision: STUDIO_WORKER_REVISION, mail: false });
     const health = await worker.fetch(new Request('https://studio.test/v1/health'), env);
     expect(health.status).toBe(200);
   });

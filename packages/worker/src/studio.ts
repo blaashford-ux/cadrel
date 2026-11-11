@@ -3,15 +3,23 @@
  * the Worker holds no one's secret, only public keys. The owner's key is set when the Studio is built; members join with an invitation the
  * owner made. Nothing here reads or writes the Studio's files: that comes with the vault.
  */
-import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
+import { b64u, fingerprint, hex, inviteEmailText, invitationLink, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
 import { ensureSchema } from './schema';
 import { admitMember, personForInvite, personIdFor, readTree, ROLELESS } from './records';
 import { d1Db, readVersions } from './d1';
 import { exportRecords, importRecords, ownerOf, type ImportRequest } from './import';
 import { isServerRoute, serverRoutes } from './server';
 
+/** Cloudflare Email Service's send binding, as far as this server uses it. */
+export interface Mailer {
+  send(message: { to: { email: string; name?: string }; from: { email: string; name?: string }; subject: string; text: string }): Promise<unknown>;
+}
+
 export interface StudioEnv {
   DB: D1Database;
+  /** Set only when the owner turned invitation email on (Admin → Studio Manager): the send binding and the address it sends from, on a domain they onboarded in Cloudflare Email Service. */
+  EMAIL?: Mailer;
+  INVITE_FROM?: string;
   /** The Studio's file store, for the vault's contents. */
   FILES?: R2Bucket;
   /** Set when the Studio is built. */
@@ -79,7 +87,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
 
   // Public: what a person joining needs to check they are at the Studio they were told about.
   if (method === 'GET' && path === '/v1/info') {
-    return json({ studioId: env.STUDIO_ID, ownerFingerprint: await fingerprint(env.OWNER_KEY), apiVersion: STUDIO_API_VERSION, schemaVersion, workerRevision: STUDIO_WORKER_REVISION });
+    return json({ studioId: env.STUDIO_ID, ownerFingerprint: await fingerprint(env.OWNER_KEY), apiVersion: STUDIO_API_VERSION, schemaVersion, workerRevision: STUDIO_WORKER_REVISION, mail: !!(env.EMAIL && env.INVITE_FROM) });
   }
 
   const binary = method === 'PUT' && /^\/v1\/(blobs|captures)\//.test(path);
@@ -164,6 +172,26 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   // Everything below is the owner's.
   if (auth.who.kind !== 'owner') return fail(403, 'Only the Studio’s owner can do that.');
 
+  // Emails an invitation the owner has just made, to the address on that person's record and to no one else, so this cannot be used to send
+  // anything else to anyone. The code is the proof there is such an invitation: only its hash is kept, so it has to come with the request.
+  if (method === 'POST' && path === '/v1/invites/mail') {
+    if (!env.EMAIL || !env.INVITE_FROM) return fail(409, 'This Studio does not send email yet. Turn it on in Admin → Studio Manager.');
+    const code = typeof data.code === 'string' ? data.code : '';
+    if (!code) return fail(400, 'An invitation code is needed.');
+    const row = await env.DB.prepare('SELECT i.expires_at AS expiresAt, i.used_at AS usedAt, p.name AS name, p.email AS email FROM invite i LEFT JOIN person p ON p.id = i.person_id WHERE i.code_hash = ?').bind(hex(await sha256(code))).first<{ expiresAt: string; usedAt: string | null; name: string | null; email: string | null }>();
+    if (!row || row.usedAt) return fail(404, 'There is no such waiting invitation.');
+    if (row.expiresAt < iso(now)) return fail(410, 'That invitation has expired. Make a new one.');
+    if (!row.email) return fail(400, 'That person has no email address. Add one to their record, or send the link yourself.');
+    const studioName = typeof data.studioName === 'string' ? data.studioName.trim().slice(0, 80) : '';
+    const link = invitationLink({ url: url.origin, code, fingerprint: await fingerprint(env.OWNER_KEY), ...(studioName ? { studioName } : {}) }, data.opens === 'reader' ? 'cadrel-reader' : 'cadrel');
+    const text = inviteEmailText({ studio: studioName, link, sender: typeof data.senderName === 'string' ? data.senderName : '' });
+    try {
+      await env.EMAIL.send({ to: { email: row.email, ...(row.name ? { name: row.name } : {}) }, from: { email: env.INVITE_FROM, ...(studioName ? { name: studioName } : {}) }, subject: text.subject, text: text.body });
+    } catch (e) {
+      return fail(502, `The email could not be sent: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300));
+    }
+    return json({ ok: true, to: row.email });
+  }
   if (method === 'POST' && path === '/v1/invites' && data.person && typeof data.person === 'object') {
     // An invitation for a person, with no role: they see nothing until the owner gives them one, per project, in Cadrel.
     const p = data.person as { id?: unknown; name?: unknown; email?: unknown };

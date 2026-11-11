@@ -102,4 +102,22 @@ describe('StudioRegistry', () => {
     const clash = sanitizeStudios({ studios: [{ id: 'a', name: 'Same', folderName: 'Same' }, { id: 'b', name: 'Same', folderName: 'same' }] });
     expect(clash.studios.map((s) => s.folderName)).toEqual(['My Studio', 'Same', 'b']);
   });
+
+  it('keeps the address a Studio’s server emails invitations from across a restart, and drops one that is not an address, or on a Studio the person only joined', async () => {
+    const { r, file } = await registry();
+    r.create('Acme');
+    const id = r.view().studios[1]!.id;
+    r.update(id, { mailFrom: 'invites@books.example' });
+    await r.flush();
+    const again = new StudioRegistry(file);
+    await again.load();
+    expect(again.get(id).mailFrom).toBe('invites@books.example');
+    expect(again.get(LOCAL_ID).mailFrom).toBeNull();
+    const dirty = sanitizeStudios({ studios: [
+      { id: 'a', name: 'A', role: 'owner', mailFrom: 'not an address' },
+      { id: 'b', name: 'B', role: 'owner', mailFrom: ' ok@books.example ' },
+      { id: 'c', name: 'C', role: 'member', mailFrom: 'ok@books.example' }
+    ] });
+    expect(dirty.studios.filter((x) => x.id !== LOCAL_ID).map((x) => [x.id, x.mailFrom])).toEqual([['a', null], ['b', 'ok@books.example'], ['c', null]]);
+  });
 });

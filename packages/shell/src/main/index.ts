@@ -49,7 +49,7 @@ import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBack
 import { UserStore } from '@cadrel/studio';
 import { AdminError, AdminStore, canAdminister, type Role } from './admin';
 import { Updater } from './updater';
-import { StudioRegistry, LOCAL_ID } from './studios';
+import { StudioRegistry, LOCAL_ID, isMailFrom } from './studios';
 import { SLOW_REFRESH_MS, MIN_REFRESH_GAP_MS } from '../shared/refresh';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
@@ -985,8 +985,34 @@ function registerShellIpc(): void {
     if (!apiToken) throw new Error('Paste your Cloudflare API token to upgrade this Studio (it was not kept on this computer).');
     const key = await studioKey(entry.id);
     if (!key || !entry.accountId) throw new Error('This Studio has no owner key or account here, so it cannot be upgraded from this computer.');
-    const built = await upgradeStudio(cloudflareOptions(), { accountId: entry.accountId, apiToken: apiToken.trim(), studioId: entry.id, ownerKey: key.publicKey, workerSource: await studioWorkerSource() }, entry);
+    const built = await upgradeStudio(cloudflareOptions(), { accountId: entry.accountId, apiToken: apiToken.trim(), studioId: entry.id, ownerKey: key.publicKey, workerSource: await studioWorkerSource(), mailFrom: entry.mailFrom }, entry); // an upgrade keeps the email binding the owner turned on
     return studiosChanged(studios.update(entry.id, { server: built.server, note: null }));
+  });
+  // The Studio's own invitation email on or off. The server is uploaded again with or without the email binding; the address is kept so every later
+  // upgrade has it too. Cloudflare refuses the upload when the account cannot send (the domain is not onboarded in Email Service, or no paid plan):
+  // that is said in its words and nothing here changes.
+  manageLike('studios:setMail', async (id: string, mail: { from?: unknown; token?: unknown }) => {
+    adminOnly();
+    const entry = studios.get(String(id));
+    if (entry.role !== 'owner') throw new Error('Only the Studio’s owner can change this.');
+    const from = typeof mail?.from === 'string' && mail.from.trim() ? mail.from.trim() : null;
+    if (from && !isMailFrom(from)) throw new Error('That is not an email address to send from. Use one on the domain you onboarded in Cloudflare Email Service, such as invites@yourdomain.com.');
+    const secrets = secretsFor(entry.id);
+    const apiToken = (typeof mail?.token === 'string' && mail.token.trim()) || (await secrets.get('cf-token'));
+    if (!apiToken) throw new Error('Paste your Cloudflare API token to change this (it was not kept on this computer).');
+    const key = await studioKey(entry.id);
+    if (!key || !entry.accountId) throw new Error('This Studio has no owner key or account here, so it cannot be changed from this computer.');
+    const built = await upgradeStudio(cloudflareOptions(), { accountId: entry.accountId, apiToken: apiToken.trim(), studioId: entry.id, ownerKey: key.publicKey, workerSource: await studioWorkerSource(), mailFrom: from }, entry);
+    return studiosChanged(studios.update(entry.id, { server: built.server, mailFrom: from, note: null }));
+  });
+  // Has the Studio's server email an invitation just made, to the address on the person's record.
+  manageLike('studios:sendInviteEmail', async (id: string, mail: { link?: unknown; senderName?: unknown }) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    const link = String(mail?.link ?? '');
+    const inv = (await import('@cadrel/kernel')).parseInvitation(link);
+    if (!inv) throw new Error('That is not a Cadrel invitation link.');
+    return client.mailInvite(inv.code, /^cadrel-reader:/i.test(link.trim()) ? 'reader' : 'studio', e.name, typeof mail?.senderName === 'string' && mail.senderName.trim() ? mail.senderName : authorName());
   });
   manageLike('studios:forgetToken', async (id: string) => {
     adminOnly();
