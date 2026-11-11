@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);

@@ -418,6 +418,9 @@ export interface ReviewSharingApi {
   /**
    * Cadrel Reader: an invitation link the app was opened with (a `cadrel-reader:` link clicked in a message), or null. Taking it clears it.
    */
+  /** Cadrel's Read tab shows Write's window as a Beta Reader's: which one it is showing now, and when it changes. Only the Cadrel app has them. */
+  getMode?(): Promise<'write' | 'read'>;
+  onMode?(cb: (mode: 'write' | 'read') => void): () => void;
   takeInviteLink?(): Promise<string | null>;
   /** Cadrel Reader: called when an invitation link arrives while the app is already open. */
   onInviteLink?(cb: () => void): () => void;

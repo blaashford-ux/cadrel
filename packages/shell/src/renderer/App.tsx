@@ -23,10 +23,10 @@ import { useScope } from './useScope';
 import { viewScopeOf } from '@cadrel/kernel';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', people: 'People', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', read: 'Read', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', people: 'People', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
 const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files', 'assistants', 'admin', 'people', 'profile', 'settings']);
-const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files']);
 
@@ -123,7 +123,7 @@ export function App() {
 
   return (
     <div className={`shell${rounded ? ' rounded' : ''}${win?.overlay ? ' has-controls' : ''}`}>
-      <Rail page={page} onGo={go} isAdmin={isAdmin} updateAvailable={!!update?.available} scope={scope} />
+      <Rail page={page} onGo={go} isAdmin={isAdmin} canRead={!!studios && studios.studios.find((x) => x.id === studios.activeId)?.role === 'member'} updateAvailable={!!update?.available} scope={scope} />
       <main className={`content${own ? '' : ' hidden'}`} aria-label={TITLES[page]}>
         {/* Windows draws the window buttons over the top-right corner; keep clear of them. */}
         <header className={`strip${win?.overlay ? ' overlay' : ''}`}>

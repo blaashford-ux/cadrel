@@ -5,7 +5,8 @@ import { Icon } from './Icon';
 interface Props {
   shared: SharedProject[];
   onOpen(dir: string): void;
-  onJoin(): void;
+  /** Without it there is no Open invitation button: Cadrel joins Studios from its Studio menu, and shows what is shared with you in the one in use. */
+  onJoin?(): void;
 }
 
 /** The projects people shared with this reader, as the project switchers list them (they are not the reader's own projects). */
@@ -33,16 +34,22 @@ export function ReaderHome({ shared, onOpen, onJoin }: Props) {
             <h1>Shared with me</h1>
             <p className="muted small">Read a manuscript someone asked you about, and leave comments and suggestions for them.</p>
           </div>
-          <div className="home-head-actions">
-            <button type="button" className="primary big" onClick={onJoin}>
-              <Icon name="plus" /> Open invitation…
-            </button>
-          </div>
+          {onJoin && (
+            <div className="home-head-actions">
+              <button type="button" className="primary big" onClick={onJoin}>
+                <Icon name="plus" /> Open invitation…
+              </button>
+            </div>
+          )}
         </header>
         {shared.length === 0 ? (
           <section className="empty-home">
             <h2>Nothing shared with you yet</h2>
-            <p>When an author invites you, click the link in their message, or choose <strong>Open invitation…</strong> and paste it here.</p>
+            {onJoin ? (
+              <p>When an author invites you, click the link in their message, or choose <strong>Open invitation…</strong> and paste it here.</p>
+            ) : (
+              <p>When the owner of a Studio you were invited to opens a manuscript to you, it appears here. Join a Studio from the Studio menu on Home, then switch to it.</p>
+            )}
           </section>
         ) : (
           <section className="other-folders shared-with-me">

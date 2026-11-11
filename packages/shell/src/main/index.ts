@@ -55,6 +55,7 @@ import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
 import { inviteMailto } from './inviteMail';
+import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
@@ -580,6 +581,25 @@ async function studioKey(id: string): Promise<KeyPair | null> {
     return null;
   }
 }
+/** A member's person in a Studio, by the Studio's id here: what their notes are filed under. Asked of the server once per run. */
+const personIn = new Map<string, string>();
+/**
+ * The Studio to read what is shared with this person in: the one in use, when they were invited to it (not their own). They joined it once, here,
+ * and the same key reads in it; the Read tab lists the manuscripts the owner has opened to them as a Beta Reader. An owner has none to read.
+ */
+async function readingStudios(): Promise<JoinedStudio[]> {
+  const v = studios.view();
+  const e = v.studios.find((x) => x.id === v.activeId);
+  if (!e || e.role !== 'member' || !e.url || !v.connected) return [];
+  const key = await studioKey(e.id);
+  if (!key) return [];
+  let personId = personIn.get(e.id);
+  if (!personId) {
+    personId = (await new StudioClient({ url: e.url, key, fetchFn: fetch }).me()).personId;
+    personIn.set(e.id, personId);
+  }
+  return [{ studioId: e.id, url: e.url, fingerprint: e.fingerprint ?? '', name: e.name, me: authorName(), personId, publicKey: key.publicKey, sealedPrivateKey: `plain:${key.privateKey}` }];
+}
 const fingerprintOf = async (k: KeyPair) => (await import('@cadrel/kernel')).fingerprint(k.publicKey);
 const studioWorkerSource = () => fsp.readFile(path.join(here, 'studio-worker.mjs'), 'utf8');
 /** Cloudflare's real address, unless a test points the app at a stand-in (CADREL_TEST_CF=http://127.0.0.1:<port>). */
@@ -705,17 +725,32 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+
+/** Write's window shows the author's side (Write) or a Beta Reader's (Read): the same window, told which. */
+let writeMode: 'write' | 'read' = 'write';
+/** The Read tab is for a Studio the person was invited to: what its owner shares with them is read there. An owner has no one to read. */
+const canRead = (): boolean => {
+  const v = studios.view();
+  return v.studios.find((x) => x.id === v.activeId)?.role === 'member';
+};
 
 function showPage(next: Page): void {
   if ((next === 'admin' || next === 'people') && !admin.isAdmin()) next = 'home'; // only administrators have the Admin and People pages
+  if (next === 'read' && !canRead()) next = 'write';
   if (!win || win.isDestroyed()) return;
   page = next;
   for (const id of ['write', 'market', 'finance'] as const) views[id]?.setVisible(false);
-  if (isModule(next) && !studios.view().connected) {
+  const shown: ModuleId | null = next === 'read' ? 'write' : isModule(next) ? next : null; // Read is Write's window, in its reading mode
+  if (next === 'write' || next === 'read') {
+    writeMode = next;
+    const wc = views.write?.webContents;
+    if (wc && !wc.isDestroyed()) wc.send('shell:writeMode', writeMode);
+  }
+  if (shown && !studios.view().connected) {
     win.webContents.focus(); // the page explains; the module's view stays hidden
-  } else if (isModule(next)) {
-    const v = ensureView(next);
+  } else if (shown) {
+    const v = ensureView(shown);
     v.setVisible(true);
     v.webContents.focus();
   } else {
@@ -977,6 +1012,8 @@ function registerShellIpc(): void {
     const { e, client } = await clientFor(String(id));
     return client.invite(String(i?.role), String(i?.label ?? ''), e.name, { projectId: typeof i?.projectId === 'string' && i.projectId ? i.projectId : null, days: typeof i?.days === 'number' && i.days > 0 ? i.days : null });
   });
+  // Write's window asks which side it shows (the Read tab or Write) when it starts; only that window may ask.
+  ipcMain.handle('shell:writeMode', (e) => (views.write && e.sender === views.write.webContents ? writeMode : 'write'));
   manageLike('studios:invitePerson', async (id: string, who: { personId?: unknown; name?: unknown; email?: unknown; opens?: unknown }) => {
     adminOnly();
     const { e, client } = await clientFor(String(id));
@@ -1679,7 +1716,8 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       assetsDir: path.join(here, 'assets'),
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
       mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
-      updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.'
+      updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.',
+      betaReading: readingStudios
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {

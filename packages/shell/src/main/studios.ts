@@ -177,7 +177,7 @@ export class StudioRegistry {
 
   /** A Studio the person was invited to and has joined. */
   addMember(o: { name: string; url: string; fingerprint: string; memberRole: string; studioId: string }): StudiosView {
-    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', recordsOnServer: true, url: o.url, fingerprint: o.fingerprint, memberRole: o.memberRole, note: null });
+    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', recordsOnServer: true, url: o.url, fingerprint: o.fingerprint, memberRole: (ROLE_KEYS as readonly string[]).includes(o.memberRole) ? o.memberRole : null, note: null }); // a roleless member has none
     return this.save();
   }
 
