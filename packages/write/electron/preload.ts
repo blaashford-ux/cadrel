@@ -6,12 +6,17 @@ import { DESKTOP_CAPABILITIES, READER_CAPABILITIES, type ExportProgress, type Wr
 const api: WriteApi = {
   // Cadrel Reader's window is opened with this argument (see packages/reader); everything else is the full app.
   capabilities: process.argv.includes('--cadrel-reader') ? READER_CAPABILITIES : DESKTOP_CAPABILITIES,
-  getMode: () => ipcRenderer.invoke('shell:writeMode'),
-  onMode: (cb) => {
-    const listener = (_e: unknown, mode: 'write' | 'read') => cb(mode);
-    ipcRenderer.on('shell:writeMode', listener);
-    return () => ipcRenderer.removeListener('shell:writeMode', listener);
-  },
+  // Cadrel's Read tab: only the Cadrel shell answers these (it starts this window with --cadrel-shell); Reader and a standalone Write never ask
+  ...(process.argv.includes('--cadrel-shell')
+    ? {
+        getMode: () => ipcRenderer.invoke('shell:writeMode'),
+        onMode: (cb: (mode: 'write' | 'read') => void) => {
+          const listener = (_e: unknown, mode: 'write' | 'read') => cb(mode);
+          ipcRenderer.on('shell:writeMode', listener);
+          return () => ipcRenderer.removeListener('shell:writeMode', listener);
+        }
+      }
+    : {}),
   takeInviteLink: () => ipcRenderer.invoke('review:takeInviteLink'),
   onInviteLink: (cb) => {
     const listener = () => cb();

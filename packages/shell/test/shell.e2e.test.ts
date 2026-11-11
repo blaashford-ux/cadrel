@@ -88,7 +88,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
   it('opens on Home with the rail, real data from both modules, and the capture server already listening', async () => {
     const { app, shell } = await launch();
     expect(await shell.title()).toBe('Cadrel');
-    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Editing', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'Admin', 'Profile', 'Settings']);
+    expect(await shell.locator('.rail-btn').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Home', 'My Books', 'Dashboard', 'Planner', 'Editing', 'Projects', 'Files', 'Notes', 'Write', 'Market', 'Finance', 'Extensions', 'People', 'Admin', 'Profile', 'Settings']);
     await shell.getByRole('heading', { level: 2 }).waitFor();
     // Write has no projects yet; Market's server is up even though its page was never opened.
     await shell.getByText('No projects yet').waitFor();
@@ -551,7 +551,7 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
     await shell.locator('.links li', { hasText: 'Editor' }).waitFor();
 
     // Projects are for the people assigned to them; the Owner sees every one, and the People page says so.
-    await shell.getByRole('button', { name: 'Admin', exact: true }).click();
+    await shell.getByRole('button', { name: 'People', exact: true }).click();
     await shell.getByText('Every project: the Owner and an Admin see all of them.').waitFor();
     await shell.getByRole('button', { name: 'Projects', exact: true }).click();
     await shell.locator('.tree-row', { hasText: 'Book 1' }).click();
@@ -1126,12 +1126,11 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
       expect(fs.existsSync(path.join(udA, 'studios', id, 'secrets', 'cf-token.bin'))).toBe(false);
 
       // Invite: the link is shown once, and the invitation is listed until someone uses it.
-      await detail.getByLabel('Who the invitation is for').fill('Alice');
-      await detail.getByLabel('Role for the invitation').selectOption('author');
-      await detail.getByRole('button', { name: 'Create invitation' }).click();
-      const link = await detail.getByLabel('Invitation link').inputValue();
+      // (The app no longer offers a role on an invitation, but the server and the app's call still take one: this is the older path.)
+      const peopleOf = () => shell.evaluate((sid) => (window as any).cadrel.studios.people(sid), id) as Promise<{ members: { id: string; name: string; revokedAt: string | null }[]; invites: { label: string }[] }>;
+      const { link } = (await shell.evaluate((sid) => (window as any).cadrel.studios.createInvite(sid, { role: 'author', label: 'Alice' }), id)) as { link: string };
       expect(link).toMatch(/^cadrel:\/\/join\?/);
-      await detail.getByRole('list', { name: 'People in this Studio' }).getByText(/Invitation for Alice/).waitFor();
+      expect((await peopleOf()).invites.map((i) => i.label)).toEqual(['Alice']);
 
       // Another computer (its own profile, home and data) joins from the link, and is a member, not an owner.
       const udB = path.join(tmp, 'member-userdata-2');
@@ -1155,13 +1154,13 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
       await dlg.getByRole('button', { name: 'Cancel' }).click();
 
       // The owner sees them join, and can remove them.
-      await detail.getByRole('button', { name: 'Create invitation' }).waitFor(); // still on the same screen
+      await detail.getByText('Ready', { exact: true }).waitFor(); // still on the same screen
       await shell.getByRole('button', { name: 'Home', exact: true }).click();
       await shell.getByRole('button', { name: 'Admin', exact: true }).click();
       await shell.getByRole('button', { name: 'Acme Books' }).click();
-      const list = shell.getByRole('list', { name: 'People in this Studio' });
-      await list.getByText('Alice Author').waitFor();
-      expect(await list.getByText(/Invitation for/).count()).toBe(0);
+      const now = await peopleOf();
+      expect(now.members.filter((m) => !m.revokedAt).map((m) => m.name)).toEqual(['Alice Author']);
+      expect(now.invites).toEqual([]);
 
       // B switches into the Studio: it restarts into its own folders, as a Member with no Admin page.
       await b.shell.getByLabel('Studio', { exact: true }).selectOption({ label: 'Acme Books (invited)' });
@@ -1174,8 +1173,9 @@ describe.skipIf(!have)('Cadrel shell in Electron', () => {
       for (const d of ['Projects', 'Write', 'Market']) expect(fs.existsSync(path.join(hB, 'Cadrel', 'Acme Books', d))).toBe(true);
       await b.app.close();
 
-      await list.getByRole('button', { name: 'Remove Alice Author' }).click();
-      await list.getByText('Alice Author').waitFor({ state: 'detached' });
+      const alice = (await peopleOf()).members.find((m) => m.name === 'Alice Author')!;
+      await shell.evaluate(([sid, mid]) => (window as any).cadrel.studios.removeMember(sid, mid), [id, alice.id]);
+      expect((await peopleOf()).members.filter((m) => !m.revokedAt)).toEqual([]);
 
       // A removed member is shut out for good.
       const gone = await fetch(`${cf.url}/w/${[...cf.workers.keys()][0]}/v1/me`);

@@ -698,7 +698,8 @@ function ensureView(id: ModuleId): WebContentsView {
   if (existing) return existing;
   const dir = path.join(here, 'modules', id);
   const view = new WebContentsView({
-    webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+    // Write's window is told by the shell whether it shows Write or the Read tab: this argument is how its preload knows it is inside the shell
+    webPreferences: { preload: path.join(dir, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, ...(id === 'write' ? { additionalArguments: ['--cadrel-shell'] } : {}) }
   });
   view.setBackgroundColor(shellColor());
   view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
