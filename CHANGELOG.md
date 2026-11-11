@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (People: invitations without a role)
+## 0.11.0 (People: invite anyone and give roles per project; a Read tab; invitation email)
 
 - **The Studio's server can now invite a person without giving them a role** (server revision 6, database step 19). The invitation names the person (name and email); if someone with that email is already in the Studio's people it is that person, otherwise they are added. Whoever joins with it is that person and **can see nothing until the owner gives them a role on a project**. Invitations that name a role still work as before.
 - **A People page** (in the left rail, for administrators) is now where people are invited and given roles. **Invite people**: a name, an email and which app the link opens (Cadrel for authors and co-authors, Cadrel Reader for readers), then **Create invitation** gives a link to **Copy**, or **Email it** opens your own mail app with the invitation written out and ready to send (Cadrel sends nothing itself). Invitations waiting can be given a **New link** or cancelled, and people who have joined can be removed. Below that are the people, teams and roles as before, and each person is marked *invited* or *joined*. A **Beta Reader** can only be given a project, so the whole-Studio choice is not offered for that role.
@@ -12,6 +12,8 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **A Read tab** (left rail, beside Write) is for a Studio you were **invited to**: it shows what that Studio's owner has opened to you as a Beta Reader, the same screen as Cadrel Reader. You joined the Studio once in Cadrel, and the same key reads there, so no second invitation is needed. It lists the manuscripts you have been given, in the chapters the owner has switched on, and opens one read-only with notes, as in Reader; they are kept under that Studio's *Shared With Me* folder. It appears only while the Studio in use is one you were invited to, and what it lists is whatever you hold *Beta Reader* on in that Studio. Joining a Studio is still done from the Studio menu on Home; there is no Open invitation button on this tab.
 - **Cadrel Reader accepts an invitation with no role.** It says *nothing has been shared with you yet* without asking you to join again, and finds the manuscript once the owner gives you the project and switches chapters on. Invitations that name a role other than Beta Reader are still refused there, as before.
 - A member who joined with a no-role invitation is shown with no role of their own in the Studio list.
+- **Upgrading.** Each Studio's server needs **upgrading** (Admin → Studio Manager → Upgrade): this release is server revision 6 and database step 19. Until a Studio is upgraded the People page says so instead of offering invitations. Readers need **Cadrel Reader 0.12.0** to open an invitation that names no role. The app no longer makes invitations that name a role; ones already sent still work, and everyone already in a Studio keeps the access they have.
+- Tested with the real Studio server code (invitations, joining, the Read tab's reader, the email route) and the fake Cloudflare; **not yet tried on a real Studio, a real phone, or with a real Cloudflare Email Service domain.**
 
 ## 0.10.0 (Beta Readers join the Studio; the Studio's server no longer runs out of CPU; a fixed burn-down)
 
@@ -40,6 +42,11 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Files made read-only by this are made so on the first pass after upgrading; nothing is deleted.
 - Not changed: the Studio's server, so there is nothing to upgrade there.
 - Tested with the real vault and server code (desktop, phone, notes merge, offline, held by the other device) and the bar's states; not yet on a real Studio and phone.
+
+## Cadrel Reader 0.12.0
+
+- **Reader accepts an invitation that names no role.** Owners now invite a person (a name and an email) and give them access to projects afterwards. If you open such a link before anything has been shared with you, Reader says *nothing has been shared with you yet*, keeps you in the Studio without asking for the link again, and brings the manuscript down once the owner gives you the project and switches chapters on. Links that name a role other than Beta Reader are still refused, as before.
+- Reader is built from the Cadrel Write code, which now also runs Cadrel's new Read tab, so its version rises with it.
 
 ## Cadrel Reader 0.10.4
 

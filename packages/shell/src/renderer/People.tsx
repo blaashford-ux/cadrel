@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { defaultRole } from '@cadrel/kernel';
+import { defaultRole, STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION } from '@cadrel/kernel';
 import type { StudioEntry, StudioPeople } from '../shared/api';
 import { PeopleRoles } from './PeopleRoles';
 import { useStudios } from './useStudios';
@@ -30,6 +30,8 @@ export function People() {
   const [people, setPeople] = useState<StudioPeople | null>(null);
   const [emails, setEmails] = useState<Record<string, string>>({});
   const owns = !!studio && studio.role === 'owner' && studio.status === 'ready' && studio.recordsOnServer;
+  /** The Studio's server is older than this app: it does not know invitations without a role yet. */
+  const behind = owns && !!studio?.server && (studio.server.schema < STUDIO_SCHEMA_VERSION || (studio.server.revision ?? 0) < STUDIO_WORKER_REVISION);
 
   const reload = useCallback(() => {
     if (!studio || !owns) return setPeople(null);
@@ -49,9 +51,18 @@ export function People() {
   if (!studios || !studio) return <section className="card"><p className="muted">Loading…</p></section>;
   return (
     <div className="settings people-page">
-      {owns ? <Invite studio={studio} people={people} emails={emails} reload={reload} /> : <NoInvites studio={studio} />}
+      {owns && behind ? <NeedsUpgrade /> : owns ? <Invite studio={studio} people={people} emails={emails} reload={reload} /> : <NoInvites studio={studio} />}
       <PeopleRoles statuses={statuses} />
     </div>
+  );
+}
+
+function NeedsUpgrade() {
+  return (
+    <section className="card" aria-labelledby="pp-invite">
+      <h3 id="pp-invite">Invite people</h3>
+      <p className="muted small">This Studio’s server is older than this version of Cadrel, so it cannot make invitations this way yet. Upgrade it first: <strong>Admin → Studio Manager → Upgrade</strong>. Roles for the people already here can be given below as usual.</p>
+    </section>
   );
 }
 
