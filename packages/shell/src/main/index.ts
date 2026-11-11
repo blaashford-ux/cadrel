@@ -54,6 +54,7 @@ import { SLOW_REFRESH_MS, MIN_REFRESH_GAP_MS } from '../shared/refresh';
 import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare';
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
+import { inviteMailto } from './inviteMail';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
 import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
@@ -707,7 +708,7 @@ function ensureView(id: ModuleId): WebContentsView {
 const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 
 function showPage(next: Page): void {
-  if (next === 'admin' && !admin.isAdmin()) next = 'home'; // only administrators have the Admin page
+  if ((next === 'admin' || next === 'people') && !admin.isAdmin()) next = 'home'; // only administrators have the Admin and People pages
   if (!win || win.isDestroyed()) return;
   page = next;
   for (const id of ['write', 'market', 'finance'] as const) views[id]?.setVisible(false);
@@ -975,6 +976,21 @@ function registerShellIpc(): void {
     adminOnly();
     const { e, client } = await clientFor(String(id));
     return client.invite(String(i?.role), String(i?.label ?? ''), e.name, { projectId: typeof i?.projectId === 'string' && i.projectId ? i.projectId : null, days: typeof i?.days === 'number' && i.days > 0 ? i.days : null });
+  });
+  manageLike('studios:invitePerson', async (id: string, who: { personId?: unknown; name?: unknown; email?: unknown; opens?: unknown }) => {
+    adminOnly();
+    const { e, client } = await clientFor(String(id));
+    return client.invitePerson(
+      { ...(typeof who?.personId === 'string' && who.personId ? { id: who.personId } : {}), ...(typeof who?.name === 'string' ? { name: who.name } : {}), ...(typeof who?.email === 'string' ? { email: who.email } : {}) },
+      e.name,
+      who?.opens === 'reader' ? 'reader' : 'studio'
+    );
+  });
+  // Opens the person's own mail app with the invitation written out: Cadrel sends nothing itself.
+  manageLike('studios:emailInvite', async (id: string, mail: { to: string; link: string }) => {
+    adminOnly();
+    const { e } = await clientFor(String(id));
+    await shell.openExternal(inviteMailto(String(mail?.to), String(mail?.link), e.name));
   });
   // The records on a Studio's server, backed up to a file the owner keeps, and put back from one.
   manageLike('studios:backupServer', async (id: string) => {

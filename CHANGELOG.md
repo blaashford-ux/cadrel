@@ -4,7 +4,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 ## Unreleased (People: invitations without a role)
 
-- **The Studio's server can now invite a person without giving them a role** (server revision 6, database step 19). The invitation names the person (name and email); if someone with that email is already in the Studio's people it is that person, otherwise they are added. Whoever joins with it is that person and **can see nothing until the owner gives them a role on a project**. Nothing in the app creates these yet: the People tab, the per-project People and the Read tab follow. Invitations that name a role still work as before.
+- **The Studio's server can now invite a person without giving them a role** (server revision 6, database step 19). The invitation names the person (name and email); if someone with that email is already in the Studio's people it is that person, otherwise they are added. Whoever joins with it is that person and **can see nothing until the owner gives them a role on a project**. Invitations that name a role still work as before.
+- **A People page** (in the left rail, for administrators) is now where people are invited and given roles. **Invite people**: a name, an email and which app the link opens (Cadrel for authors and co-authors, Cadrel Reader for readers), then **Create invitation** gives a link to **Copy**, or **Email it** opens your own mail app with the invitation written out and ready to send (Cadrel sends nothing itself). Invitations waiting can be given a **New link** or cancelled, and people who have joined can be removed. Below that are the people, teams and roles as before, and each person is marked *invited* or *joined*. A **Beta Reader** can only be given a project, so the whole-Studio choice is not offered for that role.
+- **Moved:** the invitation controls and the member list in Admin → Studio Manager, and the *People and roles* card in Admin, are replaced by the People page. Studio Manager still builds, upgrades and links phones. Studio Managers no longer make invitations that name a role.
+- The Read tab and the *Add people* list in each project come next.
 
 ## 0.10.0 (Beta Readers join the Studio; the Studio's server no longer runs out of CPU; a fixed burn-down)
 

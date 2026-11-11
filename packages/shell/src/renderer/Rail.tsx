@@ -33,6 +33,7 @@ const MODULES: Item[] = [
 ];
 const ASSISTANTS: Item = { page: 'assistants', label: 'Extensions', icon: svg('M12 3l1.8 4.7L18.5 9.5 13.8 11.3 12 16l-1.8-4.7L5.5 9.5l4.7-1.8L12 3Zm6.5 11 .9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9.9-2.1Z') };
 const ADMIN: Item = { page: 'admin', label: 'Admin', icon: svg('M12 3 4.5 6v5.5c0 4.4 3.1 8.1 7.5 9.5 4.4-1.4 7.5-5.1 7.5-9.5V6L12 3Zm-3 9 2.2 2.2L15.5 9.8') };
+const PEOPLE: Item = { page: 'people', label: 'People', icon: svg('M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5.5 8c0-3 2.4-5 5.5-5s5.5 2 5.5 5M16.5 11a2.5 2.5 0 1 0 0-5M17 14.2c2 .4 3.5 2 3.5 4.8') };
 const SETTINGS: Item = { page: 'settings', label: 'Settings', icon: svg('M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM19.4 13.5a7.7 7.7 0 0 0 0-3l1.9-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2.5h-4l-.4 2.5a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4L4.6 10.5a7.7 7.7 0 0 0 0 3l-1.9 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4-1.9-1.5Z') };
 
 /** The left rail: where you are, and where else you can go. Studio pages on top, the modules below, settings at the foot. */
@@ -58,6 +59,7 @@ export function Rail({ page, onGo, isAdmin, updateAvailable, scope }: { page: Pa
       <hr className="rail-sep" />
       <ul>{item(ASSISTANTS)}</ul>
       <ul className="rail-foot">
+        {isAdmin && item(PEOPLE)}
         {isAdmin && item(ADMIN)}
         <li>
           <button type="button" className="rail-btn" aria-label="Profile" aria-current={page === 'profile' ? 'page' : undefined} title="Your profile" onClick={() => onGo('profile')}>

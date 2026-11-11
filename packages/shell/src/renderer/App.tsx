@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Overview, Page, UpdateStatus, WindowInfo } from '../shared/api';
 import { shellCss } from '../shared/theme';
 import { Admin } from './Admin';
+import { People } from './People';
 import { NotConnected } from './NotConnected';
 import { useStudios } from './useStudios';
 import { Assistants } from './Assistants';
@@ -22,9 +23,9 @@ import { useScope } from './useScope';
 import { viewScopeOf } from '@cadrel/kernel';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', people: 'People', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
-const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files', 'assistants', 'admin', 'profile', 'settings']);
+const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files', 'assistants', 'admin', 'people', 'profile', 'settings']);
 const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
 const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'files']);
@@ -143,6 +144,7 @@ export function App() {
           {!blocked && page === 'files' && <Files />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}
+          {page === 'people' && <People />}
           {page === 'profile' && <Profile />}
           {page === 'settings' && <Settings />}
         </div>
