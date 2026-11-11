@@ -25,11 +25,14 @@ interface Data {
   studios: StudioEntry[];
 }
 
+/** The address a Studio's server sends invitation email from: one plain address (the domain is checked by Cloudflare when it sends). */
+export const isMailFrom = (v: string): boolean => /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(v.trim()) && v.trim().length <= 120;
+
 const STATUSES: StudioStatus[] = ['local', 'not-provisioned', 'provisioning', 'ready', 'error'];
 
 const localStudio = (): StudioEntry => ({
   id: LOCAL_ID, name: 'My Studio', role: 'owner', status: 'local', url: null, accountId: null, createdAt: new Date(0).toISOString(), note: null,
-  folderName: 'My Studio', memberRole: null, fingerprint: null, tokenKept: false, resources: null, server: null, recordsOnServer: false
+  folderName: 'My Studio', memberRole: null, fingerprint: null, tokenKept: false, resources: null, server: null, recordsOnServer: false, mailFrom: null
 });
 
 const str = (v: unknown): string | null => (typeof v === 'string' ? v : null);
@@ -72,7 +75,8 @@ export function sanitizeStudios(raw: unknown): Data {
       resources: sanitizeResources(o.resources),
       server: server && int(server.api) !== null && int(server.schema) !== null ? { api: server.api as number, schema: server.schema as number, ...(int(server.revision) !== null ? { revision: server.revision as number } : {}) } : null,
       // a Studio the person joined has its records on its server and nowhere else
-      recordsOnServer: o.role === 'member' || o.recordsOnServer === true
+      recordsOnServer: o.role === 'member' || o.recordsOnServer === true,
+      mailFrom: o.role !== 'member' && typeof o.mailFrom === 'string' && isMailFrom(o.mailFrom) ? o.mailFrom.trim() : null
     });
   }
   const activeId = typeof r.activeId === 'string' && studios.some((s) => s.id === r.activeId) ? r.activeId : LOCAL_ID;
@@ -177,7 +181,7 @@ export class StudioRegistry {
 
   /** A Studio the person was invited to and has joined. */
   addMember(o: { name: string; url: string; fingerprint: string; memberRole: string; studioId: string }): StudiosView {
-    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', recordsOnServer: true, url: o.url, fingerprint: o.fingerprint, memberRole: o.memberRole, note: null });
+    this.add({ name: this.checkNewMember(o.name, o.url), role: 'member', status: 'ready', recordsOnServer: true, url: o.url, fingerprint: o.fingerprint, memberRole: (ROLE_KEYS as readonly string[]).includes(o.memberRole) ? o.memberRole : null, note: null }); // a roleless member has none
     return this.save();
   }
 
@@ -197,7 +201,7 @@ export class StudioRegistry {
   }
 
   /** What the build tells us as it goes. */
-  update(id: string, patch: Partial<Pick<StudioEntry, 'status' | 'url' | 'accountId' | 'note' | 'fingerprint' | 'tokenKept' | 'resources' | 'server' | 'recordsOnServer'>>): StudiosView {
+  update(id: string, patch: Partial<Pick<StudioEntry, 'status' | 'url' | 'accountId' | 'note' | 'fingerprint' | 'tokenKept' | 'resources' | 'server' | 'recordsOnServer' | 'mailFrom'>>): StudiosView {
     const s = this.owned(id);
     Object.assign(s, patch);
     return this.save();

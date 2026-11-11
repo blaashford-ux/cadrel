@@ -9,7 +9,7 @@ import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'market', 'finance', 'assistants', 'admin', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -308,6 +308,8 @@ export interface StudioEntry {
   resources: { worker: string; d1Id: string | null; d1Name: string; bucket: string } | null;
   /** The versions the Studio's server last reported, and the ones in this app; an upgrade is offered when the app's are newer. */
   server: { api: number; schema: number; revision?: number } | null;
+  /** The address this Studio's server emails invitations from, once the owner has turned that on (and the server was uploaded with the email binding); otherwise null. */
+  mailFrom: string | null;
   /** The Studio's records (people, roles, catalogue, work, files) are on its server and this computer uses them there. Always so for a Studio the person joined. */
   recordsOnServer: boolean;
 }
@@ -317,6 +319,8 @@ export interface StudioMember {
   id: string;
   name: string;
   role: string;
+  /** The person in the Studio's people this member is, when they joined with an invitation made for a person. */
+  personId?: string | null;
   joinedAt: string;
   revokedAt: string | null;
 }
@@ -324,6 +328,8 @@ export interface StudioMember {
 export interface StudioInvite {
   id: string;
   role: string;
+  /** The person the invitation was made for (a roleless one has no role of its own). */
+  personId?: string | null;
   label: string;
   expiresAt: string;
 }
@@ -375,6 +381,14 @@ export interface StudiosApi {
   people(id: string): Promise<StudioPeople>;
   /** `projectId` gives the role on that one project only (a guest's one book); `days` ends it after that long. */
   createInvite(id: string, invite: { role: string; label: string; projectId?: string | null; days?: number | null }): Promise<{ link: string; expiresAt: string }>;
+  /** An invitation for a person with no role: they see nothing until given one, per project, in Cadrel. `opens` is the app the link opens. */
+  invitePerson(id: string, who: { personId?: string; name?: string; email?: string; opens: 'studio' | 'reader' }): Promise<{ link: string; expiresAt: string; personId: string }>;
+  /** Turns the Studio's own invitation email on (from this address) or off (null): the server is uploaded again, with or without the email binding. The address must be on a domain onboarded in Cloudflare Email Service. */
+  setMail(id: string, mail: { from: string | null; token?: string }): Promise<StudiosView>;
+  /** Has the Studio's server email an invitation made with `invitePerson`, to the address on the person's record. */
+  sendInviteEmail(id: string, mail: { link: string; senderName?: string }): Promise<{ to: string }>;
+  /** Opens the person's mail app with an email that carries the invitation link (nothing is sent until they press Send). */
+  emailInvite(id: string, mail: { to: string; link: string }): Promise<void>;
   /** Saves the Studio's records as they are on its server to a file the owner chooses (null if cancelled). */
   backupServer(id: string): Promise<{ file: string; rows: number; bytes: number } | null>;
   /** Replaces the server's records with a saved copy (null if cancelled). Cadrel restarts. */

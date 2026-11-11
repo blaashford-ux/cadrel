@@ -410,6 +410,13 @@ export function App() {
     }
   }, [ws]);
   const atHome = started && !s.root;
+  // Cadrel's Read tab: this window shows a Beta Reader's side (what was shared with them) instead of the author's projects.
+  const [readMode, setReadMode] = useState(false);
+  useEffect(() => {
+    const w = window.cadrelWrite;
+    void w.getMode?.().then((m) => setReadMode(m === 'read'), () => undefined);
+    return w.onMode?.((m) => setReadMode(m === 'read'));
+  }, []);
   // The Projects home keeps itself fresh: loaded when shown, and again when the window regains focus.
   useEffect(() => {
     if (!atHome && !showQuick && !showNewProject) return;
@@ -727,6 +734,13 @@ export function App() {
     if (await ws.closeProject()) void reloadListing();
   };
   goHomeRef.current = goHome;
+  // Changing between Write and Read leaves a project of the other side: the one open is either the author's own or one shared with this person.
+  const seenMode = useRef(readMode);
+  useEffect(() => {
+    if (seenMode.current === readMode) return;
+    seenMode.current = readMode;
+    if (s.root && (sharedHere !== undefined) !== readMode) void goHomeRef.current();
+  }, [readMode, s.root, sharedHere]);
   const changeRoot = async () => {
     const folder = await window.cadrelWrite.pickFolder();
     if (!folder) return;
@@ -1080,8 +1094,8 @@ export function App() {
             <span>Keep your projects in sync with Google Drive.</span> <button onClick={() => setShowSync(true)}>Set up sync</button>
           </div>
         )}
-        {started && !welcome && (caps.reader ? (
-          <ReaderHome shared={shared} onOpen={(dir) => void openProject(dir)} onJoin={() => setShowJoin(true)} />
+        {started && !welcome && (caps.reader || readMode ? (
+          <ReaderHome shared={shared} onOpen={(dir) => void openProject(dir)} onJoin={caps.reader ? () => setShowJoin(true) : undefined} />
         ) : (
           <ProjectsHome {...homeProps} />
         ))}
@@ -1093,7 +1107,7 @@ export function App() {
           <ProjectSwitcher
             name={s.project ? s.project.meta.name : s.root?.name ?? ''}
             isProject={s.project !== null}
-            projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
+            projects={caps.reader || readMode ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
             currentPath={s.project?.path ?? null}
             openedOrder={openedOrder}
             onOpen={(p) => void openProject(p)}
@@ -1585,7 +1599,7 @@ export function App() {
     )}
     {showQuick && (
       <QuickSwitcher
-        projects={caps.reader ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
+        projects={caps.reader || readMode ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
         currentPath={s.project?.path ?? null}
         openedOrder={openedOrder}
         onOpen={(p) => void openProject(p)}

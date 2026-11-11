@@ -18,6 +18,18 @@ export class StudioClient extends BaseClient {
     const r = await this.request<{ code: string; expiresAt: string }>('POST', '/v1/invites', { role, label, ...(grant.projectId ? { projectId: grant.projectId } : {}), ...(grant.days ? { days: grant.days } : {}) });
     return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName }, role === 'beta_reader' ? 'cadrel-reader' : 'cadrel'), expiresAt: r.expiresAt }; // an owner's key is the Studio's key; a Beta Reader's link opens Cadrel Reader
   }
+  /**
+   * An invitation for a person, with no role: whoever joins is that person and sees nothing until the owner gives them a role on a project.
+   * `opens` says which app the link opens: Cadrel (authors) or Cadrel Reader (readers). Someone already in the Studio's people with that email is that person.
+   */
+  async invitePerson(person: { id?: string; name?: string; email?: string }, studioName: string, opens: 'studio' | 'reader'): Promise<{ link: string; expiresAt: string; personId: string }> {
+    const r = await this.request<{ code: string; expiresAt: string; personId: string }>('POST', '/v1/invites', { person });
+    return { link: invitationLink({ url: this.o.url, code: r.code, fingerprint: await fingerprint(this.o.key.publicKey), studioName }, opens === 'reader' ? 'cadrel-reader' : 'cadrel'), expiresAt: r.expiresAt, personId: r.personId };
+  }
+  /** Has the Studio's server email an invitation just made, to the address on that person's record (the owner turned this on in Studio Manager). */
+  async mailInvite(code: string, opens: 'studio' | 'reader', studioName: string, senderName: string): Promise<{ to: string }> {
+    return this.request<{ to: string }>('POST', '/v1/invites/mail', { code, opens, studioName, senderName });
+  }
   /** A one-hour, one-use link that makes another device of the owner's (a phone) the owner too, with its own key. The code is shown once. */
   async linkDevice(label: string, studioName: string): Promise<{ link: string; expiresAt: string }> {
     const r = await this.request<{ code: string; expiresAt: string }>('POST', '/v1/devices', { label });

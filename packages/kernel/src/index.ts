@@ -3,6 +3,7 @@ export * from './roles';
 export * from './permissions';
 export * from './guardrails';
 export * from './vault';
+export * from './inviteEmail';
 export * from './fileLinks';
 export * from './betaRead';
 export * from './vaultStore';

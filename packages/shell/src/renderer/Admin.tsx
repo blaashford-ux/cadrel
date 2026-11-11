@@ -5,7 +5,6 @@ import { defaultAppDefaults } from '@cadrel/write/src/shared/appDefaults';
 import { defaultProjectsSettings, templateErrors, type ProjectsConfig } from '@cadrel/write/src/shared/projects';
 import type { AdminView } from '../shared/api';
 import { StudioManager } from './StudioManager';
-import { PeopleRoles } from './PeopleRoles';
 import { WorkflowBuilder } from './WorkflowBuilder';
 
 const api = window.cadrel;
@@ -52,7 +51,6 @@ export function Admin() {
   return (
     <div className="settings admin">
       <StudioManager />
-      <PeopleRoles />
       <WorkflowBuilder />
       <section className="card" aria-labelledby="a-templates">
         <h3 id="a-templates">Governed by administrators</h3>

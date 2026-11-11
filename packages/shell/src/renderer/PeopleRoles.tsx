@@ -10,7 +10,7 @@ const AREA_CAPS = AREAS.map((a) => ({ id: a.id, label: a.label, caps: [...new Se
 const ALL_AREA_CAPS = AREA_CAPS.flatMap((a) => a.caps);
 
 /** People, teams, roles and who holds what: the studio's access, edited here and enforced everywhere by the same permission check. */
-export function PeopleRoles() {
+export function PeopleRoles({ statuses }: { statuses?: Record<string, string> } = {}) {
   const [s, setS] = useState<PeopleState | null>(null);
   const [tab, setTab] = useState<Tab>('people');
   const [error, setError] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function PeopleRoles() {
         {(['people', 'teams', 'roles'] as const).map((t) => <button key={t} type="button" role="tab" className="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t === 'people' ? 'People' : t === 'teams' ? 'Teams' : 'Roles'}</button>)}
       </div>
       {error && <div className="banner error" role="alert">{error} <button type="button" className="link" onClick={() => setError(null)}>Dismiss</button></div>}
-      {tab === 'people' && <PeopleTab s={s} act={act} projects={projects} where={where} roleName={roleName} until={until} />}
+      {tab === 'people' && <PeopleTab s={s} act={act} projects={projects} where={where} roleName={roleName} until={until} statuses={statuses} />}
       {tab === 'teams' && <TeamsTab s={s} act={act} projects={projects} where={where} roleName={roleName} until={until} />}
       {tab === 'roles' && <RolesTab s={s} act={act} where={where} nameOf={nameOf} until={until} />}
     </section>
@@ -67,7 +67,7 @@ export function PeopleRoles() {
 }
 
 type Act = <T>(job: () => Promise<T>) => Promise<T | undefined>;
-interface Common { s: Ready; act: Act; where: (a: { kind: string; id: string }) => string; until: (a: AssignmentRecord) => string; roleName: (id: string) => string; projects: { id: string; name: string }[] }
+interface Common { statuses?: Record<string, string>; s: Ready; act: Act; where: (a: { kind: string; id: string }) => string; until: (a: AssignmentRecord) => string; roleName: (id: string) => string; projects: { id: string; name: string }[] }
 
 /** "Give a role" for a person or a team: which role, where it applies, and until when. */
 function GiveRole({ s, act, projects, subject }: { s: Ready; act: Act; projects: Common['projects']; subject: { kind: 'person' | 'team'; id: string } }) {
@@ -75,18 +75,21 @@ function GiveRole({ s, act, projects, subject }: { s: Ready; act: Act; projects:
   const [scope, setScope] = useState('studio');
   const [date, setDate] = useState('');
   if (!s.may.roles) return null;
+  // A Beta Reader is given projects, never the whole studio (the server refuses it), so that is not offered for them.
+  const projectOnly = s.roles.find((r) => r.id === roleId)?.templateKey === 'beta_reader';
+  const where = projectOnly && scope === 'studio' ? (projects[0]?.id ?? '') : scope;
   return (
     <div className="row" aria-label="Give a role">
       <select aria-label="Role" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
         <option value="">Give a role…</option>
         {s.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
       </select>
-      <select aria-label="Where it applies" value={scope} onChange={(e) => setScope(e.target.value)}>
-        <option value="studio">Whole studio</option>
+      <select aria-label="Where it applies" value={where} onChange={(e) => setScope(e.target.value)}>
+        {!projectOnly && <option value="studio">Whole studio</option>}
         {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
       <label className="inline small muted">until <input type="date" aria-label="Expires on" value={date} onChange={(e) => setDate(e.target.value)} /></label>
-      <button type="button" disabled={!roleId} onClick={() => void act(() => api.grant({ subject, roleId, scope: scope === 'studio' ? { kind: 'studio', id: s.studioId } : { kind: 'project', id: scope }, expiresAt: date ? `${date}T23:59:59.000Z` : null })).then(() => (setRoleId(''), setDate('')))}>Give</button>
+      <button type="button" disabled={!roleId || !where} onClick={() => void act(() => api.grant({ subject, roleId, scope: where === 'studio' ? { kind: 'studio', id: s.studioId } : { kind: 'project', id: where }, expiresAt: date ? `${date}T23:59:59.000Z` : null })).then(() => (setRoleId(''), setDate('')))}>Give</button>
     </div>
   );
 }
@@ -108,7 +111,7 @@ function Assignments({ list, s, act, where, until, label }: { list: AssignmentRe
   );
 }
 
-function PeopleTab({ s, act, projects, where, roleName, until }: Common) {
+function PeopleTab({ s, act, projects, where, roleName, until, statuses }: Common) {
   const [pick, setPick] = useState<string | null>(s.people[0]?.id ?? null);
   const [form, setForm] = useState({ name: '', email: '', kind: 'employee' });
   const person = s.people.find((p) => p.id === pick) ?? null;
@@ -119,6 +122,7 @@ function PeopleTab({ s, act, projects, where, roleName, until }: Common) {
           {s.people.map((p) => (
             <li key={p.id}>
               <button type="button" className={`link grow-text${p.id === pick ? ' on' : ''}`} aria-pressed={p.id === pick} onClick={() => setPick(p.id)}>{p.name}{p.id === s.me ? ' (you)' : ''}</button>
+              {statuses?.[p.id] && <span className="chip">{statuses[p.id]}</span>}
               <span className="chip">{p.kind}</span>
             </li>
           ))}

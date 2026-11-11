@@ -191,6 +191,87 @@ describe('the Studio server: the vault', () => {
     expect((await s.vault(guest.key, 'list')).body.result).toEqual([]);
   });
 
+  it('a roleless invitation: the person sees nothing until the owner gives them a role on a project, and an existing person is linked, not duplicated', async () => {
+    const s = await server();
+    await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));
+    expect((await addFile(s, s.owner, 'b1/one.md', 'book one', 'pB1')).body.result).toMatchObject({ ok: true });
+    expect((await addFile(s, s.owner, 'b2/two.md', 'book two', 'pB2')).body.result).toMatchObject({ ok: true });
+    // the owner already has Tristan in the people, by hand
+    const made = (await s.call(s.owner, ['people', 'create'], { name: 'Tristan', email: 'Tristan@Example.com', kind: 'guest' })).body.result;
+    const peopleBefore = (await s.call(s.owner, ['people', 'list'])).body.result.length;
+    const inv = await s.send('POST', '/v1/invites', s.owner, JSON.stringify({ person: { name: 'Tris', email: 'tristan@example.com' } }));
+    const invite = (await inv.json()) as { code: string; role: string; personId: string };
+    expect(inv.status).toBe(201);
+    expect(invite).toMatchObject({ role: '_none', personId: made.id }); // the same email: the person already there
+    const key = await generateKeyPair();
+    const joined = await s.send('POST', '/v1/join', key, JSON.stringify({ code: invite.code, name: 'Tristan' }));
+    expect(joined.status).toBe(200);
+    expect(((await joined.json()) as { role: string }).role).toBe('_none');
+    expect((await s.call(s.owner, ['people', 'list'])).body.result.length).toBe(peopleBefore); // nobody was added
+    // joined, and a person of the Studio, but with nothing
+    expect(((await (await s.send('GET', '/v1/me', key)).json()) as { personId: string }).personId).toBe(made.id);
+    expect((await s.vault(key, 'list')).body.result).toEqual([]);
+    expect((await s.get(key, 'book one')).status).toBe(404);
+    expect((await s.call(key, ['catalogue', 'books'])).status).toBe(403);
+    expect(((await (await s.send('GET', '/v1/tree', key)).json()) as { result: { projects: unknown[] } }).result.projects).toEqual([]);
+    // the owner gives them a role on one project only: that is all they see
+    expect((await s.call(s.owner, ['people', 'grant'], { subject: { kind: 'person', id: made.id }, roleId: 'role_guest', scope: { kind: 'project', id: 'pB1' } })).status).toBe(200);
+    expect((await s.vault(key, 'list')).body.result.map((f: { path: string }) => f.path)).toEqual(['b1/one.md']);
+    expect((await s.get(key, 'book one')).status).toBe(200);
+    expect((await s.get(key, 'book two')).status).toBe(404);
+    // a link is used once, and an invitation for someone nobody named is refused
+    expect((await s.send('POST', '/v1/join', await generateKeyPair(), JSON.stringify({ code: invite.code, name: 'X' }))).status).toBe(410);
+    expect((await s.send('POST', '/v1/invites', s.owner, JSON.stringify({ person: {} }))).status).toBe(400);
+    // a new person is made when no one has that email, with no role
+    const fresh = (await (await s.send('POST', '/v1/invites', s.owner, JSON.stringify({ person: { name: 'Mina', email: 'mina@example.com' } }))).json()) as { personId: string };
+    const mina = (await s.call(s.owner, ['people', 'get'], fresh.personId)).body.result;
+    expect(mina.person).toMatchObject({ name: 'Mina', email: 'mina@example.com' });
+    expect(mina.assignments).toEqual([]);
+  });
+
+  it('emails an invitation only when the owner turned email on, only to the address on that person’s record, and only an invitation that is waiting', async () => {
+    const s = await server();
+    const sent: { to: { email: string; name?: string }; from: { email: string; name?: string }; subject: string; text: string }[] = [];
+    const invite = async (person: Record<string, string>) => (await (await s.send('POST', '/v1/invites', s.owner, JSON.stringify({ person }))).json()) as { code: string };
+    const mail = (key: KeyPair | null, body: Record<string, unknown>) => s.send('POST', '/v1/invites/mail', key, JSON.stringify(body));
+    const tris = await invite({ name: 'Tristan', email: 'tristan@example.com' });
+    const noMail = await invite({ name: 'Nomail' });
+
+    // off until the owner turns it on, and it says so
+    expect(((await (await s.send('GET', '/v1/info', null)).json()) as { mail: boolean }).mail).toBe(false);
+    expect((await mail(s.owner, { code: tris.code })).status).toBe(409);
+    s.env.EMAIL = { send: async (m) => (sent.push(m), { messageId: 'm1' }) };
+    s.env.INVITE_FROM = 'invites@example.com';
+    expect(((await (await s.send('GET', '/v1/info', null)).json()) as { mail: boolean }).mail).toBe(true);
+
+    // only the owner; a code with no invitation behind it; a person with no address
+    const guest = await s.join('guest', 'Gus');
+    expect((await mail(guest.key, { code: tris.code })).status).toBe(403);
+    expect((await mail(s.owner, { code: 'x'.repeat(22) })).status).toBe(404);
+    expect((await mail(s.owner, {})).status).toBe(400);
+    expect((await mail(s.owner, { code: noMail.code })).status).toBe(400);
+    expect(sent).toEqual([]);
+
+    // the one case that sends: to the address on the record (whatever the request says), with the link, from the Studio's address
+    const ok = await mail(s.owner, { code: tris.code, opens: 'reader', studioName: 'Acme Books', senderName: 'Ann', to: 'someone-else@example.com' });
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({ ok: true, to: 'tristan@example.com' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ to: { email: 'tristan@example.com', name: 'Tristan' }, from: { email: 'invites@example.com', name: 'Acme Books' }, subject: 'You are invited to Acme Books on Cadrel Reader' });
+    expect(sent[0]!.text).toContain('Ann has invited you');
+    expect(sent[0]!.text).toMatch(new RegExp(`cadrel-reader://join\\?s=https%3A%2F%2Fstudio\\.test&c=${tris.code}&f=[0-9A-F-]+&n=Acme%20Books`));
+
+    // once used, it is no longer waiting; and a failure from the mail service is reported, not swallowed
+    s.env.EMAIL = { send: async () => { throw new Error('E_SENDER_NOT_VERIFIED'); } };
+    const second = await invite({ name: 'Mina', email: 'mina@example.com' });
+    const failed = await mail(s.owner, { code: second.code });
+    expect(failed.status).toBe(502);
+    expect(((await failed.json()) as { error: string }).error).toContain('E_SENDER_NOT_VERIFIED');
+    const key = await generateKeyPair();
+    expect((await s.send('POST', '/v1/join', key, JSON.stringify({ code: second.code, name: 'Mina' }))).status).toBe(200);
+    expect((await mail(s.owner, { code: second.code })).status).toBe(404);
+  });
+
   it('a Beta Reader gets only the chapters switched on, only through beta reading, and keeps their own notes apart', async () => {
     const s = await server();
     await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE));

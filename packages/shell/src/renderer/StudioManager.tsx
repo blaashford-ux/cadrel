@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ROLE_KEYS, STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION, defaultRole } from '@cadrel/kernel';
-import type { StudioEntry, StudioPeople, StudiosView } from '../shared/api';
+import { STUDIO_SCHEMA_VERSION, STUDIO_WORKER_REVISION } from '@cadrel/kernel';
+import type { StudioEntry, StudiosView } from '../shared/api';
 import { useStudios } from './useStudios';
 
 const api = window.cadrel.studios;
-const INVITE_ROLES = ROLE_KEYS.filter((k) => k !== 'owner');
 const STATUS_LABEL: Record<StudioEntry['status'], string> = { local: 'On this computer', 'not-provisioned': 'Not built yet', provisioning: 'Building…', ready: 'Ready', error: 'Needs attention' };
 const mask = (id: string | null) => (id ? `${id.slice(0, 4)}…${id.slice(-4)}` : 'not set');
 
@@ -92,39 +91,27 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
   const [token, setToken] = useState('');
   const [keep, setKeep] = useState(false);
   const [rename, setRename] = useState(studio.name);
-  const [role, setRole] = useState<string>('author');
-  const [label, setLabel] = useState('');
-  const [link, setLink] = useState<string | null>(null);
-  const [project, setProject] = useState('');
-  const [days, setDays] = useState('');
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [confirmMove, setConfirmMove] = useState(false);
   const [moving, setMoving] = useState(false);
-  const [people, setPeople] = useState<StudioPeople | null>(null);
   const [devices, setDevices] = useState<{ id: string; label: string; linkedAt: string }[]>([]);
   const [deviceLink, setDeviceLink] = useState<string | null>(null);
   const [deviceLabel, setDeviceLabel] = useState('');
   const [upToken, setUpToken] = useState('');
+  const [mailFrom, setMailFrom] = useState(studio.mailFrom ?? '');
+  const [mailToken, setMailToken] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
   const ready = studio.status === 'ready';
   const building = studio.status === 'provisioning';
   const behind = ready && studio.server !== null && (studio.server.schema < STUDIO_SCHEMA_VERSION || (studio.server.revision ?? 0) < STUDIO_WORKER_REVISION);
 
-  const loadPeople = () => {
-    void api.people(studio.id).then(setPeople, () => undefined);
+  const loadDevices = () => {
     void api.devices(studio.id).then(setDevices, () => setDevices([]));
   };
   useEffect(() => {
-    setPeople(null);
-    setLink(null);
     setDeviceLink(null);
     setDevices([]);
-    setProject('');
     setConfirmMove(false);
-    if (ready) loadPeople();
-    // the projects an invitation can be limited to: this Studio's own, which are known only while it is the one in use
-    if (ready && studio.recordsOnServer && studios.activeId === studio.id) void window.cadrel.studio.state().then((st) => setProjects(st.tree.projects.filter((p) => p.status === 'active').map((p) => ({ id: p.id, name: p.name }))), () => undefined);
-    else setProjects([]);
+    if (ready) loadDevices();
   }, [studio.id, ready, studio.recordsOnServer]);
 
   return (
@@ -156,32 +143,26 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
       {ready && (
         <>
           <h5>People</h5>
-          <p className="muted small">You are the Owner. Invite people by role; they connect with Cadrel, never with your Cloudflare account.</p>
-          <div className="row">
-            <select aria-label="Role for the invitation" value={role} onChange={(e) => setRole(e.target.value)}>
-              {INVITE_ROLES.map((k) => <option key={k} value={k}>{defaultRole(k).name}</option>)}
-            </select>
-            <input aria-label="Who the invitation is for" placeholder="Who is it for? (a label only you see)" value={label} onChange={(e) => setLabel(e.target.value)} />
-            {projects.length > 0 && (
-              <select aria-label="Where the role applies" value={project} onChange={(e) => setProject(e.target.value)}>
-                <option value="">{role === 'beta_reader' ? 'No project yet (give them one later)' : 'Across the whole Studio'}</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>Only {p.name}</option>)}
-              </select>
-            )}
-            {studio.recordsOnServer && <input aria-label="Days the access lasts" type="number" min={1} max={3650} placeholder="Ends after (days)" value={days} onChange={(e) => setDays(e.target.value)} style={{ width: '9rem' }} />}
-            <button type="button" onClick={() => void act(() => api.createInvite(studio.id, { role, label, projectId: project || null, days: days ? Number(days) : null }), (r) => (setLink(r.link), setLabel(''), setDays(''), loadPeople()))}>Create invitation</button>
-          </div>
-          {link && (
-            <div className="banner info" role="status">
-              <p>Send this link to them. It works once, for 7 days, and is not shown again.</p>
-              <div className="row"><input readOnly aria-label="Invitation link" className="grow" value={link} onFocus={(e) => e.currentTarget.select()} /><button type="button" onClick={() => void navigator.clipboard.writeText(link).then(() => setNote('Invitation link copied.'), () => undefined)}>Copy</button></div>
-            </div>
+          <p className="muted small">You are the Owner. Invite people, and give them roles on projects, on the <strong>People</strong> page.</p>
+          <h5>Invitation email</h5>
+          {studio.mailFrom ? (
+            <p className="muted small">The Studio emails invitations itself, from <strong>{studio.mailFrom}</strong>: on the People page, <em>Send email</em> sends one in a click.</p>
+          ) : (
+            <p className="muted small">Off. Invitations can still be copied, or written into your own mail app. To have the Studio send them itself, give it an address to send from. This needs <strong>Cloudflare Email Service</strong> (a beta, on the Workers Paid plan) with a domain you have onboarded there (Cloudflare dashboard → Compute → Email Service → Email Sending → Onboard Domain), and an address on that domain.</p>
           )}
+          <div className="row">
+            <input aria-label="Address to send invitations from" type="email" placeholder="invites@yourdomain.com" value={mailFrom} onChange={(e) => setMailFrom(e.target.value)} />
+            {!studio.tokenKept && <input aria-label="Cloudflare API token to change this" type="password" placeholder="Cloudflare API token (not kept)" value={mailToken} onChange={(e) => setMailToken(e.target.value)} autoComplete="off" />}
+            <button type="button" disabled={!mailFrom.trim() || mailFrom.trim() === studio.mailFrom || (!studio.tokenKept && !mailToken.trim())} onClick={() => void act(() => api.setMail(studio.id, { from: mailFrom.trim(), ...(studio.tokenKept ? {} : { token: mailToken }) }), () => (setMailToken(''), setNote('The Studio can now email invitations.')))}>{studio.mailFrom ? 'Change address' : 'Turn on'}</button>
+            {studio.mailFrom && <button type="button" disabled={!studio.tokenKept && !mailToken.trim()} onClick={() => void act(() => api.setMail(studio.id, { from: null, ...(studio.tokenKept ? {} : { token: mailToken }) }), () => (setMailToken(''), setMailFrom(''), setNote('Invitation email is off.')))}>Turn off</button>}
+          </div>
+          <p className="muted small">Turning it on or off uploads the Studio’s server again, with or without the email permission. If Cloudflare says the address cannot send, nothing changes.</p>
+
           <h5>Your phone</h5>
           <p className="muted small">Sign in to this Studio on your phone as yourself, the owner. Make a link here, open Cadrel Write on the phone and paste it: the phone makes its own key, so yours never leaves this computer. You can remove a phone below.</p>
           <div className="row">
             <input aria-label="Name for the phone" placeholder="Which phone? (a label only you see)" value={deviceLabel} onChange={(e) => setDeviceLabel(e.target.value)} />
-            <button type="button" onClick={() => void act(() => api.linkDevice(studio.id, deviceLabel), (r) => (setDeviceLink(r.link), setDeviceLabel(''), loadPeople()))}>Link a phone</button>
+            <button type="button" onClick={() => void act(() => api.linkDevice(studio.id, deviceLabel), (r) => (setDeviceLink(r.link), setDeviceLabel(''), loadDevices()))}>Link a phone</button>
           </div>
           {deviceLink && (
             <div className="banner info" role="status">
@@ -195,24 +176,6 @@ function StudioDetail({ studio, studios, act, setNote, onGone }: { studio: Studi
                 <li key={d.id}>
                   <span className="grow-text"><strong>{d.label || 'Phone'}</strong> <span className="muted small">linked {d.linkedAt ? new Date(d.linkedAt).toLocaleDateString() : ''}</span></span>
                   <button type="button" aria-label={`Remove ${d.label || 'phone'}`} onClick={() => void act(() => api.removeDevice(studio.id, d.id), setDevices)}>Remove</button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {people && !people.reachable && <p className="muted small" role="status">Could not reach the Studio to list its people: {people.error}</p>}
-          {people?.reachable && (
-            <ul className="studio-list" aria-label="People in this Studio">
-              {people.members.length === 0 && people.invites.length === 0 && <li className="muted">No one has joined yet.</li>}
-              {people.members.filter((m) => !m.revokedAt).map((m) => (
-                <li key={m.id}>
-                  <span className="grow-text"><strong>{m.name}</strong> <span className="muted small">{defaultRole(m.role as never).name}</span></span>
-                  <button type="button" aria-label={`Remove ${m.name}`} onClick={() => void act(() => api.removeMember(studio.id, m.id), setPeople)}>Remove</button>
-                </li>
-              ))}
-              {people.invites.map((i) => (
-                <li key={i.id}>
-                  <span className="grow-text">Invitation{i.label ? ` for ${i.label}` : ''} <span className="muted small">{defaultRole(i.role as never).name} · waiting until {new Date(i.expiresAt).toLocaleDateString()}</span></span>
-                  <button type="button" aria-label={`Cancel the invitation${i.label ? ` for ${i.label}` : ''}`} onClick={() => void act(() => api.revokeInvite(studio.id, i.id), setPeople)}>Cancel</button>
                 </li>
               ))}
             </ul>

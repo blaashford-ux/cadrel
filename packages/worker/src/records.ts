@@ -57,8 +57,40 @@ export function ensureRecords(env: RecordsEnv, now = Date.now()): Promise<string
 }
 
 /** Someone who joined by invitation becomes a person here, holding the role the invitation named where it named. */
+/** The placeholder role of a member who joined with a roleless invitation: they hold whatever the owner gives them in the Studio's records, nothing more. */
+export const ROLELESS = '_none';
+
+/**
+ * The person an invitation is for: one already in the Studio's people (by id), or the one with that email, or a new one made now. They hold no role,
+ * so whoever joins with the invitation sees nothing until the owner gives them one. Says why when it cannot be done.
+ */
+export async function personForInvite(env: RecordsEnv, who: { personId?: string; name?: string; email?: string }, now = Date.now()): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  await ensureRecords(env, now);
+  const db = d1Db(env.DB);
+  if (who.personId) {
+    const p = await db.first<{ id: string; deactivated_at: string | null }>('SELECT id, deactivated_at FROM person WHERE id = ? AND studio_id = ?', [who.personId, env.STUDIO_ID]);
+    if (!p) return { ok: false, error: 'That person is not in the Studio.' };
+    if (p.deactivated_at) return { ok: false, error: 'That person is deactivated. Reactivate them first.' };
+    return { ok: true, id: p.id };
+  }
+  const email = (who.email ?? '').trim();
+  if (email) {
+    const same = await db.first<{ id: string }>('SELECT id FROM person WHERE studio_id = ? AND lower(email) = lower(?) AND deactivated_at IS NULL', [env.STUDIO_ID, email]);
+    if (same) return { ok: true, id: same.id };
+  }
+  const name = (who.name ?? '').trim();
+  if (!name) return { ok: false, error: 'Who is the invitation for? A name is needed.' };
+  try {
+    const made = await createPerson(db, ctxAt(env, now), { name, email: email || null, kind: 'guest' });
+    return { ok: true, id: made.id };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'The Studio could not add that person.' };
+  }
+}
+
 export async function admitMember(env: RecordsEnv, m: { id: string; name: string; role: string }, grant: { scopeKind: string; scopeId: string | null; expiresAt: string | null }, now = Date.now()): Promise<void> {
   await ensureRecords(env, now);
+  if (m.role === ROLELESS) return; // the person was made when they were invited, and holds no role until the owner gives them one
   const db = d1Db(env.DB);
   const c = ctxAt(env, now);
   const there = await db.first<{ id: string }>('SELECT id FROM person WHERE id = ? AND studio_id = ?', [m.id, env.STUDIO_ID]);
@@ -72,9 +104,10 @@ export async function admitMember(env: RecordsEnv, m: { id: string; name: string
 }
 
 /** The person a signed request is from: the owner's, or the member's own (made at joining; made now for a member from before the server held records). */
-export async function personIdFor(env: RecordsEnv, who: { kind: 'owner' } | { kind: 'member'; id: string; name: string; role: string }, now = Date.now()): Promise<string> {
+export async function personIdFor(env: RecordsEnv, who: { kind: 'owner' } | { kind: 'member'; id: string; name: string; role: string; personId?: string | null }, now = Date.now()): Promise<string> {
   const owner = await ensureRecords(env, now);
   if (who.kind === 'owner') return owner;
+  if (who.personId) return who.personId; // joined with an invitation made for a person already in the Studio's people
   const db = d1Db(env.DB);
   if (!(await db.first('SELECT 1 AS x FROM person WHERE id = ?', [who.id]))) await admitMember(env, who, { scopeKind: 'studio', scopeId: null, expiresAt: null }, now);
   return who.id;

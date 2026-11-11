@@ -35,6 +35,11 @@ export interface Build {
   ownerKey: string;
   /** The Studio server, as a Worker module. */
   workerSource: string;
+  /**
+   * When set, the Studio's server can email invitations from this address (on a domain the owner onboarded in Cloudflare Email Service).
+   * Without it the Worker has no email binding at all, so a Studio that never turns this on is uploaded exactly as before.
+   */
+  mailFrom?: string | null;
 }
 
 export interface Built {
@@ -131,7 +136,8 @@ export class Cloudflare {
               { type: 'r2_bucket', name: 'FILES', bucket_name: names.bucket },
               { type: 'plain_text', name: 'STUDIO_ID', text: b.studioId },
               { type: 'plain_text', name: 'OWNER_KEY', text: b.ownerKey },
-              { type: 'plain_text', name: 'ENVIRONMENT', text: 'studio' }
+              { type: 'plain_text', name: 'ENVIRONMENT', text: 'studio' },
+              ...(b.mailFrom ? [{ type: 'send_email', name: 'EMAIL' }, { type: 'plain_text', name: 'INVITE_FROM', text: b.mailFrom }] : [])
             ]
           })
         ],

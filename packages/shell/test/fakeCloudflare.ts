@@ -17,6 +17,8 @@ export function fakeCloudflare(opts: { subdomain?: string | null; allowedToken?:
   const buckets = new Set<string>();
   const workers = new Map<string, { env: Env; source: string; bindings: unknown[] }>();
   const calls: string[] = [];
+  /** What uploaded Workers sent through their email binding (Cloudflare Email Service). */
+  const mail: { to: { email: string; name?: string }; from: { email: string; name?: string }; subject: string; text: string }[] = [];
   const dbs = new Map<string, D1Database>();
   const fetchFn = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -47,6 +49,7 @@ export function fakeCloudflare(opts: { subdomain?: string | null; allowedToken?:
         for (const b of meta.bindings) {
           if (b.type === 'd1') env.DB = dbs.get(b.id!) ?? (() => { throw new Error('no such database'); })();
           if (b.type === 'plain_text') env[b.name] = b.text;
+          if (b.type === 'send_email') env[b.name] = { send: async (m: (typeof mail)[number]) => (mail.push(m), { messageId: `m${mail.length}` }) };
         }
         workers.set(script[1]!, { env: env as unknown as Env, source, bindings: meta.bindings });
         return json({});
@@ -59,7 +62,7 @@ export function fakeCloudflare(opts: { subdomain?: string | null; allowedToken?:
     if (!w) return new Response('no worker', { status: 404 });
     return worker.fetch(new Request(url, init as RequestInit), w.env);
   }) as unknown as typeof fetch;
-  return { fetchFn, db, buckets, workers, calls };
+  return { fetchFn, db, buckets, workers, calls, mail };
 }
 
 

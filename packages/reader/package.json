@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/reader",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Cadrel Reader: read a manuscript an author shared with you and give comments and suggestions",
   "main": "dist-electron/electron/main.js",
   "scripts": {

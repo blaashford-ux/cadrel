@@ -39,7 +39,8 @@ import { READER_BLOCKED_CHANNELS } from './readerMode';
 import type { SyncService } from '../src/shared/sync/service';
 import { createDesktopSync } from './syncHost';
 import { reviewOff } from '../src/shared/syncStub';
-import { createStudioReader } from '../src/shared/review/studioReader';
+import { createStudioReader, type JoinedStudio } from '../src/shared/review/studioReader';
+import { SHARED_WITH_ME } from '../src/shared/sync/rules';
 import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
@@ -109,6 +110,11 @@ export interface WriteHost {
    * managing projects are not registered, invitations to edit are refused, the menu is the short one, and updates come from Reader's releases.
    */
   reader?: boolean;
+  /**
+   * The Studios the person has already joined in the host (Cadrel keeps their key), so Write can read what is shared with them there as a Beta
+   * Reader: the Read tab lists those manuscripts, read-only with notes, exactly as Cadrel Reader does. Without it Write has nothing to read.
+   */
+  betaReading?: () => Promise<JoinedStudio[]>;
 }
 
 export let settings: SettingsStore;
@@ -279,7 +285,15 @@ function studioReaderHost(): ReviewSharingApi {
 
 /** A reader's Studio; for the author's Write there is nothing to join (their beta readers' notes are taken in by `review:exchange`). */
 async function reviewHost(): Promise<ReviewSharingApi> {
-  return host.reader ? studioReaderHost() : reviewOff;
+  if (host.reader) return studioReaderHost();
+  // not kept between calls: the Studio (and so the folder the manuscripts go in) is the host's current one
+  if (host.betaReading) {
+    return createStudioReader({
+      fs: nodeFs, root: projectsRoot(), fetchFn: (input, init) => fetch(input, init), joined: host.betaReading,
+      seal: (plain) => `plain:${plain}`, unseal: (sealed) => sealed.replace(/^plain:/, ''), appName: 'Cadrel'
+    });
+  }
+  return reviewOff;
 }
 
 /** Something on disk changed because of the user: sync soon (does nothing unless Google Drive is connected). */
@@ -679,6 +693,7 @@ function registerIpc(): void {
     const dir = reviewPath(project);
     const drive = await (await reviewHost()).exchangeReviews(dir);
     if (host.reader || !host.files?.betaNotes) return drive;
+    if (dir.split(/[\\/]/).includes(SHARED_WITH_ME)) return drive; // a manuscript someone shared with this person: there are no readers' notes of theirs to take in
     const beta = await takeBetaNotes(dir);
     return { ...drive, changed: drive.changed || beta.changed, errors: [...drive.errors, ...beta.errors] };
   });

@@ -49,8 +49,13 @@ export interface StudioReaderOptions {
   fs: FsPort;
   /** The local Root Folder; projects live in `<root>/Shared With Me`. */
   root: string;
-  /** Where the joined Studios are remembered (outside the Root Folder). */
-  stateFile: string;
+  /** Where the joined Studios are remembered (outside the Root Folder). Not used when the host supplies them with `joined`. */
+  stateFile?: string;
+  /**
+   * The Studios this person has already joined, from the host that holds their keys (Cadrel does: they joined once, there, and the same key
+   * reads here). The reader then neither remembers Studios of its own nor joins any: a new invitation is opened in Cadrel's Studio list.
+   */
+  joined?: () => Promise<JoinedStudio[]>;
   fetchFn: typeof fetch;
   /** Seals and opens the private key at rest. */
   seal(text: string): string;
@@ -68,17 +73,19 @@ export function createStudioReader(o: StudioReaderOptions): ReviewSharingApi {
   const sharedRoot = `${o.root.replace(/[\\/]+$/, '')}/${SHARED_WITH_ME}`;
   const reviews = makeReviews(o.fs);
 
+  const stateFile = o.stateFile ?? '';
   const loadStudios = async (): Promise<JoinedStudio[]> => {
+    if (o.joined) return o.joined().catch(() => []); // offline, or not asked yet: what was downloaded before is still listed
     try {
-      const raw = JSON.parse(await o.fs.readText(o.stateFile)) as { studios?: JoinedStudio[] };
+      const raw = JSON.parse(await o.fs.readText(stateFile)) as { studios?: JoinedStudio[] };
       return Array.isArray(raw.studios) ? raw.studios : [];
     } catch {
       return [];
     }
   };
   const saveStudios = async (studios: JoinedStudio[]) => {
-    await o.fs.mkdir(o.stateFile.slice(0, Math.max(o.stateFile.lastIndexOf('/'), o.stateFile.lastIndexOf('\\'))), { recursive: true });
-    await o.fs.writeText(o.stateFile, JSON.stringify({ version: 1, studios }));
+    await o.fs.mkdir(stateFile.slice(0, Math.max(stateFile.lastIndexOf('/'), stateFile.lastIndexOf('\\'))), { recursive: true });
+    await o.fs.writeText(stateFile, JSON.stringify({ version: 1, studios }));
   };
   const clientFor = (s: JoinedStudio): StudioClient => {
     const key: KeyPair = { publicKey: s.publicKey, privateKey: o.unseal(s.sealedPrivateKey) };
@@ -141,11 +148,13 @@ export function createStudioReader(o: StudioReaderOptions): ReviewSharingApi {
 
   return {
     async joinReview(link, name) {
+      if (o.joined) throw new StudioApiError(`Studios you are invited to are joined from the Studio menu on Home: paste the invitation there, then switch to that Studio to read what is shared with you.`);
       const inv = parseInvitation(link);
       if (!inv) throw new StudioApiError('That is not a Cadrel invitation link. It starts with cadrel-reader://join');
       const who = name.trim() || 'Reader';
       const joined = await joinStudio({ link, yourName: who, fetchFn: o.fetchFn });
-      if (joined.role !== 'beta_reader') {
+      // A Beta Reader invitation, or one with no role at all (the owner gives roles afterwards, per project); a role for the work itself is for Cadrel.
+      if (joined.role !== 'beta_reader' && joined.role !== '_none') {
         throw new StudioApiError(`This invitation is for the role “${joined.role}”, which ${app} can’t use. ${app} is for Beta Readers. Ask the Studio’s owner for a Beta Reader invitation.`);
       }
       const client = new StudioClient({ url: joined.url, key: joined.key, fetchFn: o.fetchFn });
