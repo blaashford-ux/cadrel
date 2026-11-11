@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (People: invitations without a role)
+
+- **The Studio's server can now invite a person without giving them a role** (server revision 6, database step 19). The invitation names the person (name and email); if someone with that email is already in the Studio's people it is that person, otherwise they are added. Whoever joins with it is that person and **can see nothing until the owner gives them a role on a project**. Nothing in the app creates these yet: the People tab, the per-project People and the Read tab follow. Invitations that name a role still work as before.
+
 ## 0.10.0 (Beta Readers join the Studio; the Studio's server no longer runs out of CPU; a fixed burn-down)
 
 - **The Studio's server no longer runs out of CPU when a vault has many files.** Listing the vault (what a phone's first sync does), serving a file, and a Beta Reader's list of manuscripts checked each file's permission one at a time, and every check read and parsed the project tree from the database again and rebuilt the permission tables. A vault of a few hundred files made one request run hundreds of database queries (400 files: 404) and Cloudflare stopped it with *Exceeded CPU Time Limits*. The tree and the permissions are now read once per request and each decision is made once, so the same request is five queries however many files there are. **Upgrade each Studio's server** (Admin → Studio Manager): a Studio whose server was built before 0.8.1 still has the per-file code, and one built before this release has the part fixed here. The server revision is now 5, so the app offers the upgrade.

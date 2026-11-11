@@ -5,7 +5,7 @@
  */
 import { b64u, fingerprint, hex, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
 import { ensureSchema } from './schema';
-import { admitMember, personIdFor, readTree } from './records';
+import { admitMember, personForInvite, personIdFor, readTree, ROLELESS } from './records';
 import { d1Db, readVersions } from './d1';
 import { exportRecords, importRecords, ownerOf, type ImportRequest } from './import';
 import { isServerRoute, serverRoutes } from './server';
@@ -36,7 +36,7 @@ const fail = (status: number, error: string) => json({ error }, status);
 const iso = (ms: number) => new Date(ms).toISOString();
 const randomId = (prefix: string, bytes = 8) => `${prefix}${hex(crypto.getRandomValues(new Uint8Array(bytes)))}`;
 
-type Who = { kind: 'owner'; name: string; role: 'owner' } | { kind: 'member'; id: string; name: string; role: string };
+type Who = { kind: 'owner'; name: string; role: 'owner' } | { kind: 'member'; id: string; name: string; role: string; personId: string | null };
 
 /** Verifies the signature, refuses a repeat of a request already seen, and says who the key belongs to (null: nobody here). */
 async function authenticate(request: Request, body: string | Uint8Array, env: StudioEnv, now: number): Promise<{ key: string; who: Who | null } | Response> {
@@ -57,8 +57,8 @@ async function authenticate(request: Request, body: string | Uint8Array, env: St
   if (v.publicKey === env.OWNER_KEY) return { key: v.publicKey, who: { kind: 'owner', name: 'Owner', role: 'owner' } };
   // A device the owner linked (their phone): it is the owner, signed with its own key, so the owner's key never leaves the owner's computer.
   if (await env.DB.prepare('SELECT 1 AS x FROM studio_meta WHERE key = ?').bind(deviceKey(v.publicKey)).first()) return { key: v.publicKey, who: { kind: 'owner', name: 'Owner', role: 'owner' } };
-  const m = await env.DB.prepare('SELECT id, name, role FROM member WHERE public_key = ? AND revoked_at IS NULL').bind(v.publicKey).first<{ id: string; name: string; role: string }>();
-  return { key: v.publicKey, who: m ? { kind: 'member', id: m.id, name: m.name, role: m.role } : null };
+  const m = await env.DB.prepare('SELECT id, name, role, person_id AS personId FROM member WHERE public_key = ? AND revoked_at IS NULL').bind(v.publicKey).first<{ id: string; name: string; role: string; personId: string | null }>();
+  return { key: v.publicKey, who: m ? { kind: 'member', id: m.id, name: m.name, role: m.role, personId: m.personId } : null };
 }
 
 /** The Studio's routes, or null for a path that is not one of them. */
@@ -115,14 +115,14 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     if (!name) return fail(400, 'An invitation code and a name are needed.');
     if (auth.who?.kind === 'owner') return fail(400, 'The owner does not join their own Studio.');
     if (auth.who?.kind === 'member') return json({ memberId: auth.who.id, role: auth.who.role, studioId: env.STUDIO_ID });
-    const invite = await env.DB.prepare('SELECT id, role, expires_at, used_at, scope_kind, scope_id, grant_expires_at FROM invite WHERE code_hash = ?').bind(hex(await sha256(code))).first<{ id: string; role: string; expires_at: string; used_at: string | null; scope_kind: string; scope_id: string | null; grant_expires_at: string | null }>();
+    const invite = await env.DB.prepare('SELECT id, role, expires_at, used_at, scope_kind, scope_id, grant_expires_at, person_id AS personId FROM invite WHERE code_hash = ?').bind(hex(await sha256(code))).first<{ id: string; role: string; expires_at: string; used_at: string | null; scope_kind: string; scope_id: string | null; grant_expires_at: string | null; personId: string | null }>();
     if (!invite || invite.used_at) return fail(410, 'That invitation has already been used or does not exist.');
     if (invite.expires_at < iso(now)) return fail(410, 'That invitation has expired. Ask for a new one.');
     const taken = await env.DB.prepare('UPDATE invite SET used_at = ? WHERE id = ? AND used_at IS NULL').bind(iso(now), invite.id).run();
     if ((taken.meta.changes ?? 0) === 0) return fail(410, 'That invitation has already been used or does not exist.');
     const id = randomId('m');
     try {
-      await env.DB.prepare('INSERT INTO member (id, public_key, name, role, joined_at) VALUES (?, ?, ?, ?, ?)').bind(id, auth.key, name, invite.role, iso(now)).run();
+      await env.DB.prepare('INSERT INTO member (id, public_key, name, role, joined_at, person_id) VALUES (?, ?, ?, ?, ?, ?)').bind(id, auth.key, name, invite.role, iso(now), invite.personId).run();
     } catch {
       await env.DB.prepare('UPDATE invite SET used_at = NULL WHERE id = ?').bind(invite.id).run();
       return fail(403, 'This computer was removed from the Studio and cannot rejoin with it.');
@@ -164,6 +164,19 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
   // Everything below is the owner's.
   if (auth.who.kind !== 'owner') return fail(403, 'Only the Studio’s owner can do that.');
 
+  if (method === 'POST' && path === '/v1/invites' && data.person && typeof data.person === 'object') {
+    // An invitation for a person, with no role: they see nothing until the owner gives them one, per project, in Cadrel.
+    const p = data.person as { id?: unknown; name?: unknown; email?: unknown };
+    const made = await personForInvite(env, { ...(typeof p.id === 'string' && p.id ? { personId: p.id } : {}), ...(typeof p.name === 'string' ? { name: p.name } : {}), ...(typeof p.email === 'string' ? { email: p.email } : {}) }, now);
+    if (!made.ok) return fail(400, made.error);
+    const named = await env.DB.prepare('SELECT name FROM person WHERE id = ?').bind(made.id).first<{ name: string }>();
+    const label = (typeof data.label === 'string' && data.label.trim() ? data.label.trim() : named?.name ?? '').slice(0, 80);
+    const code = b64u(crypto.getRandomValues(new Uint8Array(16)));
+    const id = randomId('i');
+    const expires = iso(now + INVITE_LIFETIME_MS);
+    await env.DB.prepare("INSERT INTO invite (id, code_hash, role, label, created_at, expires_at, scope_kind, scope_id, grant_expires_at, person_id) VALUES (?, ?, ?, ?, ?, ?, 'studio', NULL, NULL, ?)").bind(id, hex(await sha256(code)), ROLELESS, label, iso(now), expires, made.id).run();
+    return json({ id, code, role: ROLELESS, label, expiresAt: expires, studioId: env.STUDIO_ID, personId: made.id }, 201);
+  }
   if (method === 'POST' && path === '/v1/invites') {
     const role = typeof data.role === 'string' ? data.role : '';
     const label = typeof data.label === 'string' ? data.label.trim().slice(0, 80) : '';
@@ -180,7 +193,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     return json({ id, code, role, label, expiresAt: expires, studioId: env.STUDIO_ID, projectId, grantEndsAt: grantEnds }, 201);
   }
   if (method === 'GET' && path === '/v1/invites') {
-    const rows = await env.DB.prepare('SELECT id, role, label, created_at AS createdAt, expires_at AS expiresAt FROM invite WHERE used_at IS NULL AND expires_at > ? AND role != ? ORDER BY created_at DESC').bind(iso(now), DEVICE_ROLE).all();
+    const rows = await env.DB.prepare('SELECT id, role, label, person_id AS personId, created_at AS createdAt, expires_at AS expiresAt FROM invite WHERE used_at IS NULL AND expires_at > ? AND role != ? ORDER BY created_at DESC').bind(iso(now), DEVICE_ROLE).all();
     return json({ invites: rows.results });
   }
   // The owner's own devices: a one-hour, one-use link that adds a phone as the owner, the phones already linked, and taking one away.
@@ -213,7 +226,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     return json({ ok: true });
   }
   if (method === 'GET' && path === '/v1/members') {
-    const rows = await env.DB.prepare('SELECT id, name, role, joined_at AS joinedAt, revoked_at AS revokedAt FROM member ORDER BY joined_at').all();
+    const rows = await env.DB.prepare('SELECT id, name, role, person_id AS personId, joined_at AS joinedAt, revoked_at AS revokedAt FROM member ORDER BY joined_at').all();
     return json({ members: rows.results });
   }
   const del = /^\/v1\/(members|invites)\/([\w-]+)$/.exec(path);
