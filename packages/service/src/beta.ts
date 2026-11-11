@@ -86,6 +86,7 @@ export class BetaAs {
       [this.o.studioId]
     );
     const out: BetaFile[] = [];
+    const mayAt = await this.o.as.checkerAt(); // once for all the files: a check per file read the project tree again for every one
     for (const r of rows) {
       let n = 0;
       try {
@@ -93,7 +94,7 @@ export class BetaAs {
       } catch {
         /* nothing on */
       }
-      if (n > 0 && fileKind(r.path) === 'manuscript' && (await this.o.as.canAt('beta.read', r.projectId))) out.push({ fileId: r.id, path: r.path, projectId: r.projectId, version: r.version, chapters: n, rev: `${r.version}:${r.at}` });
+      if (n > 0 && fileKind(r.path) === 'manuscript' && mayAt('beta.read', r.projectId)) out.push({ fileId: r.id, path: r.path, projectId: r.projectId, version: r.version, chapters: n, rev: `${r.version}:${r.at}` });
     }
     return out;
   }
