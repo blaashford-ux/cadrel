@@ -19,7 +19,7 @@ export const STUDIO_SCHEMA_VERSION = 19;
  * Changes whenever the Studio's server code gains something an older server lacks, even with no change to the API or database above (a new
  * route, say). A server reports it in `/v1/info`; one that does not report it is older than every revision, so the app offers it an upgrade.
  */
-export const STUDIO_WORKER_REVISION = 6;
+export const STUDIO_WORKER_REVISION = 7;
 
 export const SIGNATURE_WINDOW_MS = 5 * 60 * 1000;
 

@@ -2,27 +2,30 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (Progress: the averages and the daily target no longer move while you write)
+## 0.12.0 (notes counted in the tree; a note unmarks its chapter; edited dots in every stage; steadier Progress; an idle Cadrel no longer keeps the Studio's server busy)
 
-- **The 3-day and 5-day averages are of finished days only** (yesterday back). Today was being counted, so the averages fell every morning when today had only a few words in it, and rose as you wrote.
-- **Needed per day is worked out from where today began**, so it stays the same all day (the status bar's daily-target bar too, which used to run ahead because its target shrank as you wrote) and falls the next day if you beat it. It used to shrink as you wrote and then jump back up the next morning.
-- **The estimated finish date was a day late.** It counted today as a day for the deadline but not for the estimate, so being exactly on pace read "1 day behind". It now lands on the deadline.
-
-## Unreleased (notes in the tree; a note takes the edited mark off; the edited dots stay)
-
+### Chapters and notes
 - **Each chapter in the tree shows how many open notes it has**, in red, between its title and its word count. Notes by you, by an AI through the MCP server, and notes that came from another device are all counted; a chapter with none shows nothing.
 - **A note on a chapter marked as edited takes the mark off, without asking.** It happens when you add a note in Write and when an AI adds one with `add_notes` (the tool's result says `editedMarkRemoved`). Other chapters keep their marks.
 - **The edited dots now show in every stage, not only Editing.** Not yet edited is red; edited is **green in the Editing stage and orange in any other stage**. The right-click Mark Edited / Unmark Edited items were already there in every stage. Only the Editing stage still asks, when you leave a chapter, whether to mark it edited.
 - **The red / green edited dots no longer disappear when the Studio's server has a bad moment.** The dots show only while the project's stage is an editing (review) stage, and the stage is fetched from the Studio. A failed fetch (the server erroring or out of CPU) was treated as "this project has no stages", which hid every dot until the next successful fetch. Now only a role that may not read workflows sees no stages; for any other failure Write keeps the stages it last had.
 
-## Unreleased (an idle Cadrel no longer keeps the Studio's server busy)
+### Progress
+- **The 3-day and 5-day averages are of finished days only** (yesterday back). Today was being counted, so the averages fell every morning when today had only a few words in it, and rose as you wrote.
+- **Needed per day is worked out from where today began**, so it stays the same all day (the status bar's daily-target bar too, which used to run ahead because its target shrank as you wrote) and falls the next day if you beat it. It used to shrink as you wrote and then jump back up the next morning.
+- **The estimated finish date was a day late.** It counted today as a day for the deadline but not for the estimate, so being exactly on pace read "1 day behind". It now lands on the deadline.
 
+### The Studio's server and idle use
 - **Cause.** Two things made an app that was only left open ask the Studio's server for work, over and over. (1) Write checked every open file's lock **every 6 seconds**, and each check made the server list and permission-check the **whole vault**, once per open tab. (2) To answer that list the server checked each file against the permissions, and each check **read and parsed the project tree again**, so a vault of a few hundred files meant a few hundred database reads and JSON parses (the CPU limit) inside one request. The 3-minute background save also made a full pass even when nothing had changed anywhere.
 - **The server reads the project tree once per request** instead of once per file. Listing the vault is one tree read however many files there are.
 - **Lock checks no longer run on a timer.** A file's lock is looked at when it is opened, when the window gets focus, and again if a check-out or check-in is refused; the server decides who holds a lock, so a bar a little behind cannot cause harm. Several tabs asked at once share one request to the Studio.
 - **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
 - **The phone and Reader ask the Studio whether anything changed before each minute's look**, and make a full pass (list the vault, people, projects, every file) only when it has. What you change on the phone still goes at once.
-- Server code changed: use **Upgrade the server** for the CPU fix to take effect.
+- **Upgrading.** Each Studio's server needs **upgrading** (Admin → Studio Manager → Upgrade) for the CPU fix: this release is server revision 7; the database is unchanged (step 19). The app offers the upgrade by itself. Everything else in this release needs only the new app.
+
+## Cadrel Reader 0.13.0
+
+- Reader is built from Cadrel Write's code, so it gets the notes counts in the chapter list, the steadier Progress figures, and, on the phone, a minute's look that asks the Studio whether anything changed before doing a full pass.
 
 ## 0.11.0 (People: invite anyone and give roles per project; a Read tab; invitation email)
 
