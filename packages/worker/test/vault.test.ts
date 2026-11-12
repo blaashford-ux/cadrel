@@ -396,3 +396,19 @@ describe('the Studio server: the vault', () => {
     expect((await s.vault(guest.key, 'card', id('b1/cover.png'))).body.result).toMatchObject({ fields: { artist: 'Dana' } });
   });
 });
+
+describe('what the Studio server reads to list the vault', () => {
+  it('reads the project tree once for the whole listing, not once for every file that belongs to a project', async () => {
+    const s = await server();
+    expect((await s.send('PUT', '/v1/tree', s.owner, JSON.stringify(TREE))).status).toBe(200);
+    for (let i = 0; i < 6; i++) expect((await addFile(s, s.owner, `Book 1/Manuscript/Chapter ${i}.md`, `text ${i}`, 'pB1')).body.result.ok).toBe(true);
+    const inner = s.env.DB as unknown as D1Database;
+    const seen: string[] = [];
+    const prepare = inner.prepare.bind(inner);
+    (inner as { prepare: typeof inner.prepare }).prepare = (sql: string) => (seen.push(sql), prepare(sql));
+    const listed = await s.vault(s.owner, 'list');
+    expect(listed.status).toBe(200);
+    expect(listed.body.result).toHaveLength(6);
+    expect(seen.filter((q) => /FROM studio_meta WHERE key = \?/.test(q))).toHaveLength(1); // the tree
+  });
+});

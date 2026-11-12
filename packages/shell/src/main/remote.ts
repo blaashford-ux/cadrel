@@ -88,7 +88,29 @@ export class OfflineAwareStore implements VaultStore {
     }
   }
 
-  async list(): Promise<VaultListing[]> {
+  /**
+   * The list is every file in the vault, and the server reads (and checks) all of it to answer. Asking for one file's state asks for it all, so
+   * asks that arrive while one is on its way (one per open tab) share its answer instead of each making a request. Nothing is kept after it
+   * arrives, and anything this computer changes through the store ends the sharing, so no answer is older than the ask that got it.
+   */
+  private inflight: Promise<VaultListing[]> | null = null;
+  private changing<T>(job: () => Promise<T>): Promise<T> {
+    this.inflight = null;
+    return job().finally(() => {
+      this.inflight = null;
+    });
+  }
+
+  list(): Promise<VaultListing[]> {
+    if (this.inflight) return this.inflight;
+    const mine: Promise<VaultListing[]> = this.fetchList().finally(() => {
+      if (this.inflight === mine) this.inflight = null;
+    });
+    this.inflight = mine;
+    return mine;
+  }
+
+  private async fetchList(): Promise<VaultListing[]> {
     try {
       const r = await this.seen(() => this.inner.list());
       this.lastList = r;
@@ -102,22 +124,22 @@ export class OfflineAwareStore implements VaultStore {
     }
   }
   versions = (fileId: string) => this.need(() => this.inner.versions(fileId));
-  addFile = (a: Parameters<VaultStore['addFile']>[0]) => this.need(() => this.inner.addFile(a));
-  checkOut = (a: { fileId: string; machine: string }) => this.need(() => this.inner.checkOut(a));
-  checkIn = (a: Parameters<VaultStore['checkIn']>[0]) => this.need(() => this.inner.checkIn(a));
-  undoCheckOut = (a: { fileId: string; machine: string }) => this.need(() => this.inner.undoCheckOut(a));
-  forceRelease = (a: { fileId: string; reason: string }) => this.need(() => this.inner.forceRelease(a));
+  addFile = (a: Parameters<VaultStore['addFile']>[0]) => this.changing(() => this.need(() => this.inner.addFile(a)));
+  checkOut = (a: { fileId: string; machine: string }) => this.changing(() => this.need(() => this.inner.checkOut(a)));
+  checkIn = (a: Parameters<VaultStore['checkIn']>[0]) => this.changing(() => this.need(() => this.inner.checkIn(a)));
+  undoCheckOut = (a: { fileId: string; machine: string }) => this.changing(() => this.need(() => this.inner.undoCheckOut(a)));
+  forceRelease = (a: { fileId: string; reason: string }) => this.changing(() => this.need(() => this.inner.forceRelease(a)));
   orphans = async () => (await this.seen(() => this.inner.orphans()).catch((e) => (e instanceof StudioOfflineError ? [] : Promise.reject(e)))) as Orphan[];
-  acknowledgeOrphans = (a: { fileId: string; machine: string }) => this.need(() => this.inner.acknowledgeOrphans(a));
+  acknowledgeOrphans = (a: { fileId: string; machine: string }) => this.changing(() => this.need(() => this.inner.acknowledgeOrphans(a)));
   references = (fileId: string) => this.need(() => this.inner.references(fileId));
   whereUsed = (fileId: string) => this.need(() => this.inner.whereUsed(fileId));
-  addReference = (a: Parameters<VaultStore['addReference']>[0]) => this.need(() => this.inner.addReference(a));
-  setReferenceVersion = (a: Parameters<VaultStore['setReferenceVersion']>[0]) => this.need(() => this.inner.setReferenceVersion(a));
-  removeReference = (a: { fileId: string; refersToId: string }) => this.need(() => this.inner.removeReference(a));
+  addReference = (a: Parameters<VaultStore['addReference']>[0]) => this.changing(() => this.need(() => this.inner.addReference(a)));
+  setReferenceVersion = (a: Parameters<VaultStore['setReferenceVersion']>[0]) => this.changing(() => this.need(() => this.inner.setReferenceVersion(a)));
+  removeReference = (a: { fileId: string; refersToId: string }) => this.changing(() => this.need(() => this.inner.removeReference(a)));
   card = (fileId: string) => this.need(() => this.inner.card(fileId));
-  setCard = (a: Parameters<VaultStore['setCard']>[0]) => this.need(() => this.inner.setCard(a));
+  setCard = (a: Parameters<VaultStore['setCard']>[0]) => this.changing(() => this.need(() => this.inner.setCard(a)));
   betaRead = (fileId: string) => this.need(() => this.inner.betaRead(fileId));
-  setBetaRead = (a: Parameters<VaultStore['setBetaRead']>[0]) => this.need(() => this.inner.setBetaRead(a));
+  setBetaRead = (a: Parameters<VaultStore['setBetaRead']>[0]) => this.changing(() => this.need(() => this.inner.setBetaRead(a)));
 }
 
 /** Contents kept in the Studio's file store, and a copy on this computer so a version is fetched once. */

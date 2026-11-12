@@ -78,6 +78,11 @@ export interface ProjectSyncOptions {
   /** The Studio's server cannot be reached right now. */
   offline?(): boolean;
   now?(): number;
+  /**
+   * The Studio's change counter (two rows on its server), or null when there is none to ask. While it is the same as at the last full pass and nothing
+   * changed in the folder, a full pass would find nothing, so it is skipped: an idle app costs the Studio one tiny read every few minutes.
+   */
+  remoteVersion?(): Promise<string | null>;
   /** Told whenever the status changes. */
   onStatus?(s: SyncStatus): void;
 }
@@ -92,6 +97,8 @@ export class ProjectSync {
   private lastFull = 0;
   private timer: NodeJS.Timeout | null = null;
   private notesSavedAt = new Map<string, number>();
+  /** The Studio's change counter as it was before the last clean full pass. */
+  private remoteSeen: string | null = null;
 
   constructor(private readonly o: ProjectSyncOptions) {}
 
@@ -119,7 +126,11 @@ export class ProjectSync {
     this.timer = setInterval(() => {
       void (async () => {
         if (this.running) return;
-        if (this.now() - this.lastFull >= full || (await this.changed())) await this.sync();
+        if (await this.changed()) return void (await this.sync());
+        if (this.now() - this.lastFull < full) return;
+        const v = await this.o.remoteVersion?.().catch(() => null);
+        if (v != null && v === this.remoteSeen && this.status.state === 'idle') this.lastFull = this.now(); // nothing anywhere: look again in a while
+        else await this.sync();
       })();
     }, look);
     this.timer.unref?.();
@@ -196,6 +207,7 @@ export class ProjectSync {
     }
     this.set({ state: 'syncing', message: null });
     const sum = total;
+    const before = (await this.o.remoteVersion?.().catch(() => null)) ?? null; // read before the pass: a change that lands during it is seen at the next
     try {
       const projects = await this.o.projects();
       const byFolder = new Map([...projects].map(([k, v]) => [k.toLowerCase(), v]));
@@ -238,6 +250,7 @@ export class ProjectSync {
       this.lastFull = this.now();
       this.snapshot = await this.scan(new Set([...byFolder.keys()]));
       const away = this.o.offline?.() === true;
+      this.remoteSeen = away || sum.errors.length || sum.held.length || sum.unprotected.length ? null : before;
       this.set({
         state: away ? 'offline' : sum.errors.length ? 'error' : 'idle',
         lastAt: this.now(),

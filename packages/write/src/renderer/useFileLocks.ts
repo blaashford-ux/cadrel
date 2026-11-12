@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FileLock, FileLockApi } from '../shared/api';
 
+/** How often the locks on the open files are looked at again while the window is up. */
+const LOCK_LOOK_MS = 60_000;
+
 /**
  * How each open file stands for this person (checked in, checked out by them, checked out by someone else), asked of the host, so the editor can be
  * read-only until a file is checked out. Without a host that keeps files in a vault there is nothing to ask and every file is writable as usual.
@@ -37,10 +40,13 @@ export function useFileLocks(api: FileLockApi | undefined, files: string[]): {
     void ask(wanted.current);
   }, [ask, key]);
 
-  // Someone may check a file in or out elsewhere: look again every few seconds, and when the window comes back.
+  // Someone may check a file in or out elsewhere: look again now and then, and when the window comes back. Every look is a request to the
+  // Studio's server that reads its whole vault, so not often, and not at all while nobody can see the window.
   useEffect(() => {
     if (!api) return;
-    const id = setInterval(() => void ask(wanted.current), 6000);
+    const id = setInterval(() => {
+      if (typeof document === 'undefined' || !document.hidden) void ask(wanted.current);
+    }, LOCK_LOOK_MS);
     const onFocus = () => void ask(wanted.current);
     window.addEventListener('focus', onFocus);
     return () => {

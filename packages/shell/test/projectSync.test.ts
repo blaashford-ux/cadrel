@@ -246,3 +246,31 @@ describe('moving the old Vault folder into the Projects folder', () => {
     expect((await vault().checkIn('Dragon Rider/c.md', 'Chapter three')).version).toBe(2);
   });
 });
+
+describe('an idle app', () => {
+  it('asks the Studio only whether anything changed, and does not make a full pass while nothing has', async () => {
+    await put('Dragon Rider/Manuscript/Chapter 1.md', 'one');
+    let counter = 'v1', asked = 0, passes = 0;
+    const real = new VaultHost(host, where);
+    const s = new ProjectSync({ vault: () => (passes++, real.localVault), dir: projects, projects: async () => new Map([['Dragon Rider', 'p1']]), offline: () => host.offline, now: () => clock, remoteVersion: async () => (asked++, counter) });
+    await s.sync();
+    const first = passes;
+    s.start({ lookMs: 10, fullMs: 50 });
+    await new Promise((r) => setTimeout(r, 30));
+    s.stop();
+    const base = passes;
+    expect(base).toBeLessThanOrEqual(first + 1); // start()'s own first pass
+    clock += 10 * 60_000;
+    s.start({ lookMs: 10, fullMs: 50 });
+    await new Promise((r) => setTimeout(r, 80));
+    s.stop();
+    expect(passes).toBe(base + 1); // only start()'s first pass: the later looks found the same counter
+    expect(asked).toBeGreaterThan(2);
+    counter = 'v2'; // someone changed something elsewhere
+    clock += 10 * 60_000;
+    s.start({ lookMs: 10, fullMs: 50 });
+    await new Promise((r) => setTimeout(r, 80));
+    s.stop();
+    expect(passes).toBeGreaterThan(base + 1);
+  });
+});

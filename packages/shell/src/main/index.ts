@@ -465,6 +465,7 @@ async function startProjectSync(): Promise<void> {
     dir: where.dir,
     projects: projectFolders,
     offline: () => peopleHost.offline,
+    remoteVersion: async () => (serverLink ? (await serverLink.client.version()).data : null),
     onStatus: (s) => { if (win && !win.isDestroyed()) win.webContents.send('shell:vault:sync', s); }
   });
   if (!TEST || process.env.CADREL_TEST_PROJECT_SYNC) projectSync.start();

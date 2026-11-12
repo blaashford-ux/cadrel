@@ -132,5 +132,8 @@ export async function writeTree(db: Db, tree: ProjectTree): Promise<void> {
 export function serviceFor(env: RecordsEnv, now = Date.now(), versions: () => Promise<Versions> = requestVersions(env.DB)): { service: StudioService; db: Db; versions: () => Promise<Versions> } {
   const db = d1Db(env.DB);
   const access = dbAccess(db, env.STUDIO_ID, cachedAccess(env.DB, db, env.STUDIO_ID, versions));
-  return { db, versions, service: new StudioService({ db, studioId: env.STUDIO_ID, access, now: () => new Date(now), projects: () => readTree(db) }) };
+  // The project tree is one row that is parsed and sanitised each time it is read, and the service asks for it once per file when it checks a
+  // listing (a vault of a few hundred files meant a few hundred reads and parses in one request). A request sees one tree: read it once.
+  let tree: Promise<ProjectTree> | undefined;
+  return { db, versions, service: new StudioService({ db, studioId: env.STUDIO_ID, access, now: () => new Date(now), projects: () => (tree ??= readTree(db)) }) };
 }

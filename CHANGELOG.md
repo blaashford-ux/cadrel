@@ -2,6 +2,14 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (an idle Cadrel no longer keeps the Studio's server busy)
+
+- **Cause.** Two things made an app that was only left open ask the Studio's server for work, over and over. (1) Write checked every open file's lock **every 6 seconds**, and each check made the server list and permission-check the **whole vault**, once per open tab. (2) To answer that list the server checked each file against the permissions, and each check **read and parsed the project tree again**, so a vault of a few hundred files meant a few hundred database reads and JSON parses (the CPU limit) inside one request. The 3-minute background save also made a full pass even when nothing had changed anywhere.
+- **The server reads the project tree once per request** instead of once per file. Listing the vault is one tree read however many files there are.
+- **Lock checks** look every minute (not every 6 seconds), not at all while the window is hidden, and still when the window gets focus. Several tabs asked at once share one request to the Studio.
+- **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
+- Server code changed: use **Upgrade the server** for the CPU fix to take effect.
+
 ## 0.11.0 (People: invite anyone and give roles per project; a Read tab; invitation email)
 
 - **The Studio's server can now invite a person without giving them a role** (server revision 6, database step 19). The invitation names the person (name and email); if someone with that email is already in the Studio's people it is that person, otherwise they are added. Whoever joins with it is that person and **can see nothing until the owner gives them a role on a project**. Invitations that name a role still work as before.

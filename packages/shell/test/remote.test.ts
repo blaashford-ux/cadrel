@@ -582,3 +582,31 @@ describe('editorial records when the Studio cannot be reached', () => {
     expect(on.editorialOffline).toBeNull();
   });
 });
+
+describe('asking the Studio for the vault’s list', () => {
+  const listing = [{ id: 'f1', path: 'Book/ch1.md', currentVersion: 1, state: 'draft', hash: 'h', size: 1, lock: null, projectId: null }];
+  const fake = () => {
+    let asked = 0;
+    const inner = { list: async () => (asked++, await new Promise((r) => setTimeout(r, 5)), listing), checkOut: async () => ({ ok: true }) } as never;
+    return { inner, asked: () => asked };
+  };
+
+  it('answers asks that arrive together with one request, and asks again for a later one', async () => {
+    const f = fake();
+    const store = new OfflineAwareStore(f.inner, path.join(await tmp(), 'c.json'));
+    await Promise.all([store.list(), store.list(), store.list()]);
+    expect(f.asked()).toBe(1);
+    await store.list();
+    expect(f.asked()).toBe(2);
+  });
+
+  it('does not let an ask after this computer’s own change share an answer that was already on its way', async () => {
+    const f = fake();
+    const store = new OfflineAwareStore(f.inner, path.join(await tmp(), 'c.json'));
+    const before = store.list();
+    await store.checkOut({ fileId: 'f1', machine: 'pc' });
+    await store.list();
+    await before;
+    expect(f.asked()).toBe(2);
+  });
+});
