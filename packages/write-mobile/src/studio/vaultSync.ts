@@ -37,6 +37,8 @@ export interface StudioPort {
   rpc<T>(path: string[], args: unknown[]): Promise<T>;
   putBlob(hash: string, bytes: Uint8Array): Promise<void>;
   getBlob(hash: string): Promise<Uint8Array | null>;
+  /** The Studio's change counters (two rows on its server). Without it every look is a full pass. */
+  version?(): Promise<{ data: string }>;
 }
 
 /** The files the phone edits: text. The vault may hold more; those stay on the Studio. */
@@ -116,6 +118,8 @@ export class StudioSync implements SyncApi {
   private again = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private poll: ReturnType<typeof setInterval> | null = null;
+  /** The Studio's change counter as it was before the last clean pass: while it is still that, a pass would find nothing new on the Studio. */
+  private seenVersion: string | null = null;
   /** Who has each file, as the last pass saw it: what the editor and the check-out button say. */
   private views = new Map<string, { mine: boolean; by: string | null; since: string | null; version: number }>();
   private notesPushedAt = new Map<string, number>();
@@ -206,8 +210,19 @@ export class StudioSync implements SyncApi {
 
   startPolling(everyMs: number, shouldRun: () => boolean = () => true): void {
     this.stopPolling();
-    this.poll = setInterval(() => shouldRun() && void this.syncNow(), everyMs);
+    // Only to hear about changes made elsewhere: what is done here starts a pass by itself (syncSoon), so a look that finds the Studio's counter
+    // unchanged costs two rows instead of a pass that lists the whole vault and asks for people and projects as well.
+    this.poll = setInterval(() => {
+      if (shouldRun()) void this.look();
+    }, everyMs);
   }
+  private async look(): Promise<void> {
+    if (this.running || this.revoked) return;
+    const v = await this.o.port.version?.().then((x) => x.data, () => null);
+    if (v != null && v === this.seenVersion) return;
+    await this.syncNow();
+  }
+
   stopPolling(): void {
     if (this.poll) clearInterval(this.poll);
     this.poll = null;
@@ -237,8 +252,11 @@ export class StudioSync implements SyncApi {
     const started = Date.now();
     const sum: SyncSummary = { uploaded: 0, downloaded: 0, deleted: 0, conflicts: [], skipped: [], errors: [], rootCreated: false, durationMs: 0, checkedOut: [], unprotected: [] };
     this.set({ state: 'syncing', message: null, progress: null });
+    const before = (await this.o.port.version?.().then((x) => x.data, () => null)) ?? null; // read first: a change that lands during the pass is seen at the next look
+    this.seenVersion = null;
     try {
       await this.run(sum);
+      if (!sum.errors.length) this.seenVersion = before;
       this.data.lastSyncAt = this.now().getTime();
       await this.save();
       sum.durationMs = Date.now() - started;

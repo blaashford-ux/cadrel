@@ -8,6 +8,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **The server reads the project tree once per request** instead of once per file. Listing the vault is one tree read however many files there are.
 - **Lock checks no longer run on a timer.** A file's lock is looked at when it is opened, when the window gets focus, and again if a check-out or check-in is refused; the server decides who holds a lock, so a bar a little behind cannot cause harm. Several tabs asked at once share one request to the Studio.
 - **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
+- **The phone and Reader ask the Studio whether anything changed before each minute's look**, and make a full pass (list the vault, people, projects, every file) only when it has. What you change on the phone still goes at once.
 - Server code changed: use **Upgrade the server** for the CPU fix to take effect.
 
 ## 0.11.0 (People: invite anyone and give roles per project; a Read tab; invitation email)

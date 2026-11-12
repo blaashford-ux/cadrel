@@ -248,3 +248,25 @@ describe('when the Studio stops accepting the phone', () => {
     expect(calls).not.toHaveBeenCalled();
   });
 });
+
+describe('keeping up while the app is open', () => {
+  it('asks the Studio only whether anything changed, and makes a full pass only when something has', async () => {
+    const s = await studio();
+    await s.desk.add('Book 1/Draft.md', 'v1', 'pB1');
+    const p = await s.phone();
+    await p.sync.syncNow();
+    let lists = 0;
+    const vault = p.client.vault.bind(p.client);
+    (p.client as { vault: unknown }).vault = (m: string, a?: unknown) => (m === 'list' && lists++, vault(m, a));
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    p.sync.startPolling(20);
+    await wait(150);
+    expect(lists).toBe(0); // nothing changed on the Studio: no pass, however many looks
+    await s.desk.save('Book 1/Draft.md', 'v2 from the desk');
+    await wait(250);
+    p.sync.stopPolling();
+    expect(await p.fs.readText(`${ROOT}/Book 1/Draft.md`)).toBe('v2 from the desk');
+    expect(lists).toBeGreaterThanOrEqual(1);
+    expect(lists).toBeLessThanOrEqual(3);
+  });
+});
