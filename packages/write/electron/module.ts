@@ -307,7 +307,17 @@ const SYNC_TRIGGERS = new Set([
 const defaultRoot = () => host?.defaultRoot?.() ?? defaultRootFolder(app.getPath('home'));
 const projectsRoot = () => host?.projectsFolder?.() ?? settings.projects().rootFolder ?? defaultRoot();
 /** Puts the host's stage on a project's metadata (by folder name); without a host there is none. */
-const stagesNow = async (): Promise<ReadonlyMap<string, ProjectStage> | null> => (host?.projectStages ? host.projectStages().catch(() => new Map<string, ProjectStage>()) : null);
+let lastStages: ReadonlyMap<string, ProjectStage> | null = null;
+const stagesNow = async (): Promise<ReadonlyMap<string, ProjectStage> | null> => {
+  if (!host?.projectStages) return null;
+  // When the stages cannot be fetched (the Studio's server is away or erroring) the last ones are kept: a project must not lose its stage, and with
+  // it the edited / not edited dots, because one request failed.
+  try {
+    return (lastStages = await host.projectStages());
+  } catch {
+    return lastStages ?? new Map<string, ProjectStage>();
+  }
+};
 const stagedList = async (listing: RootListing): Promise<RootListing> => {
   const stages = await stagesNow();
   return stages ? { ...listing, projects: listing.projects.map((p: ProjectSummary) => ({ ...p, meta: { ...p.meta, stage: stages.get(path.basename(p.path)) ?? null } })) } : listing;

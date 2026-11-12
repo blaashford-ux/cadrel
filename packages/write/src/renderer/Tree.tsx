@@ -110,6 +110,11 @@ export function Tree(p: Props) {
               {r.kind !== 'chapter' && <Icon name={r.kind === 'dir' ? 'folder' : 'file'} size={15} className={'kind-' + r.kind} />}
               <span className="text">{r.label}</span>
             </span>
+            {r.notes !== undefined && (
+              <span className="notes" title={`${r.notes} open note${r.notes === 1 ? '' : 's'}`} aria-label={`${r.notes} open note${r.notes === 1 ? '' : 's'}`}>
+                {r.notes}
+              </span>
+            )}
             {p.isManuscript?.(r) && (
               <span className="ms-badge" title="Active manuscript: word-count goals follow this file" aria-label="active manuscript">
                 <Icon name="target" size={14} />

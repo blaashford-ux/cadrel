@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (notes in the tree; a note takes the edited mark off; the edited dots stay)
+
+- **Each chapter in the tree shows how many open notes it has**, in red, between its title and its word count. Notes by you, by an AI through the MCP server, and notes that came from another device are all counted; a chapter with none shows nothing.
+- **A note on a chapter marked as edited takes the mark off, without asking.** It happens when you add a note in Write and when an AI adds one with `add_notes` (the tool's result says `editedMarkRemoved`). Other chapters keep their marks.
+- **The red / green edited dots no longer disappear when the Studio's server has a bad moment.** The dots show only while the project's stage is an editing (review) stage, and the stage is fetched from the Studio. A failed fetch (the server erroring or out of CPU) was treated as "this project has no stages", which hid every dot until the next successful fetch. Now only a role that may not read workflows sees no stages; for any other failure Write keeps the stages it last had.
+
 ## Unreleased (an idle Cadrel no longer keeps the Studio's server busy)
 
 - **Cause.** Two things made an app that was only left open ask the Studio's server for work, over and over. (1) Write checked every open file's lock **every 6 seconds**, and each check made the server list and permission-check the **whole vault**, once per open tab. (2) To answer that list the server checked each file against the permissions, and each check **read and parsed the project tree again**, so a vault of a few hundred files meant a few hundred database reads and JSON parses (the CPU limit) inside one request. The 3-minute background save also made a full pass even when nothing had changed anywhere.

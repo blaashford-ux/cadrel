@@ -68,7 +68,7 @@ export class ProjectWork {
     const tree = await this.tree();
     const live = tree.projects.filter((p) => p.status !== 'archived' && !ancestorsOf(tree, p.id).some((a) => a.status === 'archived'));
     const liveIds = new Set(live.map((p) => p.id));
-    const [tasks, people, views] = await Promise.all([work.tasks({ projectIds: [...liveIds], state: 'any' }), this.people.peopleList(), this.stages ? this.stages.views() : Promise.resolve({})]);
+    const [tasks, people, views] = await Promise.all([work.tasks({ projectIds: [...liveIds], state: 'any' }), this.people.peopleList(), this.stages ? this.stages.views().catch(() => ({})) : Promise.resolve({})]);
     const today = new Date().toISOString().slice(0, 10);
     const shown = tasks.filter((t) => t.state !== 'cancelled');
     const inUse = new Map<string, { id: string; name: string; stages: { key: string; name: string; color: string; category: string }[] }>();

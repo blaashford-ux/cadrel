@@ -303,3 +303,27 @@ describe('finding outlines', () => {
     await expect(readOutline(ctx, 'Novel', '../x.md')).rejects.toThrow();
   });
 });
+
+describe('a note takes the edited mark off its chapter', () => {
+  const marks = async () => JSON.parse(await fs.readText('/books/Novel/.cadrel/edited.json')).files['Manuscript/Book.md'] as Record<string, { edited: boolean }>;
+  const flags = async () => (await listChapters(ctx, 'Novel', 'Manuscript/Book.md')).chapters.map((c) => c.edited);
+
+  it('unmarks only the chapters that were given a note, says so, and asks nothing', async () => {
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { through: 1 }, true);
+    expect(await flags()).toEqual([true, true]);
+    const [r] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'river' })]); // chapter Two
+    expect(r).toMatchObject({ ok: true, chapter: 1, editedMarkRemoved: true });
+    expect(await flags()).toEqual([true, false]);
+    expect((await marks()).Two.edited).toBe(false); // kept as an unmark, so a sync does not bring the mark back
+  });
+
+  it('says nothing about a chapter that was not marked, and leaves marks alone when no note was saved', async () => {
+    const [r] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'river' })]);
+    expect(r).not.toHaveProperty('editedMarkRemoved');
+    await setChaptersEdited(ctx, 'Novel', 'Manuscript/Book.md', { through: 1 }, true);
+    const [bad] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'not anywhere in the book' })]);
+    expect(bad).toMatchObject({ ok: false });
+    expect(await flags()).toEqual([true, true]);
+  });
+});
+

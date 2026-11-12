@@ -12,7 +12,7 @@ const note = (id: string, o: Partial<ShownItem> = {}): ShownItem => ({
   reviewerId: 'ai-claude', reviewerName: 'Claude', ...o,
 });
 const state = (items: ShownItem[]): ReviewState => ({
-  items, detached: new Set(), add: vi.fn(), selection: () => null, setStatus: vi.fn(async () => undefined), reply: vi.fn(async () => undefined), remove: vi.fn(async () => undefined),
+  items, all: items, detached: new Set(), add: vi.fn(), selection: () => null, setStatus: vi.fn(async () => undefined), reply: vi.fn(async () => undefined), remove: vi.fn(async () => undefined),
   accept: vi.fn(async () => null), focus: vi.fn(), reload: vi.fn(), setCategory: vi.fn(async () => undefined),
 });
 

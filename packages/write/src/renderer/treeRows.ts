@@ -18,6 +18,8 @@ export interface Row {
   words?: number;
   /** Editing stage: whether this chapter has been marked as edited (absent outside the Editing stage). */
   edit?: 'todo' | 'done';
+  /** A chapter: how many open notes are in it (absent when none). */
+  notes?: number;
   /** File marked for export. */
   marked?: boolean;
   /** File that can't be marked because another file with the same name owns the export settings. */
@@ -54,7 +56,9 @@ export function buildRows(
   docs: Map<string, MarkdownDoc>,
   filter: string,
   /** In the Editing stage: the edited-chapter ids of a file (relative lookups are the caller's business); null otherwise. */
-  editedIds: ((file: string) => readonly string[]) | null = null
+  editedIds: ((file: string) => readonly string[]) | null = null,
+  /** The open notes in each chapter of a file, by chapter number (a file with no notes may give nothing). */
+  noteCounts: ((file: string) => readonly number[] | undefined) | null = null
 ): Row[] {
   const filtered = filterTree(root, filter);
   if (!filtered || filtered.kind !== 'dir') return [];
@@ -86,6 +90,7 @@ export function buildRows(
         const doc = docs.get(n.path);
         const ids = doc && editedIds ? chapterIds(doc.chapters) : [];
         const done = editedIds ? new Set(editedIds(n.path)) : null;
+        const notes = noteCounts?.(n.path);
         doc?.chapters.forEach((c, i) =>
           rows.push({
             key: chapterKey(n.path, i),
@@ -98,6 +103,7 @@ export function buildRows(
             expanded: false,
             parentKey: n.path,
             words: countWords(c.raw),
+            ...(notes?.[i] ? { notes: notes[i] } : {}),
             ...(done ? { edit: done.has(ids[i]) ? ('done' as const) : ('todo' as const) } : {})
           })
         );

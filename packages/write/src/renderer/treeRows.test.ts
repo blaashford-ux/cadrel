@@ -110,3 +110,11 @@ describe('edit dots', () => {
     expect(chapters(buildRows(tree, open, docs, '', () => ['Two'])).map((r) => r.edit)).toEqual(['todo', 'done']);
   });
 });
+
+describe('open notes per chapter', () => {
+  it('puts the count on the chapters that have notes and on no others', () => {
+    const rows = buildRows(tree, new Set(['/r/Book', '/r/Book/story.md']), docs, '', null, (file) => (file === '/r/Book/story.md' ? [0, 3, 0] : undefined));
+    expect(rows.filter((r) => r.kind === 'chapter').map((r) => r.notes)).toEqual([undefined, 3, undefined]);
+    expect(buildRows(tree, new Set(['/r/Book', '/r/Book/story.md']), docs, '').some((r) => r.notes !== undefined)).toBe(false);
+  });
+});

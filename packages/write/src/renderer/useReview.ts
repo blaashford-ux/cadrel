@@ -51,6 +51,8 @@ export interface ShownItem extends ReviewItem {
 
 export interface ReviewState {
   items: ShownItem[];
+  /** The notes on every file of the project, not only the open one (the tree counts them per chapter). */
+  all: ShownItem[];
   /** Notes whose text can't be found in the open chapter. */
   detached: Set<string>;
   /** Saves a note on a selection captured earlier with `selection()`. */
@@ -139,6 +141,12 @@ export function useReview(
     return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [files, file]);
 
+  const all = useMemo<ShownItem[]>(() => {
+    const out: ShownItem[] = [];
+    for (const [id, f] of files) for (const i of f.items) if (i.status !== 'deleted') out.push({ ...i, reviewerId: id, reviewerName: f.reviewer.name });
+    return out;
+  }, [files]);
+
   // Draw the open notes in the editor (resolved and rejected ones fade out of the text).
   useEffect(() => {
     if (!review) return;
@@ -201,6 +209,7 @@ export function useReview(
 
   return {
     items,
+    all,
     detached,
     selection: () => review?.selection() ?? null,
     add(sel, kind, body, replacement, category) {

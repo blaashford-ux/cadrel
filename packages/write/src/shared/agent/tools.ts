@@ -232,6 +232,35 @@ async function readMarks(ctx: AgentContext, dir: string): Promise<EditedMarks> {
   }
 }
 
+async function writeMarks(ctx: AgentContext, dir: string, marks: EditedMarks): Promise<void> {
+  await ctx.fs.mkdir(`${dir}/.cadrel`, { recursive: true });
+  const target = marksFile(dir);
+  const tmp = `${target}.${Math.floor(Math.random() * 1e9)}.tmp`;
+  try {
+    await ctx.fs.writeText(tmp, JSON.stringify(marks, null, 2) + '\n');
+    await ctx.fs.rename(tmp, target);
+  } catch (e) {
+    await ctx.fs.rm(tmp, { force: true }).catch(() => undefined);
+    throw e;
+  }
+}
+
+/** Takes the edited mark off these chapters of a file (those that have one). Returns the chapters it changed. Call it inside the project's `serial`. */
+async function unmarkEdited(ctx: AgentContext, dir: string, l: Loaded, indices: Iterable<number>): Promise<number[]> {
+  const before = await readMarks(ctx, dir);
+  const ids = chapterIds(l.chapters);
+  const was = new Set(marksToMap(before)[l.rel] ?? []);
+  let map = marksToMap(before);
+  const changed: number[] = [];
+  for (const i of new Set(indices)) {
+    if (!was.has(ids[i])) continue;
+    map = withChapterEdited(map, l.rel, ids[i], false);
+    changed.push(i);
+  }
+  if (changed.length) await writeMarks(ctx, dir, applyMap(before, map, (ctx.now?.() ?? new Date()).getTime()));
+  return changed;
+}
+
 /**
  * Marks chapters of a file as edited, or unmarks them: the same marks as "Mark Edited" and "Unmark Edited" in the tree's
  * right-click menu. Name the chapters, or give `through` for every chapter from the first up to and including that one
@@ -255,19 +284,7 @@ export function setChaptersEdited(ctx: AgentContext, project: string, file: stri
       map = withChapterEdited(map, l.rel, ids[i], edited);
       changed.push(i);
     }
-    if (changed.length) {
-      const after = applyMap(before, map, (ctx.now?.() ?? new Date()).getTime());
-      await ctx.fs.mkdir(`${dir}/.cadrel`, { recursive: true });
-      const target = marksFile(dir);
-      const tmp = `${target}.${Math.floor(Math.random() * 1e9)}.tmp`;
-      try {
-        await ctx.fs.writeText(tmp, JSON.stringify(after, null, 2) + '\n');
-        await ctx.fs.rename(tmp, target);
-      } catch (e) {
-        await ctx.fs.rm(tmp, { force: true }).catch(() => undefined);
-        throw e;
-      }
-    }
+    if (changed.length) await writeMarks(ctx, dir, applyMap(before, map, (ctx.now?.() ?? new Date()).getTime()));
     return { file: l.rel, edited, changed: changed.map((i) => ({ index: i, title: l.chapters[i].title || '(before the first heading)' })), unchanged: new Set(targets).size - changed.length };
   });
 }
@@ -432,7 +449,7 @@ export interface NoteInput {
   chapter?: number;
 }
 
-export type NoteResult = { ok: true; id: string; chapter: number; chapterTitle: string; context: string } | { ok: false; error: string };
+export type NoteResult = { ok: true; id: string; chapter: number; chapterTitle: string; context: string; /** The chapter was marked as edited; a new note on it takes the mark off. */ editedMarkRemoved?: true } | { ok: false; error: string };
 
 // Same-length look-alikes, so a quote typed with straight quotes can be matched to the curly ones in the text.
 const loose = (s: string) => s.replace(/[‘’‚′]/g, "'").replace(/[“”„″]/g, '"').replace(/[–—−]/g, '-').replace(/[  ]/g, ' ');
@@ -528,6 +545,8 @@ export function addNotes(ctx: AgentContext, project: string, skill: string | und
     const loaded = new Map<string, Loaded>();
     const results: NoteResult[] = [];
     const created: ReviewItem[] = [];
+    const touched = new Map<string, Set<number>>();
+    const fileOf = new Map<NoteResult, string>();
     for (const input of notes) {
       try {
         if (file.items.filter((i) => i.status === 'open').length + created.length >= LIMITS.openNotesPerFile) throw new AgentError(`This reviewer already has ${LIMITS.openNotesPerFile} open notes in the project. Ask the author to resolve or clear some first.`);
@@ -536,13 +555,21 @@ export function addNotes(ctx: AgentContext, project: string, skill: string | und
         if (!l) loaded.set(rel, (l = await load(ctx, project, rel)));
         const { item, chapter, start } = build(ctx, l, input, reviewer, [...file.items, ...created]);
         created.push(item);
-        results.push({ ok: true, id: item.id, chapter: chapter.index, chapterTitle: chapter.title, context: chapter.flat.slice(Math.max(0, start - 30), start + item.anchor.quote.length + 30) });
+        touched.set(rel, (touched.get(rel) ?? new Set()).add(chapter.index));
+        const result: NoteResult = { ok: true, id: item.id, chapter: chapter.index, chapterTitle: chapter.title, context: chapter.flat.slice(Math.max(0, start - 30), start + item.anchor.quote.length + 30) };
+        fileOf.set(result, rel);
+        results.push(result);
       } catch (e) {
         if (!(e instanceof AgentError)) throw e;
         results.push({ ok: false, error: e.message });
       }
     }
     if (created.length) await makeReviews(ctx.fs).save(dir, reviewer.id, serializeReviewFile({ ...file, items: [...file.items, ...created] }));
+    // A chapter marked as edited that has just been given a note is not finished with: the mark comes off, as it does when the author adds a note.
+    for (const [rel, chapters] of touched) {
+      const cleared = new Set(await unmarkEdited(ctx, dir, loaded.get(rel)!, chapters).catch(() => []));
+      for (const r of results) if (r.ok && fileOf.get(r) === rel && cleared.has(r.chapter)) r.editedMarkRemoved = true;
+    }
     return results;
   });
 }

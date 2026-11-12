@@ -345,3 +345,13 @@ describe('gates that ask for finished tasks and sign-off', () => {
     expect(plan.tasks.map((t) => t.title).sort()).toEqual(['Late one', 'Launch']); // cancelled and archived work is not planned
   });
 });
+
+describe('when the workflows cannot be fetched', () => {
+  it('is an error for a failure, so the last stages are kept, and no stages only for a role that may not read them', async () => {
+    const { PermissionDenied } = await import('@cadrel/service');
+    const studio = { studio: { read: async () => ({ tree: { projects: [{ id: 'p1', name: 'Book', workflowId: 'w1', stage: 'editing', parentId: null, kind: 'Book' }], links: [] } }) } } as never;
+    const failing = (e: unknown) => new ProjectStages(studio, () => ({ list: async () => { throw e; } }) as never);
+    await expect(failing(new Error('Worker exceeded CPU')).views()).rejects.toThrow(/CPU/);
+    expect(await failing(new PermissionDenied('task.read', 'no role')).views()).toEqual({});
+  });
+});

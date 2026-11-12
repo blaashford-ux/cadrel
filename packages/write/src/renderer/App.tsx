@@ -237,6 +237,14 @@ export function App() {
   );
   const reviewRef = useRef(review);
   reviewRef.current = review;
+  // A new note on a chapter marked as edited means it is not finished with: the mark comes off, without asking.
+  const reviewPanel: typeof review = {
+    ...review,
+    add: (sel, kind, ...rest) => {
+      review.add(sel, kind, ...rest);
+      if (activeTab && (kind === 'comment' || sel.oneBlock) && ws.isChapterEdited(activeTab.file, activeTab.chapter)) void ws.setChapterEdited(activeTab.file, activeTab.chapter, false);
+    }
+  };
   const openNote = (kind: 'comment' | 'suggestion', sel: { anchor: Anchor; oneBlock: boolean }) => {
     setShowReview(true);
     setNoteRequest((r) => ({ id: (r?.id ?? 0) + 1, kind, sel }));
@@ -321,12 +329,38 @@ export function App() {
     if (!caps.windowChrome && s.root && !s.activeId) setDrawer(true);
   }, [caps.windowChrome, s.root, s.activeId]);
 
+  // The open notes in each chapter, for the tree: every note of the project is placed in the chapter its text is in. Worked out from the
+  // deferred notes and only for the files the tree shows, so typing is never held up by it.
+  const allNotes = useDeferredValue(review.all);
+  const noteCounts = useMemo(() => {
+    const open = allNotes.filter((i) => i.status === 'open');
+    if (!open.length || !s.project) return null;
+    const byFile = new Map<string, typeof open>();
+    for (const i of open) byFile.set(i.file, [...(byFile.get(i.file) ?? []), i]);
+    const done = new Map<string, number[] | undefined>();
+    return (file: string): number[] | undefined => {
+      if (done.has(file)) return done.get(file);
+      const mine = byFile.get(relativeTo(s.project!.path, file));
+      const doc = mine && s.docs.get(file);
+      let counts: number[] | undefined;
+      if (mine && doc) {
+        const texts = doc.chapters.map((c) => c.raw);
+        counts = texts.map(() => 0);
+        for (const n of mine) {
+          const at = chapterForNote(texts, n.anchor, -1);
+          if (at !== null) counts[at]++;
+        }
+      }
+      done.set(file, counts);
+      return counts;
+    };
+  }, [allNotes, s.docs, s.project?.path]);
   const rows = useMemo(
     () =>
       s.root
-        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.stage?.category === 'review' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null)
+        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.stage?.category === 'review' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts)
         : [],
-    [s.root, s.expanded, s.docs, filter, s.project]
+    [s.root, s.expanded, s.docs, filter, s.project, noteCounts]
   );
   const orphan = useMemo(
     () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
@@ -1491,7 +1525,7 @@ export function App() {
 
       {showReview && projectPath && activeTab?.mode === 'visual' && (
         <ReviewPanel
-          state={review}
+          state={reviewPanel}
           me={meHere}
           role={isReviewer ? 'reviewer' : 'owner'}
           notice={reviewNotice}

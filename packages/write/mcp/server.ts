@@ -234,7 +234,7 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
       description:
         `Add up to ${LIMITS.notesPerCall} comments and suggestions in one call. Each note is checked separately: valid ones are saved and appear in the author's Notes panel, ` +
         'and any that fail come back with the reason (quote not found, quote matches several places, and so on) so you can fix and resend just those. ' +
-        'A suggestion must sit inside one paragraph. Notes never change the manuscript.',
+        'A suggestion must sit inside one paragraph. Notes never change the manuscript, but a chapter the author had marked as edited loses that mark when it is given a note (the result says so), because it is no longer finished.',
       inputSchema: { project, book, skill, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },

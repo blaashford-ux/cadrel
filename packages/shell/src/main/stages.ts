@@ -7,6 +7,7 @@
  * test/stages.test.ts.
  */
 import { childrenOf, closedBookIds, getProject, initialStage, linksOf, subtreeIds, viewLevel, type ProjectFacts, type StageCategory, type WorkflowDraft, type WorkflowRecord, type WorkflowUsage } from '@cadrel/kernel';
+import { PermissionDenied } from '@cadrel/service';
 import type { StudioService } from './studio';
 import type { StudioWork, StudioWorkflows } from './people';
 
@@ -96,7 +97,9 @@ export class ProjectStages {
   async views(): Promise<Record<string, ProjectStageView>> {
     const wfs = this.workflows();
     if (!wfs) return {};
-    const list = await wfs.list().catch(() => []); // a role that may not read the workflows sees no stages, not an error
+    // A role that may not read the workflows sees no stages, not an error. Any other failure (the Studio's server unreachable or erroring) is not
+    // "no stages": it is thrown, so a caller keeps what it last knew instead of showing every project as if it had none.
+    const list = await wfs.list().catch((e) => (e instanceof PermissionDenied ? [] : Promise.reject(e)));
     const out: Record<string, ProjectStageView> = {};
     for (const p of (await this.studio.studio.read()).tree.projects) {
       const wf = p.workflowId ? list.find((w) => w.id === p.workflowId) : undefined;
