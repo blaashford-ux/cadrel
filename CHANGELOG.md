@@ -6,7 +6,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 - **Cause.** Two things made an app that was only left open ask the Studio's server for work, over and over. (1) Write checked every open file's lock **every 6 seconds**, and each check made the server list and permission-check the **whole vault**, once per open tab. (2) To answer that list the server checked each file against the permissions, and each check **read and parsed the project tree again**, so a vault of a few hundred files meant a few hundred database reads and JSON parses (the CPU limit) inside one request. The 3-minute background save also made a full pass even when nothing had changed anywhere.
 - **The server reads the project tree once per request** instead of once per file. Listing the vault is one tree read however many files there are.
-- **Lock checks** look every minute (not every 6 seconds), not at all while the window is hidden, and still when the window gets focus. Several tabs asked at once share one request to the Studio.
+- **Lock checks no longer run on a timer.** A file's lock is looked at when it is opened, when the window gets focus, and again if a check-out or check-in is refused; the server decides who holds a lock, so a bar a little behind cannot cause harm. Several tabs asked at once share one request to the Studio.
 - **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
 - Server code changed: use **Upgrade the server** for the CPU fix to take effect.
 
