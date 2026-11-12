@@ -78,10 +78,17 @@ describe('recordSnapshot', () => {
 
 describe('averages', () => {
   const p = build([['2026-10-01', 10000], ['2026-10-02', 10500], ['2026-10-03', 11500], ['2026-10-04', 11500], ['2026-10-05', 12400]]);
-  it('3-day and 5-day averages count zero days and include today', () => {
-    // written: 10-02 500, 10-03 1000, 10-04 0, 10-05 900
-    expect(averageWritten(p, '2026-10-05', 3)).toBeCloseTo((1000 + 0 + 900) / 3);
-    expect(averageWritten(p, '2026-10-05', 5)).toBeCloseTo((500 + 1000 + 0 + 900 + 0) / 5); // 10-01 had no writing
+  it('3-day and 5-day averages are of the finished days before today, zero days counted', () => {
+    // written: 10-02 500, 10-03 1000, 10-04 0, and today (10-05) 900, which is left out
+    expect(averageWritten(p, '2026-10-05', 3)).toBeCloseTo((500 + 1000 + 0) / 3);
+    expect(averageWritten(p, '2026-10-05', 5)).toBeCloseTo((500 + 1000 + 0) / 5); // 09-30 and 10-01 had no writing
+  });
+  it('do not move while today is written', () => {
+    const before = build([['2026-10-01', 10000], ['2026-10-02', 10800], ['2026-10-03', 11600], ['2026-10-04', 11600]]);
+    const morning = recordSnapshot(before, '2026-10-05', 11679);
+    const evening = recordSnapshot(morning, '2026-10-05', 13000);
+    expect(averageWritten(morning, '2026-10-05', 3)).toBe(averageWritten(evening, '2026-10-05', 3));
+    expect(averageWritten(morning, '2026-10-05', 5)).toBe(averageWritten(evening, '2026-10-05', 5));
   });
   it('days before tracking began count as zero', () => {
     expect(averageWritten(build([['2026-10-05', 100]]), '2026-10-05', 5)).toBe(0);
@@ -104,13 +111,18 @@ describe('goal maths', () => {
   });
   it('estimated completion at a pace, with ahead / behind the deadline', () => {
     const e = projectCompletion(goal, 20000, 1000, '2026-10-05');
-    expect(e).toEqual({ days: 70, date: '2026-12-14', vsDeadline: 17 });
+    expect(e).toEqual({ days: 70, date: '2026-12-13', vsDeadline: 18 }); // today is day 1: 70 days end on 12-13
     const late = projectCompletion(goal, 20000, 500, '2026-10-05');
     expect(late.days).toBe(140);
     expect(late.vsDeadline).toBeLessThan(0);
     expect(projectCompletion(goal, 20000, 0, '2026-10-05')).toEqual({ days: null, date: null, vsDeadline: null });
     expect(projectCompletion(goal, 20000, -50, '2026-10-05').date).toBeNull();
     expect(projectCompletion(goal, 90000, 0, '2026-10-05').days).toBe(0);
+  });
+  it('lands exactly on the deadline when the pace is exactly what is needed', () => {
+    const exact: Goal = { targetWords: 8800, startDate: '2026-10-05', targetDate: '2026-12-31' };
+    expect(requiredPerDay(exact, 0, '2026-10-05')).toBe(100);
+    expect(projectCompletion(exact, 0, 100, '2026-10-05')).toEqual({ days: 88, date: '2026-12-31', vsDeadline: 0 });
   });
   it('rounds the day count up', () => {
     expect(projectCompletion({ ...goal, targetWords: 1001, targetDate: null }, 0, 1000, '2026-10-05').days).toBe(2);
@@ -121,12 +133,22 @@ describe('goal maths', () => {
     expect(s.writtenToday).toBe(1500);
     expect(s.remaining).toBe(76000);
     expect(s.percent).toBe(16);
-    expect(s.avg3).toBeCloseTo((1500 + 0 + 1500) / 3);
-    expect(s.avg5).toBeCloseTo((1000 + 1500 + 0 + 1500) / 5);
-    expect(s.eta3.days).toBe(Math.ceil(76000 / s.avg3));
-    expect(s.eta5.days).toBe(Math.ceil(76000 / s.avg5));
-    expect(s.requiredPerDay).toBe(Math.ceil(76000 / 88));
+    expect(s.avg3).toBeCloseTo((1000 + 1500 + 0) / 3); // 10-02 to 10-04: today is not counted
+    expect(s.avg5).toBeCloseTo((0 + 0 + 1000 + 1500 + 0) / 5);
+    // today began at 12,500 words, so 77,500 were to go: that is what today and the days after it are worked out from
+    expect(s.eta3.days).toBe(Math.ceil(77500 / s.avg3));
+    expect(s.eta5.days).toBe(Math.ceil(77500 / s.avg5));
+    expect(s.requiredPerDay).toBe(Math.ceil(77500 / 88));
     expect(s.done).toBe(false);
+  });
+  it('needed per day does not move while today is written, and falls after a day that beat it', () => {
+    const base: Goal = { targetWords: 80000, startDate: '2026-11-01', targetDate: '2027-02-01' };
+    const yesterday = build([['2026-11-10', 17000], ['2026-11-11', 18015]]);
+    const day = (p: Progress, total: number, today: string) => summarize(recordSnapshot(p, today, total), base, total, today).requiredPerDay;
+    const at = [18015, 18094, 18800, 19400].map((t) => day(yesterday, t, '2026-11-12'));
+    expect(new Set(at).size).toBe(1); // the same all day
+    const tomorrow = day(recordSnapshot(yesterday, '2026-11-12', 19400), 19400, '2026-11-13');
+    expect(tomorrow).toBeLessThan(at[0]!); // 1,385 written against ~756 needed: tomorrow needs less
   });
 });
 

@@ -243,7 +243,7 @@ export function ProgressDialog({ project, progress, summary, onClose, onSetGoal 
 
 function avg(series: { date: string; written: number }[], today: string, n: number): number {
   let sum = 0;
-  for (let i = 0; i < n; i++) sum += series.find((d) => d.date === addDays(today, -i))?.written ?? 0;
+  for (let i = 1; i <= n; i++) sum += series.find((d) => d.date === addDays(today, -i))?.written ?? 0; // finished days only: not today
   return sum / n;
 }
 

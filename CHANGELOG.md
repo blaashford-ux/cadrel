@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (Progress: the averages and the daily target no longer move while you write)
+
+- **The 3-day and 5-day averages are of finished days only** (yesterday back). Today was being counted, so the averages fell every morning when today had only a few words in it, and rose as you wrote.
+- **Needed per day is worked out from where today began**, so it stays the same all day (the status bar's daily-target bar too, which used to run ahead because its target shrank as you wrote) and falls the next day if you beat it. It used to shrink as you wrote and then jump back up the next morning.
+- **The estimated finish date was a day late.** It counted today as a day for the deadline but not for the estimate, so being exactly on pace read "1 day behind". It now lands on the deadline.
+
 ## Unreleased (notes in the tree; a note takes the edited mark off; the edited dots stay)
 
 - **Each chapter in the tree shows how many open notes it has**, in red, between its title and its word count. Notes by you, by an AI through the MCP server, and notes that came from another device are all counted; a chapter with none shows nothing.

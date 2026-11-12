@@ -116,10 +116,13 @@ export const writtenOn = (p: Progress, date: string): number => {
   return r ? r.end - r.start : 0;
 };
 
-/** Average words written per calendar day over the `n` days ending on `today` (inclusive), zero days counted. */
+/**
+ * Average words written per calendar day over the `n` finished days before `today` (yesterday back), zero days counted. Today is left out: it is
+ * not finished, so counting it would pull the average down every morning and up every evening.
+ */
 export function averageWritten(p: Progress, today: string, n: number): number {
   let sum = 0;
-  for (let i = 0; i < n; i++) sum += writtenOn(p, addDays(today, -i));
+  for (let i = 1; i <= n; i++) sum += writtenOn(p, addDays(today, -i));
   return sum / n;
 }
 
@@ -163,8 +166,9 @@ export function daysLeft(goal: Goal, today: string): number | null {
 }
 
 /**
- * Words per day needed from today to finish by the deadline (today counts as a day). Null without a deadline;
- * 0 when the goal is met; the whole remainder if the deadline has passed.
+ * Words per day needed from today to finish by the deadline (today counts as a day). `total` is the manuscript's words at the START of today
+ * (see `summarize`), so the figure does not move while today is being written: it falls only when a day ends with more written than it asked for.
+ * Null without a deadline; 0 when the goal is met; the whole remainder if the deadline has passed.
  */
 export function requiredPerDay(goal: Goal, total: number, today: string): number | null {
   const left = daysLeft(goal, today);
@@ -183,13 +187,16 @@ export interface Projection {
   vsDeadline: number | null;
 }
 
-/** When the goal would be reached at `perDay` words a day starting today. */
+/**
+ * When the goal would be reached at `perDay` words a day. `total` is the words at the start of today and today is the first day, counted the way
+ * `daysLeft` counts it (the deadline is a day too), so being exactly on pace lands exactly on the deadline.
+ */
 export function projectCompletion(goal: Goal, total: number, perDay: number, today: string): Projection {
   const rem = wordsRemaining(goal, total);
   if (rem === 0) return { days: 0, date: today, vsDeadline: goal.targetDate ? daysBetween(today, goal.targetDate) : null };
   if (!(perDay > 0)) return { days: null, date: null, vsDeadline: null };
   const days = Math.ceil(rem / perDay);
-  const date = addDays(today, days);
+  const date = addDays(today, days - 1);
   return { days, date, vsDeadline: goal.targetDate ? daysBetween(date, goal.targetDate) : null };
 }
 
@@ -257,18 +264,23 @@ export interface Summary {
 export function summarize(p: Progress, goal: Goal, total: number, today: string): Summary {
   const avg3 = averageWritten(p, today, 3);
   const avg5 = averageWritten(p, today, 5);
+  const writtenToday = writtenOn(p, today);
+  // What today asks for is worked out from where the day began, so it stays put while today is written, and the averages are of finished days.
+  const startOfDay = Math.max(0, total - writtenToday);
+  const done = total >= goal.targetWords;
+  const eta = (perDay: number): Projection => (done ? projectCompletion(goal, total, perDay, today) : projectCompletion(goal, Math.min(startOfDay, goal.targetWords - 1), perDay, today));
   return {
     total,
-    writtenToday: writtenOn(p, today),
+    writtenToday,
     remaining: wordsRemaining(goal, total),
     percent: goal.targetWords > 0 ? Math.min(100, Math.round((total / goal.targetWords) * 100)) : 0,
     daysLeft: daysLeft(goal, today),
-    requiredPerDay: requiredPerDay(goal, total, today),
+    requiredPerDay: done ? 0 : requiredPerDay(goal, Math.min(startOfDay, goal.targetWords - 1), today),
     avg3,
     avg5,
-    eta3: projectCompletion(goal, total, avg3, today),
-    eta5: projectCompletion(goal, total, avg5, today),
-    done: total >= goal.targetWords
+    eta3: eta(avg3),
+    eta5: eta(avg5),
+    done
   };
 }
 
