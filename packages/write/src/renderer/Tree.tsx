@@ -104,7 +104,7 @@ export function Tree(p: Props) {
               <span className="caret" aria-hidden />
             )}
             {r.edit && (
-              <span className={`edit-dot ${r.edit}`} title={r.edit === 'done' ? 'Edited' : 'Not yet edited'} aria-label={r.edit === 'done' ? 'edited' : 'not yet edited'} />
+              <span className={`edit-dot ${r.edit}`} title={r.edit === 'todo' ? 'Not yet edited' : r.edit === 'other' ? 'Marked as edited (the project is not in the Editing stage)' : 'Edited'} aria-label={r.edit === 'todo' ? 'not yet edited' : 'edited'} />
             )}
             <span className="label">
               {r.kind !== 'chapter' && <Icon name={r.kind === 'dir' ? 'folder' : 'file'} size={15} className={'kind-' + r.kind} />}

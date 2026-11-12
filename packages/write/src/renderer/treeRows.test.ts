@@ -118,3 +118,14 @@ describe('open notes per chapter', () => {
     expect(buildRows(tree, new Set(['/r/Book', '/r/Book/story.md']), docs, '').some((r) => r.notes !== undefined)).toBe(false);
   });
 });
+
+describe('edited dots by stage', () => {
+  it('are green in the Editing stage and orange in any other, red when not edited', () => {
+    const open = new Set(['/r/Book', '/r/Book/story.md']);
+    const ids = (file: string) => (file === '/r/Book/story.md' ? ['One'] : []);
+    const dots = (editing: boolean) => buildRows(tree, open, docs, '', ids, null, editing).filter((r) => r.kind === 'chapter').map((r) => r.edit);
+    expect(dots(true)).toEqual(['todo', 'done', 'todo']);
+    expect(dots(false)).toEqual(['todo', 'other', 'todo']);
+  });
+});
+

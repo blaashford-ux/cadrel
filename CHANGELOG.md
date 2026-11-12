@@ -6,6 +6,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 - **Each chapter in the tree shows how many open notes it has**, in red, between its title and its word count. Notes by you, by an AI through the MCP server, and notes that came from another device are all counted; a chapter with none shows nothing.
 - **A note on a chapter marked as edited takes the mark off, without asking.** It happens when you add a note in Write and when an AI adds one with `add_notes` (the tool's result says `editedMarkRemoved`). Other chapters keep their marks.
+- **The edited dots now show in every stage, not only Editing.** Not yet edited is red; edited is **green in the Editing stage and orange in any other stage**. The right-click Mark Edited / Unmark Edited items were already there in every stage. Only the Editing stage still asks, when you leave a chapter, whether to mark it edited.
 - **The red / green edited dots no longer disappear when the Studio's server has a bad moment.** The dots show only while the project's stage is an editing (review) stage, and the stage is fetched from the Studio. A failed fetch (the server erroring or out of CPU) was treated as "this project has no stages", which hid every dot until the next successful fetch. Now only a role that may not read workflows sees no stages; for any other failure Write keeps the stages it last had.
 
 ## Unreleased (an idle Cadrel no longer keeps the Studio's server busy)

@@ -639,9 +639,11 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .line-no.one { color: var(--fg); opacity: 1; }
 .frame.mobile .line-gutter { left: calc(100% + 3px); width: 26px; font-size: 10px; }
 
-/* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited) ---- */
+/* ---- Editing stage: a dot before each chapter (empty red = not yet edited, filled green = edited in the Editing stage, filled orange = edited in another stage) ---- */
 .edit-dot { flex: none; box-sizing: border-box; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--danger); background: transparent; }
 .edit-dot.done { border-color: #3fb27f; background: #3fb27f; }
+/* marked as edited while the project is in any stage other than Editing */
+.edit-dot.other { border-color: #e08a2c; background: #e08a2c; }
 
 /* Project/template settings: the inherited app values are shown, but can't be changed until Override is ticked */
 .defaults-fields { border: 0; margin: 0; padding: 0; min-width: 0; }

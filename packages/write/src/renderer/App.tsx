@@ -358,7 +358,7 @@ export function App() {
   const rows = useMemo(
     () =>
       s.root
-        ? buildRows(s.root, s.expanded, s.docs, filter, s.project?.meta.stage?.category === 'review' ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts)
+        ? buildRows(s.root, s.expanded, s.docs, filter, s.project ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts, s.project?.meta.stage?.category === 'review')
         : [],
     [s.root, s.expanded, s.docs, filter, s.project, noteCounts]
   );

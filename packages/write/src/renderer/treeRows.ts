@@ -17,7 +17,7 @@ export interface Row {
   /** Word count, for chapters of files that have been read. */
   words?: number;
   /** Editing stage: whether this chapter has been marked as edited (absent outside the Editing stage). */
-  edit?: 'todo' | 'done';
+  edit?: 'todo' | 'done' | 'other';
   /** A chapter: how many open notes are in it (absent when none). */
   notes?: number;
   /** File marked for export. */
@@ -58,7 +58,9 @@ export function buildRows(
   /** In the Editing stage: the edited-chapter ids of a file (relative lookups are the caller's business); null otherwise. */
   editedIds: ((file: string) => readonly string[]) | null = null,
   /** The open notes in each chapter of a file, by chapter number (a file with no notes may give nothing). */
-  noteCounts: ((file: string) => readonly number[] | undefined) | null = null
+  noteCounts: ((file: string) => readonly number[] | undefined) | null = null,
+  /** Whether the project is in an editing (review) stage: an edited chapter is green there, and orange in any other stage. */
+  editing = true
 ): Row[] {
   const filtered = filterTree(root, filter);
   if (!filtered || filtered.kind !== 'dir') return [];
@@ -104,7 +106,7 @@ export function buildRows(
             parentKey: n.path,
             words: countWords(c.raw),
             ...(notes?.[i] ? { notes: notes[i] } : {}),
-            ...(done ? { edit: done.has(ids[i]) ? ('done' as const) : ('todo' as const) } : {})
+            ...(done ? { edit: done.has(ids[i]) ? (editing ? ('done' as const) : ('other' as const)) : ('todo' as const) } : {})
           })
         );
       }
