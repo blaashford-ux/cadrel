@@ -2,7 +2,7 @@
 
 > **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
 
-Status (1 November 2026, against `dev` 0.6.1; the latest stable release is 0.5.0): **M0 and M1 are built and released** (as 0.2.0 and 0.3.0). M2 is built and tested against the real Studio server code (not yet against a Cloudflare account): the Studio's records and vault live on its server and every check is made there, with a few listed gaps. M3 onward are not started. Releases 0.4.0 to 0.6.1 and Cadrel Reader are work outside the milestone list, so **version numbers no longer match milestone numbers** (see section 3). Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
+Status (15 November 2026, against 0.12.1, the latest stable release): **M0, M1, M2 and M3 are built and released**, and the owner has been using the apps on real Studios, real Cloudflare accounts, a second computer and phones, so the walkthroughs that were open earlier are treated as done in practice (though none has a recorded run). M4 onward are not started. Much work outside the milestone list has shipped since 0.6.1 (see "Released outside the milestones"), so **version numbers do not match milestone numbers** (see section 3). Still open from M2: the code-signed installer, which is **deferred on purpose because a certificate costs money**. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
 
 ## 1. What Cadrel is
 
@@ -61,12 +61,12 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 | | Milestone | Status |
 |---|---|---|
 | M0 | One app | Built and released as 0.2.0. |
-| M1 | Shared records | Built and released as 0.3.0. The manual exit test (`docs/M1-EXIT-TEST.md`, on a real Windows build) has no recorded run. |
-| M2 | The team vault on Cloudflare | Built, in development (`dev`, not yet released): records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records. Not done: a code-signed installer (needs a certificate), updates from R2, replicating the file store, the security policy page, separate role dashboards, any run against a real Cloudflare account. |
-| M3 | Editorial | Built, in development (`dev`, not yet released): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Tested end to end (`m3Exit.test.ts`) against the real Worker code; the manual walk-through on Windows is [M3-EXIT-TEST.md](M3-EXIT-TEST.md) and has no recorded run. See [M3-PLAN.md](M3-PLAN.md) for what is not built. |
+| M1 | Shared records | Built and released as 0.3.0. In daily use on Windows; `docs/M1-EXIT-TEST.md` has no recorded run. |
+| M2 | The team vault on Cloudflare | **Built and released** (0.7.0 on, in use on real Studios). Records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records; invitations and People page (0.11.0). Not done: **code-signed installer (deferred, needs a paid certificate)**, updates from R2 (updates come from GitHub releases), replicating the file store, the security policy page, separate Author / Editor / Director dashboards, live updates. |
+| M3 | Editorial | **Built and released** (0.7.0 on): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Automated exit test `m3Exit.test.ts`; `M3-EXIT-TEST.md` has no recorded run. Not built: assistant editorial tools for a Studio whose records are on its server, editor dashboard. See [M3-PLAN.md](M3-PLAN.md). |
 | M4 | Canon and continuity | Not started as specified. |
 | M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
-| not in the plan | Releases 0.4.0 to 0.6.1 and Cadrel Reader | Built; see "Released outside the milestones" after M1. |
+| not in the plan | Releases 0.4.0 to 0.12.1, Android and Cadrel Reader | Built; see "Released outside the milestones". |
 
 ### M0: One app (shipped as 0.2.0)
 Merge and harmonise. No new features; behaviour of both apps is unchanged and their tests are the proof.
@@ -141,12 +141,18 @@ The portal for everything about a **published** book, so a person does not hunt 
 **Build order inside M1:** (1) docs and this plan; (2) Backup and Import, because it protects every later migration and the existing users' data; (3) Finance split, a behaviour-preserving move; (4) My Books on top of the split; (5) the shared-records work listed above, with Catalogue giving My Books its list. The shell's page list becomes: Home, **My Books**, Dashboard, Projects, Notes, Write, Market, **Finance**, Assistants, Admin, Profile, Settings.
 
 
-### Released outside the milestones (0.4.0 to 0.6.1, Cadrel Reader)
+### Released outside the milestones (0.4.0 to 0.12.1, Android, Cadrel Reader)
 
 These were not in the milestone list. They shipped as Minor releases, which is why version numbers no longer match milestones. Detail is in [CHANGELOG.md](../CHANGELOG.md).
 - **0.4.0 and 0.5.0**: renaming Market categories, assistant tools for tags and note topics, Market's queue filter for new additions, **six authoring skills** in the AI Kit and the MCP server (Series Developer, Premise to Outline, Outline to Blurb, Outline to Keywords, Timeline Tracker, LitRPG Tracker, beside the three editing passes) with project-file tools, and a **development build that installs beside the stable one** on the same data (Cadrel Dev).
 - **0.6.0 and 0.6.1** (so far dev builds): the **project and book scope** (the rail shows one project and book and Write, Market, Notes, Planner, Dashboard, My Books and Home follow it); stages belong to books, with Close book and a first book for a standalone; **projects hidden from people not assigned to them**, with tasks, sign-offs and decisions following who is assigned; associations on the project page (Market categories for a whole project or one book, comparable titles, people with roles); one ledger file per series with a carried timeline and a permanent HTML page per chapter; the assistant can create and manage projects and books, give a project its manuscript folder and link books; Market captures can be copied across Studios.
-- **Cadrel Reader 0.9.0**: a separate app for beta readers (read an invited manuscript, comment and suggest; reaches the author through Google Drive). Its own installer, data folder and update feed. This is the beta-reader side of the sharing decision above, not the editorial module.
+- **Cadrel Reader** (now 0.13.0): a separate app for beta readers with its own installer, data folder and update feed. It began (0.9.0) reaching the author through Google Drive; since 0.10.0 it reads and comments **through the Studio**, and the Google Drive review sharing was removed. This is the beta-reader side of the sharing decision above, not the editorial module.
+- **0.7.x**: Android apps (Write and Reader; phones join a Studio as members and link by the owner's sign-in), the assistant reaching more of a series, and fixes for upgrading a Studio's server.
+- **0.8.0 and 0.8.1: one folder.** A person's projects are the vault; the phone's first sync of a large vault was fixed.
+- **0.9.0 and 0.9.1: check out, edit, check in.** Files are read-only until checked out (the "read-only file states" that M1 listed as not built); administrators can release a lock from the check-out bar; the phone can check out, edit and check in; notes travel with the project; the assistant says why a read-only file was not edited.
+- **0.10.0: Beta Readers as a Studio role**, with per-chapter Manage Beta Read switches, chapter-filtered text served by the Studio, and per-reader notes taken into the author's Notes panel; a fix for the server running out of CPU on large vaults; a fixed burn-down line.
+- **0.11.0: People.** A People page (invite by name and email, roles per project), a People on this project card, a Read tab for Studios you were invited to, and optional invitations emailed by the Studio itself through Cloudflare Email Service. Closes the M2 "invitations and sign-in mapping" gap in practice.
+- **0.12.0 and 0.12.1:** note counts per chapter, edited dots in every stage, steadier Progress figures, a Studio server that no longer works while idle (server revision 7), and book export settings that save again on Windows.
 
 ### M2: The team vault on Cloudflare
 Where it becomes a studio tool.
@@ -251,4 +257,11 @@ Read-only look through the connector:
 
 ## 7. Next step
 
-M0 and M1 are released, and M2 is built in `dev` as 0.7.0 (in development). Before M3 the open items are, in the order I would take them: (1) **run M2 against a real Cloudflare account**: build a Studio, move a Studio's records to it, join from a second computer and walk the exit test by hand, because everything so far is tested against a stand-in; (2) run the M1 walkthrough ([M1-EXIT-TEST.md](M1-EXIT-TEST.md)) on a real Windows build; (3) give the release workflow a code-signing certificate; (4) decide whether 0.6.0 and 0.7.0 are released as stable versions. Then **M3: Editorial**. Which comes first is a call for the owner.
+M0 to M3 are released (0.12.1 is the latest) and have been used on real Studios, so the earlier "run it against a real Cloudflare account" item is done in practice. The code-signed installer is deferred until a certificate is worth paying for. What is next, in the order I would take it:
+
+1. **Close the small M2 and M3 gaps that a team notices**: separate Author, Editor and Director dashboards (Home and the Dashboard read the records already); the assistant's record and editorial tools for a Studio whose records are on its server; the security policy page. Cut by what the Studio actually asks for.
+2. **Record a run of the M1 and M3 exit tests** on a current build if a written record matters; they have automated cover but no recorded manual run.
+3. **M4: Canon and continuity.** Not started as specified. The timeline and LitRPG trackers and the Series Developer skill already supply a ledger per series and a series bible as files; the versioned bible, anchored facts, change proposals and the continuity checker (exit: Book 4 checked against Books 1 to 3) are the work.
+4. Then M5 (Art, assets and Preflight) onward, in order, only as the Studio needs each.
+
+Deferred: code signing, updates from R2, replicating the file store. Which of 1 and 3 comes first is a call for the owner.
