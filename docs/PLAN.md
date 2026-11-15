@@ -259,7 +259,7 @@ Read-only look through the connector:
 
 M0 to M3 are released (0.12.1 is the latest) and have been used on real Studios, so the earlier "run it against a real Cloudflare account" item is done in practice. The code-signed installer is deferred until a certificate is worth paying for. What is next, in the order I would take it:
 
-1. **Close the small M2 and M3 gaps that a team notices**: separate Author, Editor and Director dashboards (Home and the Dashboard read the records already); the assistant's record and editorial tools for a Studio whose records are on its server; the security policy page. Cut by what the Studio actually asks for.
+1. **Close the small M2 and M3 gaps that a team notices** (planned in [GAPS-PLAN.md](GAPS-PLAN.md)): separate Author, Editor and Director dashboards (Home and the Dashboard read the records already); the assistant's record and editorial tools for a Studio whose records are on its server; the security policy page. Cut by what the Studio actually asks for.
 2. **Record a run of the M1 and M3 exit tests** on a current build if a written record matters; they have automated cover but no recorded manual run.
 3. **M4: Canon and continuity.** Not started as specified. The timeline and LitRPG trackers and the Series Developer skill already supply a ledger per series and a series bible as files; the versioned bible, anchored facts, change proposals and the continuity checker (exit: Book 4 checked against Books 1 to 3) are the work.
 4. Then M5 (Art, assets and Preflight) onward, in order, only as the Studio needs each.
