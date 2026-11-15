@@ -42,7 +42,7 @@ afterEach(async () => {
 
 describe('what is the Studio’s business', () => {
   it('leaves Cadrel’s own folders, exports, scratch files and loose files alone, except a project’s notes', () => {
-    for (const p of ['Book/.cadrel/project.json', 'Book/Exports/book.epub', 'Book/Manuscript/~$ch1.docx', 'Book/ch1.md.tmp', 'Book/Thumbs.db', 'Book/.git/config']) expect(neverTracked(p), p).toBe(true);
+    for (const p of ['Book/.cadrel/project.json', 'Book/Exports/book.epub', 'Book/Manuscript/~$ch1.docx', 'Book/ch1.md.tmp', 'Book/Thumbs.db', 'Book/.git/config', 'Book/Manuscript/Book.export.json']) expect(neverTracked(p), p).toBe(true);
     for (const p of ['Book/Manuscript/Chapter 1.md', 'Book/Art/cover.psd', 'Book/Research/notes.txt']) expect(neverTracked(p), p).toBe(false);
     expect(isNotesFile('Book/.cadrel/review/owner.json')).toBe(true);
     expect(isNotesFile('Book/.cadrel/project.json')).toBe(false);

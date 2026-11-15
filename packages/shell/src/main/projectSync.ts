@@ -26,13 +26,15 @@ import { mergeReviewText } from '@cadrel/write/src/shared/review/comments';
 /** Too large for the Studio's file store (the Worker accepts 95 MB); left alone and listed. */
 export const MAX_FILE_BYTES = 95 * 1024 * 1024;
 const NEVER_NAMES = /^(thumbs\.db|desktop\.ini|\.ds_store)$/i;
-const NEVER_EXT = /\.(tmp|temp|bak|swp|crdownload|part|lock)$|~$/i;
+const NEVER_EXT = /\.(tmp|temp|bak|swp|crdownload|part|lock)$|~$|\.export\.json$/i; // a book's export settings stay a plain, writable file beside it: no check-out
 const NEVER_FOLDERS = new Set(['exports', 'export', 'trash', 'node_modules']);
 /** The least time between two saves of the same notes file, so notes made in a flurry are one version, not twenty. */
 const NOTES_EVERY_MS = 2 * 60_000;
 
 /** A project's notes file: where Write keeps what each reviewer (the author, an AI, a beta reader) has noted on its chapters. */
 export const isNotesFile = (rel: string): boolean => /(^|\/)\.cadrel\/review\/[^/]+\.json$/i.test(rel);
+/** A book's export settings (`Book.export.json`): never checked out, so saving them cannot be blocked by the file's read-only flag. */
+const isExportSettings = (rel: string): boolean => /\.export\.json$/i.test(rel);
 /** The folders on the way to a notes file. */
 const isNotesDir = (rel: string): boolean => /(^|\/)\.cadrel(\/review)?$/i.test(rel);
 
@@ -217,6 +219,7 @@ export class ProjectSync {
       for (const e of entries) {
         const folder = e.path.split('/')[0]!.toLowerCase();
         const notes = isNotesFile(e.path);
+        if (isExportSettings(e.path)) continue; // tracked by an older version: now left alone (see saveDetails, which makes it writable again)
         try {
           if (e.status === 'untracked') {
             // only a file inside a project's folder is the Studio's business; anything loose in the Projects folder stays the person's

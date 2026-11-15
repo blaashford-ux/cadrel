@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -242,5 +242,14 @@ describe('the back matter set on a project reaches its books (the original bug)'
     d.back.about.text = 'Book-only bio';
     await saveDetails(md, d, [...l.overrides, 'back.about.text'], edited);
     expect((await loadDetails(md, project('Third bio'))).details.back.about.text).toBe('Book-only bio');
+  });
+});
+
+describe('saveDetails over a read-only settings file', () => {
+  it('saves even when the file was left read-only', async () => {
+    await saveDetails(md, defaultBookDetails({ title: 'One', author: 'A' }));
+    await chmod(sidecar(), 0o444);
+    await saveDetails(md, defaultBookDetails({ title: 'Two', author: 'A' }));
+    expect((await loadDetails(md)).details.title).toBe('Two');
   });
 });

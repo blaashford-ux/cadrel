@@ -143,6 +143,8 @@ export async function saveDetails(mdPath: string, details: BookDetails, override
   const paths = overrides
     ? overrides.filter((p) => LEAF_PATHS.includes(p))
     : [...new Set([...(await loadDetails(mdPath, defaults)).overrides, ...Object.keys(diffOverrides(inherited, clean))])];
+  // A vault older than this one made the settings file read-only while checked in, and Windows refuses to rename over such a file.
+  await fs.chmod(file, 0o666).catch(() => undefined);
   await writeFileAtomic(file, stringify(toSidecar(clean, paths, inherited)));
 }
 
