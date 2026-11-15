@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (in `dev`)
+
+- **The assistant's tools now work on a Studio whose records are on its server.** Before, only a Studio whose records were on this computer gave the assistant the records, editorial and book tools; on a server Studio they were simply missing. Now the app runs a small **local door** (this computer only, behind a token made each time the app starts, closed when the app closes). The assistant reaches the Studio through it, and the app signs the request with the key it already holds, so **the Studio's key never goes to the assistant's process**. The Studio still decides what each call may do, as you. The door carries only the Studio's record calls, reading of the vault, and the text of a version; it refuses anything else, and anything from a web page.
+- What the assistant can do is unchanged: read passes and items, read the exact version a pass covers, raise queries, comments and suggestions on a pass it is the editor of. It cannot answer, decide, move or close anything. The project tools (create, move, stage) still need a Studio on this computer, because only the owner changes the project tree on a server.
+- **Upgrading.** Each server Studio needs **upgrading** (Admin → Studio Manager → Upgrade): this is server revision 8, database unchanged. The assistant's note that a change was made through it is now written by the Studio, not by the assistant's own process.
+
 ## 0.12.1 (book export settings save again on Windows)
 
 ### Export

@@ -211,3 +211,5 @@ export async function joinStudio(o: { link: string; yourName: string; fetchFn: t
   const joined = await new StudioClient({ url: inv.url, key, fetchFn: o.fetchFn }).request<{ role: string; studioId: string }>('POST', '/v1/join', inv.device ? { code: inv.code } : { code: inv.code, name: o.yourName.trim() });
   return { url: inv.url, fingerprint: inv.fingerprint, role: joined.role, studioId: joined.studioId, studioName: inv.studioName ?? null, key, device: inv.device === true };
 }
+
+export { DoorClient, DOOR_VAULT_METHODS, RemoteVaultStore, SERVICE_METHODS, SERVICE_NAMESPACES, remoteService } from './remote';

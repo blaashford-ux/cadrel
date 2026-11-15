@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { WorkError, ProjectError, ancestorsOf, getProject, makeAnchor, pathOf, subtreeIds, type Db, type NewQuery, type PassRecord, type ProjectTree } from '@cadrel/kernel';
+import { WorkError, ProjectError, ancestorsOf, getProject, makeAnchor, pathOf, subtreeIds, type NewQuery, type PassRecord, type ProjectTree, type VaultStore } from '@cadrel/kernel';
 import { PermissionDenied, type StudioService } from '@cadrel/service';
-import { DirBlobs } from '@cadrel/store';
+import { type BlobStore } from '@cadrel/store';
 import type { Studio } from '@cadrel/studio';
 import { agentFromClient } from '@cadrel/write/mcp/server';
 import type { McpModule } from '../server.js';
@@ -20,10 +20,10 @@ export interface EditorialToolOptions {
   /** The person the assistant acts for. */
   personId: string;
   studio: Studio;
-  /** The records file, to read the pinned version's hash and to note in its audit log that a change was made through the assistant. */
-  db: Db;
-  /** Where the vault keeps the contents of every version. Without it the text of a manuscript cannot be read, so nothing can be quoted. */
-  blobsDir?: string;
+  /** The vault's versions, to find the hash of the version a pass covers (a local records file, or the Studio's server through the app). */
+  vault: Pick<VaultStore, 'versions'>;
+  /** Where the contents of every version are kept. Without it the text of a manuscript cannot be read, so nothing can be quoted. */
+  blobs?: BlobStore;
 }
 
 const reply = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
@@ -62,7 +62,7 @@ export function registerEditorialTools(server: McpServer, o: EditorialToolOption
     if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
   };
   const viaAssistant = async (tool: string, target: string) => {
-    await o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [new Date().toISOString(), o.personId, 'assistant', target, JSON.stringify({ tool, agent: agent() })]);
+    await as().assistant.note(tool, agent(), target);
   };
   const people = async () => as().people.list().catch(() => [{ id: o.personId, name: 'me' }]);
   const nameOf = (list: { id: string; name: string }[], id: string) => (id === o.personId ? 'me' : list.find((p) => p.id === id)?.name ?? id);
@@ -85,10 +85,10 @@ export function registerEditorialTools(server: McpServer, o: EditorialToolOption
   /** The exact text of the version a pass covers; needs the right to read manuscripts, as the vault does. */
   const pinnedText = async (p: PassRecord): Promise<string> => {
     if (!(await as().canOn('manuscript.read', p.projectId))) throw new PermissionDenied('manuscript.read', 'your role cannot read this manuscript');
-    if (!o.blobsDir) throw new Error('This computer did not say where the vault keeps its files, so the text of a manuscript cannot be read here.');
-    const v = await o.db.first<{ hash: string }>('SELECT hash FROM file_version WHERE file_id = ? AND n = ?', [p.fileId, p.fileVersion]);
+    if (!o.blobs) throw new Error('This computer did not say where the vault keeps its files, so the text of a manuscript cannot be read here.');
+    const v = (await o.vault.versions(p.fileId)).find((x) => x.n === p.fileVersion);
     if (!v) throw new Error('That version of the file is not there.');
-    const bytes = await new DirBlobs(o.blobsDir).get(v.hash);
+    const bytes = await o.blobs.get(v.hash);
     if (!bytes) throw new Error('The text of that version is not on this computer. Open it from Files in Cadrel (Get latest) first.');
     return new TextDecoder().decode(bytes);
   };

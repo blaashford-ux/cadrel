@@ -29,6 +29,7 @@
     "test/remote.test.ts",
     "test/invitePerson.test.ts",
     "test/m3Exit.test.ts",
+    "test/assistantDoor.test.ts",
     "test/fakeCloudflare.ts",
     "test/shell.e2e.test.ts"
   ]

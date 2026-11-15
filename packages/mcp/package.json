@@ -16,7 +16,8 @@
     "@cadrel/kernel": "*",
     "@cadrel/studio": "*",
     "@cadrel/service": "*",
-    "@cadrel/store": "*"
+    "@cadrel/store": "*",
+    "@cadrel/studio-client": "*"
   },
   "devDependencies": {
     "@cadrel/market-library": "*",

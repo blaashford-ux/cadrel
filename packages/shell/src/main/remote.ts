@@ -11,49 +11,7 @@ import type { StudioService } from '@cadrel/service';
 import { sha256, VaultError, type BlobStore } from '@cadrel/store';
 import { StudioApiError, StudioOfflineError, type StudioClient } from './studioClient';
 
-const NAMESPACES = ['catalogue', 'people', 'business', 'work', 'workflows', 'briefs', 'passes', 'queries'];
-const METHODS = ['can', 'canOn', 'canAt', 'explain', 'visibleProjects'];
-
-/** The Studio's service, with each call sent to the server. `as(person)` ignores the person: the server uses the one the key belongs to. */
-export function remoteService(client: Pick<StudioClient, 'rpc'>): StudioService {
-  const namespace = (name: string) =>
-    new Proxy({}, { get: (_t, method) => (typeof method === 'string' && method !== 'then' ? (...args: unknown[]) => client.rpc([name, method], args) : undefined) });
-  const as = new Proxy({}, {
-    get: (_t, name) => {
-      if (typeof name !== 'string' || name === 'then') return undefined;
-      if (NAMESPACES.includes(name)) return namespace(name);
-      if (METHODS.includes(name)) return (...args: unknown[]) => client.rpc([name], args);
-      return undefined;
-    }
-  });
-  return { as: () => as } as unknown as StudioService;
-}
-
-/** The vault's operations as calls to the server. */
-export class RemoteVaultStore implements VaultStore {
-  constructor(private readonly client: Pick<StudioClient, 'vault'>) {}
-  private call<T>(method: (typeof VAULT_STORE_METHODS)[number], arg?: unknown): Promise<T> {
-    return this.client.vault<T>(method, arg);
-  }
-  list = () => this.call<VaultListing[]>('list');
-  versions = (fileId: string) => this.call<FileVersion[]>('versions', fileId);
-  addFile = (a: Parameters<VaultStore['addFile']>[0]) => this.call<AddFileResult>('addFile', a);
-  checkOut = (a: { fileId: string; machine: string }) => this.call<CheckOutResult>('checkOut', a);
-  checkIn = (a: Parameters<VaultStore['checkIn']>[0]) => this.call<CheckInResult>('checkIn', a);
-  undoCheckOut = (a: { fileId: string; machine: string }) => this.call<boolean>('undoCheckOut', a);
-  forceRelease = (a: { fileId: string; reason: string }) => this.call<ForceResult>('forceRelease', a);
-  orphans = () => this.call<Orphan[]>('orphans');
-  acknowledgeOrphans = (a: { fileId: string; machine: string }) => this.call<void>('acknowledgeOrphans', a);
-  references = (fileId: string) => this.call<FileRef[]>('references', fileId);
-  whereUsed = (fileId: string) => this.call<FileRef[]>('whereUsed', fileId);
-  addReference = (a: Parameters<VaultStore['addReference']>[0]) => this.call<void>('addReference', a);
-  setReferenceVersion = (a: Parameters<VaultStore['setReferenceVersion']>[0]) => this.call<void>('setReferenceVersion', a);
-  removeReference = (a: { fileId: string; refersToId: string }) => this.call<void>('removeReference', a);
-  card = (fileId: string) => this.call<DataCard>('card', fileId);
-  setCard = (a: Parameters<VaultStore['setCard']>[0]) => this.call<DataCard>('setCard', a);
-  betaRead = (fileId: string) => this.call<BetaRead>('betaRead', fileId);
-  setBetaRead = (a: Parameters<VaultStore['setBetaRead']>[0]) => this.call<BetaRead>('setBetaRead', a);
-}
+export { RemoteVaultStore, remoteService } from '@cadrel/studio-client';
 
 /**
  * Keeps the last list the server gave, and gives it back, marked, when the server cannot be reached, so the Files page still shows what is

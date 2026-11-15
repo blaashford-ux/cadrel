@@ -1,6 +1,6 @@
 # Closing the small M2 and M3 gaps: implementation plan
 
-Status: **plan, nothing built.** Branch `dev`. Three items listed as "not done" in [PLAN.md](PLAN.md) (M2 and M3) and [STUDIOS.md](STUDIOS.md) §"Not built". Each is its own slice and release-able alone. Versions are not tied to the plan ([VERSIONING.md](VERSIONING.md)); each slice is a Minor or a Fix as it turns out.
+Status: **decisions made; A built in `dev` (not yet released); B and C not started.** Branch `dev`. Three items listed as "not done" in [PLAN.md](PLAN.md) (M2 and M3) and [STUDIOS.md](STUDIOS.md) §"Not built". Each is its own slice and release-able alone. Versions are not tied to the plan ([VERSIONING.md](VERSIONING.md)); each slice is a Minor or a Fix as it turns out.
 
 Order: **A (assistant on server Studios) → B (role dashboards) → C (security policy page).** A first because it is a hole (a feature that works on a local Studio silently does not on a server one) and it is the riskiest; B is the most visible to a team; C is the smallest and is cut down to what is real (see C).
 
@@ -12,6 +12,8 @@ Order: **A (assistant on server Studios) → B (role dashboards) → C (security
 - **Security policy.** `PERMISSIONS.md` §5 lists a table of settings written for email-link sign-in, 14-day sessions and second factors. **That is not how Cadrel signs in**: every request is signed by a device key, invitations are single-use codes, and the server holds only public keys. Much of the table therefore does not apply. What exists: invitation lifetime (fixed in the Worker), an end date on a role grant, `people.invite` as a capability, per-project assistant switch, force release with confirmation and audit, device list and revoke (`/v1/devices`, `/v1/members/:id`).
 
 ## A. The assistant's tools for a Studio whose records are on its server
+
+**Built (in `dev`, not yet released; needs each Studio's server upgraded to revision 8).** What was done, against the slices below: the door is `shell/src/main/assistantDoor.ts` (127.0.0.1 only, token per launch, refuses any browser request that carries an `Origin`, carries only the service's namespaces, the vault's reading operations and a version's contents by hash); the assistant's process reaches it with a `DoorClient` (`studio-client/src/remote.ts`, which also now holds `remoteService` and `RemoteVaultStore`, moved from the shell); the three tool modules no longer take a raw database: the audit line is the service's new `assistant.note` (written on the Studio's side, held on any project or the Studio), versions and files come from a `VaultStore`, contents from a `BlobStore`; `mcpArgs` gives a server Studio `--door --door-token --person --studio-id`. Tested: `shell/test/assistantDoor.test.ts` (an Editor lists their pass, reads the exact pinned text and raises a query through the door against the real Worker code; a refusal arrives with its reason; the door refuses no token, a wrong token, a browser origin, an unknown namespace and any vault write). **Left out on purpose:** the project tools (create, move, stage) stay local-Studio only, because only the owner changes the project tree on a server. **Still to do for A:** a manual run on a real Studio (the one thing the stand-in cannot show), and `files_list` asks for `manuscript.read` on the whole Studio, so a project-scoped Editor is refused it (as on a local Studio today).
 
 **Goal:** a person on a server Studio gets the same records, editorial and project tools as on a local one, acting as themselves under their role, with every check still made on the server.
 
@@ -93,8 +95,8 @@ Anything in the old table that cannot be enforced (second factor, session length
 
 Suggested release shape: **0.13.0** = A + C together (one server revision, one Upgrade); **0.14.0** = B. If you would rather see dashboards sooner, B can go first with no server change if its counts are read client-side, at the cost of the CPU risk noted in B2.
 
-## Needs your decision
+## Decided (15 November 2026)
 
-1. **A:** the app as the door (recommended) or the key in the assistant's process?
-2. **B:** the three Director numbers, and whether Owner should default to the Director lens.
-3. **C:** agree to cut the page to what the server can enforce, and to remove the aspirational rows from `PERMISSIONS.md` rather than keep them.
+1. **A:** the app is the door (loopback endpoint in the app's main process; the key never leaves the app).
+2. **B:** the Director leads with **late books** and **unanswered queries**; money waits for M7. The Owner defaults to the Director lens.
+3. **C:** the page is cut to what the server can enforce, and the unenforceable rows are removed from `PERMISSIONS.md`.

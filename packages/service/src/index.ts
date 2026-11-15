@@ -339,6 +339,17 @@ export class StudioAs {
     archive: async (kind: 'contribution' | 'credit' | 'rights' | 'share', id: string, archived = true): Promise<void> => (await this.need('business.manage'), setBusinessArchived(this.o.db, this.ctx(), kind, id, archived))
   };
 
+  /**
+   * The assistant (MCP) acting for this person. `note` leaves the audit row saying a change was made through it, written here, on the side that
+   * holds the records, so a Studio whose records are on a server needs no database in the assistant's own process. Needs assistant.use, on any project or the Studio.
+   */
+  readonly assistant = {
+    note: async (tool: string, agent: string, target: string): Promise<void> => {
+      await this.needWork('assistant.use'); // held anywhere: a role given on one project counts, as it does for the tools themselves
+      await this.o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [this.stamp(), this.personId, 'assistant', String(target).slice(0, 200), JSON.stringify({ tool: String(tool).slice(0, 80), agent: String(agent).slice(0, 80) })]);
+    }
+  };
+
   /** A read of business data: needs business.read, and leaves a row in the audit log saying who looked at what. */
   private async seen(what: string, subject?: Subject): Promise<void> {
     await this.need('business.read');

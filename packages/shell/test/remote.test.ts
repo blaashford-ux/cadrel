@@ -240,7 +240,9 @@ describe('the app’s people host over a server Studio', () => {
     if (st.available) expect(st.people.map((p) => p.name).sort()).toEqual(['Ann Author', 'Owner']);
     await boss.close();
     expect(host.penNameScope()).toEqual(['Mara Quinn']);
-    expect(host.mcpArgs('records.db')).toEqual([]); // the assistant's record tools open a records file; there is none here
+    expect(host.mcpArgs('records.db')).toEqual([]); // until the app's door is listening there is nothing to give the assistant
+    host.setDoor({ url: 'http://127.0.0.1:1', token: 't' });
+    expect(host.mcpArgs('records.db')).toEqual(['--door', 'http://127.0.0.1:1', '--door-token', 't', '--person', host.me, '--studio-id', 'sabc123def4']); // a Studio on a server: through the door, not a records file
     expect(await host.snapshot('x')).toBe(false);
     // a change the person's role does not allow comes back with its reason
     await expect(host.call('createRole', { name: 'Sneaky', capabilities: [] })).rejects.toThrow(/not allowed/);

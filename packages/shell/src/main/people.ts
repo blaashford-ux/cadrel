@@ -37,6 +37,15 @@ export class PeopleHost {
   private penScope: string[] | null = null;
   /** Set when the Studio's records are on its server: this computer's way to it. */
   private remote: StudioClient | null = null;
+  /** Where the assistant's process reaches this app's local door (see assistantDoor.ts), once the door is listening. */
+  private door: { url: string; token: string } | null = null;
+  setDoor(door: { url: string; token: string } | null): void {
+    this.door = door;
+  }
+  /** This computer's way to the Studio's server, for the assistant's door. Null where the records are on this computer. */
+  get serverClient(): StudioClient | null {
+    return this.remote;
+  }
   /** Every beta reader's notes on a manuscript in the Studio's vault (for whoever may write it). Empty where the records are not on a server. */
   async betaNotes(fileId: string): Promise<{ personId: string; name: string; text: string }[]> {
     return this.remote ? this.remote.beta('allNotes', fileId) : [];
@@ -155,7 +164,10 @@ export class PeopleHost {
   }
   /** What the AI server needs to open the Studio's records as this person: the file, who, and which Studio. Empty where this computer holds none. */
   mcpArgs(file: string, vaultBlobs?: string): string[] {
-    return this.svc && this.meId && !this.remote ? ['--records', file, '--person', this.meId, '--studio-id', this.studioId, ...(vaultBlobs ? ['--vault-blobs', vaultBlobs] : [])] : [];
+    if (!this.svc || !this.meId) return [];
+    // A Studio on a server: the assistant reaches it through the app's door and never holds the key.
+    if (this.remote) return this.door ? ['--door', this.door.url, '--door-token', this.door.token, '--person', this.meId, '--studio-id', this.studioId] : [];
+    return ['--records', file, '--person', this.meId, '--studio-id', this.studioId, ...(vaultBlobs ? ['--vault-blobs', vaultBlobs] : [])];
   }
   get me(): string {
     return this.meId;
