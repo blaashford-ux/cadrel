@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.12.1 (book export settings save again on Windows)
+
+### Export
+- **Saving a book's export details no longer fails with "EPERM: operation not permitted, rename".** The settings file beside a manuscript (`Book.export.json`) was kept read-only by the Studio's vault while not checked out, and Windows will not replace a read-only file. Export settings are now plain files beside the book (no check-out, and no longer versioned by the vault), and saving clears a read-only flag an earlier version left on them.
+- **Exporting again no longer fails when the output folder is inside the project** and the earlier EPUB, PDF or DOCX was left read-only. The earlier output is replaced.
+
 ## 0.12.0 (notes counted in the tree; a note unmarks its chapter; edited dots in every stage; steadier Progress; an idle Cadrel no longer keeps the Studio's server busy)
 
 ### Chapters and notes
