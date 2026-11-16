@@ -41,6 +41,8 @@ export interface BookRow {
   text: 'manuscript' | 'sample' | null;
   /** 1 when the book is in My Books. */
   own: number;
+  /** True when the book is known only from an author's "All Books" page (no book capture yet): title, rating and price, but no rank, categories or text. */
+  pageOnly?: boolean;
 }
 
 export interface QueueItem {
@@ -105,6 +107,30 @@ export function listCategories(db: Db): CategorySummary[] {
 }
 
 export function listBooks(db: Db, opts: { categoryKey?: string; search?: string } = {}): BookRow[] {
+  const captured = listCapturedBooks(db, opts);
+  return opts.categoryKey ? captured : [...captured, ...listPageOnlyBooks(db, opts.search)];
+}
+
+/** Books known only from the newest "All Books" capture of an author: they have no book capture yet, so no rank, category or text. */
+function listPageOnlyBooks(db: Db, search?: string): BookRow[] {
+  const like = search ? `%${search.replace(/[\\%_]/g, '\\$&')}%` : null;
+  return (db
+    .prepare(
+      `SELECT e.asin, e.title, e.authors, e.rating_value AS ratingValue, e.rating_count AS ratingCount, e.price AS kindlePrice, a.captured_at AS lastSeen,
+         0 AS snapshots, NULL AS overallRank, NULL AS listRank, NULL AS listCategory, NULL AS text,
+         EXISTS (SELECT 1 FROM own_book WHERE asin = e.asin) AS own, 1 AS pageOnly
+       FROM author_entry e
+       JOIN author_capture a ON a.id = e.author_capture_id AND a.captured_at = (SELECT max(captured_at) FROM author_capture y WHERE y.author_id = a.author_id AND y.marketplace = a.marketplace)
+       WHERE e.asin NOT IN (SELECT asin FROM snapshot)
+         AND (?1 IS NULL OR e.title LIKE ?1 ESCAPE '\\' OR e.authors LIKE ?1 ESCAPE '\\' OR e.asin = ?2)
+       GROUP BY e.asin
+       ORDER BY a.author_name, e.position`,
+    )
+    .all(like, search ? search.toUpperCase() : null) as any[])
+    .map((r) => ({ ...r, pageOnly: true, authorNames: authorNamesOf(r.authors) })) as unknown as BookRow[];
+}
+
+function listCapturedBooks(db: Db, opts: { categoryKey?: string; search?: string } = {}): BookRow[] {
   // every statement parameter is always bound (?1 category, ?2 like pattern, ?3 ASIN), so the SQL needs no building
   const like = opts.search ? `%${opts.search.replace(/[\\%_]/g, '\\$&')}%` : null;
   const where = [
@@ -142,6 +168,8 @@ export interface BookDetail {
   /** Oldest first: one point per capture, for the history charts. */
   history: { capturedAt: string; ratingValue: number | null; ratingCount: number | null; kindlePrice: number | null; overallRank: number | null }[];
   covers: { sha256: string; path: string }[];
+  /** True when this is a stand-in built from an author's page, not a book capture. */
+  pageOnly?: boolean;
   issues: { field: string; severity: string; detail: string | null }[];
   rawDir: string;
 }
@@ -361,4 +389,37 @@ export function authorCorpus(db: Db, authorId: string, marketplace = 'amazon.com
   const series = [...bySeries.values()];
   for (const s of series) s.books.sort((a, b) => (a.collects ? 1 : 0) - (b.collects ? 1 : 0) || (a.seriesPosition ?? 0) - (b.seriesPosition ?? 0) || a.position - b.position);
   return { authorId, name: cap.name, capturedAt: cap.capturedAt, totalCount: cap.totalCount, series, standalone };
+}
+
+
+/**
+ * A book known only from an author's "All Books" page, shaped like a book detail so the app can show it: the page's title, authors, series,
+ * rating and price, and nothing it does not have (no formats, ranks, history or text). Null when the book is on no author page, or has a book capture (use getBook).
+ */
+export function getPageBook(db: Db, asin: string): BookDetail | null {
+  if (db.scalar('SELECT 1 FROM snapshot WHERE asin = ?', asin)) return null;
+  const r = db
+    .prepare(
+      `SELECT e.*, a.captured_at AS capturedAt, a.dir, a.url, a.marketplace FROM author_entry e JOIN author_capture a ON a.id = e.author_capture_id
+       WHERE e.asin = ? ORDER BY a.captured_at DESC LIMIT 1`,
+    )
+    .get(asin) as any;
+  if (!r) return null;
+  return {
+    asin,
+    url: amazonUrl(asin),
+    authorNames: authorNamesOf(r.authors),
+    pageOnly: true,
+    latest: {
+      asin, captured_at: r.capturedAt, dir: r.dir, url: r.url, title: r.title, authors: r.authors, series_name: r.series_name, series_position: r.series_position,
+      series_total: r.series_total, rating_value: r.rating_value, rating_count: r.rating_count, kindle_price: r.price, pages: null, publication_date: null,
+      publisher: null, language: null, isbn13: null, file_size_mb: null, description: null, has_read_sample: 0,
+    },
+    formats: JSON.parse(r.other_formats ?? '[]').map((f: { label: string; asin: string }) => ({ code: f.asin, label: f.label, price: null, note: null })),
+    ranks: [],
+    history: [],
+    covers: [],
+    issues: [],
+    rawDir: r.dir,
+  };
 }
