@@ -120,3 +120,34 @@ export interface DetailCapture {
   detailRows: Record<string, string>;
   issues: ParseIssue[];
 }
+
+/** One book on an author's "All Books" page. */
+export interface AuthorEntry {
+  /** 1-based place in the grid (Amazon's popularity order). */
+  position: number;
+  asin: string;
+  title: string | null;
+  /** The people credited as authors. Co-authors are only known when the saved page still carried the product data; else just the page's author. */
+  authors: Person[];
+  /** false when the co-author list is a guess (the page's author alone). */
+  authorsKnown: boolean;
+  series: { name: string; asin: string | null; position: number | null; total: number | null; collects: boolean } | null;
+  ratingValue: number | null;
+  ratingCount: number | null;
+  /** "Kindle Edition", "Audible Audiobook", "Paperback" ... the edition this tile shows. */
+  format: string | null;
+  price: number | null;
+  /** The same work in other formats: [{ label: "Audiobook", asin }]. The tile's own ASIN is left out. */
+  otherFormats: { label: string; asin: string }[];
+  coverUrl: string | null;
+}
+
+export interface AuthorCapture {
+  marketplace: string;
+  authorId: string;
+  authorName: string | null;
+  /** How many books Amazon says the author has (the grid is filled in as you scroll, so a short capture has fewer entries). */
+  totalCount: number | null;
+  entries: AuthorEntry[];
+  issues: ParseIssue[];
+}

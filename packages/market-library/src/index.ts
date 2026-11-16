@@ -46,6 +46,7 @@ export * from './sales/payouts.js';
 export * from './sales/analytics.js';
 export * from './analysis/communityInsights.js';
 export * from './authors.js';
+export * from './savedPage.js';
 export * from './keywords/history.js';
 export * from './keywords/links.js';
 export * from './keywords/ideas.js';

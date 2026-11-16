@@ -242,7 +242,7 @@ function handleCapture(lib: Library, b: CaptureBody, onCapture?: (r: IngestResul
   if (typeof b.url !== 'string' || !isAmazonUrl(b.url)) throw new HttpError(400, 'url must be an https amazon.com page');
   if (typeof b.html !== 'string' || b.html.length < 100) throw new HttpError(400, 'html missing');
   const kind = b.kind ?? detectKind(b.url);
-  if (kind !== 'detail' && kind !== 'list' && kind !== 'search') throw new HttpError(400, 'cannot tell if this is a book, list or search page');
+  if (kind !== 'detail' && kind !== 'list' && kind !== 'search' && kind !== 'author') throw new HttpError(400, 'cannot tell if this is a book, list, search or author page');
   let capturedAt: string | undefined;
   if (b.capturedAt !== undefined) {
     const t = Date.parse(b.capturedAt);
@@ -277,6 +277,8 @@ function handleCapture(lib: Library, b: CaptureBody, onCapture?: (r: IngestResul
     asin: result.asin ?? null,
     category: result.categoryKey ?? null,
     query: result.query ?? null,
+    authorId: result.authorId ?? null,
+    books: result.books ?? null,
     replaced: result.replaced,
     coversSaved,
     issues: result.issues.length,
