@@ -84,11 +84,11 @@ A built Studio can keep everything on its server: the people, roles and teams, t
 ## Not built yet
 
 - **Scheduled backups**, and backing up Market's library (it has its own *Back up…*). Manual backup, restore and MDEdit import are built (Settings → Backup and import).
-- **Everything a person does is checked on the server only for what goes through the server**: the service's calls, the vault, files and captures. Notes (`studio.json`'s notes), Write's own manuscripts folder and Market's library are still each computer's own, apart from the shared captures. The assistant (MCP server) reaches a server Studio through the app's local door (built, in `dev`); before that it opened a records file, so a Studio whose records are on the server had no record tools for the assistant yet.
+- **Everything a person does is checked on the server only for what goes through the server**: the service's calls, the vault, files and captures. Notes (`studio.json`'s notes), Write's own manuscripts folder and Market's library are still each computer's own, apart from the shared captures. The assistant (MCP server) reaches a server Studio through the app's local door (built, 0.13.0); before that it opened a records file, so a Studio whose records are on the server had no record tools for the assistant yet.
 - **Members changing projects.** Only the owner changes the project tree (create, rename, move, link, archive, stages); a member's attempt is refused with a sentence. A member moving a project between stages needs this and is not possible yet.
 - **The server cannot be asked who is online**, tasks do not notify anyone, and there is no live update: a page shows the server's state when it is opened or refreshed.
-- **Role dashboards** are built (in `dev`): Home and the Dashboard lead with a Director, Editor or Author view, chosen from what the person's roles hold. They are as of when the page opens (no live update).
-- **Replicating the file store** to a second bucket. (The security policy page is built, in `dev`: invitation lifetime, guest default, stale check-out warning, assistant on or off.)
+- **Role dashboards** are built (0.13.0): Home and the Dashboard lead with a Director, Editor or Author view, chosen from what the person's roles hold. They are as of when the page opens (no live update).
+- **Replicating the file store** to a second bucket. (The security policy page is built, 0.13.0: invitation lifetime, guest default, stale check-out warning, assistant on or off.)
 - **A signed installer.** The release workflow signs when the repository has the `CSC_LINK` and `CSC_KEY_PASSWORD` secrets (a code-signing certificate); without them it builds an unsigned installer and says so. There is no certificate yet.
 - **Updates from the Studio's server** (R2). Cadrel still updates from its GitHub releases.
 - **Recovery code**: lose every owner device and you lose the Studio. A linked phone is a second owner device, so link one.
