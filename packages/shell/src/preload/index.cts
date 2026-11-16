@@ -119,6 +119,7 @@ const api: CadrelApi = {
     createBrief: (input) => studioCall('shell:editing:createBrief', input),
     reviseBrief: (id, input) => studioCall('shell:editing:reviseBrief', id, input)
   },
+  lens: { state: () => studioCall('shell:lens:state') },
   policy: {
     state: () => studioCall('shell:policy:state'),
     set: (change) => studioCall('shell:policy:set', change)

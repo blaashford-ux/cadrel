@@ -16,6 +16,7 @@ import { readPackManifest } from '@cadrel/market-library';
 import { syncCaptures } from '../src/main/sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from '../src/main/moveRecords';
 import { PeopleHost } from '../src/main/people';
+import { loadLens } from '../src/main/lens';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -243,6 +244,13 @@ describe('the app’s people host over a server Studio', () => {
     expect(host.mcpArgs('records.db')).toEqual([]); // until the app's door is listening there is nothing to give the assistant
     host.setDoor({ url: 'http://127.0.0.1:1', token: 't' });
     expect(host.mcpArgs('records.db')).toEqual(['--door', 'http://127.0.0.1:1', '--door-token', 't', '--person', host.me, '--studio-id', 'sabc123def4']); // a Studio on a server: through the door, not a records file
+    // the working views follow what the role holds, even a role given on one book: an Author gets the Author's view only; the owner leads with the Director's
+    const quiet = { editing: async () => ({ available: false as const, reason: 'none' }), plan: async () => ({ available: false as const, reason: 'none' }) };
+    expect(await loadLens({ mayAnywhere: (c) => host.mayOn(c), ...quiet }, host.me, '2026-11-16')).toMatchObject({ available: true, lenses: ['author'] });
+    const lead = new PeopleHost();
+    await lead.openRemote({ client: s.owner, studioId: 'sabc123def4' });
+    expect(await loadLens({ mayAnywhere: (c) => lead.mayOn(c), ...quiet }, lead.me, '2026-11-16')).toMatchObject({ lenses: ['director', 'editor', 'author'] });
+    await lead.close();
     // the security policy: an Author reads it and may not change it; the owner may
     expect(await host.policyState()).toMatchObject({ available: true, may: false, policy: { inviteDays: 7, staleCheckoutDays: 7, assistantEnabled: true, guestDays: null } });
     expect(await host.staleCheckoutDays()).toBe(7);

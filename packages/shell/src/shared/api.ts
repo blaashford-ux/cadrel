@@ -899,6 +899,62 @@ export type PlanState =
       projects: PlanProject[];
       tasks: OnProject<TaskRecord>[];
     };
+/** A pass as a working view lists it: what it is, where, and how long it has waited. */
+export interface LensPass {
+  passId: string;
+  projectId: string;
+  projectName: string;
+  kind: 'developmental' | 'line' | 'copy' | 'proof';
+  title: string;
+  editorName: string;
+  /** Whole days since the pass was delivered (or since it was planned, where it has not been), so the oldest wait shows first. */
+  waitingDays: number | null;
+  unanswered: number;
+  undecided: number;
+}
+/** A date a person is waiting on: a task of theirs, or a deadline of a book. */
+export interface LensDue {
+  id: string;
+  title: string;
+  projectId: string;
+  projectName: string;
+  due: string;
+  /** Whole days past the date (0 on the day itself, negative before it). */
+  daysLate: number;
+}
+/** What leads Home and the Dashboard for a person whose roles have a working view (see the kernel's `lensesFor`). */
+export interface LensViews {
+  author?: {
+    /** Queries to answer, and suggestions to decide, in passes the editor has delivered. */
+    answer: LensPass[];
+    /** Every query answered and every suggestion decided: ready to be sent back. */
+    respond: LensPass[];
+    /** The person's own open tasks that are late or fall due within a week. */
+    tasks: LensDue[];
+  };
+  editor?: {
+    toStart: LensPass[];
+    toDeliver: LensPass[];
+    /** Delivered and waiting for the author. */
+    withAuthor: LensPass[];
+    /** Queries the author has answered since, which the editor has not yet resolved. */
+    answered: number;
+  };
+  director?: {
+    /** Books with an open deadline past its date, the worst first. */
+    lateBooks: { projectId: string; name: string; deadlines: LensDue[]; daysLate: number }[];
+    /** Books with queries the author has not answered, the longest wait first. */
+    unanswered: { projectId: string; name: string; queries: number; passes: number; oldestDays: number | null }[];
+    totals: { lateBooks: number; unansweredQueries: number };
+  };
+}
+export type LensState =
+  | { available: false; reason: string }
+  | { available: true; today: string; /** In order of reach: the first is the default. Empty: this person's role has no working view. */ lenses: ('director' | 'editor' | 'author')[]; views: LensViews };
+export interface LensApi {
+  state(): Promise<LensState>;
+}
+
 /** The studio at a glance, for Home and the Dashboard. */
 export type Pulse =
   | { available: false; reason: string }
@@ -1019,6 +1075,7 @@ export interface CadrelApi {
   stages: StagesApi;
   workflow: WorkflowApi;
   policy: PolicyApi;
+  lens: LensApi;
   work: WorkApi;
   editing: EditingApi;
   vault: VaultApi;

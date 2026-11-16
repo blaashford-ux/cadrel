@@ -56,6 +56,7 @@ import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
 import { inviteMailto } from './inviteMail';
 import { AssistantDoor } from './assistantDoor';
+import { loadLens } from './lens';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -1160,6 +1161,10 @@ function registerShellIpc(): void {
     const usage: Record<string, Awaited<ReturnType<ProjectStages['usage']>>> = {};
     for (const w of st.workflows) usage[w.id] = await stages.usage(w.id);
     return { ...st, usage };
+  });
+  manageLike('lens:state', async () => {
+    const work = () => new ProjectWork(studio, peopleHost, stages);
+    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan() }, peopleHost.me, new Date().toISOString().slice(0, 10));
   });
   manageLike('policy:state', async () => peopleHost.policyState());
   manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));

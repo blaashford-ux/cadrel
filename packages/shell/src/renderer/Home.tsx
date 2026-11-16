@@ -4,6 +4,7 @@ import type { MineState, Overview, Page, StudioState, StudiosView } from '../sha
 import { captureState } from './capture';
 import { ago, formatWords, greeting, percent, wordsLabel } from './format';
 import { factsFor } from './projectFacts';
+import { LensPanel } from './LensPanel';
 import { GlanceLine, StageTag, usePulse, useStages } from './Glance';
 import { NotConnected } from './NotConnected';
 import { StudioSwitcher } from './StudioSwitcher';
@@ -68,6 +69,7 @@ export function Home({ overview, studio, onGo, onProject, studios }: Props) {
       <h2 className="hello">{greeting(new Date().getHours())}</h2>
       <p className="muted">Here is where your studio stands.</p>
       <GlanceLine pulse={pulse} onGo={onGo} />
+      <LensPanel onGo={onGo} onProject={onProject} studioKey={studio} />
 
       <section className="card" aria-labelledby="h-projects">
         <div className="card-head">
