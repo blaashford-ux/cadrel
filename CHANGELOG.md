@@ -2,6 +2,14 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.14.0 (import an author's whole catalogue into Market)
+
+- **An author's "All Books" page can be captured and imported.** Open an author's store page on amazon.com, choose **All Books**, and capture it with the Market extension (it scrolls the whole grid first), or save the page from the browser and import the file. Every book on it enters the Market library with its title, series and place in the series, rating, price, the paperback and audiobook editions and cover, and the library can group an author's books into series, omnibuses and standalone titles.
+- **Co-authors are kept** when the page carries them. Books the page does not name co-authors for are credited to the page's author alone, and the capture says how many.
+- **The books join the capture queue** until they have a book capture of their own. A capture with fewer books than Amazon says the author has is flagged, and one with none is refused.
+- **For AI tools:** two new read-only Market tools, `list_authors` and `author_corpus`.
+- **Upgrading.** The Market library adds two tables on first open (database step 20); nothing else changes.
+
 ## 0.13.0 (the assistant on server Studios; a security policy; Director, Editor and Author views)
 
 - **The assistant's tools now work on a Studio whose records are on its server.** Before, only a Studio whose records were on this computer gave the assistant the records, editorial and book tools; on a server Studio they were simply missing. Now the app runs a small **local door** (this computer only, behind a token made each time the app starts, closed when the app closes). The assistant reaches the Studio through it, and the app signs the request with the key it already holds, so **the Studio's key never goes to the assistant's process**. The Studio still decides what each call may do, as you. The door carries only the Studio's record calls, reading of the vault, and the text of a version; it refuses anything else, and anything from a web page.
