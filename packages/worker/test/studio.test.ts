@@ -173,7 +173,7 @@ describe('the Studio’s security policy, as the server enforces it', () => {
     await call('PUT', '/v1/tree', owner, { projects: [{ id: 'p1', name: 'Book', parentId: null, kind: 'Book', status: 'active', order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] });
     await call('POST', '/v1/call', owner, { path: ['policy', 'set'], args: [{ guestDays: 30 }] });
     const day = 24 * 60 * 60 * 1000;
-    const ends = (b: { grantEndsAt: string | null }) => (b.grantEndsAt ? Math.round((Date.parse(b.grantEndsAt) - Date.now()) / day) : null);
+    const ends = (b: { grantEndsAt?: string | null }) => (b.grantEndsAt ? Math.round((Date.parse(b.grantEndsAt) - Date.now()) / day) : null);
     expect(ends((await call('POST', '/v1/invites', owner, { role: 'guest', label: 'G', projectId: 'p1' })).body)).toBe(30);
     expect(ends((await call('POST', '/v1/invites', owner, { role: 'guest', label: 'G2', projectId: 'p1', days: 5 })).body)).toBe(5);
     expect(ends((await call('POST', '/v1/invites', owner, { role: 'author', label: 'Whole Studio' })).body)).toBeNull(); // not limited to a project: no guest end
