@@ -7,7 +7,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
-  ProjectError, childrenOf, getProject, linksOf, pathOf, subtreeIds, viewLevel, visibleTree, type Db, type ProjectFacts, type ProjectTree, type ProjectVisibility, type StageCategory
+  ProjectError, childrenOf, getProject, linksOf, pathOf, subtreeIds, viewLevel, visibleTree, type ProjectFacts, type ProjectTree, type ProjectVisibility, type StageCategory
 } from '@cadrel/kernel';
 import { PermissionDenied, type StudioService } from '@cadrel/service';
 import { readWriteNotes, type Studio } from '@cadrel/studio';
@@ -25,7 +25,6 @@ export interface ProjectsToolOptions {
   service: StudioService;
   personId: string;
   studio: Studio;
-  db: Db;
   /** Where Write's manuscripts are, so their open review notes count toward a stage's gate. */
   write?: { fs: FsPort; root: string };
   /** Which projects the person can see; what they cannot see is not found. */
@@ -60,10 +59,11 @@ export function registerProjectsTools(server: McpServer, o: ProjectsToolOptions)
 
   const allowed = async () => {
     if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    await as().assistant.check(); // and the Studio has not turned the assistant off (its security policy)
   };
   const viaAssistant = async (tool: string, target: string) => {
     const agent = agentFromClient(server.server.getClientVersion()?.name).agentName;
-    await o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [new Date().toISOString(), o.personId, 'assistant', target, JSON.stringify({ tool, agent })]);
+    await o.service.as(o.personId).assistant.note(tool, agent, target);
   };
   const seen = async (): Promise<ProjectTree> => {
     const t = (await o.studio.read()).tree;

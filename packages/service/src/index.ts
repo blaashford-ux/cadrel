@@ -19,6 +19,7 @@ import {
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
   assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
+  getPolicy, setPolicy, type PolicyChange, type StudioPolicy,
   briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
@@ -337,6 +338,34 @@ export class StudioAs {
     addShare: async (i: Parameters<typeof addShare>[2]): Promise<RevenueShare> => (await this.need('business.manage'), addShare(this.o.db, this.ctx(), i)),
     updateShare: async (id: string, p: Parameters<typeof updateShare>[3]): Promise<RevenueShare> => (await this.need('business.manage'), updateShare(this.o.db, this.ctx(), id, p)),
     archive: async (kind: 'contribution' | 'credit' | 'rights' | 'share', id: string, archived = true): Promise<void> => (await this.need('business.manage'), setBusinessArchived(this.o.db, this.ctx(), kind, id, archived))
+  };
+
+  /**
+   * The assistant (MCP) acting for this person. `note` leaves the audit row saying a change was made through it, written here, on the side that
+   * holds the records, so a Studio whose records are on a server needs no database in the assistant's own process. Needs assistant.use, on any project or the Studio.
+   */
+  readonly assistant = {
+    /** Whether the assistant may be used at all: the person's role holds assistant.use (on any project or the Studio) and the Studio has not turned it off. */
+    check: async (): Promise<void> => {
+      await this.needWork('assistant.use'); // held anywhere: a role given on one project counts, as it does for the tools themselves
+      if (!(await getPolicy(this.o.db, this.o.studioId)).assistantEnabled) throw new PermissionDenied('assistant.use', 'the Studio’s administrators have turned the assistant off');
+    },
+    note: async (tool: string, agent: string, target: string): Promise<void> => {
+      await this.assistant.check();
+      await this.o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [this.stamp(), this.personId, 'assistant', String(target).slice(0, 200), JSON.stringify({ tool: String(tool).slice(0, 80), agent: String(agent).slice(0, 80) })]);
+    }
+  };
+
+  /**
+   * The Studio's security policy (docs/PERMISSIONS.md §5). Anyone in the Studio may read it (the app needs the stale check-out warning and the
+   * assistant switch); changing it needs studio.settings, and every change leaves an audit row.
+   */
+  readonly policy = {
+    get: async (): Promise<StudioPolicy> => getPolicy(this.o.db, this.o.studioId),
+    set: async (change: PolicyChange): Promise<StudioPolicy> => {
+      await this.need('studio.settings');
+      return setPolicy(this.o.db, { studioId: this.o.studioId, actor: this.personId, now: this.stamp(), change });
+    }
   };
 
   /** A read of business data: needs business.read, and leaves a row in the audit log saying who looked at what. */

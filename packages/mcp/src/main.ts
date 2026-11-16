@@ -27,7 +27,9 @@ import { studioModule } from './modules/studio.js';
 import path from 'node:path';
 import { Studio, studioFile, UserStore } from '@cadrel/studio';
 import { StudioService, dbAccess } from '@cadrel/service';
-import { openStudioDb, type StudioDb } from '@cadrel/store';
+import { DirBlobs, openStudioDb, type BlobStore, type StudioDb } from '@cadrel/store';
+import { DbVaultStore, type VaultStore } from '@cadrel/kernel';
+import { DoorClient, RemoteVaultStore, remoteService } from '@cadrel/studio-client';
 import { EDITORIAL_INSTRUCTIONS } from './modules/editorial.js';
 import { RECORDS_INSTRUCTIONS } from './modules/records.js';
 import { watchLifecycle } from './lifecycle.js';
@@ -101,20 +103,39 @@ const scoped = (o: WriteOptions, closed?: ClosedBooks, view?: Viewer): WriteOpti
  */
 async function findRecords(open: boolean, write?: Found<{ options: WriteOptions }>): Promise<Found<{ module: McpModule; close(): void } & RecordsParts>> {
   const file = flag('records');
+  const door = flag('door');
   const person = flag('person');
   const studioId = flag('studio-id');
-  if (!file || !person || !studioId) return { ok: false, reason: 'no records file given (Cadrel passes --records, --person and --studio-id)' };
+  if ((!file && !door) || !person || !studioId) return { ok: false, reason: 'no records given (Cadrel passes --records, or --door for a Studio on a server, with --person and --studio-id)' };
   const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: `${RECORDS_INSTRUCTIONS} ${EDITORIAL_INSTRUCTIONS} ${PROJECTS_INSTRUCTIONS}`, register: () => undefined };
   if (!open) return { ok: true, value: { module: stub, close: () => undefined } };
   let db: StudioDb | undefined;
   try {
     const { recordsModule } = await import('./modules/records.js');
     const { editorialModule } = await import('./modules/editorial.js');
-    const { access } = await import('node:fs/promises');
-    await access(file);
-    db = await openStudioDb(file);
-    const service = new StudioService({ db, studioId, access: dbAccess(db, studioId), projects: async () => (await studio.read()).tree });
-    const d = db;
+    // Where the records are: a file on this computer, or the Studio's server through the app's door. Either way the same service answers.
+    let service: StudioService;
+    let vault: VaultStore;
+    let blobs: BlobStore | undefined;
+    let close = () => undefined as void;
+    if (door) {
+      const token = flag('door-token');
+      if (!token) return { ok: false, reason: 'the app gave the door no token' };
+      const client = new DoorClient({ url: door, token, fetchFn: fetch });
+      service = remoteService(client);
+      vault = new RemoteVaultStore(client);
+      blobs = { put: () => Promise.reject(new Error('The assistant cannot store files.')), has: async (h) => (await client.getBlob(h)) !== null, get: (h) => client.getBlob(h) };
+    } else {
+      const { access } = await import('node:fs/promises');
+      await access(file!);
+      db = await openStudioDb(file!);
+      service = new StudioService({ db, studioId, access: dbAccess(db, studioId), projects: async () => (await studio.read()).tree });
+      vault = new DbVaultStore({ db, studioId, personId: person });
+      const blobsDir = flag('vault-blobs');
+      if (blobsDir) blobs = new DirBlobs(blobsDir);
+      const d = db;
+      close = () => d.close();
+    }
     // The Books in a Done stage, by the acting person's reading of the workflows (the same rule the app uses to hide and lock them).
     const view: Viewer = (tree) => service.as(person).visibleProjects(tree);
     // A new Book starts in the first stage of the default workflow for new books, as on the Projects page.
@@ -123,8 +144,10 @@ async function findRecords(open: boolean, write?: Found<{ options: WriteOptions 
       return wf ? { workflowId: wf.id, stage: initialStage(wf) } : null;
     };
     const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));
-    const blobsDir = flag('vault-blobs');
-    return { ok: true, value: { module: both(both(recordsModule({ service, personId: person, studio, studioId, db }), editorialModule({ service, personId: person, studio, db, ...(blobsDir ? { blobsDir } : {}) })), projectsModule({ service, personId: person, studio, db, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })), close: () => d.close(), closedBooks, view, stageForNewBook } };
+    const parts = [recordsModule({ service, personId: person, studio, studioId, vault }), editorialModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}) })];
+    // The project tools (create, move, stage) change the project tree, which only the owner does on a server; they are served for a local Studio.
+    const module = db ? both(both(parts[0]!, parts[1]!), projectsModule({ service, personId: person, studio, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })) : both(parts[0]!, parts[1]!);
+    return { ok: true, value: { module, close, closedBooks, view, stageForNewBook } };
   } catch (e) {
     db?.close();
     return { ok: false, reason: `the records could not be opened (${e instanceof Error ? e.message : String(e)})` };

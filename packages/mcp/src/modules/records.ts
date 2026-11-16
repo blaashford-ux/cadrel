@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { ProjectError, WorkError, FileLinkError, CatalogueError, ancestorsOf, getProject, kindLabel, pathOf, subtreeIds, listVaultFiles, type Db, type ProjectTree, type TaskRecord } from '@cadrel/kernel';
+import { ProjectError, WorkError, FileLinkError, CatalogueError, ancestorsOf, getProject, kindLabel, pathOf, subtreeIds, type ProjectTree, type TaskRecord, type VaultStore } from '@cadrel/kernel';
 import { PermissionDenied, type StudioService } from '@cadrel/service';
 import type { Studio } from '@cadrel/studio';
 import { agentFromClient } from '@cadrel/write/mcp/server';
@@ -20,8 +20,8 @@ export interface RecordsToolOptions {
   personId: string;
   studio: Studio;
   studioId: string;
-  /** The records file, to note in its audit log that a change was made through the assistant. */
-  db: Db;
+  /** The vault's files and references (a local records file, or the Studio's server through the app). */
+  vault: Pick<VaultStore, 'list' | 'references'>;
 }
 
 const reply = (value: unknown) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] });
@@ -64,10 +64,11 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
   /** The assistant is a tool of the person's role: a role without `assistant.use` has none of these. */
   const allowed = async () => {
     if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    await as().assistant.check(); // and the Studio has not turned the assistant off (its security policy)
   };
   /** Notes in the audit log that the person's change was made by the assistant, so the record is honest about who typed it. */
   const viaAssistant = async (tool: string, target: string) => {
-    await o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [new Date().toISOString(), o.personId, 'assistant', target, JSON.stringify({ tool, agent: agent() })]);
+    await as().assistant.note(tool, agent(), target);
   };
   /** Names for ids; where the role may not see people, at least the person acted for is "me". */
   const people = async () => as().people.list().catch(() => [{ id: o.personId, name: 'me' }]);
@@ -318,8 +319,9 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
         if (!(await as().can('manuscript.read')) && !(await as().can('asset.read'))) throw new PermissionDenied('manuscript.read', 'your role cannot see the vault\'s files');
         const names = await people();
         const q = a.search?.trim().toLowerCase();
-        const files = await listVaultFiles(o.db, o.studioId);
-        const refs = await o.db.all<{ file: string; to: string; version: number | null }>('SELECT f.path AS file, t.path AS "to", r.version FROM file_reference r JOIN vault_file f ON f.id = r.file_id JOIN vault_file t ON t.id = r.refers_to_id');
+        const files = await o.vault.list();
+        const refs: { file: string; to: string; version: number | null }[] = [];
+        for (const f of files) for (const r of await o.vault.references(f.id)) refs.push({ file: f.path, to: r.path, version: r.version });
         const kindOk = async (p: string) => (await as().can(/\.(md|markdown|txt|rtf|docx?|odt|epub|fountain|html?|json|csv)$/i.test(p) || !/\./.test(p.split('/').pop()!) ? 'manuscript.read' : 'asset.read'));
         const out = [];
         for (const f of files) {

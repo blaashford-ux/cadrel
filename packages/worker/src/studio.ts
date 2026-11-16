@@ -3,7 +3,7 @@
  * the Worker holds no one's secret, only public keys. The owner's key is set when the Studio is built; members join with an invitation the
  * owner made. Nothing here reads or writes the Studio's files: that comes with the vault.
  */
-import { b64u, fingerprint, hex, inviteEmailText, invitationLink, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
+import { b64u, fingerprint, getPolicy, hex, inviteEmailText, invitationLink, ROLE_KEYS, sha256, STUDIO_API_VERSION, STUDIO_WORKER_REVISION, verifyRequest } from '@cadrel/kernel';
 import { ensureSchema } from './schema';
 import { admitMember, personForInvite, personIdFor, readTree, ROLELESS } from './records';
 import { d1Db, readVersions } from './d1';
@@ -28,7 +28,7 @@ export interface StudioEnv {
   OWNER_KEY: string;
 }
 
-const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const NONCE_KEEP_MS = 10 * 60 * 1000;
 /** Old signatures are swept at most this often by a running Worker: the table has no index on its time, so a sweep reads all of it. */
 const NONCE_SWEEP_EVERY_MS = 60 * 1000;
@@ -193,6 +193,7 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     return json({ ok: true, to: row.email });
   }
   if (method === 'POST' && path === '/v1/invites' && data.person && typeof data.person === 'object') {
+    const policy = await getPolicy(d1Db(env.DB), env.STUDIO_ID); // how long an invitation lasts, and the default end of a guest's access (the Studio's security policy)
     // An invitation for a person, with no role: they see nothing until the owner gives them one, per project, in Cadrel.
     const p = data.person as { id?: unknown; name?: unknown; email?: unknown };
     const made = await personForInvite(env, { ...(typeof p.id === 'string' && p.id ? { personId: p.id } : {}), ...(typeof p.name === 'string' ? { name: p.name } : {}), ...(typeof p.email === 'string' ? { email: p.email } : {}) }, now);
@@ -201,22 +202,24 @@ export async function studioRoutes(request: Request, env: StudioEnv, now = Date.
     const label = (typeof data.label === 'string' && data.label.trim() ? data.label.trim() : named?.name ?? '').slice(0, 80);
     const code = b64u(crypto.getRandomValues(new Uint8Array(16)));
     const id = randomId('i');
-    const expires = iso(now + INVITE_LIFETIME_MS);
+    const expires = iso(now + policy.inviteDays * DAY_MS);
     await env.DB.prepare("INSERT INTO invite (id, code_hash, role, label, created_at, expires_at, scope_kind, scope_id, grant_expires_at, person_id) VALUES (?, ?, ?, ?, ?, ?, 'studio', NULL, NULL, ?)").bind(id, hex(await sha256(code)), ROLELESS, label, iso(now), expires, made.id).run();
     return json({ id, code, role: ROLELESS, label, expiresAt: expires, studioId: env.STUDIO_ID, personId: made.id }, 201);
   }
   if (method === 'POST' && path === '/v1/invites') {
+    const policy = await getPolicy(d1Db(env.DB), env.STUDIO_ID);
     const role = typeof data.role === 'string' ? data.role : '';
     const label = typeof data.label === 'string' ? data.label.trim().slice(0, 80) : '';
     if (!MEMBER_ROLES.includes(role)) return fail(400, 'Choose a role for the invitation (not Owner).');
     // where the role applies (one project, for a guest) and for how long (days), if the invitation says
     const projectId = typeof data.projectId === 'string' && data.projectId ? data.projectId : null;
-    const days = typeof data.days === 'number' && data.days > 0 && data.days <= 3650 ? Math.floor(data.days) : null;
+    const named = typeof data.days === 'number' && data.days > 0 && data.days <= 3650 ? Math.floor(data.days) : null;
+    const days = named ?? (projectId ? policy.guestDays : null); // a guest's access ends when the invitation says, else after the Studio's default (if it has one)
     if (projectId && !(await readTree(d1Db(env.DB))).projects.some((p) => p.id === projectId)) return fail(400, 'That project is not in the Studio’s published projects.');
     const grantEnds = days ? iso(now + days * 24 * 60 * 60 * 1000) : null;
     const code = b64u(crypto.getRandomValues(new Uint8Array(16)));
     const id = randomId('i');
-    const expires = iso(now + INVITE_LIFETIME_MS);
+    const expires = iso(now + policy.inviteDays * DAY_MS);
     await env.DB.prepare('INSERT INTO invite (id, code_hash, role, label, created_at, expires_at, scope_kind, scope_id, grant_expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(id, hex(await sha256(code)), role, label, iso(now), expires, projectId ? 'project' : 'studio', projectId, grantEnds).run();
     return json({ id, code, role, label, expiresAt: expires, studioId: env.STUDIO_ID, projectId, grantEndsAt: grantEnds }, 201);
   }

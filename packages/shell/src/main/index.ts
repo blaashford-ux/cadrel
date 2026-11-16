@@ -55,10 +55,12 @@ import { buildStudio, upgradeStudio, type CloudflareOptions } from './cloudflare
 import { Secrets } from './secrets';
 import { joinStudio, StudioClient } from './studioClient';
 import { inviteMailto } from './inviteMail';
+import { AssistantDoor } from './assistantDoor';
+import { loadLens } from './lens';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
-import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
+import { checkPolicyChange, generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -142,6 +144,8 @@ let write: WriteModule;
 let market: MarketModule;
 let finance: FinanceModule;
 const peopleHost = new PeopleHost();
+/** The assistant's way to a Studio on a server: it signs with the key this app holds, so the assistant's own process never does. */
+const assistantDoor = new AssistantDoor(() => peopleHost.serverClient);
 let page: Page = 'home';
 let quitting = false;
 const views: Partial<Record<ModuleId, WebContentsView>> = {};
@@ -1158,6 +1162,12 @@ function registerShellIpc(): void {
     for (const w of st.workflows) usage[w.id] = await stages.usage(w.id);
     return { ...st, usage };
   });
+  manageLike('lens:state', async () => {
+    const work = () => new ProjectWork(studio, peopleHost, stages);
+    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan() }, peopleHost.me, new Date().toISOString().slice(0, 10));
+  });
+  manageLike('policy:state', async () => peopleHost.policyState());
+  manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));
   manageLike('workflow:call', async (name: string, ...args: unknown[]) => callWorkflow(String(name), args, peopleHost, stages));
   // Where projects are in their workflows. A move is checked against the workflow's gates and the person's roles before the tree changes.
   manageLike('stages:views', async () => stages.views());
@@ -1660,6 +1670,7 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     await fsp.mkdir(studioDir, { recursive: true });
     studioSettings = new SettingsStore(path.join(studioDir, 'settings.json'));
     await studioSettings.load();
+    await assistantDoor.start().then(() => peopleHost.setDoor(assistantDoor.url ? { url: assistantDoor.url, token: assistantDoor.token } : null)).catch(() => undefined); // without it the assistant simply has no record tools on a server Studio
     admin = new AdminStore(path.join(studioDir, 'admin.json'), studioRole);
     await admin.load();
     await ensureFolders();
@@ -1863,7 +1874,10 @@ app.on('before-quit', (e) => {
 
 // Windows are closed and nothing can cancel the quit now (a person still deciding about unsaved edits has not got here): from this point the process is
 // gone within 8 s whatever is still winding down, because a Cadrel that is "closed" but still running is what stops the next install or update.
-app.on('will-quit', () => setTimeout(() => app.exit(0), 8000).unref());
+app.on('will-quit', () => {
+  void assistantDoor.stop();
+  setTimeout(() => app.exit(0), 8000).unref();
+});
 
 app.on('quit', () => {
   if (!installerToRun) return;

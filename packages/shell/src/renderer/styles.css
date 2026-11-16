@@ -392,3 +392,7 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 .brief-body { white-space: pre-wrap; }
 .brief { border-top: 1px solid var(--raised); padding-top: 8px; margin-top: 8px; }
 .brief-history { margin: 6px 0 0 18px; padding: 0; }
+
+/* The working view above Home and the Dashboard (LensPanel.tsx) */
+.lens-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 22px; }
+.lens h4 { margin: 4px 0 6px; font-size: 13px; }

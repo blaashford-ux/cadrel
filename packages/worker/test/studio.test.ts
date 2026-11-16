@@ -25,7 +25,7 @@ async function studio() {
 
 describe('the Studio server', () => {
   it('keeps the migrations in the worker identical to the files Wrangler applies', () => {
-    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql', '0007_work.sql', '0008_book_project.sql', '0009_file_links.sql', '0010_business.sql', '0011_server.sql', '0012_brief.sql', '0013_edit_pass.sql', '0014_edit_query.sql', '0015_edit_decision.sql', '0016_edit_verification.sql', '0017_beta_read.sql', '0018_beta_note.sql', '0019_roleless_invite.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
+    ['0001_vault.sql', '0002_studio.sql', '0003_catalogue.sql', '0004_people_roles.sql', '0005_workflow.sql', '0006_workflow_levels.sql', '0007_work.sql', '0008_book_project.sql', '0009_file_links.sql', '0010_business.sql', '0011_server.sql', '0012_brief.sql', '0013_edit_pass.sql', '0014_edit_query.sql', '0015_edit_decision.sql', '0016_edit_verification.sql', '0017_beta_read.sql', '0018_beta_note.sql', '0019_roleless_invite.sql', '0020_studio_policy.sql'].forEach((f, i) => expect(MIGRATIONS[i]).toBe(readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8')));
   });
 
   it('says which database step failed instead of a bare 500', async () => {
@@ -34,7 +34,7 @@ describe('the Studio server', () => {
     env.DB = { ...real, prepare: (q: string) => real.prepare(q), batch: async () => { throw new Error('D1_ERROR: no such table: nope'); } } as unknown as D1Database;
     const r = await worker.fetch(new Request('https://studio.test/v1/info'), env);
     expect(r.status).toBe(503);
-    expect(((await r.json()) as { error: string }).error).toMatch(/database step 1 of 19 failed: D1_ERROR: no such table: nope/);
+    expect(((await r.json()) as { error: string }).error).toMatch(/database step 1 of 20 failed: D1_ERROR: no such table: nope/);
   });
 
   it('reports a schema version equal to the number of migrations', () => {
@@ -45,7 +45,7 @@ describe('the Studio server', () => {
     const { owner, call, env } = await studio();
     const info = await call('GET', '/v1/info', null);
     expect(info.status).toBe(200);
-    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 19, workerRevision: STUDIO_WORKER_REVISION, mail: false });
+    expect(info.body).toEqual({ studioId: 'st1', ownerFingerprint: await fingerprint(owner.publicKey), apiVersion: 1, schemaVersion: 20, workerRevision: STUDIO_WORKER_REVISION, mail: false });
     const health = await worker.fetch(new Request('https://studio.test/v1/health'), env);
     expect(health.status).toBe(200);
   });
@@ -149,5 +149,44 @@ describe('the Studio server', () => {
     const env: Env = { ENVIRONMENT: 'dev', DB: fakeD1(), FILES: { head: async () => null } as unknown as R2Bucket };
     expect((await worker.fetch(new Request('https://x.test/v1/info'), env)).status).toBe(404);
     expect((await worker.fetch(new Request('https://x.test/v1/health'), env)).status).toBe(200);
+  });
+});
+
+describe('the Studio’s security policy, as the server enforces it', () => {
+  it('uses a 7-day invitation and no guest end until a policy is saved, then the saved ones; an invitation already made keeps its date', async () => {
+    const { owner, call } = await studio();
+    const day = 24 * 60 * 60 * 1000;
+    const days = (iso: string) => Math.round((Date.parse(iso) - Date.now()) / day);
+    const before = await call('POST', '/v1/invites', owner, { role: 'author', label: 'Early' });
+    expect(days(before.body.expiresAt)).toBe(7);
+    const saved = await call('POST', '/v1/call', owner, { path: ['policy', 'set'], args: [{ inviteDays: 2, guestDays: 30 }] });
+    expect(saved.status).toBe(200);
+    const after = await call('POST', '/v1/invites', owner, { role: 'author', label: 'Late' });
+    expect(days(after.body.expiresAt)).toBe(2);
+    expect(days(before.body.expiresAt)).toBe(7); // already made: unchanged
+    const listed = (await call('GET', '/v1/invites', owner)).body.invites as { label: string; expiresAt: string }[];
+    expect(days(listed.find((i) => i.label === 'Early')!.expiresAt)).toBe(7);
+  });
+
+  it('gives a one-project invitation the guest default when it names no end of its own, and keeps one that does', async () => {
+    const { owner, call } = await studio();
+    await call('PUT', '/v1/tree', owner, { projects: [{ id: 'p1', name: 'Book', parentId: null, kind: 'Book', status: 'active', order: 0, workflowId: null, stage: null, createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }], links: [] });
+    await call('POST', '/v1/call', owner, { path: ['policy', 'set'], args: [{ guestDays: 30 }] });
+    const day = 24 * 60 * 60 * 1000;
+    const ends = (b: { grantEndsAt?: string | null }) => (b.grantEndsAt ? Math.round((Date.parse(b.grantEndsAt) - Date.now()) / day) : null);
+    expect(ends((await call('POST', '/v1/invites', owner, { role: 'guest', label: 'G', projectId: 'p1' })).body)).toBe(30);
+    expect(ends((await call('POST', '/v1/invites', owner, { role: 'guest', label: 'G2', projectId: 'p1', days: 5 })).body)).toBe(5);
+    expect(ends((await call('POST', '/v1/invites', owner, { role: 'author', label: 'Whole Studio' })).body)).toBeNull(); // not limited to a project: no guest end
+  });
+
+  it('refuses a member who may not change the Studio’s settings, and a value outside its range', async () => {
+    const { owner, call } = await studio();
+    const alice = await generateKeyPair();
+    const inv = await call('POST', '/v1/invites', owner, { role: 'author', label: 'Alice' });
+    await call('POST', '/v1/join', alice, { code: inv.body.code, name: 'Alice' });
+    expect((await call('POST', '/v1/call', alice, { path: ['policy', 'get'], args: [] })).status).toBe(200);
+    expect((await call('POST', '/v1/call', alice, { path: ['policy', 'set'], args: [{ inviteDays: 3 }] })).status).not.toBe(200);
+    expect((await call('POST', '/v1/call', owner, { path: ['policy', 'set'], args: [{ inviteDays: 365 }] })).status).not.toBe(200);
+    expect((await call('POST', '/v1/call', owner, { path: ['policy', 'get'], args: [] })).body).toMatchObject({ result: { inviteDays: 7 } });
   });
 });

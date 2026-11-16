@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ROLE_KEYS, bootstrapStudio, defaultRole, type Ctx } from '@cadrel/kernel';
+import { DbVaultStore, ROLE_KEYS, bootstrapStudio, defaultRole, type Ctx } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, memoryStudioDb, type StudioDb } from '@cadrel/store';
 import { Studio } from '@cadrel/studio';
@@ -33,7 +33,7 @@ beforeEach(async () => {
 });
 
 async function connect(personId = 'ana', blobs: string | null = path.join(dir, 'blobs')) {
-  const server = createCadrelServer({ modules: [editorialModule({ service: svc, personId, studio, db, ...(blobs ? { blobsDir: blobs } : {}) })] });
+  const server = createCadrelServer({ modules: [editorialModule({ service: svc, personId, studio, vault: new DbVaultStore({ db, studioId: S, personId }), ...(blobs ? { blobs: new DirBlobs(blobs) } : {}) })] });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'claude-ai', version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);

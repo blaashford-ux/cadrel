@@ -34,8 +34,8 @@ export class VaultHost {
     // when the Studio's server cannot be reached this is what was last known, and `offline` says so
     const away = () => this.people.offline;
     // the rest also comes from the server: when it is away they are empty, not an error
-    const [people, force, orphans] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans()]);
-    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, entries, kept, orphans, sync: null, ...(away() ? { offline: true } : {}) };
+    const [people, force, orphans, staleDays] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans(), this.people.staleCheckoutDays()]);
+    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, staleDays, entries, kept, orphans, sync: null, ...(away() ? { offline: true } : {}) };
   }
 
   async call(name: string, args: unknown[]): Promise<unknown> {

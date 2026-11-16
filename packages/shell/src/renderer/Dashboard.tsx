@@ -4,6 +4,7 @@ import type { MarketCategoryRow, Overview, Page, StudioState, WriteProjectRow } 
 import { captureState } from './capture';
 import { ago, formatWords, percent } from './format';
 import { factsFor } from './projectFacts';
+import { LensPanel } from './LensPanel';
 import { Glance, StageTag, usePulse, useStages } from './Glance';
 import { ScopeToggle, usePageScope } from './PageScope';
 
@@ -124,6 +125,7 @@ export function Dashboard({ overview, studio, onGo, onProject, onRefresh }: Prop
   return (
     <div className="dashboard">
       <div className="row"><ScopeToggle s={ps} /></div>
+      <LensPanel onGo={onGo} onProject={onProject} studioKey={studio} />
       <Glance pulse={pulse} onGo={onGo} onProject={onProject} />
 
       <section className="card wide" aria-labelledby="d-projects">

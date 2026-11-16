@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { addReference, addVaultFile, bootstrapStudio, checkIn, checkOut, defaultRole, newRecordId, type Ctx } from '@cadrel/kernel';
+import { DbVaultStore, addReference, addVaultFile, bootstrapStudio, checkIn, checkOut, defaultRole, newRecordId, type Ctx } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { memoryStudioDb, type StudioDb } from '@cadrel/store';
 import { Studio } from '@cadrel/studio';
@@ -33,7 +33,7 @@ async function connect(personId = 'ana') {
     const wf = await svc.as(personId).workflows.defaultFor('subproject').catch(() => null);
     return wf ? { workflowId: wf.id, stage: wf.stages[0]!.key } : null;
   };
-  const server = createCadrelServer({ modules: [studioModule({ studio, view, stageForNewBook, write: { fs: mem, root: '/books' } }), recordsModule({ service: svc, personId, studio, studioId: S, db }), projectsModule({ service: svc, personId, studio, db, view })] });
+  const server = createCadrelServer({ modules: [studioModule({ studio, view, stageForNewBook, write: { fs: mem, root: '/books' } }), recordsModule({ service: svc, personId, studio, studioId: S, vault: new DbVaultStore({ db, studioId: S, personId }) }), projectsModule({ service: svc, personId, studio, view })] });
   const [a, b] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'claude-ai', version: '1' });
   await Promise.all([server.connect(a), client.connect(b)]);
