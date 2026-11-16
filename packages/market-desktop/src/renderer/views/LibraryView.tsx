@@ -42,7 +42,7 @@ export function LibraryView({ version, show = null }: { version: number; show?: 
     { key: 'rating', label: 'Rating', num: true, get: (b) => b.ratingValue },
     { key: 'ratings', label: 'Ratings', num: true, get: (b) => b.ratingCount, render: (b) => b.ratingCount?.toLocaleString() ?? '' },
     { key: 'price', label: 'Price', num: true, get: (b) => b.kindlePrice, render: (b) => money(b.kindlePrice) },
-    { key: 'captures', label: 'Captures', num: true, get: (b) => b.snapshots },
+    { key: 'captures', label: 'Captures', num: true, get: (b) => b.snapshots, render: (b) => (b.pageOnly ? 'author page only' : String(b.snapshots)), title: (b) => (b.pageOnly ? 'Known from an author\'s All Books page; capture the book page for its rank, categories and text' : undefined) },
     { key: 'mine', label: 'Mine', choices: ['mine', ''], get: (b) => (b.own ? 'mine' : ''), render: (b) => (b.own ? '★' : ''), title: () => 'One of your own books (see My Books)' },
     { key: 'text', label: 'Text', choices: ['book', 'sample', ''], get: (b) => (b.text ? TEXT_LABEL[b.text] : '') },
   ];

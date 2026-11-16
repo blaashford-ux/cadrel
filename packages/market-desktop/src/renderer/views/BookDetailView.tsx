@@ -82,11 +82,17 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
       <div className="row">
         <button onClick={onBack}>← Back</button>
         <button onClick={() => api.openBook(asin)}>Open on Amazon</button>
-        <button onClick={() => api.revealBook(asin)}>Show files</button>
+        {!d.pageOnly && <button onClick={() => api.revealBook(asin)}>Show files</button>}
         <button onClick={() => void toggleOwn(!own)} title={own ? 'This is one of your books' : 'Add it to My Books'}>{own ? '★ Remove from My Books' : '☆ This is my book'}</button>
         <NotesButton kind="book" id={asin} label={String(L.title ?? asin)} />
       </div>
       {err && <div className="err" role="alert">{err}</div>}
+      {d.pageOnly && (
+        <div className="banner">
+          <strong>Known only from the author's All Books page</strong>
+          <div>You have its title, series, rating and price, but not its rank, categories, description or text. Press <b>Open on Amazon</b> and send the book's page to Cadrel Market to capture it fully.</div>
+        </div>
+      )}
       <div className="detail">
         {cover ? <img src={cover} alt="Cover" /> : <div className="cover-empty">No cover</div>}
         <div>
@@ -98,6 +104,7 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
         </div>
       </div>
 
+      {!d.pageOnly && (<>
       <h2>History ({d.history.length} capture{d.history.length === 1 ? '' : 's'})</h2>
       <div className="grid3">
         <div className="card"><Spark label="Kindle Store rank" values={d.history.map((h) => h.overallRank)} invert /></div>
@@ -129,6 +136,7 @@ export function BookDetailView({ asin, onBack, version }: { asin: string; onBack
           <button onClick={() => { if (window.confirm('Delete this book from the library and take it out of every category it is listed in? Its captured pages, cover, text, notes and files are removed from disk.')) void run(async () => { await api.removeBook(asin, true); onBack(); }); }}>Remove from library and all categories…</button>
         </div>
       </div>
+      </>)}
 
       {d.issues.length > 0 && (
         <>

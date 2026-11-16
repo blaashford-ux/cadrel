@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.14.1 (the books of a captured author page show in the Library)
+
+- **An author's books now appear in Library → All books** as soon as their All Books page is captured, marked "author page only" until the book's own page is captured. Before, they only joined the capture queue, so a capture of 45 books showed none in the Library. They can be searched and opened: the book page shows what the author's page gave (title, authors, series, rating, price, other formats) and says what a full capture would add. A book already captured keeps its full page; the books in a category list are unchanged.
+
 ## 0.14.0 (import an author's whole catalogue into Market)
 
 - **An author's "All Books" page can be captured and imported.** Open an author's store page on amazon.com, choose **All Books**, and capture it with the Market extension (it scrolls the whole grid first), or save the page from the browser and import the file. Every book on it enters the Market library with its title, series and place in the series, rating, price, the paperback and audiobook editions and cover, and the library can group an author's books into series, omnibuses and standalone titles.
