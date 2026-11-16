@@ -497,7 +497,7 @@ describe('AppService', () => {
       svc.onMaintenance(() => seen.push(svc.maintenanceStatus().kind ?? 'idle'));
       const first = svc.rebuild();
       await expect(svc.rebuild()).rejects.toThrow(/another job/);
-      expect(await first).toEqual({ detail: 1, list: 0, search: 0 });
+      expect(await first).toEqual({ detail: 1, list: 0, search: 0, author: 0 });
       expect(seen[0]).toBe('rebuild');
       expect(seen.at(-1)).toBe('idle');
       expect(svc.maintenanceStatus()).toMatchObject({ kind: null, message: expect.stringContaining('Re-read 1 book page') });
