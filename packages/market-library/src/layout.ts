@@ -37,3 +37,7 @@ export function searchDir(root: string, c: { marketplace: string; query: string 
   const slug = c.query.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'query';
   return path.join(root, 'searches', c.marketplace, slug, stamp);
 }
+
+export function authorDir(root: string, c: { marketplace: string; authorId: string }, stamp: string): string {
+  return path.join(root, 'authors', c.marketplace, c.authorId, stamp);
+}

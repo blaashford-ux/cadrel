@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { KEYWORD_TOOLS } from './keywordTools.js';
 import {
   METRICS, amazonUrl, analyzeCovers, contentMetricsOf, contentStats, excerpt, getManuscripts, categoryReport, coverStats, marketShape, packagingStats, readerVoice, reportMarkdown, successScores, trend, categoryBooks, cohortStats, embeddingStatus, getBook, listAnnotations, listBooks, listCategories,
-  authorNamesOf, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type CategoryBook, type Embedder, type Library, type MetricName, type OutlineSource,
+  authorNamesOf, authorCorpus, listAuthors, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type CategoryBook, type Embedder, type Library, type MetricName, type OutlineSource,
 } from '@cadrel/market-library';
 
 export interface ToolContext {
@@ -361,6 +361,39 @@ export const TOOLS: ToolSpec[] = [
         books_on_list: c.listedBooks, books_with_detail_pages: c.capturedBooks,
       })),
     }),
+  },
+  {
+    name: 'list_authors',
+    description: 'List the authors whose "All Books" page has been captured, with how many of their books are in the library and how many have full detail pages. Use the returned author_id in author_corpus.',
+    shape: {},
+    readOnly: true,
+    run: ({ lib }) => ({
+      data: listAuthors(lib.db).map((a) => ({
+        author_id: a.authorId, name: a.name, last_capture: a.lastCapture, captures: a.captures,
+        books_on_page: a.books, books_amazon_says: a.totalCount, books_with_detail_pages: a.capturedBooks,
+      })),
+    }),
+  },
+  {
+    name: 'author_corpus',
+    description: 'One author\'s whole catalogue from their newest "All Books" capture, grouped into series (numbered books, and any omnibus that collects them) and standalone books, with rating, price, co-authors and other formats. Books marked detail_captured: false are known only from this page.',
+    shape: { author_id: z.string().describe('Amazon author id from list_authors, e.g. B0CMJC56GQ') },
+    readOnly: true,
+    run: ({ lib }, { author_id }: { author_id: string }) => {
+      const c = authorCorpus(lib.db, author_id);
+      if (!c) return { error: `no captured "All Books" page for author ${author_id}; see list_authors` };
+      const book = (b: any) => ({
+        ...cite(b.asin, c.capturedAt), title: b.title, authors: b.authorNames, authors_known: b.authorsKnown, format: b.format, rating: b.ratingValue,
+        rating_count: b.ratingCount, price_usd: b.price, other_formats: b.otherFormats, detail_captured: b.captured,
+      });
+      return {
+        data: {
+          author_id: c.authorId, name: c.name, captured_at: c.capturedAt, books_amazon_says: c.totalCount,
+          series: c.series.map((s) => ({ name: s.name, url: s.url, books_in_series: s.total, books: s.books.map((b) => ({ ...book(b), position: b.seriesPosition, omnibus: b.collects })) })),
+          standalone: c.standalone.map(book),
+        },
+      };
+    },
   },
   {
     name: 'category_overview',

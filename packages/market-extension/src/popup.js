@@ -29,7 +29,7 @@ $('save').addEventListener('click', async () => {
 $('send').addEventListener('click', async () => {
   status('Capturing…', true);
   const r = await chrome.runtime.sendMessage({ type: 'capture-active' });
-  status(r.ok ? `Saved ${r.kind === 'list' ? 'list' : r.kind === 'search' ? `search "${r.query}"` : r.asin}` : r.error, r.ok);
+  status(r.ok ? `Saved ${r.kind === 'list' ? 'list' : r.kind === 'search' ? `search "${r.query}"` : r.kind === 'author' ? `${r.books} books by author ${r.authorId}` : r.asin}` : r.error, r.ok);
 });
 
 for (const [id, type] of [['sample-start', 'sample-start'], ['sample-now', 'sample-now'], ['sample-finish', 'sample-finish']]) {

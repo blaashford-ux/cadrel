@@ -6,11 +6,13 @@ import {
   parseDetailPage,
   parseListPage,
   parseSearchPage,
+  parseAuthorPage,
   scrub,
   detectPersonalLiterals,
   type DetailCapture,
   type ListCapture,
   type SearchCapture,
+  type AuthorCapture,
   type ParseIssue,
 } from '@cadrel/market-core';
 import { openDb, type Db } from './schema.js';
@@ -24,9 +26,9 @@ import { excludeFromCategory, excludedAsins, insertListEntry, refreshDerived, re
 import { reindexSales } from './sales/import.js';
 import type { AuthorScope } from './sales/scope.js';
 import { reindexManuscripts, removeManuscript, saveManuscript, type ManuscriptInput, type ManuscriptRow, type TextSource } from './manuscripts.js';
-import { categoryKey, coversDir, dbPath, isAsin, listDir, searchDir, snapshotDir, stampOf } from './layout.js';
+import { authorDir, categoryKey, coversDir, dbPath, isAsin, listDir, searchDir, snapshotDir, stampOf } from './layout.js';
 
-export type PageKind = 'detail' | 'list' | 'search';
+export type PageKind = 'detail' | 'list' | 'search' | 'author';
 
 export interface CaptureInput {
   kind: PageKind;
@@ -51,6 +53,9 @@ export interface IngestResult {
   categoryKey?: string;
   /** The search words for search pages. */
   query?: string;
+  /** Amazon author id and how many books were on the page, for author pages. */
+  authorId?: string;
+  books?: number;
   issues: ParseIssue[];
   /** true when this exact capture already existed and was replaced. */
   replaced: boolean;
@@ -58,16 +63,17 @@ export interface IngestResult {
 
 export function detectKind(url: string): PageKind | null {
   if (/\/(?:zgbs|gp\/bestsellers|gp\/new-releases|gp\/movers-and-shakers)\b/.test(url)) return 'list';
+  if (/\/stores\/(?:[^/?#]+\/)?author\/[A-Z0-9]{10}\/allbooks\b/.test(url)) return 'author';
   if (/\/(?:dp|gp\/product)\/[A-Z0-9]{10}/.test(url)) return 'detail';
   if (/^https?:\/\/(?:www\.)?amazon\.com\/s\/?\?(?:[^#]*&)?k=[^&]/.test(url)) return 'search';
   return null;
 }
 
-export interface RebuildCounts { detail: number; list: number; search: number }
+export interface RebuildCounts { detail: number; list: number; search: number; author: number }
 
 /** Parse a stored or incoming page with the parser for its kind. */
-function parsePage(meta: CaptureMeta, html: string): DetailCapture | ListCapture | SearchCapture {
-  return meta.kind === 'detail' ? parseDetailPage(html) : meta.kind === 'search' ? parseSearchPage(html, meta.url) : parseListPage(html);
+function parsePage(meta: CaptureMeta, html: string): DetailCapture | ListCapture | SearchCapture | AuthorCapture {
+  return meta.kind === 'detail' ? parseDetailPage(html) : meta.kind === 'search' ? parseSearchPage(html, meta.url) : meta.kind === 'author' ? parseAuthorPage(html, meta.url) : parseListPage(html);
 }
 
 const gz = (s: string | Buffer) => zlib.gzipSync(s, { level: 9 });
@@ -181,6 +187,11 @@ export class Library {
       const asin = (parsed as DetailCapture).asin;
       if (!asin || !isAsin(asin)) throw new Error('detail page has no recognisable ASIN');
       dir = snapshotDir(this.root, asin, stamp);
+    } else if (input.kind === 'author') {
+      const ac = parsed as AuthorCapture;
+      if (!ac.authorId) throw new Error('author page has no author id');
+      if (!ac.entries.length) throw new Error(ac.issues.find((i) => i.field === 'entries')?.detail ?? 'author page has no books');
+      dir = authorDir(this.root, ac, stamp);
     } else if (input.kind === 'search') {
       const sc = parsed as SearchCapture;
       if (!sc.query) throw new Error('search page has no search words');
@@ -240,12 +251,12 @@ export class Library {
   }
 
   private *rebuildSteps(): Generator<{ done: number; total: number }, RebuildCounts> {
-    const counts: RebuildCounts = { detail: 0, list: 0, search: 0 };
+    const counts: RebuildCounts = { detail: 0, list: 0, search: 0, author: 0 };
     this.rebuilding = true;
     resetVectors(this.db);
     this.db.begin();
     try {
-      for (const t of ['chunk', 'manuscript', 'text_block', 'parse_issue', 'list_entry', 'list_capture', 'search_entry', 'search_capture', 'rank_entry', 'format_offer', 'snapshot', 'category', 'book']) {
+      for (const t of ['chunk', 'manuscript', 'text_block', 'parse_issue', 'list_entry', 'list_capture', 'search_entry', 'search_capture', 'author_entry', 'author_capture', 'rank_entry', 'format_offer', 'snapshot', 'category', 'book']) {
         this.db.exec(`DELETE FROM ${t}`);
       }
       const dirs = findCaptureDirs(this.root);
@@ -271,8 +282,10 @@ export class Library {
     return counts;
   }
 
-  private index(meta: CaptureMeta, parsed: DetailCapture | ListCapture | SearchCapture, relDir: string, replaced: boolean): IngestResult {
-    return meta.kind === 'detail'
+  private index(meta: CaptureMeta, parsed: DetailCapture | ListCapture | SearchCapture | AuthorCapture, relDir: string, replaced: boolean): IngestResult {
+    return meta.kind === 'author'
+      ? this.indexAuthor(meta, parsed as AuthorCapture, relDir, replaced)
+      : meta.kind === 'detail'
       ? this.indexDetail(meta, parsed as DetailCapture, relDir, replaced)
       : meta.kind === 'search'
         ? this.indexSearch(meta, parsed as SearchCapture, relDir, replaced)
@@ -366,6 +379,26 @@ export class Library {
     return { kind: 'search', dir: relDir, query: sc.query, issues: sc.issues, replaced };
   }
 
+  private indexAuthor(meta: CaptureMeta, a: AuthorCapture, relDir: string, replaced: boolean): IngestResult {
+    const db = this.db;
+    db.prepare('DELETE FROM author_capture WHERE author_id = ? AND marketplace = ? AND captured_at = ?').run(a.authorId, a.marketplace, meta.capturedAt);
+    const info = db
+      .prepare('INSERT INTO author_capture (author_id, author_name, marketplace, captured_at, dir, url, total_count, listed_count) VALUES (?,?,?,?,?,?,?,?)')
+      .run(a.authorId, a.authorName, a.marketplace, meta.capturedAt, relDir, meta.url, a.totalCount, a.entries.length);
+    const id = Number(info.lastInsertRowid);
+    const ins = db.prepare(
+      `INSERT INTO author_entry (author_capture_id, position, asin, title, authors, authors_known, series_name, series_asin, series_position, series_total,
+         series_collects, rating_value, rating_count, format, price, other_formats, cover_url) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    for (const e of a.entries) {
+      ins.run(id, e.position, e.asin, e.title, JSON.stringify(e.authors), e.authorsKnown ? 1 : 0, e.series?.name ?? null, e.series?.asin ?? null,
+        e.series?.position ?? null, e.series?.total ?? null, e.series?.collects ? 1 : 0, e.ratingValue, e.ratingCount, e.format, e.price,
+        JSON.stringify(e.otherFormats), e.coverUrl);
+    }
+    this.saveIssues('author_capture', id, a.issues);
+    return { kind: 'author', dir: relDir, authorId: a.authorId, books: a.entries.length, issues: a.issues, replaced };
+  }
+
   private saveIssues(kind: string, id: number, issues: ParseIssue[]): void {
     const st = this.db.prepare('INSERT INTO parse_issue (source_kind, source_id, field, severity, detail) VALUES (?,?,?,?,?)');
     for (const i of issues) st.run(kind, id, i.field, i.severity, i.detail);
@@ -382,7 +415,7 @@ function findCaptureDirs(root: string): string[] {
       else walk(p);
     }
   };
-  for (const top of ['books', 'lists', 'searches']) {
+  for (const top of ['books', 'lists', 'searches', 'authors']) {
     const p = path.join(root, top);
     if (fs.existsSync(p)) walk(p);
   }

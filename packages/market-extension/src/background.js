@@ -106,8 +106,8 @@ export async function captureTab(tab) {
   const kind = classifyUrl(tab.url ?? '');
   const ctx = { asin: asinOf(tab.url ?? ''), session: null };
   if (!kind) {
-    show(tabId, '!', 'open an amazon.com book page, bestseller list or search first', '#b3261e', ctx);
-    return { ok: false, error: 'not an amazon.com book, list or search page' };
+    show(tabId, '!', 'open an amazon.com book page, bestseller list, search or an author All Books page first', '#b3261e', ctx);
+    return { ok: false, error: 'not an amazon.com book, list, search or author "All Books" page' };
   }
   const cfg = await getConfig();
   if (!cfg.token) {
