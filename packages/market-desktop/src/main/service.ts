@@ -11,7 +11,7 @@ import {
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
   applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, getOutlineChoice, setOutlineChoice, listInjectedSuggestions, dismissInjectedSuggestion, type OutlineRef, type OutlineSource, type InjectedSuggestion, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, purgeBook, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
-  Library, amazonUrl, getBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
+  Library, amazonUrl, getBook, getPageBook, listBooks, listCategories, listExclusions, listedIn, listIssues, nextInQueue, queue,
   type BookDetail, type QueueItem, type RemovedBook,
 } from '@cadrel/market-library';
 import { DEFAULT_PORT, loadOrCreateToken, rotateToken, startIngestServer, type SampleLogEvent } from '@cadrel/market-server';
@@ -962,7 +962,7 @@ export class AppService {
 
   categories() { return listCategories(this.need().db); }
   books(o?: { categoryKey?: string; search?: string }) { return listBooks(this.need().db, o); }
-  book(asin: string): BookDetail | null { assertAsin(asin); return getBook(this.need().db, asin); }
+  book(asin: string): BookDetail | null { assertAsin(asin); const db = this.need().db; return getBook(db, asin) ?? getPageBook(db, asin); }
   issues(): IssueRow[] { return listIssues(this.need().db); }
   queue(o?: { categoryKey?: string; includeSkipped?: boolean; onlyNew?: boolean }) { return queue(this.need().db, o); }
 
