@@ -64,6 +64,7 @@ export function registerRecordsTools(server: McpServer, o: RecordsToolOptions): 
   /** The assistant is a tool of the person's role: a role without `assistant.use` has none of these. */
   const allowed = async () => {
     if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    await as().assistant.check(); // and the Studio has not turned the assistant off (its security policy)
   };
   /** Notes in the audit log that the person's change was made by the assistant, so the record is honest about who typed it. */
   const viaAssistant = async (tool: string, target: string) => {

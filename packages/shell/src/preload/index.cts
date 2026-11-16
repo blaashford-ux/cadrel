@@ -119,6 +119,10 @@ const api: CadrelApi = {
     createBrief: (input) => studioCall('shell:editing:createBrief', input),
     reviseBrief: (id, input) => studioCall('shell:editing:reviseBrief', id, input)
   },
+  policy: {
+    state: () => studioCall('shell:policy:state'),
+    set: (change) => studioCall('shell:policy:set', change)
+  },
   workflow: {
     state: () => studioCall('shell:workflow:state'),
     create: (i) => studioCall('shell:workflow:call', 'create', i),

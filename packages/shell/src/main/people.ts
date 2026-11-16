@@ -5,14 +5,14 @@
  * A Studio whose records are on its server (every Studio this person joined, and an owned one that was moved there) is the same service sent
  * over the wire: nothing else in the app needs to know. A joined Studio that cannot be reached says so until it can.
  */
-import { bootstrapStudio, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
+import { bootstrapStudio, DEFAULT_POLICY, POLICY_LIMITS, STUDIO_API_VERSION, STUDIO_SCHEMA_VERSION, type PolicyChange, type ProjectTree, type ProjectVisibility } from '@cadrel/kernel';
 import { StudioService, dbAccess } from '@cadrel/service';
 import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store';
 import { EditorialOffline } from './offlineEditorial';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
 import { StudioOfflineError, type StudioClient } from './studioClient';
 import path from 'node:path';
-import type { PeopleState, WorkflowState } from '../shared/api';
+import type { PeopleState, PolicyState, WorkflowState } from '../shared/api';
 
 /** The operations the page may ask for: the service's `people` methods that change things, by the page's names. Nothing else is reachable. */
 const CALLS: Record<string, string> = {
@@ -253,6 +253,23 @@ export class PeopleHost {
     const done = await people[method]!(...args);
     await this.refreshPenNames(); // a pen name may have been added, renamed or removed
     return done;
+  }
+
+  /** The Studio's security policy as the person using the app sees it, and whether they may change it. The defaults where the Studio keeps none. */
+  async policyState(): Promise<PolicyState> {
+    if (!this.svc) return { available: false, reason: this.why };
+    const p = this.svc.as(this.meId);
+    const [policy, may] = await Promise.all([p.policy.get(), p.can('studio.settings')]);
+    return { available: true, policy, may, limits: POLICY_LIMITS };
+  }
+  async setPolicy(change: PolicyChange): Promise<PolicyState> {
+    if (!this.svc) throw new Error(this.why);
+    await this.svc.as(this.meId).policy.set(change);
+    return this.policyState();
+  }
+  /** Days after which a check-out is flagged as stale. The default where the policy cannot be read (the Studio is away). */
+  async staleCheckoutDays(): Promise<number> {
+    return this.svc ? (await this.svc.as(this.meId).policy.get().catch(() => DEFAULT_POLICY)).staleCheckoutDays : DEFAULT_POLICY.staleCheckoutDays;
   }
 
   async workflowState(): Promise<Exclude<WorkflowState, { available: true }> | Omit<Extract<WorkflowState, { available: true }>, 'usage'>> {

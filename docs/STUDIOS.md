@@ -88,7 +88,7 @@ A built Studio can keep everything on its server: the people, roles and teams, t
 - **Members changing projects.** Only the owner changes the project tree (create, rename, move, link, archive, stages); a member's attempt is refused with a sentence. A member moving a project between stages needs this and is not possible yet.
 - **The server cannot be asked who is online**, tasks do not notify anyone, and there is no live update: a page shows the server's state when it is opened or refreshed.
 - **Role dashboards.** Home and the Dashboard show what a person's role lets them read (a card a role may not see is left out), but there is no separate Author, Editor or Director dashboard.
-- **The security policy page** (sign-in rules, who may invite) and **replicating the file store** to a second bucket.
+- **Replicating the file store** to a second bucket. (The security policy page is built, in `dev`: invitation lifetime, guest default, stale check-out warning, assistant on or off.)
 - **A signed installer.** The release workflow signs when the repository has the `CSC_LINK` and `CSC_KEY_PASSWORD` secrets (a code-signing certificate); without them it builds an unsigned installer and says so. There is no certificate yet.
 - **Updates from the Studio's server** (R2). Cadrel still updates from its GitHub releases.
 - **Recovery code**: lose every owner device and you lose the Studio. A linked phone is a second owner device, so link one.

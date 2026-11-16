@@ -60,6 +60,7 @@ export function registerEditorialTools(server: McpServer, o: EditorialToolOption
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
   const allowed = async () => {
     if (!(await as().canOn('assistant.use'))) throw new PermissionDenied('assistant.use', 'your role does not include using the assistant');
+    await as().assistant.check(); // and the Studio has not turned the assistant off (its security policy)
   };
   const viaAssistant = async (tool: string, target: string) => {
     await as().assistant.note(tool, agent(), target);

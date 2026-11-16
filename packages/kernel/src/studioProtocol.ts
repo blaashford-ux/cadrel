@@ -13,7 +13,7 @@
 /** Changes when the requests or answers change in a way an older app could not follow. */
 export const STUDIO_API_VERSION = 1;
 /** Changes when the Studio's database changes. Only ever added to: an older app must keep working on a newer database. */
-export const STUDIO_SCHEMA_VERSION = 19;
+export const STUDIO_SCHEMA_VERSION = 20;
 
 /**
  * Changes whenever the Studio's server code gains something an older server lacks, even with no change to the API or database above (a new

@@ -1,6 +1,6 @@
 # Closing the small M2 and M3 gaps: implementation plan
 
-Status: **decisions made; A built in `dev` (not yet released); B and C not started.** Branch `dev`. Three items listed as "not done" in [PLAN.md](PLAN.md) (M2 and M3) and [STUDIOS.md](STUDIOS.md) §"Not built". Each is its own slice and release-able alone. Versions are not tied to the plan ([VERSIONING.md](VERSIONING.md)); each slice is a Minor or a Fix as it turns out.
+Status: **A and C built in `dev` (not yet released; one server revision, 8, and database step 20); B not started.** Branch `dev`. Three items listed as "not done" in [PLAN.md](PLAN.md) (M2 and M3) and [STUDIOS.md](STUDIOS.md) §"Not built". Each is its own slice and release-able alone. Versions are not tied to the plan ([VERSIONING.md](VERSIONING.md)); each slice is a Minor or a Fix as it turns out.
 
 Order: **A (assistant on server Studios) → B (role dashboards) → C (security policy page).** A first because it is a hole (a feature that works on a local Studio silently does not on a server one) and it is the riskiest; B is the most visible to a team; C is the smallest and is cut down to what is real (see C).
 
@@ -60,6 +60,8 @@ A person with several lenses sees the highest-reach one first and a switch; Owne
 **Open question for you:** which three or four numbers a Director most wants first (late books, unanswered queries, money committed, who is overloaded?). The plan assumes the first and second; money waits for M7.
 
 ## C. Security policy page: cut to what is real
+
+**Built (in `dev`, not yet released).** `PERMISSIONS.md` §3 and §5 now describe what Cadrel really does (a device is a key; no emailed sign-in, sessions or second factor) and list what is not planned. The policy is the table `studio_policy` (database step 20; one row per Studio, none meaning the defaults), `kernel/src/policy.ts` (defaults, ranges, audited change), the service's `policy.get` (anyone) and `policy.set` (`studio.settings`) and `assistant.check`, the Worker (invitation lifetime and the guest default are applied when an invitation is made), and **Admin → Security policy** (`renderer/SecurityPolicy.tsx`). The Files page flags a check-out older than the stale limit to its holder and to anyone who may force a release; the assistant's record, editorial and project tools refuse for everyone when the Studio turns it off. Tested in the kernel, the service, the Worker over HTTP, and the shell against the real Worker code (including the assistant refusing through the door). **Not done:** the stale warning is on the Files page only (not on Home); the page's screen has not been seen in a real window; the switch covers the records, editorial and project tools, not Write's or Market's own tools (those are governed per computer by Settings → MCP).
 
 **Finding.** The table in `PERMISSIONS.md` §5 assumes email-link sign-in, sessions and second factors; Cadrel uses device keys. Building the page as written would promise controls that do not exist. So this slice **first rewrites that section to match how sign-in works**, then builds a page that sets only what the server can enforce.
 

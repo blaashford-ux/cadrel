@@ -113,6 +113,17 @@ describe('the assistant on a Studio whose records are on its server', () => {
       expect(files).toMatchObject({ error: true });
       expect(files.text).toMatch(/not allowed.*manuscript\.read/);
 
+      // the Studio's administrators turn the assistant off: its tools refuse for the Editor too, whatever their role holds, and work again when it is back on
+      const owner = remoteService(s.owner).as('x');
+      await owner.policy.set({ assistantEnabled: false });
+      s.advance();
+      const off = await asEve('edit_passes', { mine: true });
+      expect(off).toMatchObject({ error: true });
+      expect(off.text).toMatch(/turned the assistant off/);
+      await owner.policy.set({ assistantEnabled: true });
+      s.advance();
+      expect((await asEve('edit_passes', { mine: true })).error).toBe(false);
+
       // the Author, through the same kind of door, can read the pass but not raise on it, and the assistant cannot answer or decide at all
       target = annClient;
       const annId = (await annClient.me()).personId;

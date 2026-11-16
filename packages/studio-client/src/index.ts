@@ -29,7 +29,8 @@ const READS = new Set([
   'business.contributions', 'business.credits', 'business.rights', 'business.shares',
   'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
   'briefs.list', 'briefs.get', 'briefs.versions', 'passes.list', 'passes.get', 'queries.list', 'queries.counts', 'queries.decisions', 'queries.verification',
-  'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove'
+  'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove',
+  'policy.get'
 ]);
 /** How long the Studio's change counter is trusted before it is asked again. */
 export const FRESH_MS = 3_000;

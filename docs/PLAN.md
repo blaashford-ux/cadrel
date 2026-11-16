@@ -62,7 +62,7 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 |---|---|---|
 | M0 | One app | Built and released as 0.2.0. |
 | M1 | Shared records | Built and released as 0.3.0. In daily use on Windows; `docs/M1-EXIT-TEST.md` has no recorded run. |
-| M2 | The team vault on Cloudflare | **Built and released** (0.7.0 on, in use on real Studios). Records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records; invitations and People page (0.11.0). Not done: **code-signed installer (deferred, needs a paid certificate)**, updates from R2 (updates come from GitHub releases), replicating the file store, the security policy page, separate Author / Editor / Director dashboards, live updates. |
+| M2 | The team vault on Cloudflare | **Built and released** (0.7.0 on, in use on real Studios). Records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records; invitations and People page (0.11.0). Not done: **code-signed installer (deferred, needs a paid certificate)**, updates from R2 (updates come from GitHub releases), replicating the file store, separate Author / Editor / Director dashboards, live updates. Built since in `dev` (not released): the assistant on server Studios and the security policy page ([GAPS-PLAN.md](GAPS-PLAN.md)). |
 | M3 | Editorial | **Built and released** (0.7.0 on): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Automated exit test `m3Exit.test.ts`; `M3-EXIT-TEST.md` has no recorded run. Not built: assistant editorial tools for a Studio whose records are on its server, editor dashboard. See [M3-PLAN.md](M3-PLAN.md). |
 | M4 | Canon and continuity | Not started as specified. |
 | M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
@@ -243,7 +243,7 @@ I have assumed a default for each so work is not blocked; tell me where you disa
 | 8 | Product name for modules and Cadrel installer | Suite is "Cadrel"; modules use the plain names in section 2. |
 | 9 | Who may force a lock? | **Decided:** you start as Owner; administrators configure roles. `vault.force` is held by Owner and Admin by default and can be granted to any role. |
 | 10 | Default roles | **Decided:** Owner, Admin, Director, Series Lead, Author, Editor, Art Director, Artist, Marketing, Analyst, Finance, Guest (matrix in PERMISSIONS.md). Admin sees everything. |
-| 11 | Sign-in | **Decided:** email invitation plus one-time link. Needs an email sender; see PERMISSIONS.md. |
+| 11 | Sign-in | **Built differently from the first decision:** an invitation link joins a device, and each device is a key (no passwords, no emailed sign-in links). The Studio can email an invitation itself (optional). See PERMISSIONS.md §3. |
 | 12 | Domain for email sending and the API | Open: do you have a domain on Cloudflare to use (for example `api.<yourdomain>` and the sender address)? Without one the Worker runs on a `workers.dev` address and invitations are copied by hand. |
 
 ## 6. The Cloudflare account (checked)
@@ -259,7 +259,7 @@ Read-only look through the connector:
 
 M0 to M3 are released (0.12.1 is the latest) and have been used on real Studios, so the earlier "run it against a real Cloudflare account" item is done in practice. The code-signed installer is deferred until a certificate is worth paying for. What is next, in the order I would take it:
 
-1. **Close the small M2 and M3 gaps that a team notices** (planned in [GAPS-PLAN.md](GAPS-PLAN.md)): separate Author, Editor and Director dashboards (Home and the Dashboard read the records already); the assistant's record and editorial tools for a Studio whose records are on its server; the security policy page. Cut by what the Studio actually asks for.
+1. **Finish the small M2 and M3 gaps that a team notices** ([GAPS-PLAN.md](GAPS-PLAN.md)): the assistant on server Studios and the security policy page are built in `dev` (release as 0.13.0); what remains is the separate Author, Editor and Director dashboards (slice B).
 2. **Record a run of the M1 and M3 exit tests** on a current build if a written record matters; they have automated cover but no recorded manual run.
 3. **M4: Canon and continuity.** Not started as specified. The timeline and LitRPG trackers and the Series Developer skill already supply a ledger per series and a series bible as files; the versioned bible, anchored facts, change proposals and the continuity checker (exit: Book 4 checked against Books 1 to 3) are the work.
 4. Then M5 (Art, assets and Preflight) onward, in order, only as the Studio needs each.

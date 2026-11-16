@@ -59,7 +59,7 @@ import { AssistantDoor } from './assistantDoor';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
-import { generateKeyPair, type KeyPair } from '@cadrel/kernel';
+import { checkPolicyChange, generateKeyPair, type KeyPair } from '@cadrel/kernel';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const TEST = process.env.CADREL_TEST === '1';
@@ -1161,6 +1161,8 @@ function registerShellIpc(): void {
     for (const w of st.workflows) usage[w.id] = await stages.usage(w.id);
     return { ...st, usage };
   });
+  manageLike('policy:state', async () => peopleHost.policyState());
+  manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));
   manageLike('workflow:call', async (name: string, ...args: unknown[]) => callWorkflow(String(name), args, peopleHost, stages));
   // Where projects are in their workflows. A move is checked against the workflow's gates and the person's roles before the tree changes.
   manageLike('stages:views', async () => stages.views());

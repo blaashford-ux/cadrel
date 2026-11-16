@@ -7,7 +7,7 @@ import { VAULT_STORE_METHODS, type CheckInResult, type CheckOutResult, type Data
 import { decodeError, decodeValue, encodeValue, type StudioService, type WireError } from '@cadrel/service';
 
 /** The service's namespaces and methods a remote caller may use. The server and the door both check a call against these. */
-export const SERVICE_NAMESPACES = ['catalogue', 'people', 'business', 'work', 'workflows', 'briefs', 'passes', 'queries', 'assistant'] as const;
+export const SERVICE_NAMESPACES = ['catalogue', 'people', 'business', 'work', 'workflows', 'briefs', 'passes', 'queries', 'assistant', 'policy'] as const;
 export const SERVICE_METHODS = ['can', 'canOn', 'canAt', 'explain', 'visibleProjects'] as const;
 /** What the assistant may ask the vault: reading only. */
 export const DOOR_VAULT_METHODS = ['list', 'versions', 'references', 'whereUsed', 'card'] as const;

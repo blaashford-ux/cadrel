@@ -129,6 +129,9 @@ function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: 
   const [mode, setMode] = useState<'in' | 'force' | null>(null);
   const [reason, setReason] = useState('');
   const st = STATUS[e.status];
+  // a check-out older than the Studio's warning is flagged to whoever holds it and to anyone who may force a release; nobody else needs to see it
+  const days = e.lock ? Math.floor((Date.now() - Date.parse(e.lock.since)) / 86_400_000) : 0;
+  const stale = !!e.lock && days >= s.staleDays && (e.lock.personId === s.me || s.may.force);
   const holder = e.lock ? (e.lock.personId === s.me ? 'you, on another computer' : nameOf(e.lock.personId)) : null;
   return (
     <>
@@ -137,6 +140,7 @@ function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: 
         <td title={st.hint}>
           {st.label}{e.status === 'checked-out-by-other' && holder ? ` by ${holder}` : ''}{e.status === 'checked-out-by-me' && e.modified ? ' · changed' : ''}
           {e.lock && <span className="muted small"> since {e.lock.since.slice(0, 10)}</span>}
+          {stale && <span className="chip warn" role="note" title={`Checked out for ${days} days, longer than this Studio’s ${s.staleDays}-day warning. It is never released automatically.`}> {days} days</span>}
         </td>
         <td className="num">{e.version ?? ''}{e.localVersion !== null && e.version !== null && e.localVersion !== e.version ? <span className="muted small"> (yours {e.localVersion})</span> : null}</td>
         <td className="num">{kb(e.size)}</td>

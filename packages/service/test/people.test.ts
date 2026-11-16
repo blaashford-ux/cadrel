@@ -199,3 +199,28 @@ describe('property: a role manager cannot escalate, whatever they do', () => {
     expect((await db.all<{ all_caps: number }>("SELECT all_caps FROM role WHERE id = 'role_owner'"))[0]!.all_caps).toBe(1);
   }, 60000);
 });
+
+describe('the Studio’s security policy', () => {
+  it('is readable by anyone in the Studio, and changed only by someone who may change the Studio’s settings', async () => {
+    const { ana, person, svc } = await studio();
+    const admin = svc.as(await person('Dana Admin', 'role_admin'));
+    const author = svc.as(await person('Ann Author', 'role_author'));
+    expect(await author.policy.get()).toMatchObject({ inviteDays: 7, assistantEnabled: true });
+    expect(await refused(author.policy.set({ inviteDays: 3 }))).toBe('denied');
+    expect(await refused(admin.policy.set({ inviteDays: 3 }))).toBe('ok');
+    expect((await ana.policy.get()).inviteDays).toBe(3);
+    expect(await refused(ana.policy.set({ inviteDays: 99 }))).toMatch(/^other:/); // a bad value is refused with its reason, not as a permission error
+  });
+
+  it('turns the assistant off for everyone, whatever their role holds, and back on', async () => {
+    const { ana, person, svc } = await studio();
+    const editor = svc.as(await person('Eve Editor', 'role_editor'));
+    expect(await refused(editor.assistant.check())).toBe('ok');
+    await ana.policy.set({ assistantEnabled: false });
+    expect(await refused(editor.assistant.check())).toBe('denied');
+    expect(await refused(editor.assistant.note('edit_raise', 'claude-ai', 'pass1'))).toBe('denied');
+    expect(await refused(ana.assistant.check())).toBe('denied'); // the Owner too: it is the Studio's rule, not a role's
+    await ana.policy.set({ assistantEnabled: true });
+    expect(await refused(editor.assistant.note('edit_raise', 'claude-ai', 'pass1'))).toBe('ok');
+  });
+});

@@ -649,6 +649,22 @@ export interface PeopleApi {
   visibleProjects(personId: string): Promise<{ all: boolean; assigned: string[]; context: string[] }>;
 }
 
+/** The Studio's security policy (Admin → Security policy): the few rules the Studio itself enforces. */
+export type PolicyState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      policy: { inviteDays: number; guestDays: number | null; staleCheckoutDays: number; assistantEnabled: boolean };
+      /** Whether this person may change it (`studio.settings`). Everyone may read it. */
+      may: boolean;
+      limits: { inviteDays: { min: number; max: number }; guestDays: { min: number; max: number }; staleCheckoutDays: { min: number; max: number } };
+    };
+export interface PolicyApi {
+  state(): Promise<PolicyState>;
+  /** Changes the fields given and leaves the rest; refuses a value outside its limits and says why. */
+  set(change: Partial<Extract<PolicyState, { available: true }>['policy']>): Promise<PolicyState>;
+}
+
 /** The workflows an administrator builds: the stages a book moves through and the gates between them. */
 export type WorkflowState =
   | { available: false; reason: string }
@@ -798,6 +814,8 @@ export type VaultState =
       me: string;
       people: { id: string; name: string }[];
       may: { force: boolean };
+      /** Days after which a check-out is flagged as stale (the Studio's security policy). Nothing is ever released because of it. */
+      staleDays: number;
       entries: {
         path: string;
         kind: 'manuscript' | 'asset';
@@ -1000,6 +1018,7 @@ export interface CadrelApi {
   studios: StudiosApi;
   stages: StagesApi;
   workflow: WorkflowApi;
+  policy: PolicyApi;
   work: WorkApi;
   editing: EditingApi;
   vault: VaultApi;

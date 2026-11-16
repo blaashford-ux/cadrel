@@ -63,10 +63,12 @@ Before a server exists, the local vault runs the same model with you as the only
 
 ### Sign-in and invitations
 
-- An admin enters an email address and picks a role and scope. The person gets an **invitation link**; opening it in Cadrel (custom `cadrel://` link or a code to paste) creates their account on that device.
-- Afterwards, signing in on a new device sends a **one-time link** to their email (15 minutes, single use). A device then holds a refresh token for the session length, revocable by an admin or the person.
-- Links are single-use random tokens stored hashed, rate-limited per address and per IP.
-- Email needs a sender. Cloudflare Email Sending can do it, but it is in beta, needs the Workers Paid plan and a domain onboarded to Email Service. Until that exists, **an admin can copy the invitation link and send it themselves**, and the Owner's first sign-in uses the setup code and needs no email.
+Cadrel has no passwords, no emailed sign-in links and no sessions. **A device is a key.** Each computer or phone makes its own key pair when it joins a Studio; the Studio's server keeps only the public half and checks the signature on every request (a request is also refused if it is old or has been seen before). So "signing in" is *joining once*, and a person is whoever holds an accepted key.
+
+- **The owner's first key** is set when the Studio is built (the Studio Manager). A linked phone is a second owner device.
+- **An invitation is a single-use code**, made on the People page (or by an owner device), shown once, kept by the Studio only as a hash, and valid for a lifetime the Studio sets (7 days by default; see Security policy). It names a person and, optionally, a role, one project and an end date. Opening the link in Cadrel (or Cadrel Reader for a Beta Reader) makes a key on that device and joins it. An invitation that names no role gives no access until the owner gives a role per project.
+- **Another device for the same person** needs a new invitation (or, for the owner, *Link a phone*). A lost or stolen device is removed from People (or Studio Manager for an owner device); its key then stops working at once.
+- **Email is optional and only carries invitations.** The Studio can email an invitation itself through Cloudflare Email Service (a beta, Workers Paid, a domain onboarded there); otherwise the owner copies the link or opens their own mail app. Nothing is emailed for sign-in, because there is no sign-in to email.
 
 ## 4. Default roles
 
@@ -118,22 +120,27 @@ Notes on the defaults:
 - **View as**: preview the app as a role or person (read-only) before assigning.
 - **Capability review**: capabilities added by new modules or versions that no role yet contains.
 
-**Settings → Security policy** (defaults in brackets)
+**Admin → Security policy** (owner, and anyone holding `studio.settings`). Only what the Studio can enforce is on the page; each row says where.
 
-| Setting | Default |
+| Setting | Default | Enforced by |
+|---|---|---|
+| Invitation lifetime | 7 days (1 to 30) | the Studio's server, when an invitation is made (one already made keeps the date it was given) |
+| Guest access ends after | not set (1 to 365 days) | the server: used when an invitation limited to one project names no end date of its own |
+| Stale check-out warning | 7 days (1 to 90) | shown on the Files page, to the holder and to anyone who may force a release; **a lock is never released automatically** |
+| The assistant | On | the Studio's service: when off, the assistant's record, editorial and project tools refuse for everyone, whatever their role holds |
+
+Settings that are already controlled elsewhere, listed here so they are not looked for twice:
+
+| Setting | Where it lives |
 |---|---|
-| Sign-in | **Decided:** email invitation and one-time sign-in link; no passwords. SSO can be added later |
-| Second factor | Not part of email-link sign-in; the link proves control of the mailbox. A second factor (authenticator app) for Owner, Admin, Finance and Director is a later addition |
-| Session length on a device | 14 days; revoke any device from People |
-| Invitation and sign-in link lifetime | Invitation 7 days; each sign-in link 15 minutes, single use |
-| Who may invite | Holders of `people.invite` (Owner, Admin) |
-| Guest access | Allowed; expires after 90 days unless renewed; cannot invite anyone |
-| Stale check-out | Warn the holder and the admin after 7 days; never released automatically |
-| Force release | Needs `vault.force`, a typed reason, confirmation of the data-loss warning; notifies the holder; audited |
-| Confidential projects | Optional per project (and so for everything under it); assistant disabled on them |
-| Assistant (MCP) | On for roles that have the capability; acts only with the signed-in person's permissions; writes are proposals |
-| Local copies on departure | When access is removed, the app deletes cached read-only copies the next time it connects and moves any file with unsaved changes into a quarantine folder for the admin; it cannot recall files from a machine that never reconnects |
-| Audit retention | Kept indefinitely |
+| Who may invite | the capability `people.invite` (Owner, Admin by default); change it in the role editor |
+| Who may force a release | the capability `vault.force`; a typed reason, the data-loss confirmation and an audit entry are always required, and the holder is told by the check-out bar |
+| Devices | People (members) and Studio Manager (owner devices): remove one and its key stops working |
+| Confidential projects | optional per project; the assistant is off on them |
+| Which AI tools may create or edit files | Settings → MCP, on each computer |
+| Audit retention | kept indefinitely |
+
+**Not planned**, because Cadrel's sign-in is a device key and these belong to a different design: a second factor, a session length, single sign-on, a revocable refresh token. Also **not built**: deleting a departed person's cached local copies on their computer the next time it connects (a person's computer keeps what it already has; remove access and revoke the device, and treat files already on a machine as theirs to have had).
 
 ## 6. Guardrails
 

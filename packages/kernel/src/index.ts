@@ -29,3 +29,4 @@ export * from './editGate';
 export * from './sql';
 export * from './viewScope';
 export * from './visibility';
+export * from './policy';
