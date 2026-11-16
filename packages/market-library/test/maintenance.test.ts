@@ -112,7 +112,7 @@ describe('rebuildAsync', () => {
     const seen: string[] = [];
     let busyDuring = false;
     const r = await lib.rebuildAsync((d, t) => { busyDuring = busyDuring || lib.rebuilding; seen.push(`${d}/${t}`); });
-    expect(r).toEqual({ detail: 2, list: 1, search: 0 });
+    expect(r).toEqual({ detail: 2, list: 1, search: 0, author: 0 });
     expect(seen.at(-1)).toBe('3/3');
     expect(busyDuring).toBe(true);
     expect(lib.rebuilding).toBe(false);

@@ -593,6 +593,43 @@ const MIGRATIONS: string[] = [
     renamed_at TEXT NOT NULL
   );
   `,
+  // An author's "All Books" page: the whole catalogue of one author in one capture. Its books are known by title, series, rating and price
+  // but have no detail capture yet, so they join the capture queue; each capture also records which series the author writes.
+  `
+  CREATE TABLE author_capture (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id TEXT NOT NULL,
+    author_name TEXT,
+    marketplace TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    dir TEXT NOT NULL,
+    url TEXT,
+    total_count INTEGER,
+    listed_count INTEGER NOT NULL,
+    UNIQUE (author_id, marketplace, captured_at)
+  );
+  CREATE TABLE author_entry (
+    author_capture_id INTEGER NOT NULL REFERENCES author_capture(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    asin TEXT NOT NULL,
+    title TEXT,
+    authors TEXT,
+    authors_known INTEGER NOT NULL DEFAULT 0,
+    series_name TEXT,
+    series_asin TEXT,
+    series_position REAL,
+    series_total INTEGER,
+    series_collects INTEGER NOT NULL DEFAULT 0,
+    rating_value REAL,
+    rating_count INTEGER,
+    format TEXT,
+    price REAL,
+    other_formats TEXT,
+    cover_url TEXT,
+    PRIMARY KEY (author_capture_id, asin)
+  );
+  CREATE INDEX author_entry_asin ON author_entry(asin);
+  `,
 ];
 
 export function openDb(file: string): Db {

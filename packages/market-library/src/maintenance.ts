@@ -103,14 +103,14 @@ export function verifyLibrary(db: Db, root: string): VerifyReport {
   const fk = (db.prepare('PRAGMA foreign_key_check').all() as unknown[]).length;
   const indexed = new Set<string>();
   const missingFiles: string[] = [];
-  for (const t of ['snapshot', 'list_capture', 'search_capture']) {
+  for (const t of ['snapshot', 'list_capture', 'search_capture', 'author_capture']) {
     for (const r of db.prepare(`SELECT dir FROM ${t}`).all() as unknown as { dir: string }[]) {
       indexed.add(r.dir);
       if (!fs.existsSync(path.join(root, r.dir, 'page.html.gz'))) missingFiles.push(r.dir);
     }
   }
   const notIndexed: string[] = [];
-  for (const top of ['books', 'lists', 'searches']) {
+  for (const top of ['books', 'lists', 'searches', 'authors']) {
     const base = path.join(root, top);
     if (!fs.existsSync(base)) continue;
     const go = (d: string) => {

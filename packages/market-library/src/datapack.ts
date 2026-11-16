@@ -65,7 +65,7 @@ export interface ExportOptions {
 }
 
 const SEG = '[A-Za-z0-9._-]+';
-const CAPTURE_DIR = new RegExp(`^(?:books/[A-Z0-9]{10}/snapshots|lists/${SEG}/${SEG}/${SEG}|searches/${SEG}/${SEG})/\\d{8}T\\d{6}Z$`);
+const CAPTURE_DIR = new RegExp(`^(?:books/[A-Z0-9]{10}/snapshots|lists/${SEG}/${SEG}/${SEG}|searches/${SEG}/${SEG}|authors/${SEG}/[A-Z0-9]{10})/\\d{8}T\\d{6}Z$`);
 const COVER_FILE = /^books\/([A-Z0-9]{10})\/covers\/[0-9a-f]{16}\.([a-z0-9]{2,5})$/;
 const MAX_PAGE_BYTES = 64 * 1024 * 1024;
 const MAX_COVER_BYTES = 32 * 1024 * 1024;
@@ -100,7 +100,7 @@ function select(lib: Library, keys: string[] | null): Selection {
   const subsOf = (rows: { subreddit: string }[]) => [...new Set(rows.map((r) => r.subreddit))].sort();
 
   if (!keys) {
-    for (const t of ['snapshot', 'list_capture', 'search_capture']) for (const r of db.prepare(`SELECT dir FROM ${t}`).all() as unknown as { dir: string }[]) dirs.add(r.dir);
+    for (const t of ['snapshot', 'list_capture', 'search_capture', 'author_capture']) for (const r of db.prepare(`SELECT dir FROM ${t}`).all() as unknown as { dir: string }[]) dirs.add(r.dir);
     for (const r of db.prepare('SELECT asin FROM snapshot').all() as unknown as { asin: string }[]) books.add(r.asin);
     for (const r of db.prepare('SELECT path FROM asset').all() as unknown as { path: string }[]) covers.add(r.path);
     categories = db.prepare('SELECT key, name FROM category WHERE EXISTS (SELECT 1 FROM list_capture WHERE category_key = category.key) ORDER BY name').all() as unknown as PackManifest['categories'];

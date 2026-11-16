@@ -29,10 +29,33 @@ export function detectPersonalLiterals(html: string): string[] {
   return [...found];
 }
 
+/**
+ * An author's "All Books" page carries its product data in a script the scrubber would drop whole (it also holds tokens and the signed-in
+ * person's ids). The co-authors, covers and total in it are the market data, so keep just those, as a small JSON block.
+ */
+function distilAuthorProducts(html: string): string | null {
+  const m = html.match(/var config = (\{[\s\S]*?\});\s*var widgetDOM/g)?.find((c) => c.includes('"sectionType":"AuthorAllBooksProductGrid"'));
+  if (!m) return null;
+  try {
+    const cfg = JSON.parse(m.replace(/^var config = /, '').replace(/;\s*var widgetDOM$/, '')) as { content?: { totalCount?: number; products?: any[] } };
+    const products = (cfg.content?.products ?? []).map((p) => ({
+      asin: String(p.asin),
+      authors: ((p.byLine?.contributors ?? []) as any[])
+        .filter((c) => (c.roles ?? []).some((r: any) => r.type === 'author'))
+        .map((c) => ({ name: String(c.name).replace(/\s+/g, ' ').trim(), authorId: String(c.contributor?.author ?? '').split('/').pop() || null })),
+      cover: p.productImages?.images?.[0]?.hiRes?.url ?? p.productImages?.images?.[0]?.lowRes?.url ?? null,
+    }));
+    return `<script type="application/json" id="cadrel-author-products">${JSON.stringify({ totalCount: cfg.content?.totalCount ?? null, products }).replace(/</g, '\\u003c')}</script>`;
+  } catch {
+    return null;
+  }
+}
+
 export function scrub(html: string, extraLiterals: string[] = []): string {
+  const author = distilAuthorProducts(html);
   const literals = [...new Set([...detectPersonalLiterals(html), ...extraLiterals])].sort((a, b) => b.length - a.length);
   let s = html;
-  s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (m) => (KEEP_SCRIPT.some((k) => m.includes(k)) && !m.includes('ue_sid') ? m : '<script></script>'));
+  s = s.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (m) => (m.includes('id="cadrel-author-products"') || (KEEP_SCRIPT.some((k) => m.includes(k)) && !m.includes('ue_sid')) ? m : '<script></script>'));
   s = s.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '<style></style>');
   s = s.replace(/(?<!\d)\d{3,7}-\d{7}-\d{7}(?!\d)/g, (m) => m.replace(/\d/g, '0')); // session ids (3-7-7 digits) and similar client ids (7-7-7); not \b: the id also appears URL-encoded as ...%2F137-...
   s = s.replace(/(encrypted-slate-token' content=')[^']*/g, '$1REDACTED');
@@ -51,5 +74,6 @@ export function scrub(html: string, extraLiterals: string[] = []): string {
   s = s.replace(/(<\/span>\s+to )[A-Z][A-Za-z ]+?(?=\s+on <|<\/div>)/g, '$1REDACTED');
   s = s.replace(/((?:FREE )?[Dd]elivery to )[A-Z][A-Za-z ]+?(?= on <|<)/g, '$1REDACTED');
   for (const lit of literals) s = s.split(lit).join('REDACTED');
+  if (author) s = s.includes('</body>') ? s.replace('</body>', () => `${author}</body>`) : s + author;
   return s;
 }

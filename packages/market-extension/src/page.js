@@ -6,10 +6,12 @@ export async function preparePage(kind) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const startY = window.scrollY;
   const measure = () =>
-    kind === 'list' ? document.querySelectorAll('#gridItemRoot').length * 100000 + document.body.scrollHeight : document.body.scrollHeight;
+    kind === 'list' ? document.querySelectorAll('#gridItemRoot').length * 100000 + document.body.scrollHeight
+    : kind === 'author' ? document.querySelectorAll('[data-testid="product-grid-item"]').length * 100000 + document.body.scrollHeight
+    : document.body.scrollHeight;
   let last = -1;
   let stable = 0;
-  for (let i = 0; i < 40 && stable < 3; i++) {
+  for (let i = 0; i < (kind === 'author' ? 80 : 40) && stable < 3; i++) {
     window.scrollTo(0, document.body.scrollHeight);
     await sleep(350);
     const m = measure();

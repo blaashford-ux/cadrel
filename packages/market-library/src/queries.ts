@@ -226,7 +226,22 @@ export function queue(db: Db, opts: { categoryKey?: string; includeSkipped?: boo
        ORDER BY rank, e.asin`,
     )
     .all() as (Omit<QueueItem, 'state' | 'isNew'> & { qstate: string | null; isNew: number })[]);
-  return [...fromLists, ...fromSearches]
+  // Books of an author whose "All Books" page was captured: known by title and price only, so they are queued for a book capture too.
+  const fromAuthors = (opts.categoryKey && opts.categoryKey !== UNCATEGORISED) || opts.onlyNew ? [] : (db
+    .prepare(
+      `SELECT e.asin, min(e.position) AS rank, '${UNCATEGORISED}' AS categoryKey, 'Uncategorised' AS categoryName,
+         max(e.title) AS title, max(a.author_name) AS author, max(e.price) AS price, q.state AS qstate, 0 AS isNew
+       FROM author_entry e
+       JOIN author_capture a ON a.id = e.author_capture_id AND a.captured_at = (SELECT max(captured_at) FROM author_capture y WHERE y.author_id = a.author_id AND y.marketplace = a.marketplace)
+       LEFT JOIN queue_item q ON q.asin = e.asin
+       WHERE e.asin NOT IN (SELECT asin FROM snapshot)
+         AND e.asin NOT IN (SELECT le.asin FROM list_entry le JOIN (${LATEST_LISTS}) l ON l.id = le.list_capture_id)
+         AND e.asin NOT IN (SELECT asin FROM search_entry WHERE sponsored = 0)
+       GROUP BY e.asin
+       ORDER BY rank, e.asin`,
+    )
+    .all() as (Omit<QueueItem, 'state' | 'isNew'> & { qstate: string | null; isNew: number })[]);
+  return [...fromLists, ...fromSearches, ...fromAuthors]
     .map(({ qstate, isNew, ...r }) => ({ ...r, isNew: !!isNew, state: (qstate ?? 'pending') as QueueItem['state'] }))
     .filter((r) => (opts.includeSkipped || r.state !== 'skipped') && (!opts.onlyNew || r.isNew));
 }
@@ -251,4 +266,99 @@ export function openNext(db: Db, categoryKey?: string, onlyNew?: boolean): (Queu
   if (!item) return null;
   setQueueState(db, item.asin, 'opened');
   return { ...item, state: 'opened', url: amazonUrl(item.asin) };
+}
+
+
+export interface AuthorSummary {
+  authorId: string;
+  name: string | null;
+  marketplace: string;
+  captures: number;
+  lastCapture: string;
+  /** Books on the newest capture, and how many Amazon said the author has. */
+  books: number;
+  totalCount: number | null;
+  /** Of those books, how many have a detail capture. */
+  capturedBooks: number;
+}
+
+export function listAuthors(db: Db): AuthorSummary[] {
+  return db
+    .prepare(
+      `SELECT a.author_id AS authorId, a.author_name AS name, a.marketplace, a.captured_at AS lastCapture, a.listed_count AS books, a.total_count AS totalCount,
+         (SELECT count(*) FROM author_capture y WHERE y.author_id = a.author_id AND y.marketplace = a.marketplace) AS captures,
+         (SELECT count(*) FROM author_entry e WHERE e.author_capture_id = a.id AND e.asin IN (SELECT asin FROM snapshot)) AS capturedBooks
+       FROM author_capture a
+       WHERE a.captured_at = (SELECT max(captured_at) FROM author_capture y WHERE y.author_id = a.author_id AND y.marketplace = a.marketplace)
+       ORDER BY a.author_name, a.author_id`,
+    )
+    .all() as unknown as AuthorSummary[];
+}
+
+export interface CorpusBook {
+  position: number;
+  asin: string;
+  title: string | null;
+  authorNames: string[];
+  /** false when the page did not say who else wrote it. */
+  authorsKnown: boolean;
+  format: string | null;
+  ratingValue: number | null;
+  ratingCount: number | null;
+  price: number | null;
+  otherFormats: { label: string; asin: string }[];
+  coverUrl: string | null;
+  /** True when the book has a detail capture (rank, categories, text). */
+  captured: boolean;
+  url: string;
+}
+
+export interface CorpusSeries {
+  name: string;
+  asin: string | null;
+  url: string | null;
+  /** Books in the series as Amazon counts them. */
+  total: number | null;
+  /** The numbered books on the page, in order, and any omnibus that collects them. */
+  books: (CorpusBook & { seriesPosition: number | null; collects: boolean })[];
+}
+
+export interface AuthorCorpus {
+  authorId: string;
+  name: string | null;
+  capturedAt: string;
+  totalCount: number | null;
+  series: CorpusSeries[];
+  /** Books that belong to no series. */
+  standalone: CorpusBook[];
+}
+
+/** One author's catalogue from their newest "All Books" capture, grouped into series and standalone books. */
+export function authorCorpus(db: Db, authorId: string, marketplace = 'amazon.com'): AuthorCorpus | null {
+  const cap = db
+    .prepare('SELECT id, author_name AS name, captured_at AS capturedAt, total_count AS totalCount FROM author_capture WHERE author_id = ? AND marketplace = ? ORDER BY captured_at DESC LIMIT 1')
+    .get(authorId, marketplace) as { id: number; name: string | null; capturedAt: string; totalCount: number | null } | undefined;
+  if (!cap) return null;
+  const rows = db
+    .prepare(
+      `SELECT e.*, EXISTS (SELECT 1 FROM snapshot s WHERE s.asin = e.asin) AS captured FROM author_entry e WHERE e.author_capture_id = ? ORDER BY e.position`,
+    )
+    .all(cap.id) as any[];
+  const bySeries = new Map<string, CorpusSeries>();
+  const standalone: CorpusBook[] = [];
+  for (const r of rows) {
+    const book: CorpusBook = {
+      position: r.position, asin: r.asin, title: r.title, authorNames: authorNamesOf(r.authors), authorsKnown: !!r.authors_known, format: r.format,
+      ratingValue: r.rating_value, ratingCount: r.rating_count, price: r.price, otherFormats: JSON.parse(r.other_formats ?? '[]'), coverUrl: r.cover_url,
+      captured: !!r.captured, url: amazonUrl(r.asin),
+    };
+    if (!r.series_name) { standalone.push(book); continue; }
+    let s = bySeries.get(r.series_name);
+    if (!s) bySeries.set(r.series_name, (s = { name: r.series_name, asin: r.series_asin, url: r.series_asin ? amazonUrl(r.series_asin) : null, total: null, books: [] }));
+    if (r.series_total && !r.series_collects) s.total = r.series_total;
+    s.books.push({ ...book, seriesPosition: r.series_position, collects: !!r.series_collects });
+  }
+  const series = [...bySeries.values()];
+  for (const s of series) s.books.sort((a, b) => (a.collects ? 1 : 0) - (b.collects ? 1 : 0) || (a.seriesPosition ?? 0) - (b.seriesPosition ?? 0) || a.position - b.position);
+  return { authorId, name: cap.name, capturedAt: cap.capturedAt, totalCount: cap.totalCount, series, standalone };
 }

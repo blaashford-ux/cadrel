@@ -2,7 +2,7 @@
 
 export const DEFAULT_PORT = 47321;
 
-/** @returns {'detail' | 'list' | 'search' | null} */
+/** @returns {'detail' | 'list' | 'search' | 'author' | null} */
 export function classifyUrl(u) {
   let url;
   try {
@@ -12,6 +12,7 @@ export function classifyUrl(u) {
   }
   if (url.protocol !== 'https:' || (url.hostname !== 'www.amazon.com' && url.hostname !== 'amazon.com')) return null;
   if (/\/(?:zgbs|gp\/bestsellers|gp\/new-releases|gp\/movers-and-shakers)\b/.test(url.pathname)) return 'list';
+  if (/\/stores\/(?:[^/]+\/)?author\/[A-Z0-9]{10}\/allbooks\b/.test(url.pathname)) return 'author';
   if (/\/(?:dp|gp\/product)\/[A-Z0-9]{10}/.test(url.pathname)) return 'detail';
   if (/^\/s\/?$/.test(url.pathname) && url.searchParams.get('k')) return 'search';
   return null;
@@ -65,7 +66,7 @@ export function toBase64(buf) {
 /** Map a failed or successful response from the app to a short toolbar message. */
 export function describeResult(r) {
   if (r.ok) {
-    const what = r.kind === 'list' ? `list ${r.category ?? ''}`.trim() : r.kind === 'search' ? `search "${r.query ?? ''}"` : `book ${r.asin ?? ''}`.trim();
+    const what = r.kind === 'list' ? `list ${r.category ?? ''}`.trim() : r.kind === 'search' ? `search "${r.query ?? ''}"` : r.kind === 'author' ? `${r.books ?? ''} books by author ${r.authorId ?? ''}`.replace(/\s+/g, ' ') : `book ${r.asin ?? ''}`.trim();
     return { badge: '✓', title: `Saved ${what}${r.replaced ? ' (replaced)' : ''}` };
   }
   return { badge: '!', title: r.error };
