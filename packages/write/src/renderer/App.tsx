@@ -19,6 +19,7 @@ import { ProjectSwitcher } from './ProjectSwitcher';
 import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { ProgressDialog } from './ProgressDialog';
 import { QuickSwitcher } from './QuickSwitcher';
+import { ReferenceWindow } from './ReferenceWindow';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, summarize, writtenOn } from '../shared/progress';
 import { goalFor, relativeTo, withOpened } from '../shared/projects';
@@ -192,6 +193,7 @@ export function App() {
   // The tree shows every file's check-out icon, so the files in the tree are asked about as well as the open ones.
   const lockFiles = useMemo(() => [...new Set([...s.tabs.map((t) => t.file), ...rowsFiles(s.root)])], [s.tabs, s.root]);
   const fileLocks = useFileLocks(window.cadrelWrite.fileLock, lockFiles);
+  const [showReference, setShowReference] = useState(false);
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState<{ file: string; message: string } | null>(null);
   /** Runs a check-out / check-in for a file, then looks at the file again (a check-out may bring in a newer version). Its refusal is shown on the file. */
@@ -1152,6 +1154,7 @@ export function App() {
             onOpenFolder={caps.folderPicker ? () => void ws.openFolder() : undefined}
             onSettings={caps.reader ? undefined : () => s.project && setProjectSettings(s.project.path)}
             onProgress={caps.reader ? undefined : () => setShowProgress(true)}
+            onCheckReference={s.root ? () => setShowReference(true) : undefined}
           />
           <button
             onClick={() => void ws.refresh()}
@@ -1634,6 +1637,7 @@ export function App() {
         }}
       />
     )}
+    {showReference && s.root && <ReferenceWindow root={s.root} base={s.project?.path ?? s.root.path} onClose={() => setShowReference(false)} />}
     {showQuick && (
       <QuickSwitcher
         projects={caps.reader || readMode ? sharedAsSummaries(shared) : scopedListing?.projects ?? []}
