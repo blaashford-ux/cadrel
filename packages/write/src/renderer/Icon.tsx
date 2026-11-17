@@ -26,7 +26,9 @@ const PATHS = {
   alignRight: 'M4 6h16M10 10h10M4 14h16M10 18h10',
   alignJustify: 'M4 6h16M4 10h16M4 14h16M4 18h16',
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
-  shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5'
+  shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
+  lock: 'M6 11h12v9H6v-9Zm3 0V8a3 3 0 0 1 6 0v3',
+  unlock: 'M6 11h12v9H6v-9Zm3 0V8a3 3 0 0 1 5.6-1.5'
 } as const;
 
 export type IconName = keyof typeof PATHS;

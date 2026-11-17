@@ -808,3 +808,9 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .banner.file-lock.lock-free, .banner.file-lock.lock-other { background: var(--surface-2, var(--surface)); }
 .banner.file-lock.lock-unprotected { border-left: 3px solid var(--danger); }
 .banner.file-lock .file-lock-error { color: var(--danger); }
+
+/* Check-out icon on files and tabs: open padlock = checked in, closed = checked out (green: by you, red: by someone else). Hover says who. */
+.lock-badge { display: inline-flex; flex: none; align-items: center; color: var(--faint); }
+.lock-badge.mine { color: #3fb27f; }
+.lock-badge.other { color: var(--danger); }
+.tab .lock-badge { margin-right: 4px; }

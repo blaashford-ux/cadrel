@@ -1,4 +1,6 @@
 import { Icon } from './Icon';
+import { FileLockBadge } from './FileLockBadge';
+import type { FileLock } from '../shared/api';
 import { justLongPressed, longPressProps } from './longPress';
 import { useEffect, useRef } from 'react';
 import { navigate, type NavKey, type Row } from './treeRows';
@@ -12,6 +14,8 @@ interface Props {
   activeKey: string | null;
   /** Files whose tab has unsaved edits. */
   dirtyFiles: Set<string>;
+  /** How a file stands in the Studio's vault (checked in, or checked out by whom); nothing is drawn where it has no check-out. */
+  lockOf?(path: string): FileLock | undefined;
   onFocusKey(key: string): void;
   /** Click / Enter on a row. */
   onActivate(row: Row): void;
@@ -115,6 +119,7 @@ export function Tree(p: Props) {
                 {r.notes}
               </span>
             )}
+            {r.kind === 'file' && !r.html && p.lockOf && <FileLockBadge lock={p.lockOf(r.path)} />}
             {p.isManuscript?.(r) && (
               <span className="ms-badge" title="Active manuscript: word-count goals follow this file" aria-label="active manuscript">
                 <Icon name="target" size={14} />

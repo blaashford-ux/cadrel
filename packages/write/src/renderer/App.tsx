@@ -57,7 +57,7 @@ import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { useRewriteScroll } from './useRewriteScroll';
 import { Tree } from './Tree';
-import { buildRows, chapterKey, chapterLabel, type Row } from './treeRows';
+import { buildRows, chapterKey, chapterLabel, rowsFiles, type Row } from './treeRows';
 import { useWorkspace } from './useWorkspace';
 import { Workspace } from './workspace';
 import './styles.css';
@@ -189,7 +189,9 @@ export function App() {
   /** Nothing here can be changed: Cadrel Reader, a project shared for review, or a closed Book. */
   const locked = isReviewer || closedHere;
   // Where the files are kept in a Studio's vault, a file is read-only until it is checked out (and a check-in is what makes a version).
-  const fileLocks = useFileLocks(window.cadrelWrite.fileLock, s.tabs.map((t) => t.file));
+  // The tree shows every file's check-out icon, so the files in the tree are asked about as well as the open ones.
+  const lockFiles = useMemo(() => [...new Set([...s.tabs.map((t) => t.file), ...rowsFiles(s.root)])], [s.tabs, s.root]);
+  const fileLocks = useFileLocks(window.cadrelWrite.fileLock, lockFiles);
   const [lockBusy, setLockBusy] = useState(false);
   const [lockError, setLockError] = useState<{ file: string; message: string } | null>(null);
   /** Runs a check-out / check-in for a file, then looks at the file again (a check-out may bring in a newer version). Its refusal is shown on the file. */
@@ -1218,6 +1220,7 @@ export function App() {
                 focusKey={focusKey}
                 activeKey={activeKey}
                 dirtyFiles={dirtyFiles}
+                lockOf={window.cadrelWrite.fileLock ? fileLocks.lock : undefined}
                 onFocusKey={setFocusKey}
                 onActivate={(r) => void activateRow(r)}
                 onToggle={(r) => void ws.toggleExpanded(r.path, r.kind === 'file')}
@@ -1275,7 +1278,7 @@ export function App() {
           </div>
         )}
 
-        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} onActivate={(id) => { setPage(null); ws.activateTab(id); }} onClose={(id) => void ws.closeTab(id)} />}
+        {!zone && <Tabs tabs={s.tabs} activeId={s.activeId} lockOf={window.cadrelWrite.fileLock ? fileLocks.lock : undefined} onActivate={(id) => { setPage(null); ws.activateTab(id); }} onClose={(id) => void ws.closeTab(id)} />}
 
         <div className="panes">
           {page && (

@@ -155,6 +155,16 @@ describe('analysis', () => {
     expect(o.previous!.usd).toBeCloseTo(m.totals.usd, 2);
     expect(o.previousByBook[A]).toBeGreaterThan(0);
   });
+  it('limits a month to one book, so what is shown to its author holds that book alone', () => {
+    const all = monthReport(lib.db, '2026-09', TODAY);
+    const one = monthReport(lib.db, '2026-09', TODAY, B);
+    expect(one.books.map((b) => b.asin)).toEqual([B]);
+    expect(one.totals.usd).toBeCloseTo(all.books.find((b) => b.asin === B)!.usd, 2);
+    expect(one.totals.usd).toBeLessThan(all.totals.usd);
+    expect(one.daily.reduce((n, d) => n + d.units, 0)).toBeLessThanOrEqual(all.daily.reduce((n, d) => n + d.units, 0));
+    expect(one.kenp.reduce((n, k) => n + k.pages, 0)).toBeLessThanOrEqual(all.kenp.reduce((n, k) => n + k.pages, 0));
+    expect(Object.keys(monthReport(lib.db, '2026-10', TODAY, B).previousByBook)).toEqual([B]);
+  });
   it('gives a period report with a row per month and the months an import is missing', () => {
     const r = analysisReport(lib.db, { from: '2026-08', to: '2026-10' }, TODAY);
     expect(r.months.map((x) => x.month)).toEqual(['2026-08', '2026-09', '2026-10']);

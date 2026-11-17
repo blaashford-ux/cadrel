@@ -151,3 +151,15 @@ export function navigate(rows: Row[], focusKey: string | null, key: NavKey): Nav
       return cur ? { activate: cur.key } : {};
   }
 }
+
+/** Every editable file in the tree (web pages are shown, never edited, and have no check-out): the files whose check-out icon is asked for. */
+export function rowsFiles(root: TreeNode | null): string[] {
+  const out: string[] = [];
+  const walk = (n: TreeNode) => {
+    if (n.kind === 'file') {
+      if (!n.html) out.push(n.path);
+    } else n.children.forEach(walk);
+  };
+  if (root) walk(root);
+  return out;
+}

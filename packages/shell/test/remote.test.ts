@@ -304,7 +304,7 @@ describe('backing up and restoring a server Studio’s records', () => {
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 20 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 21 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 
@@ -626,5 +626,33 @@ describe('asking the Studio for the vault’s list', () => {
     await store.list();
     await before;
     expect(f.asked()).toBe(2);
+  });
+});
+
+describe('what the books earned, over the wire to a Studio’s server', () => {
+  const report = (asin: string, month: string, usd: number) => ({ from: month, to: month, month, totals: { usd }, months: [{ month, usd }], books: [{ asin, title: asin, usd }] });
+
+  it('the owner publishes a book’s months and only the authors credited on it read them, as one of several authors', async () => {
+    const s = await studio();
+    const ann = await s.person('author', 'Ann Author');
+    const bea = await s.person('author', 'Bea Author');
+    const cat = await s.person('author', 'Cat Author');
+    const owner = remoteService(s.owner).as('ignored');
+    const book = await owner.catalogue.createBook({ title: 'Written Together' });
+    await owner.catalogue.addEdition(book.id, { format: 'ebook', asin: 'B0AAAAAAA1' });
+    const other = await owner.catalogue.createBook({ title: 'Someone Else’s' });
+    await owner.catalogue.addEdition(other.id, { format: 'ebook', asin: 'B0AAAAAAA2' });
+    for (const who of [ann, bea]) await owner.business.addCredit({ subject: { kind: 'book', id: book.id }, personId: (await who.me()).personId, role: 'co-author', placement: 'cover' });
+    await owner.finance.publish({ asin: 'B0AAAAAAA1', title: 'Written Together', months: [{ month: '2026-10', report: report('B0AAAAAAA1', '2026-10', 42) }] });
+    await owner.finance.publish({ asin: 'B0AAAAAAA2', title: 'Someone Else’s', months: [{ month: '2026-10', report: report('B0AAAAAAA2', '2026-10', 7) }] });
+
+    for (const who of [ann, bea]) {
+      const me = remoteService(who).as('ignored');
+      expect((await me.finance.books()).map((b) => b.asin)).toEqual(['B0AAAAAAA1']);
+      expect(((await me.finance.book('B0AAAAAAA1'))[0]!.report as { totals: { usd: number } }).totals.usd).toBe(42);
+      expect(await me.finance.book('B0AAAAAAA2').catch((e: Error) => e)).toBeInstanceOf(PermissionDenied);
+      expect(await me.finance.publish({ asin: 'B0AAAAAAA1', months: [] }).catch((e: Error) => e)).toBeInstanceOf(PermissionDenied);
+    }
+    expect(await remoteService(cat).as('ignored').finance.books()).toEqual([]);
   });
 });
