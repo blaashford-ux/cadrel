@@ -1,3 +1,4 @@
+import type { AuthorLinks } from '../../src/shared/export/matter';
 import { app } from 'electron';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
@@ -28,9 +29,11 @@ export function pdfResources(): PdfResources {
 /** The real-file-system implementation of everything the export orchestrator needs. */
 export function makeExportDeps(
   resources: PdfResources = pdfResources(),
-  getDefaults: (file: string) => AppDefaults | Promise<AppDefaults> = () => defaultAppDefaults()
+  getDefaults: (file: string) => AppDefaults | Promise<AppDefaults> = () => defaultAppDefaults(),
+  author?: () => Promise<AuthorLinks | null>
 ): ExportDeps {
   return {
+    ...(author ? { author } : {}),
     chapterLevel: async (file) => (await getDefaults(file)).chapterLevel,
     readText: (p) => fsp.readFile(p, 'utf8'),
     readBytes: async (p, max) => {

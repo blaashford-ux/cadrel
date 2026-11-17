@@ -294,7 +294,35 @@ export interface ImportDocxResult {
   failed: string[];
 }
 
+/**
+ * What Cadrel knows of the author that the Book Details form can use, given by the app that hosts Write (Cadrel's profile and My Books). Null where
+ * there is no such host: then the form simply has no "from my profile" or "from My Books" choices.
+ */
+export interface AuthorKit {
+  /** The profile's names, bio, and Patreon (what a Patreon back-matter page says). */
+  profile: { displayName: string; penNames: string[]; bio: string; patreonUrl: string; patreonCta: string };
+  /** The author's published books (My Books), for the Also By page. */
+  books: AuthorKitBook[];
+}
+export interface AuthorKitBook {
+  asin: string;
+  title: string;
+  /** Where the book is sold. */
+  url: string;
+  /** The pen names it is published under, so the list can be narrowed to this book's author. */
+  penNames: string[];
+  series: string | null;
+  /** Its place in the series, when known, so a series lists in reading order. */
+  position: number | null;
+}
+
 export interface DesktopApi {
+  /** Saved text blocks for the Book Details form (wording used again and again). */
+  listTextBlocks?(): Promise<import('./textBlocks').TextBlock[]>;
+  saveTextBlock?(input: { kind: import('./textBlocks').BlockKind; name: string; text: string }): Promise<import('./textBlocks').TextBlock>;
+  deleteTextBlock?(id: string): Promise<void>;
+  /** The author's profile and My Books, where Write is hosted by Cadrel. Null otherwise. */
+  authorKit?(): Promise<AuthorKit | null>;
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */

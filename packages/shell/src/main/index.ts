@@ -45,6 +45,7 @@ import { migrateVaultFolder } from './vaultMigration';
 import { createFileControl } from './fileLocks';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { AuthorFigures, publishFigures, type PublishResult } from './bookFinance';
+import { buildAuthorKit } from './authorKit';
 import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -1794,7 +1795,18 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
       mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.',
-      betaReading: readingStudios
+      betaReading: readingStudios,
+      // Book Details can use the person's profile (pen names, bio, Patreon) and their published books (Also by)
+      author: async () => {
+        const u = userCache ?? (await refreshUser());
+        const cat = peopleHost.service?.as(peopleHost.me).catalogue;
+        const [books, series] = cat ? await Promise.all([cat.books().catch(() => []), cat.series().catch(() => [])]) : [[], []];
+        return buildAuthorKit({
+          profile: { displayName: u.displayName, penNames: u.penNames, bio: u.bio, patreonUrl: u.patreonUrl, patreonCta: u.patreonCta },
+          own: market.service.status().libraryRoot ? market.service.ownBooks().map((b) => ({ asin: b.asin, title: b.title, penNames: b.penNames })) : [],
+          books, series
+        });
+      }
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {

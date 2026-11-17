@@ -12,7 +12,7 @@ const clean = (e: unknown) => String((e as Error)?.message ?? e).replace(/^Error
 export function Profile() {
   const [view, setView] = useState<UserView | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ displayName: '', email: '', penNames: '', bio: '' });
+  const [form, setForm] = useState({ displayName: '', email: '', penNames: '', bio: '', patreonUrl: '', patreonCta: '' });
   const [saved, setSaved] = useState(false);
   const [over, setOver] = useState(false);
   const loaded = useRef(false);
@@ -22,7 +22,7 @@ export function Profile() {
     // Fill the form once; later updates from outside (a photo change) must not overwrite what is being typed.
     if (!loaded.current) {
       loaded.current = true;
-      setForm({ displayName: v.profile.displayName, email: v.profile.email, penNames: v.profile.penNames.join(', '), bio: v.profile.bio });
+      setForm({ displayName: v.profile.displayName, email: v.profile.email, penNames: v.profile.penNames.join(', '), bio: v.profile.bio, patreonUrl: v.profile.patreonUrl, patreonCta: v.profile.patreonCta });
     }
   }, []);
 
@@ -45,7 +45,7 @@ export function Profile() {
   };
 
   const save = async () => {
-    const ok = await run(() => api.update({ displayName: form.displayName, email: form.email, penNames: form.penNames.split(/[,\n]/).map((x) => x.trim()).filter(Boolean), bio: form.bio }));
+    const ok = await run(() => api.update({ displayName: form.displayName, email: form.email, penNames: form.penNames.split(/[,\n]/).map((x) => x.trim()).filter(Boolean), bio: form.bio, patreonUrl: form.patreonUrl, patreonCta: form.patreonCta }));
     if (ok) {
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -55,7 +55,7 @@ export function Profile() {
   if (!view) return <p className="muted">{error ?? 'Loading…'}</p>;
   const p = view.profile;
   const dirty =
-    form.displayName.trim() !== p.displayName || form.email.trim() !== p.email || form.penNames.split(/[,\n]/).map((x) => x.trim()).filter(Boolean).join(', ') !== p.penNames.join(', ') || form.bio.trim() !== p.bio;
+    form.displayName.trim() !== p.displayName || form.email.trim() !== p.email || form.penNames.split(/[,\n]/).map((x) => x.trim()).filter(Boolean).join(', ') !== p.penNames.join(', ') || form.bio.trim() !== p.bio || form.patreonUrl.trim() !== p.patreonUrl || form.patreonCta.trim() !== p.patreonCta;
   const problem = (a: Attachment) => view.problems.find((x) => x.id === a.id);
 
   return (
@@ -87,6 +87,15 @@ export function Profile() {
           <label className="field">
             <span className="field-label">About me</span>
             <textarea rows={4} value={form.bio} maxLength={2000} onChange={(e) => setForm({ ...form, bio: e.target.value })} placeholder="A short author bio, or how you like to write." />
+          </label>
+          <label className="field">
+            <span className="field-label">Patreon link</span>
+            <input value={form.patreonUrl} maxLength={300} onChange={(e) => setForm({ ...form, patreonUrl: e.target.value })} placeholder="https://www.patreon.com/yourname" />
+          </label>
+          <label className="field">
+            <span className="field-label">Patreon call to action</span>
+            <textarea rows={3} value={form.patreonCta} maxLength={600} onChange={(e) => setForm({ ...form, patreonCta: e.target.value })} placeholder="Read the next chapters early and help me write more." />
+            <span className="field-hint">In Book Details → Back matter, switch on the Patreon page and this link and wording go at the end of the book.</span>
           </label>
           <div className="row">
             <button type="submit" className="primary" disabled={!dirty}>Save</button>

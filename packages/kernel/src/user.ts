@@ -9,6 +9,7 @@ import { newId } from './projects';
 export const USER_VERSION = 1;
 export const NAME_LIMIT = 80;
 export const BIO_LIMIT = 2000;
+export const PATREON_CTA_LIMIT = 600;
 export const PEN_NAME_LIMIT = 20;
 export const ATTACHMENT_LIMIT = 200;
 /** The largest file that can be attached, in bytes. */
@@ -53,6 +54,10 @@ export interface UserProfile {
   penNames: string[];
   /** A short "about me" the person (and, if allowed, the assistant) can use for author bios and voice. */
   bio: string;
+  /** Where readers can support them on Patreon (a web address), or empty. Book Details can add a back-matter page from it. */
+  patreonUrl: string;
+  /** What that page says to readers ("Read the next chapters early…"). */
+  patreonCta: string;
   /** The attachment used as the photo, or null. Must be an image. */
   avatarId: string | null;
   attachments: Attachment[];
@@ -89,7 +94,7 @@ export function cleanFileName(raw: string): string {
 }
 
 export function newUser(now = new Date().toISOString(), id = newId('u')): UserProfile {
-  return { version: USER_VERSION, id, displayName: '', email: '', penNames: [], bio: '', avatarId: null, attachments: [], assistantReads: [], createdAt: now, updatedAt: now };
+  return { version: USER_VERSION, id, displayName: '', email: '', penNames: [], bio: '', patreonUrl: '', patreonCta: '', avatarId: null, attachments: [], assistantReads: [], createdAt: now, updatedAt: now };
 }
 
 const line = (v: unknown, max: number): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, max).trim() : '');
@@ -110,11 +115,22 @@ export function cleanPenNames(v: unknown): string[] {
   return out;
 }
 
+/** A Patreon address: http(s) only, nothing else is ever put in a book. Empty clears it. */
+export function cleanPatreonUrl(v: unknown): string {
+  const t = line(v, 300);
+  if (!t) return '';
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(t) ? t : `https://${t}`; // "patreon.com/me" is what people type
+  if (!/^https?:\/\/[^\s/]+\.[^\s/]+\S*$/i.test(withScheme)) return fail('That does not look like a web address (for example https://www.patreon.com/yourname).');
+  return withScheme;
+}
+
 export interface ProfilePatch {
   displayName?: string;
   email?: string;
   penNames?: string[];
   bio?: string;
+  patreonUrl?: string;
+  patreonCta?: string;
 }
 
 export function updateProfile(u: UserProfile, patch: ProfilePatch, now = new Date().toISOString()): UserProfile {
@@ -123,6 +139,8 @@ export function updateProfile(u: UserProfile, patch: ProfilePatch, now = new Dat
   if (patch.email !== undefined) next.email = cleanEmail(patch.email);
   if (patch.penNames !== undefined) next.penNames = cleanPenNames(patch.penNames);
   if (patch.bio !== undefined) next.bio = typeof patch.bio === 'string' ? patch.bio.replace(/\r\n/g, '\n').trim().slice(0, BIO_LIMIT) : '';
+  if (patch.patreonUrl !== undefined) next.patreonUrl = cleanPatreonUrl(patch.patreonUrl);
+  if (patch.patreonCta !== undefined) next.patreonCta = typeof patch.patreonCta === 'string' ? patch.patreonCta.replace(/\r\n/g, '\n').trim().slice(0, PATREON_CTA_LIMIT) : '';
   return next;
 }
 
@@ -227,6 +245,14 @@ export function sanitizeUser(raw: unknown, now = new Date().toISOString()): User
     email,
     penNames,
     bio: typeof r.bio === 'string' ? r.bio.slice(0, BIO_LIMIT) : '',
+    patreonUrl: (() => {
+      try {
+        return cleanPatreonUrl(r.patreonUrl);
+      } catch {
+        return '';
+      }
+    })(),
+    patreonCta: typeof r.patreonCta === 'string' ? r.patreonCta.slice(0, PATREON_CTA_LIMIT) : '',
     avatarId: avatar && IMAGE_MIME.test(avatar.mime) ? avatar.id : null,
     attachments,
     assistantReads: sanitizeReads(r.assistantReads),
