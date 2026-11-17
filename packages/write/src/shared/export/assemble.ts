@@ -1,6 +1,6 @@
 import { formatChapterHeading, type ChapterHeading } from './headings';
 import { applySmartQuotes, parseManuscript, type Block } from './manuscript';
-import { buildBackMatter, buildFrontMatter, type MatterPage } from './matter';
+import { buildBackMatter, buildFrontMatter, type AuthorLinks, type MatterPage } from './matter';
 import type { BookDetails, ExportSettings } from './model';
 import { countWords } from '../words';
 
@@ -51,7 +51,7 @@ export interface AssembleResult {
 export function assembleBook(
   source: string,
   details: BookDetails,
-  env: { now?: Date; uuid?: () => string; chapterLevel?: number } = {}
+  env: { now?: Date; uuid?: () => string; chapterLevel?: number; /** The author's profile links (Patreon), for the pages that use them. */ author?: Partial<AuthorLinks> | null } = {}
 ): AssembleResult {
   const errors: string[] = [];
   if (!details.title.trim()) errors.push('The book needs a title (Book Details → Title page).');
@@ -82,7 +82,7 @@ export function assembleBook(
   });
 
   const front = buildFrontMatter(details);
-  const back = buildBackMatter(details, warnings);
+  const back = buildBackMatter(details, warnings, env.author);
   const now = env.now ?? new Date();
   const year = details.copyright.year.trim() || String(now.getFullYear());
 

@@ -1,5 +1,6 @@
 import type { ExportKind, ExportOutput, ExportPlan, ExportProgress, ExportResult } from '../../src/shared/api';
 import { assembleBook, type BookBuild } from '../../src/shared/export/assemble';
+import type { AuthorLinks } from '../../src/shared/export/matter';
 import { buildDocx } from '../../src/shared/export/docx';
 import { buildEpub, verifyEpub, type EpubCover, type EpubFamilyFiles, type EpubFonts } from '../../src/shared/export/epub';
 import { bundledFont, DEFAULT_FONT, headingFamily } from '../../src/shared/export/fonts';
@@ -26,6 +27,8 @@ export interface ExportDeps {
   installedFonts?(): Promise<string[]>;
   /** The heading level that starts a chapter (default 1). */
   chapterLevel?(file: string): number | Promise<number>;
+  /** The author's profile links (their Patreon), for back-matter pages that use them. */
+  author?(): Promise<AuthorLinks | null>;
   now?(): Date;
   uuid?(): string;
 }
@@ -73,7 +76,7 @@ export async function runExport(
     result.errors.push('Choose at least one output to build.');
     return result;
   }
-  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid, chapterLevel: await deps.chapterLevel?.(file) });
+  const assembled = assembleBook(await deps.readText(file), details, { now: deps.now?.(), uuid: deps.uuid, chapterLevel: await deps.chapterLevel?.(file), author: await deps.author?.().catch(() => null) });
   if (!assembled.build) {
     result.errors.push(...assembled.errors);
     return result;

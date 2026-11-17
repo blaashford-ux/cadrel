@@ -809,7 +809,26 @@ export class AppService {
     if (asin !== undefined) assertAsin(asin);
     return analysisReport(this.need().db, { from, to, asin });
   }
-  moneyMonth(month: string): MonthReport { assertMonths(month, month); return monthReport(this.need().db, month); }
+  moneyMonth(month: string, asin?: string): MonthReport {
+    assertMonths(month, month);
+    if (asin !== undefined) assertAsin(asin);
+    return monthReport(this.need().db, month, new Date(), asin);
+  }
+  /**
+   * What the Studio's authors are shown of one book: each month it has anything in, as that month's report for this book alone (never with
+   * other books in it, so a co-author sees nothing of anyone else's). Null when the book has no figures.
+   */
+  bookFinanceForAuthors(asin: string): { asin: string; title: string; months: { month: string; report: MonthReport }[] } | null {
+    assertAsin(asin);
+    const own = this.need().db;
+    const months: { month: string; report: MonthReport }[] = [];
+    for (const m of reportMonths(own)) {
+      const report = monthReport(own, m, new Date(), asin);
+      if (report.totals.usd || report.totals.pending || report.totals.units || report.totals.pages || report.totals.freeUnits) months.push({ month: m, report });
+    }
+    if (!months.length) return null;
+    return { asin, title: this.ownBook(asin)?.title ?? months[0]!.report.books[0]?.title ?? asin, months: months.reverse() };
+  }
   people(): Person[] { return listPeople(this.need().db); }
   savePerson(p: { id?: number; name: string; penNames?: string[] }): Person { const lib = this.need(); return savePerson(lib.db, lib.root, p); }
   deletePerson(id: number): void { const lib = this.need(); deletePerson(lib.db, lib.root, id); }

@@ -84,7 +84,7 @@ export class AssistantDoor {
       }
       const names = Array.isArray(request.path) && request.path.every((x) => typeof x === 'string') ? (request.path as string[]) : null;
       const ok =
-        names && ((names.length === 1 && (SERVICE_METHODS as readonly string[]).includes(names[0]!)) || (names.length === 2 && (SERVICE_NAMESPACES as readonly string[]).includes(names[0]!)));
+        names && ((names.length === 1 && (SERVICE_METHODS as readonly string[]).includes(names[0]!)) || (names.length === 2 && names[0] !== 'finance' && (SERVICE_NAMESPACES as readonly string[]).includes(names[0]!))) // the assistant never reaches what the books earned;
       if (!names || !ok) return fail(400, 'That is not something the assistant may do.');
       return send(200, encodeValue({ result: await client.rpc(names, args) }));
     } catch (e) {

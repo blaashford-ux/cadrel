@@ -1,4 +1,6 @@
 import { Icon } from './Icon';
+import { FileLockBadge } from './FileLockBadge';
+import type { FileLock } from '../shared/api';
 import { basename, dirname } from '../shared/paths';
 import type { Tab } from './workspace';
 
@@ -7,6 +9,7 @@ interface Props {
   activeId: string | null;
   onActivate(id: string): void;
   onClose(id: string): void;
+  lockOf?(file: string): FileLock | undefined;
 }
 
 /** File name, plus the parent folder when two open files share a name. */
@@ -21,7 +24,7 @@ export function tabLabels(tabs: Pick<Tab, 'id' | 'file'>[]): Map<string, string>
   );
 }
 
-export function Tabs({ tabs, activeId, onActivate, onClose }: Props) {
+export function Tabs({ tabs, activeId, onActivate, onClose, lockOf }: Props) {
   const labels = tabLabels(tabs);
   if (tabs.length === 0) return null;
   return (
@@ -47,6 +50,7 @@ export function Tabs({ tabs, activeId, onActivate, onClose }: Props) {
               if (e.key === 'Enter' || e.key === ' ') onActivate(t.id);
             }}
           >
+            {lockOf && <FileLockBadge lock={lockOf(t.file)} />}
             <span className="tab-name">{labels.get(t.id)}</span>
             {t.draft !== null && (
               <span className="dirty" title="Unsaved changes" aria-label="unsaved changes">

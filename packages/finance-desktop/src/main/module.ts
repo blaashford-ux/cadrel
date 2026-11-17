@@ -8,6 +8,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, ipcMain, shell, type WebContents } from 'electron';
 import type { AppService } from '@cadrel/market-desktop/src/main/service.js';
 import { CHANNELS } from '../shared/api.js';
+import type { AuthorFinance } from './authorFinance.js';
 
 // Tests run the real app but must not open a real file dialog or folder window.
 export const TEST = process.env.CADREL_TEST === '1';
@@ -18,7 +19,17 @@ export interface FinanceHost {
   getContents(): WebContents | null;
   /** The library service Finance reads and writes through. */
   service: AppService;
+  /**
+   * Set where the person is an Author of a Studio that has a server: what is published there for the books they wrote. Finance then shows them
+   * only the charts and analysis and the Month view, from that, and nothing of the library on this computer. Null: the publisher's own Finance.
+   */
+  author?: () => Promise<AuthorFinance | null>;
+  /** The figures changed on this computer (a KDP report was imported, a rate was set): the Studio's authors have something new to be shown. */
+  onFiguresChanged?(): void;
 }
+
+/** What an Author's Finance answers; every other channel is refused. */
+const AUTHOR_CHANNELS = new Set(['mode', 'ready', 'moneyMonths', 'moneyAnalysis', 'moneyMonth']);
 
 export interface FinanceModule {
   /** Registers the IPC channels. */
@@ -29,6 +40,19 @@ export interface FinanceModule {
   writeStatementPdfs(dir: string, from: string, to: string, payees: string[], basis: 'paid' | 'earned', asin?: string): Promise<string[]>;
   /** Prints each author's roll-up for the period as a PDF into `dir`; with `asin`, the one-book roll-up. */
   writeRollupPdfs(dir: string, from: string, to: string, payees: string[], asin?: string): Promise<string[]>;
+}
+
+/** One channel of an Author's Finance. Only these are answered; the rest of Finance is the publisher's and says so. */
+export function authorAnswer(author: AuthorFinance, channel: string, args: unknown[]): unknown {
+  if (!AUTHOR_CHANNELS.has(channel)) throw new Error('Your role shows you the charts and analysis and the Month view for the books you wrote. The rest of Finance is the publisher’s.');
+  const [a, b, c] = args as [string, string, string | undefined];
+  switch (channel) {
+    case 'mode': return 'author';
+    case 'ready': return author.ready();
+    case 'moneyMonths': return author.moneyMonths();
+    case 'moneyAnalysis': return author.moneyAnalysis(String(a), String(b), typeof c === 'string' ? c : undefined);
+    default: return author.moneyMonth(String(a), typeof b === 'string' ? b : undefined);
+  }
 }
 
 export function createFinanceModule(host: FinanceHost): FinanceModule {
@@ -130,11 +154,20 @@ export function createFinanceModule(host: FinanceHost): FinanceModule {
     clearSalesData: (...a: unknown[]) => (service.clearSalesData as (...x: unknown[]) => unknown)(...a),
   };
 
+  // what changes the figures an author is shown tells the host, so it can publish them to the Studio
+  for (const ch of ['importSales', 'setKenpRate', 'setFxRate', 'applyCalibration', 'resetCalibration', 'clearSalesData', 'setKenpc', 'setKuCompletion']) {
+    const inner = handlers[ch];
+    if (inner) handlers[ch] = async (...a: unknown[]) => { const r = await inner(...a); host.onFiguresChanged?.(); return r; };
+  }
+
   return {
     start() {
       for (const ch of CHANNELS) {
         ipcMain.handle(`finance:${ch}`, async (e, ...args) => {
           if (e.sender !== host.getContents()) throw new Error('not allowed');
+          const author = host.author ? await host.author() : null;
+          if (author) return authorAnswer(author, ch, args);
+          if (ch === 'mode') return 'publisher';
           return handlers[ch]!(...args);
         });
       }

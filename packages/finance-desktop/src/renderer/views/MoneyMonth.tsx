@@ -9,7 +9,7 @@ const api = window.cadrelFinance;
 const delta = (now: number, was: number | undefined) => (was === undefined ? undefined : `${now - was >= 0 ? '+' : ''}${usd(now - was)} (${was ? `${now - was >= 0 ? '+' : ''}${Math.round(((now - was) / was) * 100)}%` : 'new'})`);
 
 /** One month and everything in it: totals by source, every book, every day, marketplace and royalty rate, against the month before and a year earlier. */
-export function MoneyMonth({ version }: { version: number }) {
+export function MoneyMonth({ version, readOnly = false }: { version: number; /** An Author sees the month and cannot change its rates. */ readOnly?: boolean }) {
   const [months, setMonths] = useState<string[] | null>(null);
   const [month, setMonth] = useState('');
   const [r, setR] = useState<MonthReport | null>(null);
@@ -75,15 +75,15 @@ export function MoneyMonth({ version }: { version: number }) {
               <h2>Kindle+ rate</h2>
               <p className="muted">Pages read are paid per page at a rate KDP sets for the month. After KDP finalizes the month it is worked out from your report; until then the last final rate is used. You can enter a rate to override either.</p>
               <table>
-                <thead><tr><th>Currency</th><th className="num">Pages read</th><th className="num">Rate per page</th><th>Status</th><th>Override</th></tr></thead>
+                <thead><tr><th>Currency</th><th className="num">Pages read</th><th className="num">Rate per page</th><th>Status</th>{!readOnly && <th>Override</th>}</tr></thead>
                 <tbody>
                   {r.kenp.map((k) => (
                     <tr key={k.currency}>
                       <td>{k.currency}</td><td className="num">{int(k.pages)}</td><td className="num">{k.rate.toFixed(5)}</td><td>{month >= currentMonth() ? 'Pending' : k.state === 'final' ? 'Final' : 'Estimated'}</td>
-                      <td>
+                      {!readOnly && <td>
                         <input value={edit[k.currency] ?? ''} onChange={(e) => setEdit({ ...edit, [k.currency]: e.target.value })} placeholder="rate per page" aria-label={`Rate per page for ${k.currency}`} style={{ width: 110 }} />{' '}
                         <button onClick={() => void saveRate(k.currency)} disabled={edit[k.currency] === undefined}>{(edit[k.currency] ?? '').trim() === '' ? 'Use KDP rate' : 'Set'}</button>
-                      </td>
+                      </td>}
                     </tr>
                   ))}
                 </tbody>

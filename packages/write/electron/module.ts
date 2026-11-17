@@ -41,7 +41,8 @@ import { createDesktopSync } from './syncHost';
 import { reviewOff } from '../src/shared/syncStub';
 import { createStudioReader, type JoinedStudio } from '../src/shared/review/studioReader';
 import { SHARED_WITH_ME } from '../src/shared/sync/rules';
-import type { BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
+import type { AuthorKit, BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
+import { TextBlockStore } from './textBlocks';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
 /**
@@ -115,6 +116,8 @@ export interface WriteHost {
    * Reader: the Read tab lists those manuscripts, read-only with notes, exactly as Cadrel Reader does. Without it Write has nothing to read.
    */
   betaReading?: () => Promise<JoinedStudio[]>;
+  /** The author's profile and published books, for the Book Details form (Cadrel gives them; Write on its own has neither). */
+  author?: () => Promise<AuthorKit | null>;
 }
 
 export let settings: SettingsStore;
@@ -523,7 +526,13 @@ function registerIpc(): void {
     await fsp.rename(from, target);
   });
   // --- export ---
-  const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file));
+  const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file), host.author ? async () => (await host.author!())?.profile ?? null : undefined);
+  // --- saved text blocks and the author's profile, for the Book Details form ---
+  const blocks = new TextBlockStore(path.join(dataDir, 'text-blocks.json'));
+  handle('blocks:list', () => blocks.list());
+  handle('blocks:save', (_e, input: { kind?: unknown; name?: unknown; text?: unknown }) => blocks.save({ kind: input?.kind, name: input?.name, text: input?.text }));
+  handle('blocks:delete', (_e, id: string) => blocks.remove(String(id)));
+  handle('author:kit', async () => (host.author ? await host.author().catch(() => null) : null));
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened
   handle('export:plan', (_e, p: string, unsaved?: unknown) =>

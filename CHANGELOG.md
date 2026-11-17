@@ -2,6 +2,21 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.16.0 (filling in Book Details is quicker: saved text blocks, Also by from My Books, a Patreon page)
+
+- **Saved text blocks.** Beside every wording field in Book Details (the copyright notices, the dedication and epigraph, the Continue the story text, About the author, the Custom page, an Also by blurb, and the copyright page's extra lines) there is **Saved blocks** and **Save as block…**. Write the text once, save it under a name, and **Use** it in any other book: it fills an empty field, or follows what is there. Each place offers only its own kind (front matter, copyright page, back matter), saving under a name already used replaces that block, and a block can be deleted. They are kept per Studio, so a Studio's blocks are its own. They also work in the project and app default forms.
+- **Also by, from My Books.** On the Also by page, **Add from My Books…** lists your published books (under this book's author name first, in series order, with a switch to show every pen name) with their Amazon links; tick the ones you want, or press **Add all N by <author>**. Books already on the page are not added twice, and the book being made is left out. Books the catalogue knows (with an ASIN) are offered even if your KDP library is not on this computer.
+- **Patreon, from your profile.** Profile has a **Patreon link** and a **call to action**. In Book Details → Back matter there is a **Patreon** page with an on/off switch (and an optional heading, "SUPPORT ME ON PATREON" by default); when it is on, the export puts your call to action and a link to your Patreon at the end of the book. Set the switch in the app or project defaults and every book follows. If it is on but your profile has no (usable) link, the page is left out and the export says why. Only web addresses are ever used; typing `patreon.com/you` is enough.
+- **Other conveniences added with it.** **Pick a pen name** from your profile for the book's author; **Use my profile bio** to fill About the author; and the saved blocks above also cover the copyright page's extra lines.
+- **Upgrading.** Nothing on the Studio's server changes.
+
+## 0.15.0 (check-out icons and Check Reference in Write; authors see what their books earn)
+
+- **Check Reference.** In Write's project menu (the project name above the file tree), **Check Reference…** opens any file of the project read-only in a small window that floats over the app. It is not a modal: nothing is dimmed or blocked, it stays in front when you click back into your own document, and you can keep typing there while you read it. Drag its title bar to move it, drag its corner to resize it, **Change** picks another file, and the cross closes it. It shows the file as it is on disk and refreshes when the window regains focus.
+- **A padlock beside every file shows whether it is checked in or checked out.** In Write's file tree and on each open tab: an open padlock is checked in, a closed green one is checked out by you, a closed red one is checked out by someone else (or changed without a check-out). Hover it to see who has it, since when, and the version. It works the same in a Studio with a server and in a Studio on this computer, and nothing is shown for a file that is not in a vault.
+- **Authors see what their books earn, in Finance.** KDP reports only exist on the publisher's computer, so the publisher's Cadrel now **publishes each book's figures, month by month, to the Studio's server** after a KDP report is imported (or when you press **Publish earnings to authors** in My Books, which is also how to send what was already imported). The Studio decides who reads which book: an author reads **only the books they are credited on as author or co-author** (as themselves or under a pen name they hold), so a book written together shows to each of its authors and to nobody else. They get Finance's **Charts and analysis** and the **Month** view, over their own books, read-only (no splits, payments, payouts, imports or rate overrides). Each published month holds one book alone, so a co-author never receives another book's figures. Reads are logged; the assistant cannot reach the figures. Admin, Director, Finance and the Owner read every book as before.
+- **Upgrading.** Each server Studio needs **upgrading** (Admin → Studio Manager → Upgrade): this is server revision 9 and database step 21 (one new table, `book_finance`). Until it is upgraded the publisher's publish is refused and authors see nothing. A Studio on this computer needs nothing.
+
 ## 0.14.1 (the books of a captured author page show in the Library)
 
 - **An author's books now appear in Library → All books** as soon as their All Books page is captured, marked "author page only" until the book's own page is captured. Before, they only joined the capture queue, so a capture of 45 books showed none in the Library. They can be searched and opened: the book page shows what the author's page gave (title, authors, series, rating, price, other formats) and says what a full capture would add. A book already captured keeps its full page; the books in a category list are unchanged.
@@ -49,6 +64,14 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
 - **The phone and Reader ask the Studio whether anything changed before each minute's look**, and make a full pass (list the vault, people, projects, every file) only when it has. What you change on the phone still goes at once.
 - **Upgrading.** Each Studio's server needs **upgrading** (Admin → Studio Manager → Upgrade) for the CPU fix: this release is server revision 7; the database is unchanged (step 19). The app offers the upgrade by itself. Everything else in this release needs only the new app.
+
+## Cadrel Reader 0.13.2
+
+- Reader is built from Cadrel Write's code, so it carries the saved-text-block and Book Details changes (Reader has no export).
+
+## Cadrel Reader 0.13.1
+
+- Reader is built from Cadrel Write's code, so files in a Studio show the same check-in / check-out padlock.
 
 ## Cadrel Reader 0.13.0
 

@@ -124,3 +124,48 @@ describe('safeUrl', () => {
     (i, o) => expect(safeUrl(i)).toBe(o)
   );
 });
+
+describe('the Patreon page, from the author’s profile', () => {
+  const on = () => {
+    const d = base();
+    d.back.patreon.enabled = true;
+    return d;
+  };
+  const profile = { patreonUrl: 'https://www.patreon.com/penname', patreonCta: 'Get chapters early.\n\nJoin us.' };
+
+  it('is off unless switched on, and then says the profile’s words with its link', () => {
+    expect(buildBackMatter(base(), [], profile).map((p) => p.id)).not.toContain('patreon');
+    const w: string[] = [];
+    const page = buildBackMatter(on(), w, profile).find((p) => p.id === 'patreon')!;
+    expect(page.heading).toBe('SUPPORT ME ON PATREON');
+    expect(page.blocks).toEqual([
+      { t: 'heading', text: 'SUPPORT ME ON PATREON' },
+      { t: 'para', text: 'Get chapters early.' },
+      { t: 'para', text: 'Join us.' },
+      { t: 'link', label: 'Patreon', url: 'https://www.patreon.com/penname' }
+    ]);
+    expect(w).toEqual([]);
+  });
+
+  it('uses the book’s own heading when it has one', () => {
+    const d = on();
+    d.back.patreon.heading = 'BECOME A PATRON';
+    expect(buildBackMatter(d, [], profile).find((p) => p.id === 'patreon')!.heading).toBe('BECOME A PATRON');
+  });
+
+  it('leaves the page out and says why when the profile has no usable link', () => {
+    const none: string[] = [];
+    expect(buildBackMatter(on(), none, { patreonUrl: '', patreonCta: 'x' }).some((p) => p.id === 'patreon')).toBe(false);
+    expect(none[0]).toMatch(/no Patreon link/);
+    const bad: string[] = [];
+    expect(buildBackMatter(on(), bad, { patreonUrl: 'javascript:alert(1)', patreonCta: '' }).some((p) => p.id === 'patreon')).toBe(false);
+    expect(bad[0]).toMatch(/Patreon.*isn’t a web or email address/);
+    expect(buildBackMatter(on(), [], null).some((p) => p.id === 'patreon')).toBe(false);
+  });
+
+  it('comes before About the author and is listed in the contents', () => {
+    const d = on();
+    d.back.about = { enabled: true, heading: 'ABOUT THE AUTHOR', text: 'Hi.' };
+    expect(buildBackMatter(d, [], profile).map((p) => p.id)).toEqual(['patreon', 'about']);
+  });
+});

@@ -9,7 +9,7 @@ export type PageBlock =
   | { t: 'link'; label: string; url: string };
 
 export interface MatterPage {
-  id: 'title' | 'copyright' | 'dedication' | 'epigraph' | 'links' | 'alsoBy' | 'about' | 'custom';
+  id: 'title' | 'copyright' | 'dedication' | 'epigraph' | 'links' | 'alsoBy' | 'patreon' | 'about' | 'custom';
   /** Back-matter pages appear in the table of contents under this heading. */
   heading?: string;
   blocks: PageBlock[];
@@ -79,7 +79,13 @@ export function buildFrontMatter(d: BookDetails): MatterPage[] {
   return pages;
 }
 
-export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[] {
+/** What the author's profile supplies to a book: today, their Patreon. */
+export interface AuthorLinks {
+  patreonUrl: string;
+  patreonCta: string;
+}
+
+export function buildBackMatter(d: BookDetails, warnings: string[], author?: Partial<AuthorLinks> | null): MatterPage[] {
   const pages: MatterPage[] = [];
   const checked = (url: string, what: string): string => {
     if (!url.trim()) return '';
@@ -112,6 +118,21 @@ export function buildBackMatter(d: BookDetails, warnings: string[]): MatterPage[
       for (const p of paragraphsKeepBreaks(it.blurb ?? '')) blocks.push({ t: 'para', text: p });
     }
     pages.push({ id: 'alsoBy', heading, blocks });
+  }
+
+  const patreon = d.back.patreon;
+  if (patreon.enabled) {
+    const url = checked(author?.patreonUrl ?? '', 'Patreon');
+    if (!url) {
+      // a link that is not a web address was already reported by `checked`
+      if (!author?.patreonUrl?.trim()) warnings.push('The Patreon page is switched on, but your profile has no Patreon link, so it was left out. Add one in your Profile.');
+    } else {
+      const heading = patreon.heading.trim() || 'SUPPORT ME ON PATREON';
+      const blocks: PageBlock[] = [{ t: 'heading', text: heading }];
+      for (const p of paragraphsKeepBreaks(author?.patreonCta ?? '')) blocks.push({ t: 'para', text: p });
+      blocks.push({ t: 'link', label: 'Patreon', url });
+      pages.push({ id: 'patreon', heading, blocks });
+    }
   }
 
   const about = d.back.about;

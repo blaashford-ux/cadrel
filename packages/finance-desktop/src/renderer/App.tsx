@@ -15,6 +15,9 @@ const TABS: [Tab, string][] = [['books', 'Reports'], ['analysis', 'Charts and an
 export function App() {
   const [ready, setReady] = useState<boolean | null>(null);
   const [tab, setTab] = useState<Tab>('books');
+  /** An Author sees the charts and analysis and the Month view of the books they wrote, from what the publisher published to the Studio. */
+  const [mode, setMode] = useState<'publisher' | 'author'>('publisher');
+  const author = mode === 'author';
   /** Bumped when data changes (an import here, a capture in Market) so every view reloads. */
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
@@ -22,19 +25,31 @@ export function App() {
   const [asin, setAsin] = useState<string | null>(null);
 
   useEffect(() => {
-    void api.ready().then(setReady, () => setReady(false));
+    const look = () => {
+      void api.mode().then((m) => { setMode(m); if (m === 'author') setTab((t) => (t === 'analysis' || t === 'month' ? t : 'analysis')); }, () => setMode('publisher'));
+      void api.ready().then(setReady, () => setReady(false));
+    };
+    look();
     const offNavigate = api.onNavigate((page) => {
       const m = /^book:([A-Z0-9]{10})$/.exec(page);
       if (m) { setTab('books'); setAsin(m[1]!); }
     });
     const offChange = api.onChange(() => {
       bump();
-      void api.ready().then(setReady, () => setReady(false));
+      look();
     });
     return () => { offNavigate(); offChange(); };
   }, [bump]);
 
   if (ready === null) return null;
+  if (!ready && author) {
+    return (
+      <div className="welcome">
+        <h1>Your books’ earnings</h1>
+        <p className="muted">Nothing has been published for your books yet. When the publisher imports a KDP report in Cadrel, the charts, the analysis and each month for the books you wrote appear here.</p>
+      </div>
+    );
+  }
   if (!ready) {
     return (
       <div className="welcome">
@@ -47,15 +62,15 @@ export function App() {
   return (
     <>
       <header className="tabs" role="tablist">
-        {TABS.map(([id, label]) => (
+        {TABS.filter(([id]) => !author || id === 'analysis' || id === 'month').map(([id, label]) => (
           <button key={id} role="tab" className="tab" aria-selected={tab === id} onClick={() => { setTab(id); setAsin(null); }}>{label}</button>
         ))}
       </header>
       <main>
-        {asin && <BookView asin={asin} version={version} onBack={() => setAsin(null)} onSplits={() => { setAsin(null); setTab('royalties'); }} onPayments={() => { setAsin(null); setTab('payments'); }} onPayAuthors={() => { setAsin(null); setTab('payouts'); }} />}
-        {!asin && tab === 'books' && <BooksTab version={version} onImported={bump} onOpen={setAsin} />}
+        {asin && !author && <BookView asin={asin} version={version} onBack={() => setAsin(null)} onSplits={() => { setAsin(null); setTab('royalties'); }} onPayments={() => { setAsin(null); setTab('payments'); }} onPayAuthors={() => { setAsin(null); setTab('payouts'); }} />}
+        {!asin && !author && tab === 'books' && <BooksTab version={version} onImported={bump} onOpen={setAsin} />}
         {!asin && tab === 'analysis' && <MoneyAnalysis version={version} />}
-        {!asin && tab === 'month' && <MoneyMonth version={version} />}
+        {!asin && tab === 'month' && <MoneyMonth version={version} readOnly={author} />}
         {!asin && tab === 'royalties' && <Royalties version={version} />}
         {!asin && tab === 'payments' && <Payments version={version} onImported={bump} />}
         {!asin && tab === 'payouts' && <Payouts version={version} onChanged={bump} />}

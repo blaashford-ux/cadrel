@@ -588,6 +588,8 @@ export interface MyBooksApi {
   addFromMarket(asins: string[]): Promise<{ added: string[]; skipped: { asin: string; reason: string }[] }>;
   list(): Promise<MyBooksList>;
   book(asin: string): Promise<BookPage | null>;
+  /** Publishes the figures that changed to the Studio, so the authors of the books see what they earned. Only where the Studio has a server and the role manages royalties. */
+  publishFigures(): Promise<{ sent: boolean; published?: number; unchanged?: number; message: string }>;
   /** Asks for a folder, then saves the Market exports for the categories this book is listed in. Null if cancelled. */
   saveMarket(asin: string): Promise<BookSaveResult | null>;
   /** Asks for a folder, then saves this book's earnings and the statements of the authors on it (CSV and PDF). Null if cancelled, or refused when the role may not see Finance. */
