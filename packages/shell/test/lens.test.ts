@@ -41,6 +41,10 @@ describe('the Director’s view: late books and unanswered queries', () => {
     ]);
     expect(v.totals.unansweredQueries).toBe(6);
   });
+  it('carries how many canon proposals wait on the Director, and none when it is not known', () => {
+    expect(buildLens(['director'], { me: 'dana', today: TODAY, passes, tasks, canonWaiting: 3 }).director!.canonWaiting).toBe(3);
+    expect(buildLens(['director'], { me: 'dana', today: TODAY, passes, tasks }).director!.canonWaiting).toBe(0);
+  });
   it('builds only the views asked for', () => {
     expect(Object.keys(buildLens(['director'], { me: 'dana', today: TODAY, passes, tasks }))).toEqual(['director']);
   });
@@ -114,6 +118,17 @@ describe('which views a person gets, and what it costs', () => {
   it('treats a role that may not read editorial passes or the plan as having none there, not as an error', async () => {
     const s = await loadLens({ mayAnywhere: async (c) => c === 'roles.manage', editing: async () => ({ available: false, reason: 'no' }), plan: async () => { throw new Error('away'); } }, 'x', TODAY);
     expect(s).toMatchObject({ available: true, lenses: ['director'], views: { director: { lateBooks: [], unanswered: [], totals: { lateBooks: 0, unansweredQueries: 0 } } } });
+  });
+  it('asks for the canon proposals only for a Director’s view, and treats a failure there as none', async () => {
+    const asked: string[] = [];
+    const src = (caps: string[], waiting: () => Promise<number>) => ({ ...sources(caps, []), canonWaiting: async () => (asked.push('canon'), waiting()) });
+    const dir = await loadLens(src(['roles.manage'], async () => 4), 'x', TODAY);
+    expect(dir.available && dir.views.director!.canonWaiting).toBe(4);
+    const author = await loadLens(src(['manuscript.write'], async () => 9), 'x', TODAY);
+    expect(author.available && author.views.director).toBeUndefined();
+    expect(asked).toEqual(['canon']); // not asked for an Author
+    const broken = await loadLens(src(['roles.manage'], async () => { throw new Error('away'); }), 'x', TODAY);
+    expect(broken.available && broken.views.director!.canonWaiting).toBe(0);
   });
   it('treats a capability check that fails as not held', async () => {
     const s = await loadLens({ mayAnywhere: async () => { throw new Error('away'); }, editing: async () => editing, plan: async () => plan }, 'x', TODAY);

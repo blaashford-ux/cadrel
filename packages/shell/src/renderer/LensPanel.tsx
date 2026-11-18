@@ -52,6 +52,9 @@ export function LensPanel({ onGo, onProject, studioKey }: { onGo: (p: Page) => v
         )}
       </div>
 
+      {lens === 'director' && v.director && v.director.canonWaiting > 0 && (
+        <p className="small"><span className="chip warn">{v.director.canonWaiting}</span> canon {v.director.canonWaiting === 1 ? 'proposal is' : 'proposals are'} waiting for you. <button type="button" className="link" onClick={() => onGo('canon')}>Open Canon</button></p>
+      )}
       {lens === 'director' && v.director && (
         <div className="lens-cols">
           <div>

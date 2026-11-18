@@ -18,6 +18,8 @@ export interface LensInput {
   today: string;
   passes: EditingPassRow[];
   tasks: Task[];
+  /** Canon proposals this person may approve. */
+  canonWaiting?: number;
 }
 
 const pass = (p: EditingPassRow, today: string): LensPass => ({
@@ -79,7 +81,7 @@ export function buildLens(lenses: readonly ('director' | 'editor' | 'author')[],
       waiting.set(p.projectId, w);
     }
     const unanswered = [...waiting].map(([projectId, w]) => ({ projectId, name: w.name, queries: w.queries, passes: w.passes, oldestDays: w.oldest })).sort((a, b) => (b.oldestDays ?? 0) - (a.oldestDays ?? 0) || a.name.localeCompare(b.name));
-    views.director = { lateBooks, unanswered, totals: { lateBooks: lateBooks.length, unansweredQueries: unanswered.reduce((n, u) => n + u.queries, 0) } };
+    views.director = { lateBooks, unanswered, totals: { lateBooks: lateBooks.length, unansweredQueries: unanswered.reduce((n, u) => n + u.queries, 0) }, canonWaiting: i.canonWaiting ?? 0 };
   }
   return views;
 }
@@ -89,6 +91,8 @@ export interface LensSources {
   mayAnywhere(capability: string): Promise<boolean>;
   editing(): Promise<EditingState>;
   plan(): Promise<PlanState>;
+  /** How many canon proposals wait on this person (only asked for a Director's view). */
+  canonWaiting?(): Promise<number>;
 }
 
 /**
@@ -100,7 +104,8 @@ export async function loadLens(src: LensSources, me: string, today: string): Pro
   const lenses = lensesFor({ rolesManage, editApprove, editRun, manuscriptWrite });
   if (!lenses.length) return { available: true, today, lenses, views: {} };
   const [editing, plan] = await Promise.all([src.editing().catch(() => null), src.plan().catch(() => null)]);
+  const canonWaiting = lenses.includes('director') && src.canonWaiting ? await src.canonWaiting().catch(() => 0) : 0;
   const passes = editing && editing.available ? editing.passes : [];
   const tasks = plan && plan.available ? plan.tasks : [];
-  return { available: true, today, lenses, views: buildLens(lenses, { me, today, passes, tasks }) };
+  return { available: true, today, lenses, views: buildLens(lenses, { me, today, passes, tasks, canonWaiting }) };
 }

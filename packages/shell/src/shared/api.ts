@@ -1042,6 +1042,8 @@ export interface LensViews {
     /** Books with queries the author has not answered, the longest wait first. */
     unanswered: { projectId: string; name: string; queries: number; passes: number; oldestDays: number | null }[];
     totals: { lateBooks: number; unansweredQueries: number };
+    /** Canon proposals this person may approve, across every series (0 where they may approve none). */
+    canonWaiting: number;
   };
 }
 export type LensState =
