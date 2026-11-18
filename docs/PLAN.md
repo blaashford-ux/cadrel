@@ -64,7 +64,7 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 | M1 | Shared records | Built and released as 0.3.0. In daily use on Windows; `docs/M1-EXIT-TEST.md` has no recorded run. |
 | M2 | The team vault on Cloudflare | **Built and released** (0.7.0 on, in use on real Studios). Records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records; invitations and People page (0.11.0). Not done: **code-signed installer (deferred, needs a paid certificate)**, updates from R2 (updates come from GitHub releases), replicating the file store, live updates. Built since, in 0.13.0: the assistant on server Studios, the security policy page, and Author / Editor / Director views ([GAPS-PLAN.md](GAPS-PLAN.md)). |
 | M3 | Editorial | **Built and released** (0.7.0 on): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Automated exit test `m3Exit.test.ts`; `M3-EXIT-TEST.md` has no recorded run. Not built: assistant editorial tools for a Studio whose records are on its server, editor dashboard. See [M3-PLAN.md](M3-PLAN.md). |
-| M4 | Canon and continuity | Not started as specified. |
+| M4 | Canon and continuity | Planned ([M4-PLAN.md](M4-PLAN.md)); not started. |
 | M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
 | not in the plan | Releases 0.4.0 to 0.18.0, Android and Cadrel Reader | Built; see "Released outside the milestones". |
 
@@ -185,7 +185,7 @@ Where it becomes a studio tool.
 
 ### M4: Canon and continuity
 
-**Status: not started as specified.** Related: the LitRPG and timeline trackers keep a ledger per series with a carried timeline and flag contradictions, and the Series Developer skill writes a series bible as files. There is no versioned bible with anchored facts, change proposals or continuity checker.
+**Status: planned, not started** (the plan is [M4-PLAN.md](M4-PLAN.md); four decisions are waiting on the owner). Related: the LitRPG and timeline trackers keep a ledger per series with a carried timeline and flag contradictions, and the Series Developer skill writes a series bible as files. There is no versioned bible with anchored facts, change proposals or continuity checker.
 
 - Series bible with versioned entries; facts anchored to the manuscript passage that establishes them.
 - Change proposals reviewed by the series lead; author assignments get the approved canon, open threads and brief.
