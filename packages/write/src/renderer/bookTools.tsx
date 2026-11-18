@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AuthorKit } from '../shared/api';
 import { insertText } from '../shared/bookKit';
+import type { CommunityLink } from '../shared/community';
 import { BLOCK_KIND_LABEL, blocksFor, type BlockKind, type TextBlock } from '../shared/textBlocks';
 
 /** What the Book Details form can offer from outside the book: saved text blocks, and the author's profile and books (where Cadrel hosts Write). */
@@ -11,6 +12,9 @@ interface Tools {
   blocks: TextBlock[] | null;
   save(input: { kind: BlockKind; name: string; text: string }): Promise<void>;
   remove(id: string): Promise<void>;
+  /** The Studio's community links; null where Write keeps none (or they are not read yet). */
+  communities: CommunityLink[] | null;
+  saveCommunities(links: { id?: string; name: string; url: string }[]): Promise<void>;
 }
 
 const ToolsContext = createContext<Tools | null>(null);
@@ -24,11 +28,13 @@ export function BookToolsProvider({ children }: { children: ReactNode }) {
   const api = window.cadrelWrite;
   const [kit, setKit] = useState<AuthorKit | null>(null);
   const [blocks, setBlocks] = useState<TextBlock[] | null>(null);
+  const [communities, setCommunities] = useState<CommunityLink[] | null>(null);
   useEffect(() => {
     if (outer) return;
     let live = true;
     void api.authorKit?.().then((k) => live && setKit(k), () => undefined);
     void api.listTextBlocks?.().then((b) => live && setBlocks(b), () => undefined);
+    void api.listCommunities?.().then((c) => live && setCommunities(c), () => undefined);
     return () => {
       live = false;
     };
@@ -45,9 +51,11 @@ export function BookToolsProvider({ children }: { children: ReactNode }) {
       remove: async (id) => {
         await api.deleteTextBlock!(id);
         await reload();
-      }
+      },
+      communities: api.saveCommunities ? communities : null,
+      saveCommunities: async (links) => setCommunities(await api.saveCommunities!(links))
     }),
-    [api, kit, blocks, reload]
+    [api, kit, blocks, reload, communities]
   );
   return outer ? <>{children}</> : <ToolsContext.Provider value={value}>{children}</ToolsContext.Provider>;
 }

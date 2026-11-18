@@ -3,7 +3,7 @@ import { buildFrontMatter, safeUrl } from '../shared/export/matter';
 import type { BookDetails } from '../shared/export/model';
 import { Field, ListEditor, TextArea, Toggle } from './formParts';
 import { BookToolsProvider } from './bookTools';
-import { AlsoByPicker, BioFromProfile, BlockTools, PatreonSection, PenNamePicker } from './bookKitForms';
+import { AlsoByPicker, BioFromProfile, BlockTools, CommunitySection, PatreonSection, PenNamePicker } from './bookKitForms';
 
 const urlHint = (url: string) =>
   url.trim() && !safeUrl(url) ? <span className="bad">Only http(s) and mailto links are used — this one will be left out.</span> : null;
@@ -160,6 +160,7 @@ export function BackMatterForm(props: BookFormProps) {
                   </>
                 )}
               </section>
+              <CommunitySection details={details} set={(patch) => props.set({ back: { ...details.back, ...patch } })} />
               <PatreonSection details={details} set={(patch) => props.set({ back: { ...details.back, ...patch } })} />
               <section>
                 <h4>About the author</h4>

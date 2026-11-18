@@ -102,6 +102,11 @@ function pageBlockHtml(b: PageBlock, medium: Medium, headingClass: string): stri
       if (b.italic) inner = `<em>${inner}</em>`;
       return `<p class="${cls}">${inner}</p>`;
     }
+    case 'address':
+      // the name, then the address spelled out; in an ebook the address is the hyperlink
+      return medium === 'ebook'
+        ? `<p class="linkline">${esc(b.name)}: <a href="${esc(b.url)}">${esc(b.url)}</a></p>`
+        : `<p class="linkline">${esc(b.name)}: ${esc(b.url)}</p>`;
     case 'link':
       // ebook: a real hyperlink; print: the address spelled out so it can be typed
       return medium === 'ebook'

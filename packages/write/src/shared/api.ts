@@ -321,6 +321,9 @@ export interface DesktopApi {
   listTextBlocks?(): Promise<import('./textBlocks').TextBlock[]>;
   saveTextBlock?(input: { kind: import('./textBlocks').BlockKind; name: string; text: string }): Promise<import('./textBlocks').TextBlock>;
   deleteTextBlock?(id: string): Promise<void>;
+  /** The Studio's community links (Discord, a reader group…) for the Community back-matter page. Saving replaces the whole list. */
+  listCommunities?(): Promise<import('./community').CommunityLink[]>;
+  saveCommunities?(links: { id?: string; name: string; url: string }[]): Promise<import('./community').CommunityLink[]>;
   /** The author's profile and My Books, where Write is hosted by Cadrel. Null otherwise. */
   authorKit?(): Promise<AuthorKit | null>;
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */

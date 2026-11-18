@@ -296,3 +296,17 @@ Justified line.
     expect(jc(find(ps, 'Justified line.'))).toBe('both');
   });
 });
+
+describe('buildDocx — community links', () => {
+  it('writes the name, then the address spelled out as the hyperlink, one to a paragraph', async () => {
+    const withCommunities = (d: BookDetails) => d;
+    void withCommunities;
+    const b = assembleBook(SRC, details(), { ...env, author: { communities: [{ id: 'a', name: 'Reader Discord', url: 'https://discord.gg/readers' }] } }).build!;
+    const doc = strFromU8(unzipSync(await buildDocx(b))['word/document.xml']);
+    const p = paragraphs(doc).find((x) => textOfPara(x).startsWith('Reader Discord: '))!;
+    expect(p).toBeDefined();
+    expect(textOfPara(p)).toBe('Reader Discord: https://discord.gg/readers');
+    expect(p).toMatch(/<w:hyperlink[^>]*>[\s\S]*https:\/\/discord\.gg\/readers[\s\S]*<\/w:hyperlink>/);
+    expect(p.match(/<w:hyperlink/g)).toHaveLength(1);
+  });
+});

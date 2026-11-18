@@ -114,6 +114,8 @@ export interface BookDetails {
     alsoBy: { enabled: boolean; heading: string; items: TitleItem[] };
     /** A page asking readers to support the author on Patreon. The link and the call to action come from the author's profile when the book is exported. */
     patreon: { enabled: boolean; heading: string };
+    /** The Studio's community links (Discord, a reader group…): the page is on by default, and `off` holds the ids of the communities this book leaves out (a new community is therefore on everywhere until switched off). */
+    community: { enabled: boolean; heading: string; off: string[] };
     about: { enabled: boolean; heading: string; text: string };
     custom: { enabled: boolean; heading: string; text: string };
   };
@@ -178,6 +180,7 @@ export function defaultBookDetails(seed: { title?: string; author?: string; year
       links: { enabled: false, heading: 'CONTINUE THE STORY', intro: '', items: [] },
       alsoBy: { enabled: false, heading: '', items: [] },
       patreon: { enabled: false, heading: '' },
+      community: { enabled: true, heading: '', off: [] },
       about: { enabled: false, heading: 'ABOUT THE AUTHOR', text: '' },
       custom: { enabled: false, heading: '', text: '' }
     },
@@ -216,6 +219,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
   const links = isObj(back.links) ? back.links : {};
   const also = isObj(back.alsoBy) ? back.alsoBy : {};
   const patreon = isObj(back.patreon) ? back.patreon : {};
+  const community = isObj(back.community) ? back.community : {};
   const about = isObj(back.about) ? back.about : {};
   const custom = isObj(back.custom) ? back.custom : {};
   const ex = isObj(raw.export) ? raw.export : {};
@@ -265,6 +269,11 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
       },
       patreon: { enabled: bool(patreon.enabled, false), heading: str(patreon.heading, '', 300) },
+      community: {
+        enabled: bool(community.enabled, true),
+        heading: str(community.heading, '', 300),
+        off: Array.isArray(community.off) ? [...new Set(community.off.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length < 100))].slice(0, 200) : []
+      },
       about: { enabled: bool(about.enabled, false), heading: str(about.heading, d.back.about.heading, 300), text: str(about.text, '') },
       custom: { enabled: bool(custom.enabled, false), heading: str(custom.heading, '', 300), text: str(custom.text, '') }
     },

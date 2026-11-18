@@ -1,3 +1,4 @@
+import type { CommunityLink } from '../community';
 import type { BookDetails } from './model';
 
 /** Format-neutral content for the pages around the chapters. Each builder renders these its own way. */
@@ -6,10 +7,12 @@ export type PageBlock =
   | { t: 'heading'; text: string }
   | { t: 'line'; text: string; bold?: boolean }
   | { t: 'para'; text: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right' }
-  | { t: 'link'; label: string; url: string };
+  | { t: 'link'; label: string; url: string }
+  /** A name and its web address spelled out, the address a hyperlink in ebooks and Word (a community link). */
+  | { t: 'address'; name: string; url: string };
 
 export interface MatterPage {
-  id: 'title' | 'copyright' | 'dedication' | 'epigraph' | 'links' | 'alsoBy' | 'patreon' | 'about' | 'custom';
+  id: 'title' | 'copyright' | 'dedication' | 'epigraph' | 'links' | 'alsoBy' | 'patreon' | 'community' | 'about' | 'custom';
   /** Back-matter pages appear in the table of contents under this heading. */
   heading?: string;
   blocks: PageBlock[];
@@ -83,6 +86,8 @@ export function buildFrontMatter(d: BookDetails): MatterPage[] {
 export interface AuthorLinks {
   patreonUrl: string;
   patreonCta: string;
+  /** The Studio's community links, for the Community page. */
+  communities: CommunityLink[];
 }
 
 export function buildBackMatter(d: BookDetails, warnings: string[], author?: Partial<AuthorLinks> | null): MatterPage[] {
@@ -132,6 +137,20 @@ export function buildBackMatter(d: BookDetails, warnings: string[], author?: Par
       for (const p of paragraphsKeepBreaks(author?.patreonCta ?? '')) blocks.push({ t: 'para', text: p });
       blocks.push({ t: 'link', label: 'Patreon', url });
       pages.push({ id: 'patreon', heading, blocks });
+    }
+  }
+
+  const community = d.back.community;
+  if (community.enabled) {
+    const chosen = (author?.communities ?? []).filter((c) => !community.off.includes(c.id));
+    const blocks: PageBlock[] = [];
+    for (const c of chosen) {
+      const url = checked(c.url, c.name);
+      if (url) blocks.push({ t: 'address', name: c.name, url });
+    }
+    if (blocks.length) {
+      const heading = community.heading.trim() || 'JOIN THE COMMUNITY';
+      pages.push({ id: 'community', heading, blocks: [{ t: 'heading', text: heading }, ...blocks] });
     }
   }
 
