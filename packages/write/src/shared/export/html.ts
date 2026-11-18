@@ -102,6 +102,13 @@ function pageBlockHtml(b: PageBlock, medium: Medium, headingClass: string): stri
       if (b.italic) inner = `<em>${inner}</em>`;
       return `<p class="${cls}">${inner}</p>`;
     }
+    case 'subheading':
+      return `<h2 class="bookhead">${esc(b.text)}</h2>`;
+    case 'image':
+      // pictures are for the PDF; ebooks and Word files keep to text
+      return medium === 'print' && /^data:image\/(jpeg|png);base64,/.test(b.src) ? `<p class="bookcover"><img src="${esc(b.src)}" alt="${esc(b.alt)}"/></p>` : '';
+    case 'weblink':
+      return `<p class="weburl"><a href="${esc(b.url)}">${esc(b.url)}</a></p>`;
     case 'address':
       // the name, then the address spelled out; in an ebook the address is the hyperlink
       return medium === 'ebook'
@@ -119,5 +126,6 @@ export function matterPageHtml(page: MatterPage, medium: Medium): string {
   const cls = page.id === 'title' ? 'titlepage' : page.id === 'copyright' ? 'copyright' : page.id === 'dedication' || page.id === 'epigraph' ? 'centered-page' : 'backpage';
   return `<div class="${cls}">\n${page.blocks
     .map((b) => pageBlockHtml(b, medium, 'matter'))
+    .filter(Boolean)
     .join('\n')}\n</div>`;
 }

@@ -167,6 +167,16 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
         const align = b.align === 'center' ? AlignmentType.CENTER : b.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT;
         return new Paragraph({ children: textRuns(b.text, { bold: b.bold, italics: b.italic }), alignment: align, spacing: { before: 0, after: backMatter ? BACK_GAP : 180 }, ...pb });
       }
+      case 'subheading':
+        return new Paragraph({ children: [new TextRun({ text: b.text, font: FONT, size: Math.round(size * 1.15), bold: true })], alignment: AlignmentType.LEFT, keepNext: true, spacing: { before: 120, after: 120 }, ...pb });
+      case 'image':
+        return new Paragraph({ children: [], spacing: { before: 0, after: 0 }, ...pb });
+      case 'weblink':
+        return new Paragraph({
+          children: [new ExternalHyperlink({ link: safeUrl(b.url), children: [new TextRun({ text: b.url, font: FONT, size, color: '0563C1', underline: {} })] })],
+          spacing: { before: 0, after: backMatter ? BACK_GAP : 120 },
+          ...pb
+        });
       case 'address':
         return new Paragraph({
           children: [
@@ -185,7 +195,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
     }
   };
   const matterParagraphs = (p: MatterPage, startsNewPage: boolean): Paragraph[] =>
-    p.blocks.map((b, i) => pageBlock(b, startsNewPage && i === 0));
+    p.blocks.filter((b) => b.t !== 'image').map((b, i) => pageBlock(b, startsNewPage && i === 0));
 
   const frontChildren: Paragraph[] = [];
   book.front.forEach((p, i) => {

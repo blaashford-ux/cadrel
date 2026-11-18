@@ -45,7 +45,7 @@ import { migrateVaultFolder } from './vaultMigration';
 import { createFileControl } from './fileLocks';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
 import { AuthorFigures, publishFigures, type PublishResult } from './bookFinance';
-import { buildAuthorKit } from './authorKit';
+import { buildAuthorKit, plainBlurb } from './authorKit';
 import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -1806,6 +1806,22 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
           own: market.service.status().libraryRoot ? market.service.ownBooks().map((b) => ({ asin: b.asin, title: b.title, penNames: b.penNames })) : [],
           books, series
         });
+      },
+      // The Also By page's cover (kept small, so the book's details stay light) and blurb, from the market library
+      bookCard: async (asin) => {
+        if (!market.service.status().libraryRoot) return null;
+        let cover: string | null = null;
+        try {
+          const full = market.service.cover(asin);
+          if (full) {
+            const img = nativeImage.createFromDataURL(full);
+            const { width } = img.getSize();
+            const small = width > 360 ? img.resize({ width: 360, quality: 'best' }) : img;
+            cover = `data:image/jpeg;base64,${small.toJPEG(82).toString('base64')}`;
+          }
+        } catch { cover = null; }
+        const d = (market.service.book(asin)?.latest as { description?: unknown } | undefined)?.description;
+        return { cover, blurb: typeof d === 'string' ? plainBlurb(d) : '' };
       }
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.

@@ -1,4 +1,4 @@
-import type { BookBuild } from './assemble';
+import { isBackMatterTitle, type BookBuild } from './assemble';
 import { fontStack, headingFamily } from './fonts';
 import { blocksHtml, chapterHeadingHtml, esc, matterPageHtml } from './html';
 import type { ParagraphStyle } from './model';
@@ -93,6 +93,12 @@ p.linkline { text-align: left; text-indent: 0; margin: 0 0 0.6em; overflow-wrap:
 /* Back matter: always a blank line between paragraphs, lines and links, whatever the body paragraph style */
 .backpage p { text-align: left; text-indent: 0; margin: 0 0 1.25em; }
 .backpage p.linkline, .backpage p.crline { margin: 0 0 1.25em; }
+/* Also By: title, cover, clickable address, blurb */
+.backpage h2.bookhead { font-family: ${headStack}; font-size: 1.2em; font-weight: 700; text-align: center; margin: 1.6em 0 0.6em; break-after: avoid; }
+.backpage p.bookcover { text-align: center; margin: 0 0 0.6em; break-after: avoid; }
+.backpage p.bookcover img { max-height: 2.6in; max-width: 60%; width: auto; height: auto; box-shadow: none; }
+.backpage p.weburl { text-align: center; font-size: 0.85em; margin: 0 0 0.8em; overflow-wrap: anywhere; break-after: avoid; }
+.backpage p.weburl a { color: inherit; text-decoration: underline; }
 p.scenebreak { text-align: center; margin: 1.2em 0; text-indent: 0; }
 
 h1 { font-family: ${headStack}; text-align: center; font-weight: 700; }
@@ -122,7 +128,9 @@ export function printBody(book: BookBuild): string {
     const cls = p.id === 'title' ? 'titlepage' : p.id === 'copyright' ? 'copyright' : 'centered-page';
     sections.push(`<section class="front ${cls}" id="front-${p.id}">\n${matterPageHtml(p, 'print')}\n</section>`);
   }
+  // The printed Contents lists the story only: back matter is left out, whether it is a generated page or a Heading 1 in the manuscript.
   const toc = book.toc
+    .filter((t) => !t.id.startsWith('back-') && !isBackMatterTitle(t.label))
     .map((t) => `<li><a href="#${esc(t.id)}" data-toc-target="${esc(t.id)}"><span class="toc-title">${esc(t.label)}</span><span class="toc-dots"></span><span class="toc-num">000</span></a></li>`)
     .join('\n');
   sections.push(`<section class="front toc" id="contents">\n<h1 class="toc-title">CONTENTS</h1>\n<ol>\n${toc}\n</ol>\n</section>`);

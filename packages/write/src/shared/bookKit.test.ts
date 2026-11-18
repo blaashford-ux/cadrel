@@ -28,7 +28,9 @@ describe('Also by, from My Books', () => {
     const first = addAlsoBy([{ title: 'saga 1', url: '', blurb: 'kept' }], chosen);
     expect(first.map((i) => i.title)).toEqual(['saga 1', 'Saga 2', 'Standalone']);
     expect(first[0]!.blurb).toBe('kept');
-    expect(first[1]).toEqual({ title: 'Saga 2', url: 'https://www.amazon.com/dp/Saga 2', blurb: '' });
+    expect(first[1]).toEqual({ title: 'Saga 2', url: 'https://www.amazon.com/dp/Saga 2', blurb: '', cover: '' });
+    const withCard = addAlsoBy([], [chosen[0]!], [{ cover: 'data:image/jpeg;base64,AA==', blurb: 'A blurb.' }]);
+    expect(withCard[0]).toMatchObject({ blurb: 'A blurb.', cover: 'data:image/jpeg;base64,AA==' });
     expect(addAlsoBy(first, chosen)).toEqual(first);
     expect(onAlsoBy(first, chosen[2]!)).toBe(true);
     expect(onAlsoBy([], chosen[2]!)).toBe(false);
