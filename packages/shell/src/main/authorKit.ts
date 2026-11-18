@@ -16,6 +16,17 @@ export interface KitSources {
 /** Where a book is sold: the Amazon page for its ASIN. */
 export const bookUrl = (asin: string): string => `https://www.amazon.com/dp/${asin}`;
 
+/** A description from a book page as plain paragraphs: tags and entities removed, breaks kept as blank lines. */
+export function plainBlurb(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li)>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;|&rsquo;/g, '’')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function buildAuthorKit(s: KitSources): AuthorKit {
   const seriesName = new Map(s.series.map((x) => [x.id, x.name]));
   const byAsin = new Map<string, { series: string | null; position: number | null }>();

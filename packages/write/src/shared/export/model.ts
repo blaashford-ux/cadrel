@@ -30,6 +30,8 @@ export interface TitleItem {
   url: string;
   /** Optional short description shown under the title. */
   blurb: string;
+  /** The cover, as a small image data URL (JPEG or PNG), shown under the title in print. Empty for none. */
+  cover?: string;
 }
 
 export interface CopyrightDetails {
@@ -194,6 +196,8 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g;
 const str = (v: unknown, d: string, max = 20000) => (typeof v === 'string' ? v.replace(CONTROL, '').slice(0, max) : d);
+/** Only a small embedded JPEG or PNG is kept as a cover. */
+const coverData = (v: unknown): string => (typeof v === 'string' && v.length <= 600_000 && /^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : '');
 const bool = (v: unknown, d: boolean) => (typeof v === 'boolean' ? v : d);
 const num = (v: unknown, d: number, min: number, max: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : d;
@@ -266,7 +270,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
       alsoBy: {
         enabled: bool(also.enabled, false),
         heading: str(also.heading, '', 300),
-        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
+        items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, ''), cover: coverData(x.cover) }))
       },
       patreon: { enabled: bool(patreon.enabled, false), heading: str(patreon.heading, '', 300) },
       community: {

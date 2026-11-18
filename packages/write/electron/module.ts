@@ -119,6 +119,8 @@ export interface WriteHost {
   betaReading?: () => Promise<JoinedStudio[]>;
   /** The author's profile and published books, for the Book Details form (Cadrel gives them; Write on its own has neither). */
   author?: () => Promise<AuthorKit | null>;
+  /** The cover and blurb of one of the author's books, for the Also By page. */
+  bookCard?: (asin: string) => Promise<import('../src/shared/api').BookCard | null>;
 }
 
 export let settings: SettingsStore;
@@ -541,6 +543,7 @@ function registerIpc(): void {
   handle('blocks:list', () => blocks.list());
   handle('blocks:save', (_e, input: { kind?: unknown; name?: unknown; text?: unknown }) => blocks.save({ kind: input?.kind, name: input?.name, text: input?.text }));
   handle('blocks:delete', (_e, id: string) => blocks.remove(String(id)));
+  handle('author:bookCard', async (_e, asin: unknown) => (host.bookCard && typeof asin === 'string' ? await host.bookCard(asin).catch(() => null) : null));
   handle('author:kit', async () => (host.author ? await host.author().catch(() => null) : null));
   let exportAbort: AbortController | null = null;
   const exportedFiles = new Set<string>(); // only files produced by an export may be revealed/opened

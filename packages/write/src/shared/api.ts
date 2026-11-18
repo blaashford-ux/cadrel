@@ -304,6 +304,13 @@ export interface AuthorKit {
   /** The author's published books (My Books), for the Also By page. */
   books: AuthorKitBook[];
 }
+/** What the Also By page takes from My Books for one book, beyond its title and link. */
+export interface BookCard {
+  /** The cover as a small JPEG data URL, or null when none is saved. */
+  cover: string | null;
+  /** The book's description from its Amazon page, as plain text. */
+  blurb: string;
+}
 export interface AuthorKitBook {
   asin: string;
   title: string;
@@ -326,6 +333,8 @@ export interface DesktopApi {
   saveCommunities?(links: { id?: string; name: string; url: string }[]): Promise<import('./community').CommunityLink[]>;
   /** The author's profile and My Books, where Write is hosted by Cadrel. Null otherwise. */
   authorKit?(): Promise<AuthorKit | null>;
+  /** The cover and blurb of one of those books (by ASIN), for the Also By page. Null where there is no My Books. */
+  bookCard?(asin: string): Promise<BookCard | null>;
   /** Shows the OS folder picker. Resolves to the chosen folder or null if cancelled. */
   pickFolder(): Promise<string | null>;
   /** Shows the item in File Explorer. */

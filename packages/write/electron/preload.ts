@@ -79,6 +79,7 @@ const api: WriteApi = {
   listCommunities: () => ipcRenderer.invoke('community:list'),
   saveCommunities: (links) => ipcRenderer.invoke('community:save', links),
   authorKit: () => ipcRenderer.invoke('author:kit'),
+  bookCard: (asin: string) => ipcRenderer.invoke('author:bookCard', asin),
   getBookDetails: (file) => ipcRenderer.invoke('export:getDetails', file),
   saveBookDetails: (file, details, overrides) => ipcRenderer.invoke('export:saveDetails', file, details, overrides),
   setMarked: (file, marked) => ipcRenderer.invoke('export:setMarked', file, marked),

@@ -4,44 +4,63 @@ import { addAlsoBy, alsoByCandidates, insertText, onAlsoBy } from '../shared/boo
 import { BlockTools, useBookTools } from './bookTools';
 import { Field, Toggle } from './formParts';
 
-/** Also by: choose from My Books instead of typing each title and link. Absent where Write has no My Books to ask. */
+/** Also by: pick a book from My Books in the dropdown (title, link, cover and blurb come with it) instead of typing each one. Absent where Write has no My Books to ask. */
 export function AlsoByPicker({ author, title, items, onChange }: { author: string; title: string; items: TitleItem[]; onChange(items: TitleItem[]): void }) {
   const kit = useBookTools()?.kit;
-  const [open, setOpen] = useState(false);
   const [all, setAll] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
   const candidates = useMemo(() => (kit ? alsoByCandidates(kit.books, { author, title, all }) : []), [kit, author, title, all]);
   if (!kit) return null;
   const fresh = candidates.filter((b) => !onAlsoBy(items, b));
-  const add = (books: typeof candidates) => {
-    onChange(addAlsoBy(items, books));
-    setPicked(new Set());
+  const add = async (books: typeof candidates) => {
+    setBusy(true);
+    try {
+      const cards = await Promise.all(books.map((b) => window.cadrelWrite.bookCard?.(b.asin).catch(() => null) ?? null));
+      onChange(addAlsoBy(items, books, cards));
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div className="kit-panel">
       <div className="kit-row">
-        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>Add from My Books…</button>
-        {fresh.length > 0 && <button type="button" onClick={() => add(fresh)} title="Add every book listed that is not already on the page">Add all {fresh.length} by {author.trim() || 'this author'}</button>}
-        {kit.books.length === 0 && <span className="muted small">My Books has no published books yet.</span>}
+        <select aria-label="Add a book from My Books" value="" disabled={busy || fresh.length === 0} onChange={(e) => { const b = fresh.find((x) => x.asin === e.target.value); if (b) void add([b]); }}>
+          <option value="">{fresh.length ? 'Add a book from My Books…' : candidates.length ? 'All books are on the page' : 'No other books in My Books'}</option>
+          {fresh.map((b) => (
+            <option key={b.asin} value={b.asin}>{b.title}{b.series ? ` — ${b.series}${b.position != null ? ` #${b.position}` : ''}` : ''}</option>
+          ))}
+        </select>
+        {fresh.length > 1 && <button type="button" disabled={busy} onClick={() => void add(fresh)} title="Add every book listed that is not already on the page">Add all {fresh.length} by {author.trim() || 'this author'}</button>}
+        {busy && <span className="muted small">Fetching covers…</span>}
       </div>
-      {open && (
-        <>
-          <label className="toggle"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /><span>Show books under every pen name</span></label>
-          <div className="kit-books" role="group" aria-label="Books from My Books">
-            {candidates.length === 0 && <p className="muted small">No other books to add.</p>}
-            {candidates.map((b) => {
-              const there = onAlsoBy(items, b);
-              return (
-                <label key={b.asin}>
-                  <input type="checkbox" disabled={there} checked={there || picked.has(b.asin)} onChange={(e) => setPicked((cur) => { const n = new Set(cur); if (e.target.checked) n.add(b.asin); else n.delete(b.asin); return n; })} />
-                  <span>{b.title}{b.series ? <span className="muted small"> — {b.series}{b.position != null ? ` #${b.position}` : ''}</span> : null}{there ? <span className="muted small"> (on the page)</span> : null}</span>
-                </label>
-              );
-            })}
-          </div>
-          <button type="button" className="primary" disabled={picked.size === 0} onClick={() => add(candidates.filter((b) => picked.has(b.asin)))}>Add {picked.size || ''} selected</button>
-        </>
-      )}
+      <label className="toggle"><input type="checkbox" checked={all} onChange={(e) => setAll(e.target.checked)} /><span>Show books under every pen name</span></label>
+    </div>
+  );
+}
+
+/** A book's cover on the Also By page: shown, replaced from a file, or removed. Kept as a small image saved with the book's details. */
+export function CoverField({ cover, onChange }: { cover: string; onChange(cover: string): void }) {
+  const pick = (file: File | undefined) => {
+    if (!file) return;
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const w = Math.min(360, img.naturalWidth || 360);
+      const c = document.createElement('canvas');
+      c.width = w;
+      c.height = Math.round(w * ((img.naturalHeight || 1) / (img.naturalWidth || 1)));
+      c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
+      onChange(c.toDataURL('image/jpeg', 0.85));
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  };
+  return (
+    <div className="kit-row">
+      {cover ? <img src={cover} alt="Book cover" style={{ height: 72, width: 'auto', borderRadius: 2 }} /> : <span className="muted small">No cover</span>}
+      <label className="button-like"><input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />{cover ? 'Replace cover…' : 'Choose cover…'}</label>
+      {cover && <button type="button" onClick={() => onChange('')}>Remove cover</button>}
     </div>
   );
 }
