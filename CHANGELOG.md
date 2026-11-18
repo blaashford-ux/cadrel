@@ -2,6 +2,27 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.19.0 (M4: canon, and continuity checks of a book against it)
+
+### Canon
+- **A Canon page** (in the rail, beside Editing) keeps the series' agreed facts about its characters, places, rules, events and terms. An **entry** has a name, other names and a summary; a **fact** is one agreed sentence about it, and says where in the series it was established and, if you give it, the passage that established it (a quote in an exact version of a file). A fact is never edited: **replacing one retires the old and keeps it**, so nothing already checked against it is rewritten.
+- **Nothing becomes canon until someone who may approve it does.** Authors and editors **propose** changes (the buttons say Propose); a Series Lead or the Owner **approves or rejects** them in the Proposals tab (a rejection needs a reason), or changes canon in one step. Two proposals that clash (the same name, the same fact) cannot both be approved, and a proposal made from an older version of an entry is refused. Everything is in the audit log.
+- **Canon belongs to the series** (the top project of a book's path; a book with no series above it is its own). Anyone with a role on any book in the series reads its canon.
+- **Seeding from the tracker ledgers.** Your assistant can propose canon from the series' LitRPG and timeline ledgers (`canon_seed`): each character, place and event they name becomes an entry, and each logged event a fact in its book and chapter. It shows what it would do first, makes entries first and facts once the entries are approved, and never proposes the same thing twice.
+
+### Continuity checks
+- **Ask your assistant for a continuity check of a book** (there is a new **Continuity Check** skill in the AI Kit). It reads the manuscript at its newest version against the canon that applies at each chapter, and raises findings. A **finding must quote a passage that is exactly in that version and cite the canon facts it conflicts with**, and say how serious it is and how sure the assistant is; one without a passage that is really there, or without a real canon fact, is refused, and a refused batch adds nothing. A finding you already dismissed for this manuscript is not raised again.
+- **You decide each finding.** The page shows the passage marked in its surroundings beside the canon facts it cites, with where they were established. **Dismiss** (a reason is required), **The manuscript is right…** (which *proposes* replacing the cited fact, with this passage as its source; a Series Lead approves it), or fix the manuscript and **re-check a later version**: a finding whose passage is gone is marked fixed. A check closes once nothing is open.
+- **The assistant can read canon, propose changes and raise findings, and nothing else:** it cannot approve, reject, dismiss, accept or close, and it is refused when the Studio has turned the assistant off.
+- **An optional gate** (off unless an administrator adds it): *Its latest continuity check has no open high-severity finding* holds a stage move until a check has been made and no high finding is open; medium and low only advise.
+- **A Series Lead's Home** shows how many canon proposals are waiting for them.
+- **Not in this release:** the Canon page has no offline mode, and there is no canon panel in Write beside the manuscript yet. Semantic search was left out on purpose: the assistant does the reading and Cadrel gives it exact, bounded context.
+- **Upgrading.** Each server Studio needs **upgrading** (Admin → Studio Manager → Upgrade): this is **server revision 10 and database step 22** (six new tables). A Studio on this computer needs nothing. Run [M4-EXIT-TEST.md](docs/M4-EXIT-TEST.md) on a real series: nothing here has been tried on a real book, only on the automated test's five planted contradictions.
+
+## Cadrel Reader 0.13.5
+
+- Reader is built from Cadrel Write's code, so it carries the new Continuity Check skill (Reader does not use it).
+
 ## 0.18.0 (PDF: Contents without back matter, a proper Also by page)
 
 - **Contents.** The PDF's Contents page lists the story only. Back-matter pages (Also by, About the author, Community…) are never listed, and neither is a Heading 1 in the manuscript that is plainly back matter (About the Author, Acknowledgements, Author's Note, Afterword, Also By, Other Books, a sneak peek…). Ebooks and Word keep their own contents.

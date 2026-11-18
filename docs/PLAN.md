@@ -2,7 +2,7 @@
 
 > **Names.** In the product the two apps are **Cadrel Write** and **Cadrel Market**, and nothing a person sees or any file or setting on disk uses the old names. "MDEdit" and "BookScout" in this document mean the original apps Cadrel was built from (and, in migration notes, the data they made).
 
-Status (18 November 2026, against 0.18.0, the latest stable release; the Studio's server is at revision 9 and database step 21): **M0, M1, M2 and M3 are built and released**, and the owner has been using the apps on real Studios, real Cloudflare accounts, a second computer and phones, so the walkthroughs that were open earlier are treated as done in practice (though none has a recorded run). M4 onward are not started. Much work outside the milestone list has shipped since 0.6.1 (see "Released outside the milestones"), so **version numbers do not match milestone numbers** (see section 3). Still open from M2: the code-signed installer, which is **deferred on purpose because a certificate costs money**. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
+Status (18 November 2026, against 0.19.0, the latest stable release; the Studio's server is at revision 10 and database step 22): **M0, M1, M2, M3 and M4 are built and released**, and the owner has been using the apps on real Studios, real Cloudflare accounts, a second computer and phones, so the walkthroughs that were open earlier are treated as done in practice (though none has a recorded run). M5 onward are not started. Much work outside the milestone list has shipped since 0.6.1 (see "Released outside the milestones"), so **version numbers do not match milestone numbers** (see section 3). Still open from M2: the code-signed installer, which is **deferred on purpose because a certificate costs money**. Architecture and stack are in [ARCHITECTURE.md](ARCHITECTURE.md); roles and security in [PERMISSIONS.md](PERMISSIONS.md); versioning in [VERSIONING.md](VERSIONING.md).
 
 ## 1. What Cadrel is
 
@@ -64,7 +64,7 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 | M1 | Shared records | Built and released as 0.3.0. In daily use on Windows; `docs/M1-EXIT-TEST.md` has no recorded run. |
 | M2 | The team vault on Cloudflare | **Built and released** (0.7.0 on, in use on real Studios). Records, vault, locks, versions, force release and offline on the server with every permission check there; guests given one project for a time; shared captures; backup and restore of the server's records; invitations and People page (0.11.0). Not done: **code-signed installer (deferred, needs a paid certificate)**, updates from R2 (updates come from GitHub releases), replicating the file store, live updates. Built since, in 0.13.0: the assistant on server Studios, the security policy page, and Author / Editor / Director views ([GAPS-PLAN.md](GAPS-PLAN.md)). |
 | M3 | Editorial | **Built and released** (0.7.0 on): briefs, passes pinned to an exact version, anchored queries, decisions in the ledger, version compare and revision verification, stage gates, offline answers, the Editing page, assistant tools, Rewrite mode and separate heading and body fonts. Automated exit test `m3Exit.test.ts`; `M3-EXIT-TEST.md` has no recorded run. Not built: assistant editorial tools for a Studio whose records are on its server, editor dashboard. See [M3-PLAN.md](M3-PLAN.md). |
-| M4 | Canon and continuity | Planned ([M4-PLAN.md](M4-PLAN.md)); not started. |
+| M4 | Canon and continuity | **Built and released** (0.19.0; server revision 10, database step 22): the series' canon as records (entries, facts that never change but are superseded, proposals that someone who may approve decides), tracker ledgers seeding proposals, continuity checks pinned to an exact manuscript version and the canon at the time, findings that must quote the passage and cite canon facts, assistant tools and a Continuity Check skill, the Canon page, an optional gate, and Director's Home shows proposals waiting. Automated exit test `m4Exit.test.ts`; `M4-EXIT-TEST.md` has no recorded run. Not built: offline use of the Canon page, a canon panel in Write. See [M4-PLAN.md](M4-PLAN.md). |
 | M5 to M8 | Art and assets, Launch, Business, Coordinator | Not started. |
 | not in the plan | Releases 0.4.0 to 0.18.0, Android and Cadrel Reader | Built; see "Released outside the milestones". |
 
@@ -185,7 +185,7 @@ Where it becomes a studio tool.
 
 ### M4: Canon and continuity
 
-**Status: planned, not started** (the plan is [M4-PLAN.md](M4-PLAN.md); four decisions are waiting on the owner). Related: the LitRPG and timeline trackers keep a ledger per series with a carried timeline and flag contradictions, and the Series Developer skill writes a series bible as files. There is no versioned bible with anchored facts, change proposals or continuity checker.
+**Status: built and released as 0.19.0** (see [M4-PLAN.md](M4-PLAN.md) for what was built and where it differs from this list). Before it, related work was: the LitRPG and timeline trackers keep a ledger per series with a carried timeline and flag contradictions, and the Series Developer skill writes a series bible as files. There is no versioned bible with anchored facts, change proposals or continuity checker.
 
 - Series bible with versioned entries; facts anchored to the manuscript passage that establishes them.
 - Change proposals reviewed by the series lead; author assignments get the approved canon, open threads and brief.
@@ -262,11 +262,11 @@ Read-only look through the connector:
 
 ## 7. Next step
 
-M0 to M3 are released (0.18.0 is the latest) and have been used on real Studios, so the earlier "run it against a real Cloudflare account" item is done in practice. The code-signed installer is deferred until a certificate is worth paying for. What is next, in the order I would take it:
+M0 to M4 are released (0.19.0 is the latest) and M0 to M3 have been used on real Studios. The code-signed installer is deferred until a certificate is worth paying for. What is next, in the order I would take it:
 
-1. **The small M2 and M3 gaps are closed** (0.13.0, [GAPS-PLAN.md](GAPS-PLAN.md)): the assistant on server Studios, the security policy page, and the Director, Editor and Author views on Home and the Dashboard. Each server Studio needs to be upgraded to revision 9 (database step 21), which also carries 0.15.0's author earnings. What is left of them is a manual look at the new screens on Windows.
-2. **Record a run of the M1 and M3 exit tests** on a current build if a written record matters; they have automated cover but no recorded manual run.
-3. **M4: Canon and continuity.** Not started as specified. The timeline and LitRPG trackers and the Series Developer skill already supply a ledger per series and a series bible as files; the versioned bible, anchored facts, change proposals and the continuity checker (exit: Book 4 checked against Books 1 to 3) are the work.
-4. Then M5 (Art, assets and Preflight) onward, in order, only as the Studio needs each.
+1. **Use M4 on a real series, and write it down.** Upgrade each server Studio to revision 10 (database step 22), then walk [M4-EXIT-TEST.md](M4-EXIT-TEST.md) on a real series: seed canon from the ledgers, run a check with your assistant on a real book, and note how many findings were real, how many were wrong and what was missed. That number decides whether the checker needs more (a canon panel in Write beside the manuscript, semantic search) before anything is built on it.
+2. **The gaps M4 left:** the Canon page has no offline mode (the Editing page does), and there is no canon panel in Write.
+3. **Record a run of the M1 and M3 exit tests** on a current build if a written record matters; they have automated cover but no recorded manual run.
+4. Then **M5 (Art, assets and Preflight)** onward, in order, only as the Studio needs each.
 
-Deferred: code signing, updates from R2, replicating the file store. Which of 1 and 3 comes first is a call for the owner.
+Deferred: code signing, updates from R2, replicating the file store.

@@ -1,8 +1,22 @@
 # M4: Canon and continuity, implementation plan
 
-Status: **plan, nothing built.** Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M4 and the Canon records in [ARCHITECTURE.md](ARCHITECTURE.md) (the Canon records). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)); each slice below is releasable on its own, but the exit test needs them all.
+Status: **built and released as 0.19.0** (server revision 10, database step 22). The decisions below were made on 18 November 2026: canon lives in records; embeddings are left out; anyone holding `canon.propose` (or `canon.approve`) on the book may run a check; built straight through to the exit test. "What was built, and where it differs from the plan" is just below. Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M4 and the Canon records in [ARCHITECTURE.md](ARCHITECTURE.md) (the Canon records). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)); each slice below is releasable on its own, but the exit test needs them all.
 
 **Exit (from PLAN.md):** Book 4's manuscript is checked against Books 1 to 3 and the findings are specific and checkable.
+
+## What was built, and where it differs from the plan
+
+All nine slices are built and tested (kernel 343, service 192, MCP 111, shell 310 including `m4Exit.test.ts`; the Canon page is also drawn and clicked in jsdom, `canonPage.test.tsx`). The manual walk-through is [M4-EXIT-TEST.md](M4-EXIT-TEST.md) and has no recorded run. Where the build departs from the plan above and below, so the plan is not read as describing what shipped:
+
+- **Facts have no `proposed` status.** A proposal carries the payload and a fact is created only when it is approved, so a fact is `canon` or `retired`. Fewer states, and nothing half-true in the list.
+- **One page, three tabs.** The rail gets one **Canon** page (Canon, Proposals, Continuity checks) rather than two pages, and a Series Lead's Home shows how many proposals wait on them. There is no read-only canon panel in Write beside the manuscript yet.
+- **The series is the top project of a book's path** (a book with no parent is its own series). Canon is read and proposed by anyone who holds the capability on the series or on any book in it; approving needs `canon.approve` on the series itself.
+- **Approving implies proposing.** A Series Lead holds `canon.approve` but not `canon.propose` in the default roles, so approval counts for both (and for starting a check). Someone who may approve changes canon in one step (`apply`: proposed and approved together, both in the audit log).
+- **Who decides a finding:** whoever may change the manuscript (`manuscript.write` on the book) or approve canon, so an Editor as well as the Author. What they can do is dismiss, or *propose* a canon change; only `canon.approve` makes anything canon.
+- **Seeding** (`canon_seed`) proposes entries first and facts for entries that already exist, so it is run twice with an approval between. It reads the series' tracker ledgers from the manuscript folder on the computer the assistant runs on.
+- **Offline is not built.** The plan said the Canon and Continuity pages would read from a local copy and queue the Author's decisions as the Editing page does. They do not: they need the Studio's server (or the local records). Not in this release.
+- **Not built:** the canon panel in Write; a ledger citation in a finding (a finding cites canon facts, and seeding is how ledger content becomes facts); semantic search (left out on purpose, decision 2).
+- **Known limit, not new:** `workflows.stageOptions` needs a Studio-wide `task.read`, so a role given only on one series cannot ask what stage moves are open. The exit test's Series Lead is Studio-wide and assigned to the series, as in M3's.
 
 ## What this is for
 
@@ -101,9 +115,9 @@ Manual (`M4-EXIT-TEST.md`): on a real series, seed canon, run the assistant over
 - Translation or multi-language canon.
 - Embedding-based retrieval in this milestone (decision 2): name, alias and full-text search first; semantic search later if findings are missed for lack of it.
 
-## Needs your decision
+## Decided (18 November 2026)
 
-1. **Where the truth lives.** Recommended: **records are canon, files are prose**: a fact is a record with a source passage, the series bible and character files stay the authors' writing, and seeding (slice 4) proposes facts from them. The alternative (canon *is* the bible file, parsed) is simpler to start and much harder to govern, version and cite. Agree with records?
-2. **Embeddings.** Recommended: **not in M4**; the assistant does the reasoning and Cadrel supplies exact, bounded context per chapter. Add semantic search later if a real series shows missed findings. Agree?
-3. **Who may run a check.** Recommended: anyone holding `canon.propose` on the book (Author, Editor) can run one and raise findings, and only `canon.approve` (Series Lead, Owner) approves canon. Anything different?
-4. **First release.** Recommended: ship slices 1 to 3 plus the Canon page first (govern canon by hand, with seeding), then the checker. That gets value into the studio sooner and lets a real series shake the records before the checker depends on them. Or build straight through to the exit test?
+1. **Where the truth lives: records.** A fact is a record with a source passage; the series bible and character files stay the authors' writing, and seeding proposes facts from the ledgers.
+2. **Embeddings: not in M4.** The assistant does the reasoning and Cadrel supplies exact, bounded context per chapter. Semantic search can come later if a real series shows missed findings.
+3. **Who may run a check:** anyone holding `canon.propose` on the book (Author, Editor) and, since approval implies it, a Series Lead; only `canon.approve` approves canon.
+4. **First release:** build straight through to the exit test and ship it together.
