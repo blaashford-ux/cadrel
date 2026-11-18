@@ -95,7 +95,8 @@ describe('back matter', () => {
       { t: 'heading', text: 'CONTINUE THE STORY' }, { t: 'para', text: 'Join us.' },
       { t: 'link', label: 'Newsletter', url: 'https://example.com/n' }, { t: 'line', text: 'Plain' }
     ]);
-    expect(pages[1].blocks.filter((b) => b.t === 'link' || b.t === 'line')).toHaveLength(2);
+    expect(pages[1].blocks.filter((b) => b.t === 'subheading').map((b) => (b as { text: string }).text)).toEqual(['Book Two', 'Book Three']);
+    expect(pages[1].blocks.filter((b) => b.t === 'weblink')).toEqual([{ t: 'weblink', url: 'https://example.com/2' }]);
     expect(pages[1].blocks.filter((b) => b.t === 'para').map((b) => (b as { text: string }).text)).toEqual(['A sequel.', 'More peril.']);
     expect(w).toEqual([]);
   });

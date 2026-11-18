@@ -8,6 +8,12 @@ export type PageBlock =
   | { t: 'line'; text: string; bold?: boolean }
   | { t: 'para'; text: string; bold?: boolean; italic?: boolean; align?: 'left' | 'center' | 'right' }
   | { t: 'link'; label: string; url: string }
+  /** A smaller heading inside a page (a book's title on the Also By page). */
+  | { t: 'subheading'; text: string }
+  /** A picture from an embedded data URL (a book cover). Only the PDF shows it. */
+  | { t: 'image'; src: string; alt: string }
+  /** A web address as clickable text, wherever links can be clicked. */
+  | { t: 'weblink'; url: string }
   /** A name and its web address spelled out, the address a hyperlink in ebooks and Word (a community link). */
   | { t: 'address'; name: string; url: string };
 
@@ -119,7 +125,9 @@ export function buildBackMatter(d: BookDetails, warnings: string[], author?: Par
     for (const it of also.items) {
       if (!it.title.trim()) continue;
       const url = checked(it.url, it.title);
-      blocks.push(url ? { t: 'link', label: it.title.trim(), url } : { t: 'line', text: it.title.trim() });
+      blocks.push({ t: 'subheading', text: it.title.trim() });
+      if (it.cover) blocks.push({ t: 'image', src: it.cover, alt: `Cover of ${it.title.trim()}` });
+      if (url) blocks.push({ t: 'weblink', url });
       for (const p of paragraphsKeepBreaks(it.blurb ?? '')) blocks.push({ t: 'para', text: p });
     }
     pages.push({ id: 'alsoBy', heading, blocks });

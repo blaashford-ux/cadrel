@@ -1,5 +1,5 @@
 /** Conveniences for filling in Book Details from what Cadrel already knows: saved blocks, My Books, the author's profile. Pure, so each is tested. */
-import type { AuthorKitBook } from './api';
+import type { AuthorKitBook, BookCard } from './api';
 import type { TitleItem } from './export/model';
 
 /** A saved block put into a field: it replaces an empty field, and follows what is there (after a blank line) otherwise. */
@@ -31,14 +31,14 @@ export function alsoByCandidates(books: AuthorKitBook[], o: { author: string; ti
 }
 
 /** Adds the chosen books to the Also By list, leaving out any already on it (the same title, or the same link). */
-export function addAlsoBy(items: TitleItem[], chosen: AuthorKitBook[]): TitleItem[] {
+export function addAlsoBy(items: TitleItem[], chosen: AuthorKitBook[], cards: (BookCard | null)[] = []): TitleItem[] {
   const have = new Set(items.flatMap((i) => [norm(i.title), i.url.trim()]).filter(Boolean));
   const out = [...items];
-  for (const b of chosen) {
-    if (have.has(norm(b.title)) || (b.url && have.has(b.url))) continue;
-    out.push({ title: b.title, url: b.url, blurb: '' });
+  chosen.forEach((b, i) => {
+    if (have.has(norm(b.title)) || (b.url && have.has(b.url))) return;
+    out.push({ title: b.title, url: b.url, blurb: cards[i]?.blurb ?? '', cover: cards[i]?.cover ?? '' });
     have.add(norm(b.title));
-  }
+  });
   return out;
 }
 

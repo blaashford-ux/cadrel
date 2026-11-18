@@ -2,6 +2,12 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (PDF: Contents without back matter, a proper Also by page)
+
+- **Contents.** The PDF's Contents page lists the story only. Back-matter pages (Also by, About the author, Community…) are never listed, and neither is a Heading 1 in the manuscript that is plainly back matter (About the Author, Acknowledgements, Author's Note, Afterword, Also By, Other Books, a sneak peek…). Ebooks and Word keep their own contents.
+- **Also by layout.** Each book is set as its **title as a heading, its cover, its address below (clickable in the PDF), then its blurb**. Ebooks and Word get the title, clickable address and blurb (no cover image).
+- **Also by from the market database.** **Add a book from My Books…** is now a dropdown; choosing a book fills in its title, link, a small cover and its blurb from Cadrel Market. **Add all N** does the same for the whole list. Books can still be typed in by hand, and each book can have its cover chosen from a file, replaced or removed.
+
 ## 0.17.0 (a Community links page in the back matter, and the assistant can manage the links)
 
 - **Community links.** Define your communities once for the Studio (a reader Discord, a Facebook group, a mailing list) in Book Details → Back matter → **Community links** (**Add a community…** / **Edit the Studio's communities…**: a name and a web address each; `discord.gg/abc` is enough, https:// is added). Each book then has the **Community page** on by default, with every community **on** to begin with and a tick box to leave any one out of that book. A community added later is on in every book until switched off there. On the page each community is **one line: its name, then its address spelled out and hyperlinked** (a link in ebooks and Word, plain text in print), with a space between lines; the heading is "JOIN THE COMMUNITY" unless the book names its own. A community whose address is not a web address is left out and the export says so; if none are left the page is left out.

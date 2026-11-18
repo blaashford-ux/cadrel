@@ -42,6 +42,10 @@ export interface BookBuild {
   warnings: string[];
 }
 
+/** Chapter titles that are really back matter written into the manuscript under a Heading 1 (About the Author, Acknowledgements…). */
+const BACK_MATTER_TITLE = /^\s*(about\s+the\s+authors?|also\s+by\b|other\s+books\b|books?\s+by\b|acknowledge?ments?|author[’']?s\s+note|a\s+note\s+from\s+the\s+author|afterword|(a\s+)?(sneak\s+peek|preview|excerpt)\b|newsletter|continue\s+the\s+story|join\s+the\s+community|support\s+me\s+on\s+patreon)/i;
+export const isBackMatterTitle = (title: string): boolean => BACK_MATTER_TITLE.test(title);
+
 export interface AssembleResult {
   build?: BookBuild;
   /** Problems that stop the export. */

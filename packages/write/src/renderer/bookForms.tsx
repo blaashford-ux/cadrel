@@ -3,7 +3,7 @@ import { buildFrontMatter, safeUrl } from '../shared/export/matter';
 import type { BookDetails } from '../shared/export/model';
 import { Field, ListEditor, TextArea, Toggle } from './formParts';
 import { BookToolsProvider } from './bookTools';
-import { AlsoByPicker, BioFromProfile, BlockTools, CommunitySection, PatreonSection, PenNamePicker } from './bookKitForms';
+import { AlsoByPicker, CoverField, BioFromProfile, BlockTools, CommunitySection, PatreonSection, PenNamePicker } from './bookKitForms';
 
 const urlHint = (url: string) =>
   url.trim() && !safeUrl(url) ? <span className="bad">Only http(s) and mailto links are used — this one will be left out.</span> : null;
@@ -145,13 +145,14 @@ export function BackMatterForm(props: BookFormProps) {
                     <ListEditor
                       items={details.back.alsoBy.items}
                       path="back.alsoBy.items" onChange={(items) => setBack('alsoBy', { items })}
-                      blank={() => ({ title: '', url: '', blurb: '' })}
+                      blank={() => ({ title: '', url: '', blurb: '', cover: '' })}
                       addLabel="Add a book"
                       row={(it, update) => (
                         <>
                           <input aria-label="Book title" placeholder="Book title" value={it.title} onChange={(e) => update({ ...it, title: e.target.value })} />
                           <input aria-label="Book link" placeholder="https://… (optional)" value={it.url} onChange={(e) => update({ ...it, url: e.target.value })} />
                           {urlHint(it.url)}
+                          <CoverField cover={it.cover ?? ''} onChange={(cover) => update({ ...it, cover })} />
                           <textarea aria-label="Book blurb" placeholder="Blurb (optional)" rows={4} value={it.blurb} onChange={(e) => update({ ...it, blurb: e.target.value })} />
                           <BlockTools kind="back" value={it.blurb} onChange={(blurb) => update({ ...it, blurb })} />
                         </>

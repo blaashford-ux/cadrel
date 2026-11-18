@@ -94,7 +94,7 @@ describe('printBody', () => {
   });
   it('contents list links every chapter and back page, with a dot-leader row and a number slot', () => {
     expect(body).toContain('<a href="#chapter1" data-toc-target="chapter1"><span class="toc-title">Chapter 1: A</span><span class="toc-dots"></span><span class="toc-num">000</span></a>');
-    expect(body).toContain('data-toc-target="back-about"');
+    expect(body).not.toContain('data-toc-target="back-about"');
     expect(body).not.toMatch(/toc-title">(Title Page|Copyright)/);
   });
   it('has unique ids (so TOC links resolve to one place)', () => {
