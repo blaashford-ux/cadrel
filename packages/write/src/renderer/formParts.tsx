@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { BlockKind } from '../shared/textBlocks';
+import { BlockTools } from './bookTools';
 import { LayerTag } from './layerEditor';
 
 export function Field(props: {
@@ -33,16 +35,19 @@ export function Field(props: {
   );
 }
 
-export function TextArea(props: { label: string; value: string; onChange(v: string): void; rows?: number; hint?: ReactNode; placeholder?: string; path?: string }) {
+export function TextArea(props: { label: string; value: string; onChange(v: string): void; rows?: number; hint?: ReactNode; placeholder?: string; path?: string; /** Offers the saved text blocks of this part of the book beside the field. */ blocks?: BlockKind }) {
   return (
-    <label className="field">
-      <span className="field-label">
-        {props.label}
-        <LayerTag path={props.path} />
-      </span>
-      <textarea value={props.value} rows={props.rows ?? 4} placeholder={props.placeholder} onChange={(e) => props.onChange(e.target.value)} />
-      {props.hint && <span className="field-hint">{props.hint}</span>}
-    </label>
+    <>
+      <label className="field">
+        <span className="field-label">
+          {props.label}
+          <LayerTag path={props.path} />
+        </span>
+        <textarea value={props.value} rows={props.rows ?? 4} placeholder={props.placeholder} onChange={(e) => props.onChange(e.target.value)} />
+        {props.hint && <span className="field-hint">{props.hint}</span>}
+      </label>
+      {props.blocks && <BlockTools kind={props.blocks} value={props.value} onChange={props.onChange} />}
+    </>
   );
 }
 

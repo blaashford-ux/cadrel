@@ -20,6 +20,7 @@ import {
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
   assignEditor, createPass, getPass, listPasses, movePass, type NewPass, type PassFilter, type PassRecord, type PassState,
   getPolicy, setPolicy, type PolicyChange, type StudioPolicy,
+  bookFinanceMonths, listBookFinance, ownedAsins, publishBookFinance, type BookFinanceSummary, type PublishedMonth,
   briefVersions, createBrief, getBrief, listBriefs, reviseBrief, type BriefFilter, type BriefKind, type BriefRecord, type BriefVersion, type NewBrief,
   type ApprovalRecord, type DecisionRecord, type NewApproval, type NewTask, type TaskFilter, type TaskPatch, type TaskRecord, type TaskState, type ApprovalState,
   type RoleRecord, type Series, type Team, type ScopeKind, type ScopeRef, type WorkflowDraft, type WorkflowRecord, type StageOption, type Stage, type ProjectFacts, type ProjectLevel, type WorkflowUsage, type ProjectTree, type ProjectVisibility
@@ -367,6 +368,39 @@ export class StudioAs {
       return setPolicy(this.o.db, { studioId: this.o.studioId, actor: this.personId, now: this.stamp(), change });
     }
   };
+
+  /**
+   * What the books earned, for the people who wrote them. The publisher's Cadrel publishes each book's months (needs royalties.manage); reading
+   * is by book. Everyone who may manage royalties, and the roles that read them and edit the catalogue (Admin, Director), read every book; anyone
+   * else with royalties.read (an Author) reads the books they are credited on as author or co-author, and only those. Every read is logged.
+   */
+  readonly finance = {
+    publish: async (input: { asin: string; title?: string; months: PublishedMonth[] }): Promise<{ asin: string; months: number }> => {
+      await this.need('royalties.manage');
+      return publishBookFinance(this.o.db, this.ctx(), input);
+    },
+    /** The books this person may see figures for, with the months published for each. */
+    books: async (): Promise<BookFinanceSummary[]> => {
+      const asins = await this.financeBooks();
+      return listBookFinance(this.o.db, this.o.studioId, asins);
+    },
+    /** Every published month of one book (oldest first), if this person may see that book. */
+    book: async (asin: string): Promise<PublishedMonth[]> => {
+      const a = String(asin ?? '').trim().toUpperCase();
+      const asins = await this.financeBooks();
+      if (asins && !asins.includes(a)) throw new PermissionDenied('royalties.read', 'you may see the figures of the books you wrote');
+      await this.o.db.run('INSERT INTO audit (at, actor, action, target, detail) VALUES (?, ?, ?, ?, ?)', [this.stamp(), this.personId, 'read.royalties', a, '{}']);
+      return bookFinanceMonths(this.o.db, this.o.studioId, a);
+    }
+  };
+
+  /** The books whose figures this person may see: null for every book, else the ASINs of the books they wrote. */
+  private async financeBooks(): Promise<string[] | null> {
+    if (await this.can('royalties.manage')) return null;
+    await this.need('royalties.read');
+    if (await this.can('catalogue.edit')) return null;
+    return ownedAsins(this.o.db, this.o.studioId, this.personId);
+  }
 
   /** A read of business data: needs business.read, and leaves a row in the audit log saying who looked at what. */
   private async seen(what: string, subject?: Subject): Promise<void> {

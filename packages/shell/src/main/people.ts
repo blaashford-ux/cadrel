@@ -11,6 +11,7 @@ import { DirBlobs, LocalVault, openStudioDb, type StudioDb } from '@cadrel/store
 import { EditorialOffline } from './offlineEditorial';
 import { OfflineAwareStore, RemoteBlobs, RemoteVaultStore, remoteService } from './remote';
 import { StudioOfflineError, type StudioClient } from './studioClient';
+import type { FinanceCalls } from './bookFinance';
 import path from 'node:path';
 import type { PeopleState, PolicyState, WorkflowState } from '../shared/api';
 
@@ -45,6 +46,19 @@ export class PeopleHost {
   /** This computer's way to the Studio's server, for the assistant's door. Null where the records are on this computer. */
   get serverClient(): StudioClient | null {
     return this.remote;
+  }
+  /** Whether the Studio's records are on its server (so a publisher and the authors of the books are different computers). */
+  get onServer(): boolean {
+    return !!this.remote;
+  }
+  /**
+   * What the books earned, as the person using the app: the publisher publishes, an Author reads the books they wrote. Null where the Studio has
+   * no server: its one person is the publisher and the author, and sees everything in Finance already.
+   */
+  financeCalls(): FinanceCalls | null {
+    if (!this.svc || !this.remote) return null;
+    const f = this.svc.as(this.meId).finance;
+    return { publish: (i) => f.publish(i as never), books: () => f.books(), book: (a) => f.book(a) as Promise<{ month: string; report: unknown }[]> };
   }
   /** Every beta reader's notes on a manuscript in the Studio's vault (for whoever may write it). Empty where the records are not on a server. */
   async betaNotes(fileId: string): Promise<{ personId: string; name: string; text: string }[]> {

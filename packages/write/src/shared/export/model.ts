@@ -112,6 +112,8 @@ export interface BookDetails {
   back: {
     links: { enabled: boolean; heading: string; intro: string; items: LinkItem[] };
     alsoBy: { enabled: boolean; heading: string; items: TitleItem[] };
+    /** A page asking readers to support the author on Patreon. The link and the call to action come from the author's profile when the book is exported. */
+    patreon: { enabled: boolean; heading: string };
     about: { enabled: boolean; heading: string; text: string };
     custom: { enabled: boolean; heading: string; text: string };
   };
@@ -175,6 +177,7 @@ export function defaultBookDetails(seed: { title?: string; author?: string; year
     back: {
       links: { enabled: false, heading: 'CONTINUE THE STORY', intro: '', items: [] },
       alsoBy: { enabled: false, heading: '', items: [] },
+      patreon: { enabled: false, heading: '' },
       about: { enabled: false, heading: 'ABOUT THE AUTHOR', text: '' },
       custom: { enabled: false, heading: '', text: '' }
     },
@@ -212,6 +215,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
   const back = isObj(raw.back) ? raw.back : {};
   const links = isObj(back.links) ? back.links : {};
   const also = isObj(back.alsoBy) ? back.alsoBy : {};
+  const patreon = isObj(back.patreon) ? back.patreon : {};
   const about = isObj(back.about) ? back.about : {};
   const custom = isObj(back.custom) ? back.custom : {};
   const ex = isObj(raw.export) ? raw.export : {};
@@ -260,6 +264,7 @@ export function sanitizeBookDetails(raw: unknown, seed: { title?: string; author
         heading: str(also.heading, '', 300),
         items: list(also.items, (x) => ({ title: str(x.title, '', 300), url: str(x.url, '', 2000), blurb: str(x.blurb, '') }))
       },
+      patreon: { enabled: bool(patreon.enabled, false), heading: str(patreon.heading, '', 300) },
       about: { enabled: bool(about.enabled, false), heading: str(about.heading, d.back.about.heading, 300), text: str(about.text, '') },
       custom: { enabled: bool(custom.enabled, false), heading: str(custom.heading, '', 300), text: str(custom.text, '') }
     },

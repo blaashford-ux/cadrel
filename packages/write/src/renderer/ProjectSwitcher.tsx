@@ -19,10 +19,12 @@ interface Props {
   /** Absent in Cadrel Reader, where a project has no settings or progress of its own to open. */
   onSettings?(): void;
   onProgress?(): void;
+  /** Opens a file read-only in a floating window, to read while writing in the open one. */
+  onCheckReference?(): void;
 }
 
 /** The sidebar header: the open project's name, with a menu to jump to another project or back to the Projects home. */
-export function ProjectSwitcher({ name, isProject, projects, currentPath, openedOrder, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress }: Props) {
+export function ProjectSwitcher({ name, isProject, projects, currentPath, openedOrder, onOpen, onHome, onNew, onOpenFolder, onSettings, onProgress, onCheckReference }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
@@ -52,6 +54,14 @@ export function ProjectSwitcher({ name, isProject, projects, currentPath, opened
       </button>
       {open && (
         <div className="switcher-menu" role="menu">
+          {onCheckReference && (
+            <>
+              <button type="button" role="menuitem" title="Read another file in a window that stays in front while you write" onClick={() => (setOpen(false), onCheckReference())}>
+                Check Reference…
+              </button>
+              <div className="mb-sep" />
+            </>
+          )}
           {isProject && onProgress && onSettings && (
             <>
               <button type="button" role="menuitem" onClick={() => (setOpen(false), onProgress())}>

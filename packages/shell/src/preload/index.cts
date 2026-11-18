@@ -169,6 +169,7 @@ const api: CadrelApi = {
     addFromMarket: (asins) => studioCall('shell:mybooks:addFromMarket', asins),
     list: () => studioCall('shell:mybooks:list'),
     book: (asin) => studioCall('shell:mybooks:book', asin),
+    publishFigures: () => studioCall('shell:mybooks:publishFigures'),
     saveMarket: (asin) => studioCall('shell:mybooks:saveMarket', asin),
     saveFinance: (asin, o) => studioCall('shell:mybooks:saveFinance', asin, o),
     saveAll: (asin, o) => studioCall('shell:mybooks:saveAll', asin, o),

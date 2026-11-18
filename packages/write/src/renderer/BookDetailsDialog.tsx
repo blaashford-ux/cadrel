@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { basename } from '../shared/paths';
 import { BackMatterForm, FrontMatterForm, TitleCopyrightForm } from './bookForms';
+import { BookToolsProvider } from './bookTools';
 import { LayerProvider } from './layerEditor';
 import { useBookLayers } from './useBookLayers';
 import { useEscape } from './useEscape';
@@ -98,6 +99,7 @@ export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
           <p className="muted small">
             Settings marked “From project settings” or “From app settings” follow those. Change one here to give this book its own value; Reset hands it back.
           </p>
+          <BookToolsProvider>
           <LayerProvider value={layer}>
             {tab === 'title' && <TitleCopyrightForm details={details} set={set} />}
 
@@ -105,6 +107,7 @@ export function BookDetailsDialog({ file, onClose, onSaved }: Props) {
 
             {tab === 'back' && <BackMatterForm details={details} set={set} />}
           </LayerProvider>
+          </BookToolsProvider>
         </div>
 
         <div className="modal-actions">

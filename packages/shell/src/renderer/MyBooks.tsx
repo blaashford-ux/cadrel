@@ -34,6 +34,30 @@ function Spark({ points, label, invert }: { points: number[]; label: string; inv
   );
 }
 
+/** For the publisher: sends the Studio what the books earned, so each author sees their own books' figures in Finance. It happens by itself after a KDP report is imported; this is for the first time and for a second look. */
+function PublishFigures() {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const go = async () => {
+    setBusy(true);
+    setNote('');
+    try {
+      const r = await api.publishFigures();
+      setNote(!r.sent ? r.message : r.published ? `Published ${r.published} book${r.published === 1 ? '' : 's'} to the Studio${r.unchanged ? ` (${r.unchanged} already up to date)` : ''}.` : 'The Studio already has everything.');
+    } catch (e) {
+      setNote(clean(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="row">
+      <button type="button" disabled={busy} onClick={() => void go()} title="Authors see only the books they wrote">Publish earnings to authors</button>
+      {note && <span className="muted small" role="status">{note}</span>}
+    </div>
+  );
+}
+
 function SaveBar({ page, financeVisible }: { page: BookPage; financeVisible: boolean }) {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<BookSaveResult | null>(null);
@@ -263,6 +287,7 @@ function MarketList({ studio, act, error, clearError }: Props) {
   return (
     <div className="mybooks">
       <p className="muted">Every book you have published, in one place: its listing from Market, its sales and royalties from Finance, and its files to save. Books come from your KDP reports and from Market’s list of your own books.</p>
+      {money && <PublishFigures />}
       <div className="row">
         <input aria-label="Search books" placeholder="Search title, pen name or ASIN" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select aria-label="Pen name" value={pen} onChange={(e) => setPen(e.target.value)}>

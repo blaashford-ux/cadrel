@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   assistantVisibleFiles, recordAssistantRead,
-  ATTACHMENT_LIMIT, ATTACHMENT_MAX_BYTES, addAttachment, cleanFileName, editAttachment, mimeFor, nameOf, newUser, removeAttachment, sanitizeUser, setAvatar, updateProfile
+  ATTACHMENT_LIMIT, ATTACHMENT_MAX_BYTES, UserError, addAttachment, cleanFileName, editAttachment, mimeFor, nameOf, newUser, removeAttachment, sanitizeUser, setAvatar, updateProfile
 } from '../src/user';
 
 const add = (u = newUser(), name = 'Contract.pdf', size = 10) => addAttachment(u, { name, size, hash: 'abc' });
@@ -100,5 +100,29 @@ describe('user profile', () => {
     expect(u.attachments.map((a) => [a.id, a.size, a.mime])).toEqual([['a1', 5, 'application/pdf'], ['a2', 0, 'image/png']]);
     expect(sanitizeUser({ avatarId: 'zzz', attachments: [] }).avatarId).toBeNull();
     expect(sanitizeUser({ avatarId: 'a1', attachments: [{ id: 'a1', name: 'doc.pdf' }] }).avatarId).toBeNull(); // not a picture
+  });
+});
+
+describe('the Patreon link and call to action', () => {
+  it('are empty for a new profile and for one saved before they existed', () => {
+    const u = newUser('2026-11-17T00:00:00Z', 'u1');
+    expect([u.patreonUrl, u.patreonCta]).toEqual(['', '']);
+    expect(sanitizeUser({ id: 'u1', displayName: 'Ann' }).patreonUrl).toBe('');
+  });
+  it('keep a web address (adding https:// when it is left off) and the wording, and can be cleared', () => {
+    const u = newUser('2026-11-17T00:00:00Z', 'u1');
+    const a = updateProfile(u, { patreonUrl: ' patreon.com/ann ', patreonCta: 'Read ahead.\r\nJoin us.  ' });
+    expect(a.patreonUrl).toBe('https://patreon.com/ann');
+    expect(a.patreonCta).toBe('Read ahead.\nJoin us.');
+    expect(updateProfile(a, { patreonUrl: '' }).patreonUrl).toBe('');
+    expect(updateProfile(a, { bio: 'x' }).patreonUrl).toBe('https://patreon.com/ann');
+  });
+  it('refuse anything that is not a web address', () => {
+    const u = newUser('2026-11-17T00:00:00Z', 'u1');
+    for (const bad of ['javascript:alert(1)', 'ftp://x.com/a', 'not a link', 'mailto:a@b.com']) expect(() => updateProfile(u, { patreonUrl: bad }), bad).toThrow(UserError);
+  });
+  it('are read defensively from a hand-edited file', () => {
+    expect(sanitizeUser({ patreonUrl: 'javascript:x', patreonCta: 5 }).patreonUrl).toBe('');
+    expect(sanitizeUser({ patreonUrl: 'https://www.patreon.com/a', patreonCta: 'hi' })).toMatchObject({ patreonUrl: 'https://www.patreon.com/a', patreonCta: 'hi' });
   });
 });

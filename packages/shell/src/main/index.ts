@@ -44,6 +44,8 @@ import { ProjectSync, isNotesFile, vaultIgnores } from './projectSync';
 import { migrateVaultFolder } from './vaultMigration';
 import { createFileControl } from './fileLocks';
 import { bookPage, financeAccess, listBooks, saveBook } from './mybooks';
+import { AuthorFigures, publishFigures, type PublishResult } from './bookFinance';
+import { buildAuthorKit } from './authorKit';
 import { addFromMarket, catalogueCall, deleteBookEverywhere, catalogueDetail, catalogueList, type Sources } from './catalogueBooks';
 import { BACKUP_EXTENSION, studioBackupSources, studioRestoreTargets, createBackup, describeBackup, findMdeditProjects, importMdeditProject, previewMdeditImport, restoreBackup, restoreProject } from './backup';
 import { UserStore } from '@cadrel/studio';
@@ -741,12 +743,45 @@ const canRead = (): boolean => {
   return v.studios.find((x) => x.id === v.activeId)?.role === 'member';
 };
 
+// ---- books' earnings: the publisher publishes them to the Studio, an Author reads the books they wrote -------------------------
+/** Whether the person using the app is a publisher in the sense of Finance (sees all of it); an Author of a Studio with a server sees their own books only. */
+const financeRole = (): boolean => financeAccess(studios.active().role === 'owner' ? 'owner' : studios.active().memberRole);
+const sentFigures = new Map<string, string>();
+let figuresStudio = '';
+let authorReader: { studio: string; figures: AuthorFigures } | null = null;
+/** An Author's reader of the Studio's figures, or null for a publisher and for a Studio with no server (they see their own library). */
+function authorFigures(): AuthorFigures | null {
+  const calls = peopleHost.financeCalls();
+  const id = studios.active().id;
+  if (!calls || financeRole()) return null;
+  if (authorReader?.studio !== id) authorReader = { studio: id, figures: new AuthorFigures(calls) };
+  return authorReader.figures;
+}
+/** Sends the Studio the figures that changed since it was last sent them. Only for whoever may manage royalties, and only where there is a server. */
+async function publishToAuthors(): Promise<PublishResult | { notSent: string }> {
+  const calls = peopleHost.financeCalls();
+  if (!calls) return { notSent: 'This Studio has no server, so there are no other authors to publish to.' };
+  if (!(await peopleHost.may('royalties.manage'))) return { notSent: 'Your role does not manage royalties, so you cannot publish figures to the Studio.' };
+  const id = studios.active().id;
+  if (figuresStudio !== id) { sentFigures.clear(); figuresStudio = id; }
+  return publishFigures(market.service, calls, sentFigures);
+}
+let figuresTimer: NodeJS.Timeout | null = null;
+/** After a KDP report is imported (or a rate set), publish once the person has stopped changing things for a few seconds. A failure is left for the button to say. */
+function publishFiguresSoon(): void {
+  if (!peopleHost.onServer) return;
+  if (figuresTimer) clearTimeout(figuresTimer);
+  figuresTimer = setTimeout(() => void publishToAuthors().catch(() => undefined), 3000);
+  figuresTimer.unref();
+}
+
 function showPage(next: Page): void {
   if ((next === 'admin' || next === 'people') && !admin.isAdmin()) next = 'home'; // only administrators have the Admin and People pages
   if (next === 'read' && !canRead()) next = 'write';
   if (!win || win.isDestroyed()) return;
   page = next;
   for (const id of ['write', 'market', 'finance'] as const) views[id]?.setVisible(false);
+  if (next === 'finance') authorFigures()?.invalidate(); // an Author looking at Finance sees what has been published since they last looked
   const shown: ModuleId | null = next === 'read' ? 'write' : isModule(next) ? next : null; // Read is Write's window, in its reading mode
   if (next === 'write' || next === 'read') {
     writeMode = next;
@@ -1251,6 +1286,10 @@ function registerShellIpc(): void {
   manageLike('mybooks:deleteBook', async (id: string) => deleteBookEverywhere(peopleHost, market.service.status().libraryRoot ? market.service : null, String(id)));
   manageLike('mybooks:addFromMarket', async (asins: string[]) => addFromMarket(peopleHost, market.service, Array.isArray(asins) ? asins.map(String) : []));
   manageLike('mybooks:list', async () => listBooks(market.service, financeSeen()));
+  manageLike('mybooks:publishFigures', async () => {
+    const r = await publishToAuthors();
+    return 'notSent' in r ? { sent: false as const, message: r.notSent } : { sent: !r.error, published: r.published, unchanged: r.unchanged, message: r.error ?? '' };
+  });
   manageLike('mybooks:book', async (asin: string) => bookPage(market.service, asinOf(asin), financeSeen()));
   const saveWhat = (what: 'market' | 'finance' | 'all') => async (asin: string, o?: { months?: number }) => {
     let parent = picked('CADREL_TEST_BOOK_SAVE_TO');
@@ -1756,7 +1795,18 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
       // One AI server for the whole suite, started with Cadrel's own runtime; the Claude Desktop extension holds a launcher for it.
       mcp: { file: mcpFile(), kitServer: kitLauncher, brand: KIT_BRAND, extraArgs: () => (publishActiveStudio(), ['--active', activeFile()]) },
       updatesDisabledReason: 'Cadrel is updated as a whole; Cadrel Write’s own updater is switched off here.',
-      betaReading: readingStudios
+      betaReading: readingStudios,
+      // Book Details can use the person's profile (pen names, bio, Patreon) and their published books (Also by)
+      author: async () => {
+        const u = userCache ?? (await refreshUser());
+        const cat = peopleHost.service?.as(peopleHost.me).catalogue;
+        const [books, series] = cat ? await Promise.all([cat.books().catch(() => []), cat.series().catch(() => [])]) : [[], []];
+        return buildAuthorKit({
+          profile: { displayName: u.displayName, penNames: u.penNames, bio: u.bio, patreonUrl: u.patreonUrl, patreonCta: u.patreonCta },
+          own: market.service.status().libraryRoot ? market.service.ownBooks().map((b) => ({ asin: b.asin, title: b.title, penNames: b.penNames })) : [],
+          books, series
+        });
+      }
     });
     // Projects made before workflows existed are given the default for their level, once, starting in the status they had.
     await stages.adoptLegacy(async (projectId) => {
@@ -1791,7 +1841,11 @@ if (!TEST && !smokeArg && !app.requestSingleInstanceLock()) {
     publishActiveStudio();
     setInterval(publishActiveStudio, 15_000).unref();
     // Finance reads and writes the money side of the same library. It is told when a capture arrives so its figures reload.
-    finance = createFinanceModule({ getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service });
+    finance = createFinanceModule({
+      getWindow: () => win, getContents: () => views.finance?.webContents ?? null, service: market.service,
+      author: async () => authorFigures()?.get() ?? null,
+      onFiguresChanged: () => publishFiguresSoon()
+    });
     finance.start();
     market.service.onCapture(() => finance.notify());
     registerShellIpc();

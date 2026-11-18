@@ -14,6 +14,8 @@ export type {
 };
 
 export interface FinanceApi {
+  /** Whose Finance this is: the publisher's (their own KDP library, everything) or an author's (the figures published to the Studio for the books they wrote: the charts and analysis, and the Month view). */
+  mode(): Promise<'publisher' | 'author'>;
   /** Is there a Market library to read from? Finance has nothing to show until there is one. */
   ready(): Promise<boolean>;
   /** The books Market knows as the studio's own: the one thing Finance reads of Market's own records. Never written from here. */
@@ -100,4 +102,4 @@ export interface FinanceApi {
   onNavigate(cb: (page: string) => void): () => void;
 }
 
-export const CHANNELS = ['ready', 'bookPayments', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData', 'booksOutsideScope', 'removeBooksOutsideScope'] as const satisfies readonly (keyof FinanceApi)[];
+export const CHANNELS = ['mode', 'ready', 'bookPayments', 'exportBookEarnings', 'ownBooks', 'openBook', 'salesStatus', 'moneyMonths', 'moneyAnalysis', 'moneyMonth', 'people', 'savePerson', 'deletePerson', 'bookSplit', 'allSplits', 'detectedAuthors', 'setBookSplit', 'statement', 'payments', 'paymentOwed', 'allocatePayment', 'unallocatePayment', 'exportPayment', 'payoutRollup', 'allocateRollup', 'exportRollup', 'payouts', 'recordPayout', 'deletePayout', 'removePayment', 'exportStatement', 'setFxRate', 'setKenpRate', 'importSales', 'importRanks', 'calibrationPreview', 'applyCalibration', 'setKenpc', 'setKuCompletion', 'resetCalibration', 'clearSalesData', 'booksOutsideScope', 'removeBooksOutsideScope'] as const satisfies readonly (keyof FinanceApi)[];

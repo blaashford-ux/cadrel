@@ -125,18 +125,18 @@ export interface MonthReport extends AnalysisReport {
 
 const shift = (month: string, by: number) => { const [y, m] = month.split('-').map(Number) as [number, number]; const d = new Date(Date.UTC(y, m - 1 + by, 1)); return d.toISOString().slice(0, 7); };
 
-/** Everything for one month, with the month before and the same month a year ago for comparison. */
-export function monthReport(db: Db, month: string, today = new Date()): MonthReport {
-  const r = analysisReport(db, { from: month, to: month }, today);
+/** Everything for one month, with the month before and the same month a year ago for comparison. `asin` limits all of it to one book. */
+export function monthReport(db: Db, month: string, today = new Date(), asin?: string): MonthReport {
+  const r = analysisReport(db, { from: month, to: month, ...(asin ? { asin } : {}) }, today);
   const side = (m: string) => {
-    const x = analysisReport(db, { from: m, to: m }, today);
+    const x = analysisReport(db, { from: m, to: m, ...(asin ? { asin } : {}) }, today);
     return x.totals.usd || x.months[0]!.units || x.months[0]!.pages ? { month: m, usd: x.totals.usd, books: x.books } : null;
   };
   const prev = side(shift(month, -1));
   const year = side(shift(month, -12));
   const rates = kenpRates(db);
   const pages = new Map<string, number>();
-  for (const k of db.prepare(`SELECT marketplace, SUM(pages) AS pages FROM kenp_day WHERE substr(day, 1, 7) = ? GROUP BY marketplace`).all(month) as unknown as { marketplace: string; pages: number }[]) {
+  for (const k of db.prepare(`SELECT marketplace, SUM(pages) AS pages FROM kenp_day WHERE substr(day, 1, 7) = ?${asin ? ' AND asin = ?' : ''} GROUP BY marketplace`).all(...(asin ? [month, asin] : [month])) as unknown as { marketplace: string; pages: number }[]) {
     const c = marketplaceCurrency(k.marketplace); pages.set(c, (pages.get(c) ?? 0) + k.pages);
   }
   return {
