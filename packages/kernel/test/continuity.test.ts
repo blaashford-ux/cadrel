@@ -143,7 +143,7 @@ describe('a person decides every finding', () => {
     await deliverCheck(db, ctx('eve'), checkId);
     expect(await code(decideFinding(db, ctx('ann'), f1, { outcome: 'accept_as_canon', change: { change: 'retire_fact', factId: 'made-up', reason: 'x' } }))).toBe('not-found');
     expect(await code(decideFinding(db, ctx('ann'), f1, { outcome: 'accept_as_canon', change: undefined }))).toBe('invalid');
-    expect(await code(decideFinding(db, ctx('ann'), f1, { outcome: 'ponder' as never }))).toBe('invalid');
+    expect(await code(decideFinding(db, ctx('ann'), f1, { outcome: 'ponder' } as unknown as Parameters<typeof decideFinding>[3]))).toBe('invalid');
     expect((await listFindings(db, ctx('x'), { checkId, state: 'live' })).length).toBe(3);
   });
 
