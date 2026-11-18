@@ -19,6 +19,9 @@ on:
 env:
   # GitHub is retiring the Node 20 runtime for actions; run them on Node 24 now.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # onnxruntime-node's install script also downloads a CUDA (GPU) build on Linux, and that release file now returns 404, which fails `npm ci`.
+  # Nothing here uses the GPU build, so skip it.
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
 
 permissions:
   contents: read
