@@ -210,8 +210,8 @@ describe.skipIf(!haveEnv)('print PDF (real Electron + Paged.js)', () => {
       const num = /(\d+)$/.exec(line!)![1];
       expect(num).toBe(String(chapterPage(r.pages, n) - start + 1));
     }
-    expect(toc.some((t) => /ABOUT THE AUTHOR.*\d+$/.test(t))).toBe(true);
-    expect(toc.join(' ')).not.toMatch(/Copyright|Title Page/);
+    // back matter is kept out of the printed contents
+    expect(toc.join(' ')).not.toMatch(/ABOUT THE AUTHOR|Copyright|Title Page/);
   });
 
   it('small book: one layout pass and the smallest KDP gutter; under-24-page warning absent', () => {
