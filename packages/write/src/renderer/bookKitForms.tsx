@@ -40,27 +40,34 @@ export function AlsoByPicker({ author, title, items, onChange }: { author: strin
 
 /** A book's cover on the Also By page: shown, replaced from a file, or removed. Kept as a small image saved with the book's details. */
 export function CoverField({ cover, onChange }: { cover: string; onChange(cover: string): void }) {
-  const pick = (file: File | undefined) => {
+  const [error, setError] = useState('');
+  const pick = async (file: File | undefined) => {
     if (!file) return;
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const w = Math.min(360, img.naturalWidth || 360);
+    setError('');
+    try {
+      // decoded without loading a URL, so it works under the page's content security policy
+      const bmp = await createImageBitmap(file);
+      const w = Math.min(360, bmp.width || 360);
       const c = document.createElement('canvas');
       c.width = w;
-      c.height = Math.round(w * ((img.naturalHeight || 1) / (img.naturalWidth || 1)));
-      c.getContext('2d')?.drawImage(img, 0, 0, c.width, c.height);
+      c.height = Math.max(1, Math.round(w * (bmp.height / (bmp.width || 1))));
+      const ctx = c.getContext('2d');
+      if (!ctx) throw new Error('no canvas');
+      ctx.fillStyle = '#fff'; // a PNG's transparent areas become white in the JPEG
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      bmp.close();
       onChange(c.toDataURL('image/jpeg', 0.85));
-      URL.revokeObjectURL(url);
-    };
-    img.onerror = () => URL.revokeObjectURL(url);
-    img.src = url;
+    } catch {
+      setError('That image could not be read. Use a JPEG or PNG file.');
+    }
   };
   return (
     <div className="kit-row">
       {cover ? <img src={cover} alt="Book cover" style={{ height: 72, width: 'auto', borderRadius: 2 }} /> : <span className="muted small">No cover</span>}
-      <label className="button-like"><input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />{cover ? 'Replace cover…' : 'Choose cover…'}</label>
+      <label className="button-like"><input type="file" accept="image/png,image/jpeg" hidden onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ''; }} />{cover ? 'Replace cover…' : 'Choose cover…'}</label>
       {cover && <button type="button" onClick={() => onChange('')}>Remove cover</button>}
+      {error && <span className="muted small" role="alert">{error}</span>}
     </div>
   );
 }
