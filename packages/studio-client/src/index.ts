@@ -30,7 +30,9 @@ const READS = new Set([
   'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
   'briefs.list', 'briefs.get', 'briefs.versions', 'passes.list', 'passes.get', 'queries.list', 'queries.counts', 'queries.decisions', 'queries.verification',
   'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove',
-  'policy.get'
+  'policy.get',
+  'canon.seriesOf', 'canon.listEntries', 'canon.getEntry', 'canon.entryVersions', 'canon.listFacts', 'canon.getFact', 'canon.stamp', 'canon.listProposals', 'canon.waitingForMe', 'canon.getProposal',
+  'continuity.list', 'continuity.get', 'continuity.findings', 'continuity.counts'
 ]);
 /** How long the Studio's change counter is trusted before it is asked again. */
 export const FRESH_MS = 3_000;
