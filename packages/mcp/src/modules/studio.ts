@@ -12,6 +12,7 @@ import { bookOf, findBook, findNode } from '../scope.js';
 import { makeProjects } from '@cadrel/write/src/shared/backend/projects';
 import { defaultTemplates, projectNameError } from '@cadrel/write/src/shared/projects';
 import type { McpModule } from '../server.js';
+import { COMMUNITY_INSTRUCTIONS, registerCommunityTools } from './community.js';
 import { STUDIO_HINT } from '@cadrel/write/src/shared/agent/tools';
 
 export const STUDIO_INSTRUCTIONS =
@@ -23,6 +24,8 @@ export const STUDIO_INSTRUCTIONS =
 
 export interface StudioToolOptions {
   studio: Studio;
+  /** The file the Studio's community links are kept in (Write's data folder); with it the assistant can list, add, change and delete them. */
+  communityLinks?: string;
   /** The person's profile, if this computer has one: the assistant may read their name, pen names and bio, and the files they have attached unless they opted out (never their email). */
   user?: UserStore;
   /** Where Write's manuscripts are, so their review notes are listed too. */
@@ -94,12 +97,13 @@ export function studioModule(o: StudioToolOptions): McpModule {
   return {
     id: 'studio',
     title: 'Projects and notes (the whole studio)',
-    instructions: STUDIO_INSTRUCTIONS,
+    instructions: o.communityLinks ? `${STUDIO_INSTRUCTIONS} ${COMMUNITY_INSTRUCTIONS}` : STUDIO_INSTRUCTIONS,
     register: (server) => registerStudioTools(server, o)
   };
 }
 
 export function registerStudioTools(server: McpServer, o: StudioToolOptions): void {
+  if (o.communityLinks) registerCommunityTools(server, o.communityLinks);
   const who = () => agentFromClient(server.server.getClientVersion()?.name).agentName;
   const readOnly = { readOnlyHint: true, openWorldHint: false } as const;
   const projectRef = z.string().describe('A project: its id, or its name or path such as "Dragon Rider / Book 1".');

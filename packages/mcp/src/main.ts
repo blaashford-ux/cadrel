@@ -89,7 +89,7 @@ type ClosedBooks = () => Promise<ReadonlySet<string>>;
 const both = (a: McpModule, b: McpModule): McpModule => ({ ...a, instructions: `${a.instructions} ${b.instructions}`, register: (server) => (a.register(server), b.register(server)) });
 type Viewer = NonNullable<Parameters<typeof makeProjectResolver>[0]['view']>;
 type RecordsParts = { closedBooks?: ClosedBooks; view?: Viewer; stageForNewBook?: () => Promise<{ workflowId: string; stage: string } | null> };
-const studioFor = (w: Found<{ options: WriteOptions }>, r?: RecordsParts) => studioModule({ studio, user, ...(r?.closedBooks ? { closed: r.closedBooks } : {}), ...(r?.view ? { view: r.view } : {}), ...(r?.stageForNewBook ? { stageForNewBook: r.stageForNewBook } : {}), ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
+const studioFor = (w: Found<{ options: WriteOptions }>, r?: RecordsParts) => studioModule({ studio, user, ...(flag('community-links') ? { communityLinks: flag('community-links')! } : {}), ...(r?.closedBooks ? { closed: r.closedBooks } : {}), ...(r?.view ? { view: r.view } : {}), ...(r?.stageForNewBook ? { stageForNewBook: r.stageForNewBook } : {}), ...(w.ok ? { write: { fs: nodeFs, root: w.value.options.root } } : {}) });
 /** Write's options with the Project and Book resolution of the studio's tree (which folder a Project or Book means, what came before a Book). */
 const scoped = (o: WriteOptions, closed?: ClosedBooks, view?: Viewer): WriteOptions => {
   const r = makeProjectResolver({ studio, closed, view });

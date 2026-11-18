@@ -43,6 +43,7 @@ import { createStudioReader, type JoinedStudio } from '../src/shared/review/stud
 import { SHARED_WITH_ME } from '../src/shared/sync/rules';
 import type { AuthorKit, BetaReadState, FileLock, ReviewSharingApi } from '../src/shared/api';
 import { TextBlockStore } from './textBlocks';
+import { CommunityStore } from './communityStore';
 
 /** What the module needs from whoever hosts it: the window it lives in, its own renderer, and where its files and AI server are. */
 /**
@@ -526,7 +527,15 @@ function registerIpc(): void {
     await fsp.rename(from, target);
   });
   // --- export ---
-  const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file), host.author ? async () => (await host.author!())?.profile ?? null : undefined);
+  const communities = new CommunityStore(path.join(dataDir, 'community-links.json'));
+  // what the export needs besides the book: the profile's Patreon (where there is a profile) and the Studio's community links
+  const authorLinks = async () => {
+    const profile = host.author ? (await host.author().catch(() => null))?.profile : null;
+    return { patreonUrl: profile?.patreonUrl ?? '', patreonCta: profile?.patreonCta ?? '', communities: await communities.list() };
+  };
+  const exportDeps = () => makeExportDeps(undefined, (file) => defaultsFor(file), authorLinks);
+  handle('community:list', () => communities.list());
+  handle('community:save', (_e, links: unknown) => communities.save(links));
   // --- saved text blocks and the author's profile, for the Book Details form ---
   const blocks = new TextBlockStore(path.join(dataDir, 'text-blocks.json'));
   handle('blocks:list', () => blocks.list());

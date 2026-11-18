@@ -206,7 +206,7 @@ const mcpFile = () => path.join(here, 'mcp.mjs');
 const activeFile = () => path.join(userData, 'mcp-active.json');
 const activeArgs = (): string[] => {
   const library = market?.service.status().libraryRoot;
-  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), ...peopleHost.mcpArgs(recordsFile(), path.join(studioDir, 'vault-blobs')), ...penNameArgs(), ...(library ? ['--library', library] : [])];
+  return ['--root', projectsFolder(), '--studio', studioFile(), '--ai-access', aiAccessFile(), '--community-links', path.join(writeData(), 'community-links.json'), ...peopleHost.mcpArgs(recordsFile(), path.join(studioDir, 'vault-blobs')), ...penNameArgs(), ...(library ? ['--library', library] : [])];
 };
 /** Writes the active Studio's server arguments, if they are not what the file already says (so an unchanged Studio never restarts the AI server). */
 function publishActiveStudio(): void {

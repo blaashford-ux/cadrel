@@ -102,4 +102,69 @@ export function BioFromProfile({ value, onChange }: { value: string; onChange(v:
   );
 }
 
+/** The Community page: the Studio's community links, each switched on or off for this book (all on to begin with), and a place to define them. */
+export function CommunitySection({ details, set }: { details: BookDetails; set(patch: Partial<BookDetails['back']>): void }) {
+  const tools = useBookTools();
+  const c = details.back.community;
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<{ id?: string; name: string; url: string }[]>([]);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!tools || tools.communities === null) return null;
+  const all = tools.communities;
+  const setOff = (id: string, on: boolean) => set({ community: { ...c, off: on ? c.off.filter((x) => x !== id) : [...new Set([...c.off, id])] } });
+  const save = async () => {
+    setBusy(true);
+    try {
+      await tools.saveCommunities(draft);
+      setEditing(false);
+      setError('');
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const shown = all.filter((x) => !c.off.includes(x.id)).length;
+  return (
+    <section>
+      <h4>Community links</h4>
+      <Toggle label="Include a Community page" checked={c.enabled} path="back.community.enabled" onChange={(v) => set({ community: { ...c, enabled: v } })} hint="One line for each community: its name, then its address." />
+      {c.enabled && (
+        <>
+          <Field label="Heading" value={c.heading} placeholder="JOIN THE COMMUNITY" path="back.community.heading" onChange={(v) => set({ community: { ...c, heading: v } })} />
+          {all.length === 0 && !editing && <p className="muted small">This Studio has no community links yet.</p>}
+          {!editing && all.map((x) => (
+            <label className="toggle" key={x.id}>
+              <input type="checkbox" checked={!c.off.includes(x.id)} onChange={(e) => setOff(x.id, e.target.checked)} />
+              <span>{x.name} <span className="muted small">{x.url}</span></span>
+            </label>
+          ))}
+          {!editing && all.length > 0 && <p className="muted small">{shown === 0 ? 'None are switched on for this book, so the page is left out.' : `${shown} of ${all.length} on for this book.`}</p>}
+          {!editing ? (
+            <div className="kit-row"><button type="button" onClick={() => (setDraft(all.map((x) => ({ ...x }))), setError(''), setEditing(true))}>{all.length ? 'Edit the Studio’s communities…' : 'Add a community…'}</button></div>
+          ) : (
+            <div className="kit-panel">
+              <p className="muted small">These are kept for the whole Studio, so every book can use them. New ones are on in every book until you switch them off there.</p>
+              {draft.map((x, i) => (
+                <div className="kit-row" key={x.id ?? `new${i}`}>
+                  <input aria-label="Community name" placeholder="Name (e.g. Reader Discord)" value={x.name} onChange={(e) => setDraft(draft.map((d, k) => (k === i ? { ...d, name: e.target.value } : d)))} />
+                  <input aria-label="Community address" placeholder="https://…" value={x.url} onChange={(e) => setDraft(draft.map((d, k) => (k === i ? { ...d, url: e.target.value } : d)))} />
+                  <button type="button" aria-label="Remove community" onClick={() => setDraft(draft.filter((_, k) => k !== i))}>✕</button>
+                </div>
+              ))}
+              <div className="kit-row">
+                <button type="button" onClick={() => setDraft([...draft, { name: '', url: '' }])}>＋ Add a community</button>
+                <button type="button" className="primary" disabled={busy} onClick={() => void save()}>Save to Studio</button>
+                <button type="button" disabled={busy} onClick={() => (setEditing(false), setError(''))}>Cancel</button>
+              </div>
+              {error && <div className="bad" role="alert">{error}</div>}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export { BlockTools };
