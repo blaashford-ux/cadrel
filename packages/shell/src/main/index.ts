@@ -59,6 +59,7 @@ import { joinStudio, StudioClient } from './studioClient';
 import { inviteMailto } from './inviteMail';
 import { AssistantDoor } from './assistantDoor';
 import { loadLens } from './lens';
+import { Canon } from './canon';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -733,7 +734,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 
 /** Write's window shows the author's side (Write) or a Beta Reader's (Read): the same window, told which. */
 let writeMode: 'write' | 'read' = 'write';
@@ -1199,7 +1200,7 @@ function registerShellIpc(): void {
   });
   manageLike('lens:state', async () => {
     const work = () => new ProjectWork(studio, peopleHost, stages);
-    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan() }, peopleHost.me, new Date().toISOString().slice(0, 10));
+    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan(), canonWaiting: async () => (await peopleHost.service?.as(peopleHost.me).canon.waitingForMe())?.length ?? 0 }, peopleHost.me, new Date().toISOString().slice(0, 10));
   });
   manageLike('policy:state', async () => peopleHost.policyState());
   manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));
@@ -1243,6 +1244,12 @@ function registerShellIpc(): void {
   });
   /** The Editing page's logic, with this Studio's vault for the manuscripts, their versions and their text. */
   const editorial = () => new Editorial(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  const canon = () => new Canon(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('canon:state', async (seriesRef?: string) => canon().state(seriesRef ? String(seriesRef) : undefined));
+  manageLike('canon:call', async (name: string, ...args: unknown[]) => canon().call(String(name), args));
+  manageLike('continuity:state', async () => canon().continuity());
+  manageLike('continuity:check', async (id: string) => canon().check(String(id)));
+  manageLike('continuity:call', async (name: string, ...args: unknown[]) => canon().continuityCall(String(name), args));
   manageLike('editing:state', async () => editorial().state());
   manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
   manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));

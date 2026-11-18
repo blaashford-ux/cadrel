@@ -4,12 +4,12 @@ import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
+import type { CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -901,6 +901,100 @@ export type PlanState =
       projects: PlanProject[];
       tasks: OnProject<TaskRecord>[];
     };
+// ---- canon and continuity (docs/M4-PLAN.md) ------------------------------------------------------------------------------------
+
+/** What a person may do with the canon of the series being shown. */
+export interface CanonMay {
+  read: boolean;
+  propose: boolean;
+  /** Approve and reject proposals, and change canon in one step. */
+  approve: boolean;
+}
+export interface CanonFactRow extends CanonFact {
+  /** The file the fact's source passage is in, and whether the passage can still be found in that version (null: not looked at). */
+  sourcePath: string | null;
+  /** Where in the series it was established, in words ("Book One, chapter 3"), or null. */
+  established: string | null;
+}
+export interface CanonEntryRow extends CanonEntry {
+  facts: CanonFactRow[];
+  /** Open proposals that touch this entry. */
+  pending: number;
+}
+export interface CanonProposalRow extends CanonProposal {
+  proposerName: string;
+  /** The change in a sentence ("Add the character Mara", "Replace a fact about Mara"). */
+  summary: string;
+  /** The finding it came from, if a person accepted a continuity finding as canon. */
+  fromFinding: boolean;
+}
+export type CanonState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** The series this person can read canon of (every top-level project), and the one shown. */
+      series: { id: string; name: string }[];
+      current: { id: string; name: string };
+      may: CanonMay;
+      entries: CanonEntryRow[];
+      /** Open proposals first, then the latest decided. */
+      proposals: CanonProposalRow[];
+      /** The books of the series, for saying where a fact was established. */
+      books: { id: string; name: string }[];
+      /** Open proposals this person may decide, across every series. */
+      waitingOnMe: number;
+    };
+export const CANON_CALLS = ['propose', 'apply', 'approve', 'reject', 'withdraw'] as const;
+export type CanonCallName = (typeof CANON_CALLS)[number];
+
+export interface ContinuityCheckRow extends ContinuityCheck {
+  projectName: string;
+  runByName: string;
+  counts: FindingCounts;
+}
+export type ContinuityState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      may: { start: boolean };
+      checks: ContinuityCheckRow[];
+      /** The books this person may start a check of, and the manuscripts in the vault one could be run on (the service checks the file is the book's). */
+      books: { id: string; name: string }[];
+      manuscripts: { fileId: string; path: string; version: number }[];
+    };
+/** A finding with what a person needs to judge it: the passage in its surroundings, and the canon facts it cites. */
+export interface FindingView extends ContinuityFinding {
+  context: { before: string; quote: string; after: string } | null;
+  facts: { id: string; entry: string; text: string; status: 'canon' | 'retired'; established: string | null; sourcePath: string | null; passage: string | null }[];
+  proposal: CanonProposalRow | null;
+}
+export type ContinuityCheckView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      check: ContinuityCheckRow;
+      findings: FindingView[];
+      /** What this person may do on it: decide findings, deliver, close, and re-check a later version. */
+      may: { decide: boolean; deliver: boolean; close: boolean };
+      /** The file's newest version, if later than the one the check covers (a re-check can be made against it). */
+      newerVersion: number | null;
+      people: { id: string; name: string }[];
+    };
+export const CONTINUITY_CALLS = ['start', 'deliver', 'decide', 'close', 'verify'] as const;
+export type ContinuityCallName = (typeof CONTINUITY_CALLS)[number];
+export interface CanonApi {
+  state(seriesRef?: string): Promise<CanonState>;
+  /** One change to canon, by name: see CANON_CALLS. `propose` and `apply` take the series and the change; the rest take a proposal id (reject also a reason). */
+  call(name: CanonCallName, ...args: unknown[]): Promise<unknown>;
+}
+export interface ContinuityApi {
+  state(): Promise<ContinuityState>;
+  check(id: string): Promise<ContinuityCheckView>;
+  call(name: ContinuityCallName, ...args: unknown[]): Promise<unknown>;
+}
+
 /** A pass as a working view lists it: what it is, where, and how long it has waited. */
 export interface LensPass {
   passId: string;
@@ -948,6 +1042,8 @@ export interface LensViews {
     /** Books with queries the author has not answered, the longest wait first. */
     unanswered: { projectId: string; name: string; queries: number; passes: number; oldestDays: number | null }[];
     totals: { lateBooks: number; unansweredQueries: number };
+    /** Canon proposals this person may approve, across every series (0 where they may approve none). */
+    canonWaiting: number;
   };
 }
 export type LensState =
@@ -1078,6 +1174,8 @@ export interface CadrelApi {
   workflow: WorkflowApi;
   policy: PolicyApi;
   lens: LensApi;
+  canon: CanonApi;
+  continuity: ContinuityApi;
   work: WorkApi;
   editing: EditingApi;
   vault: VaultApi;

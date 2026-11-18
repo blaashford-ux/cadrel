@@ -52,7 +52,8 @@ export const CONDITION_KINDS = {
   no_open_tasks: 'It and its subprojects have no open tasks',
   approved: 'It has been signed off',
   pass_closed: 'An editorial pass has been closed',
-  queries_resolved: 'Every editor’s query has been answered'
+  queries_resolved: 'Every editor’s query has been answered',
+  continuity_clear: 'Its latest continuity check has no open high-severity finding'
 } as const;
 export type ConditionKind = keyof typeof CONDITION_KINDS;
 export interface Condition {
@@ -349,6 +350,16 @@ export interface ProjectFacts {
   approved: string[];
   /** Editorial passes on the project and everything under it. Absent where the Studio holds no editorial records: no pass is closed, no query waits. */
   editorial?: EditorialFacts;
+  /** Continuity checks of the manuscripts on the project and everything under it. Absent where the Studio holds none: nothing has been checked. */
+  continuity?: ContinuityFacts;
+}
+export interface ContinuityFacts {
+  /** Manuscripts whose newest check has been handed over for decisions (or closed). */
+  checked: number;
+  /** Manuscripts whose newest check is still being made. */
+  underway: number;
+  /** High-severity findings still open in those newest checks. */
+  openHigh: number;
 }
 export interface EditorialFacts {
   /** The kinds of pass that have been closed. */
@@ -372,6 +383,13 @@ export function unmetConditions(facts: ProjectFacts, conditions: Condition[]): s
       const ed = facts.editorial;
       if (ed?.live.includes(passKind ?? '')) out.push(`The ${name} is still under way. It needs closing first.`);
       else if (!ed?.closed.includes(passKind ?? '')) out.push(`Needs a closed ${name}`);
+      continue;
+    }
+    if (kind === 'continuity_clear') {
+      const c = facts.continuity;
+      if (!c || c.checked + c.underway === 0) out.push('Needs a continuity check');
+      else if (c.underway > 0) out.push(`${c.underway === 1 ? 'A continuity check is' : `${c.underway} continuity checks are`} still being made`);
+      else if (c.openHigh > 0) out.push(`${c.openHigh} high-severity continuity finding${c.openHigh === 1 ? ' is' : 's are'} still open`);
       continue;
     }
     if (kind === 'queries_resolved') {

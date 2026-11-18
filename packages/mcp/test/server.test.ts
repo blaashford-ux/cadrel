@@ -112,7 +112,7 @@ describe('the Cadrel MCP server', () => {
   it('prompts carry Cadrel Write\'s editing and authoring skills', async () => {
     const { client } = await connect(both());
     const prompts = (await client.listPrompts()).prompts.map((p) => p.name).sort();
-    expect(prompts).toEqual(['copy_edit', 'developmental_edit', 'line_edit', 'litrpg_tracker', 'outline_to_blurb', 'outline_to_keywords', 'premise_to_outline', 'series_developer', 'timeline_tracker']);
+    expect(prompts).toEqual(['continuity_check', 'copy_edit', 'developmental_edit', 'line_edit', 'litrpg_tracker', 'outline_to_blurb', 'outline_to_keywords', 'premise_to_outline', 'series_developer', 'timeline_tracker']);
   });
 
   it('serves just the part that exists', async () => {

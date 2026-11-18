@@ -11,10 +11,14 @@ import {
   acknowledgeCapabilities, bookProjectLinks, linkBookProject, addDependency, addEdition, approvalsWaitingFor, approvedLabels, createTask, getApproval, getDecision, getTask, listApprovals, listDecisions, listTasks, openTaskCount, recordDecision, removeDependency, requestApproval, respondToApproval, setTaskState, updateTask, withdrawApproval, checkMove, createWorkflow, defaultWorkflow, deleteWorkflow, listWorkflows, saveWorkflow, setDefaultWorkflow, stageOptions, bookByAsin, can, canEditRole, canGrantRole, capabilityReview, createBook, createIp, createPenName, createPerson, createRole, createSeries, createTeam, defaultRole,
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
-  updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf,
+  updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf, subtreeIds, getProject,
+  canonStamp, checkChange, decideProposal, entryVersions, getEntry, getFact, getProposal, listEntries, listFacts, listProposals, proposeChange, withdrawProposal,
+  type CanonChange, type CanonEntry, type CanonEntryVersion, type CanonFact, type CanonProposal, type EntryFilter, type FactFilter, type ProposalFilter,
+  closeCheck, decideFinding, deliverCheck, findingCounts, getCheck, getFinding, listChecks, listFindings, raiseFindings, startCheck, verifyFindings,
+  type CheckFilter, type ContinuityCheck, type ContinuityFinding, type FindingCounts, type FindingDecision, type FindingFilter, type NewFinding,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
-  editorialFacts, type EditorialFacts,
+  editorialFacts, type EditorialFacts, continuityFacts, type ContinuityFacts,
   listVerification, verifyPass, type VerificationRecord,
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
@@ -358,6 +362,159 @@ export class StudioAs {
   };
 
   /**
+   * Canon, the series' agreed facts (docs/M4-PLAN.md). A series is the top project of a book's path (a book that has no parent is its own series), and
+   * its canon is read by everyone who may read canon on the series or on any book in it. Proposing a change needs canon.propose the same way;
+   * approving or rejecting one needs canon.approve on the series itself. Nothing becomes canon except through an approved proposal, and a person
+   * with canon.approve who changes canon makes a proposal and approves it in one step (`apply`), so the record reads the same either way.
+   */
+  readonly canon = {
+    /** The series a project belongs to, and its name. */
+    seriesOf: async (projectId: string): Promise<{ seriesId: string; name: string }> => {
+      const { id, name } = await this.seriesFor(projectId);
+      return { seriesId: id, name };
+    },
+    listEntries: async (f: EntryFilter & { projectId: string }): Promise<CanonEntry[]> => {
+      const series = await this.canonSeries(f?.projectId, 'canon.read');
+      return listEntries(this.o.db, this.ctx(), { ...f, projectId: series });
+    },
+    getEntry: async (id: string): Promise<CanonEntry | null> => {
+      const e = await getEntry(this.o.db, this.ctx(), id);
+      if (!e) return null;
+      await this.canonSeries(e.projectId, 'canon.read');
+      return e;
+    },
+    entryVersions: async (id: string): Promise<CanonEntryVersion[]> => {
+      const e = await getEntry(this.o.db, this.ctx(), id);
+      if (!e) throw new Error('That entry is not there.');
+      await this.canonSeries(e.projectId, 'canon.read');
+      return entryVersions(this.o.db, this.ctx(), id);
+    },
+    listFacts: async (f: FactFilter & { projectId: string }): Promise<CanonFact[]> => {
+      const series = await this.canonSeries(f?.projectId, 'canon.read');
+      return listFacts(this.o.db, this.ctx(), { ...f, projectId: series });
+    },
+    getFact: async (id: string): Promise<CanonFact | null> => {
+      const f = await getFact(this.o.db, this.ctx(), id);
+      if (!f) return null;
+      await this.canonSeries(f.projectId, 'canon.read');
+      return f;
+    },
+    /** The time of the series' last canon change: what a check made now would be pinned to. */
+    stamp: async (projectId: string): Promise<string> => canonStamp(this.o.db, this.ctx(), await this.canonSeries(projectId, 'canon.read')),
+    listProposals: async (f: ProposalFilter & { projectId: string }): Promise<CanonProposal[]> => {
+      const series = await this.canonSeries(f?.projectId, 'canon.read');
+      return listProposals(this.o.db, this.ctx(), { ...f, projectId: series });
+    },
+    /** Every open proposal in the series this person may approve: what waits on them. */
+    waitingForMe: async (): Promise<CanonProposal[]> => {
+      const tree = await this.o.projects?.();
+      if (!tree) return [];
+      const open = await listProposals(this.o.db, this.ctx(), { state: 'open' });
+      const out: CanonProposal[] = [];
+      for (const p of open) if (await this.holds('canon.approve', p.projectId)) out.push(p);
+      return out;
+    },
+    getProposal: async (id: string): Promise<CanonProposal | null> => {
+      const p = await getProposal(this.o.db, this.ctx(), id);
+      if (!p) return null;
+      await this.canonSeries(p.projectId, 'canon.read');
+      return p;
+    },
+    propose: async (projectId: string, change: unknown): Promise<CanonProposal> => {
+      const series = await this.canonSeries(projectId, 'canon.propose');
+      return proposeChange(this.o.db, this.ctx(), series, change);
+    },
+    /** Someone who may approve changes canon: proposed and approved in one step. */
+    apply: async (projectId: string, change: unknown): Promise<CanonProposal> => {
+      const series = await this.seriesFor(projectId);
+      await this.needWork('canon.approve', series.id);
+      const p = await proposeChange(this.o.db, this.ctx(), series.id, change);
+      return decideProposal(this.o.db, this.ctx(), p.id, { approve: true });
+    },
+    approve: async (id: string): Promise<CanonProposal> => {
+      const p = await this.proposalToDecide(id);
+      return decideProposal(this.o.db, this.ctx(), p.id, { approve: true });
+    },
+    reject: async (id: string, reason: string): Promise<CanonProposal> => {
+      const p = await this.proposalToDecide(id);
+      return decideProposal(this.o.db, this.ctx(), p.id, { approve: false, reason });
+    },
+    /** The person who proposed it takes it back, or someone who may approve does. */
+    withdraw: async (id: string): Promise<CanonProposal> => {
+      const p = await getProposal(this.o.db, this.ctx(), id);
+      if (!p) throw new Error('That proposal is not there.');
+      await this.canonSeries(p.projectId, 'canon.propose');
+      if (p.proposedBy !== this.personId) await this.needWork('canon.approve', p.projectId);
+      return withdrawProposal(this.o.db, this.ctx(), id);
+    }
+  };
+  /**
+   * Continuity checks: one book's manuscript, at an exact version, read against the series' canon. Starting a check, raising findings and
+   * delivering it need canon.propose on the book (and only the person who started it, or someone who may approve canon, raises or delivers).
+   * Deciding a finding, closing a check and re-checking a later version need the right to change the manuscript (manuscript.write) on the book, or
+   * canon.approve on the series. Every read needs canon.read on the book.
+   */
+  readonly continuity = {
+    start: async (i: { projectId: string; fileId: string; fileVersion?: number }): Promise<ContinuityCheck> => {
+      await this.mustReach(i?.projectId, 'canon.read');
+      await this.needPropose(i?.projectId);
+      const series = await this.seriesFor(i.projectId);
+      await this.mustHoldFileIn(i.fileId, i.projectId);
+      return startCheck(this.o.db, this.ctx(), { projectId: i.projectId, seriesId: series.id, fileId: i.fileId, ...(i.fileVersion ? { fileVersion: i.fileVersion } : {}) });
+    },
+    list: async (f: CheckFilter = {}): Promise<ContinuityCheck[]> => {
+      await this.needWork('canon.read');
+      const reach = await this.reach('canon.read');
+      return (await listChecks(this.o.db, this.ctx(), f)).filter((k) => !reach || reach(k.projectId));
+    },
+    get: async (id: string): Promise<ContinuityCheck | null> => {
+      await this.needWork('canon.read');
+      const k = await getCheck(this.o.db, this.ctx(), id);
+      const reach = await this.reach('canon.read');
+      return k && (!reach || reach(k.projectId)) ? k : null;
+    },
+    findings: async (f: FindingFilter = {}): Promise<ContinuityFinding[]> => {
+      await this.needWork('canon.read');
+      const reach = await this.reach('canon.read');
+      const all = await listFindings(this.o.db, this.ctx(), f);
+      if (!reach) return all;
+      const ok = new Set((await listChecks(this.o.db, this.ctx(), {})).filter((k) => reach(k.projectId)).map((k) => k.id));
+      return all.filter((x) => ok.has(x.checkId));
+    },
+    counts: async (checkIds: string[]): Promise<Record<string, FindingCounts>> => {
+      await this.needWork('canon.read');
+      const reach = await this.reach('canon.read');
+      const ok = reach ? (await listChecks(this.o.db, this.ctx(), {})).filter((k) => reach(k.projectId)).map((k) => k.id) : checkIds;
+      return findingCounts(this.o.db, this.ctx(), checkIds.filter((id) => ok.includes(id)));
+    },
+    raise: async (checkId: string, items: NewFinding[]): Promise<{ raised: ContinuityFinding[]; skipped: { index: number; why: string }[] }> => {
+      await this.finderOf(await this.checkToRead(checkId));
+      return raiseFindings(this.o.db, this.ctx(), checkId, items);
+    },
+    deliver: async (checkId: string): Promise<ContinuityCheck> => {
+      await this.finderOf(await this.checkToRead(checkId));
+      return deliverCheck(this.o.db, this.ctx(), checkId);
+    },
+    decide: async (findingId: string, d: FindingDecision): Promise<{ finding: ContinuityFinding; proposal: CanonProposal | null }> => {
+      const f = await getFinding(this.o.db, this.ctx(), findingId);
+      if (!f) throw new Error('That finding is not there.');
+      const k = await this.checkToRead(f.checkId);
+      await this.deciderOf(k);
+      if (d?.outcome === 'accept_as_canon') await this.needPropose(k.projectId);
+      return decideFinding(this.o.db, this.ctx(), findingId, d);
+    },
+    close: async (checkId: string): Promise<ContinuityCheck> => {
+      await this.deciderOf(await this.checkToRead(checkId));
+      return closeCheck(this.o.db, this.ctx(), checkId);
+    },
+    /** A later version of the manuscript, with its text (the records hold none): findings whose passage is gone from it are fixed. */
+    verify: async (checkId: string, v: { version: number; text: string }): Promise<{ fixed: ContinuityFinding[]; remaining: ContinuityFinding[] }> => {
+      await this.deciderOf(await this.checkToRead(checkId));
+      return verifyFindings(this.o.db, this.ctx(), checkId, v);
+    }
+  };
+
+  /**
    * The Studio's security policy (docs/PERMISSIONS.md §5). Anyone in the Studio may read it (the app needs the stale check-out warning and the
    * assistant switch); changing it needs studio.settings, and every change leaves an audit row.
    */
@@ -454,6 +611,86 @@ export class StudioAs {
       }
       return allowed;
     };
+  }
+
+  // ---- canon: which series, and who may ----------------------------------------------------------------------------------
+
+  /** The series a project belongs to: the top project of its path, or the project itself if it has no parent. */
+  private async seriesFor(projectId: string): Promise<{ id: string; name: string }> {
+    const tree = await this.o.projects?.();
+    if (!tree) throw new Error('Canon needs the Studio’s projects, and they are not available here.');
+    const p = typeof projectId === 'string' ? getProject(tree, projectId) : null;
+    if (!p) throw new Error('There is no such project.');
+    const root = ancestorsOf(tree, p.id)[0] ?? p;
+    return { id: root.id, name: root.name };
+  }
+  /** Whether this person holds a capability on the series, or (for what a book's people may do) on any project in it. */
+  private async holds(capability: string, seriesId: string, viaBook = false): Promise<boolean> {
+    const tree = await this.o.projects?.();
+    if (!tree || (await this.visibleProjects(tree)).all) {
+      try {
+        await this.need(capability);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    const ctx = await this.context();
+    const ids = viaBook ? subtreeIds(tree, seriesId) : [seriesId];
+    return ids.some((id) => explain(ctx, capability, { path: this.projectPath(tree, id) }).allowed);
+  }
+  /** Resolves a project to its series and checks the person may read or propose canon there (on the series, or on any book in it). */
+  private async canonSeries(projectId: string, capability: 'canon.read' | 'canon.propose'): Promise<string> {
+    const series = await this.seriesFor(projectId);
+    // whoever may approve canon may of course propose it
+    if (!(await this.holds(capability, series.id, true)) && !(capability === 'canon.propose' && (await this.holds('canon.approve', series.id)))) {
+      const d = explain(await this.context(), capability, { path: [{ kind: 'studio', id: this.o.studioId }] });
+      throw new PermissionDenied(capability, d.reason);
+    }
+    return series.id;
+  }
+  /** canon.propose on a project, or canon.approve (whoever approves canon may also propose and run checks). */
+  private async needPropose(projectId: string): Promise<void> {
+    try {
+      await this.needWork('canon.propose', projectId);
+    } catch (e) {
+      if (!(e instanceof PermissionDenied)) throw e;
+      await this.needWork('canon.approve', projectId);
+    }
+  }
+  private async proposalToDecide(id: string): Promise<CanonProposal> {
+    const p = await getProposal(this.o.db, this.ctx(), id);
+    if (!p) throw new Error('That proposal is not there.');
+    await this.canonSeries(p.projectId, 'canon.read');
+    await this.needWork('canon.approve', p.projectId);
+    return p;
+  }
+  private async checkToRead(id: string): Promise<ContinuityCheck> {
+    await this.needWork('canon.read');
+    const k = await getCheck(this.o.db, this.ctx(), id);
+    const reach = await this.reach('canon.read');
+    if (!k || (reach && !reach(k.projectId))) throw new Error('That check is not there.');
+    return k;
+  }
+  /** Whoever started a check raises its findings and delivers it; someone who may approve canon can do so for them. */
+  private async finderOf(k: ContinuityCheck): Promise<void> {
+    if (k.runBy === this.personId) return this.needPropose(k.projectId);
+    await this.needWork('canon.approve', k.seriesId);
+  }
+  /** The people who may change the manuscript decide what is wrong with it; so may whoever approves canon. */
+  private async deciderOf(k: ContinuityCheck): Promise<void> {
+    try {
+      await this.needWork('manuscript.write', k.projectId);
+    } catch (e) {
+      if (!(e instanceof PermissionDenied)) throw e;
+      await this.needWork('canon.approve', k.seriesId);
+    }
+  }
+  /** A manuscript file checked is one of the book's own (its data card names a project in the book), when the card names one at all. */
+  private async mustHoldFileIn(fileId: string, projectId: string): Promise<void> {
+    const tree = await this.o.projects?.();
+    const card = await this.o.db.first<{ projectId: string | null }>('SELECT project_id AS projectId FROM file_card WHERE file_id = ?', [fileId]);
+    if (tree && card?.projectId && !subtreeIds(tree, projectId).includes(card.projectId)) throw new Error('That file belongs to another book.');
   }
 
   /** The path to a project in the permission check: the studio, the projects above it, and it. */
@@ -578,6 +815,12 @@ export class StudioAs {
       await this.needWork('task.read');
       const reach = await this.reach();
       return editorialFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
+    /** What a workflow gate sees of continuity checks on these projects (a project and its subprojects). Needs task.read, like the other gate facts. */
+    continuityFacts: async (projectIds: string[]): Promise<ContinuityFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return continuityFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
     },
     approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
     requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {

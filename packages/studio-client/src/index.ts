@@ -27,10 +27,12 @@ const READS = new Set([
   'catalogue.ips', 'catalogue.series', 'catalogue.books', 'catalogue.book', 'catalogue.byAsin', 'catalogue.projectLinks',
   'people.list', 'people.get', 'people.teams', 'people.directory', 'people.penNames', 'people.penNameNames', 'people.roles', 'people.assignments', 'people.capabilityReview', 'people.explainAccess', 'people.effectiveCapabilities',
   'business.contributions', 'business.credits', 'business.rights', 'business.shares',
-  'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
+  'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.continuityFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
   'briefs.list', 'briefs.get', 'briefs.versions', 'passes.list', 'passes.get', 'queries.list', 'queries.counts', 'queries.decisions', 'queries.verification',
   'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove',
-  'policy.get'
+  'policy.get',
+  'canon.seriesOf', 'canon.listEntries', 'canon.getEntry', 'canon.entryVersions', 'canon.listFacts', 'canon.getFact', 'canon.stamp', 'canon.listProposals', 'canon.waitingForMe', 'canon.getProposal',
+  'continuity.list', 'continuity.get', 'continuity.findings', 'continuity.counts'
 ]);
 /** How long the Studio's change counter is trusted before it is asked again. */
 export const FRESH_MS = 3_000;
