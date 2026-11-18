@@ -1,6 +1,6 @@
 # M4: Canon and continuity, implementation plan
 
-Status: **built and released as 0.19.0** (server revision 10, database step 22). The decisions below were made on 18 November 2026: canon lives in records; embeddings are left out; anyone holding `canon.propose` (or `canon.approve`) on the book may run a check; built straight through to the exit test. "What was built, and where it differs from the plan" is just below. Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M4 and the Canon records in [ARCHITECTURE.md](ARCHITECTURE.md) (the Canon records). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)); each slice below is releasable on its own, but the exit test needs them all.
+Status: **built, as 0.19.0 on `dev`, not yet released** (server revision 10, database step 22). The decisions below were made on 18 November 2026: canon lives in records; embeddings are left out; anyone holding `canon.propose` (or `canon.approve`) on the book may run a check; built straight through to the exit test. "What was built, and where it differs from the plan" is just below. Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M4 and the Canon records in [ARCHITECTURE.md](ARCHITECTURE.md) (the Canon records). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)); each slice below is releasable on its own, but the exit test needs them all.
 
 **Exit (from PLAN.md):** Book 4's manuscript is checked against Books 1 to 3 and the findings are specific and checkable.
 
