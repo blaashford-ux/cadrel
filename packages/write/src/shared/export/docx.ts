@@ -167,6 +167,15 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
         const align = b.align === 'center' ? AlignmentType.CENTER : b.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT;
         return new Paragraph({ children: textRuns(b.text, { bold: b.bold, italics: b.italic }), alignment: align, spacing: { before: 0, after: backMatter ? BACK_GAP : 180 }, ...pb });
       }
+      case 'address':
+        return new Paragraph({
+          children: [
+            new TextRun({ text: `${b.name}: `, font: FONT, size }),
+            new ExternalHyperlink({ link: safeUrl(b.url), children: [new TextRun({ text: b.url, font: FONT, size, color: '0563C1', underline: {} })] })
+          ],
+          spacing: { before: 0, after: backMatter ? BACK_GAP : 120 },
+          ...pb
+        });
       case 'link':
         return new Paragraph({
           children: [new ExternalHyperlink({ link: safeUrl(b.url), children: [new TextRun({ text: b.label, font: FONT, size, color: '0563C1', underline: {} })] })],

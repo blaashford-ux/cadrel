@@ -151,3 +151,12 @@ describe('alignment in the print PDF', () => {
     expect(printCss(aligned((d) => void (d.export.pdf.bodyAlign = 'left')), layout())).toContain('p { text-align: left;');
   });
 });
+
+describe('community links in print and ebook', () => {
+  it('spells the address out in print, and links it in an ebook', async () => {
+    const { matterPageHtml } = await import('./html');
+    const page = { id: 'community' as const, heading: 'JOIN', blocks: [{ t: 'address' as const, name: 'Reader <Discord>', url: 'https://discord.gg/a?x=1&y=2' }] };
+    expect(matterPageHtml(page, 'print')).toContain('<p class="linkline">Reader &lt;Discord&gt;: https://discord.gg/a?x=1&amp;y=2</p>');
+    expect(matterPageHtml(page, 'ebook')).toContain('<p class="linkline">Reader &lt;Discord&gt;: <a href="https://discord.gg/a?x=1&amp;y=2">https://discord.gg/a?x=1&amp;y=2</a></p>');
+  });
+});

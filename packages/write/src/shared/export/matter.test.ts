@@ -169,3 +169,51 @@ describe('the Patreon page, from the author’s profile', () => {
     expect(buildBackMatter(d, [], profile).map((p) => p.id)).toEqual(['patreon', 'about']);
   });
 });
+
+describe('the Community links page', () => {
+  const communities = [
+    { id: 'a', name: 'Reader Discord', url: 'https://discord.gg/readers' },
+    { id: 'b', name: 'Facebook Group', url: 'https://www.facebook.com/groups/readers' },
+    { id: 'c', name: 'Bad One', url: 'javascript:alert(1)' }
+  ];
+  const page = (d = base(), w: string[] = []) => buildBackMatter(d, w, { communities }).find((p) => p.id === 'community');
+
+  it('is on by default and lists each community as its name and its address, one to a line', () => {
+    const w: string[] = [];
+    const p = page(base(), w)!;
+    expect(p.heading).toBe('JOIN THE COMMUNITY');
+    expect(p.blocks).toEqual([
+      { t: 'heading', text: 'JOIN THE COMMUNITY' },
+      { t: 'address', name: 'Reader Discord', url: 'https://discord.gg/readers' },
+      { t: 'address', name: 'Facebook Group', url: 'https://www.facebook.com/groups/readers' }
+    ]);
+    expect(w).toHaveLength(1); // the one that is not a web address is left out, and says so
+    expect(w[0]).toMatch(/Bad One/);
+  });
+
+  it('leaves out the communities this book switches off, and a new one is on until it is', () => {
+    const d = base();
+    d.back.community.off = ['a'];
+    expect(page(d)!.blocks.filter((b) => b.t === 'address').map((b) => (b as { name: string }).name)).toEqual(['Facebook Group']);
+    d.back.community.off = ['a', 'b', 'c'];
+    expect(page(d)).toBeUndefined(); // nothing left, so no page and no heading on its own
+  });
+
+  it('is left out when switched off for the book, when the Studio has none, or with no list at all', () => {
+    const d = base();
+    d.back.community.enabled = false;
+    expect(page(d)).toBeUndefined();
+    expect(buildBackMatter(base(), [], { communities: [] }).some((p) => p.id === 'community')).toBe(false);
+    expect(buildBackMatter(base(), [], null).some((p) => p.id === 'community')).toBe(false);
+  });
+
+  it('takes the book’s own heading, and sits between Patreon and About the author', () => {
+    const d = base();
+    d.back.community.heading = 'FIND US';
+    d.back.patreon.enabled = true;
+    d.back.about = { enabled: true, heading: 'ABOUT THE AUTHOR', text: 'Hi.' };
+    const pages = buildBackMatter(d, [], { communities, patreonUrl: 'https://www.patreon.com/a', patreonCta: '' });
+    expect(pages.map((p) => p.id)).toEqual(['patreon', 'community', 'about']);
+    expect(pages[1]!.heading).toBe('FIND US');
+  });
+});

@@ -80,3 +80,53 @@ describe('Book Details conveniences', () => {
     expect(host.textContent).toMatch(/no Patreon link yet/);
   });
 });
+
+describe('Community links in Book Details', () => {
+  let studio: { id: string; name: string; url: string }[];
+  const saveCommunities = vi.fn(async (links: { id?: string; name: string; url: string }[]) => {
+    studio = links.map((l, i) => ({ id: l.id ?? `n${i}`, name: l.name, url: l.url.startsWith('http') ? l.url : `https://${l.url}` }));
+    return studio;
+  });
+  beforeEach(() => {
+    studio = [{ id: 'a', name: 'Reader Discord', url: 'https://discord.gg/readers' }, { id: 'b', name: 'Facebook Group', url: 'https://www.facebook.com/groups/r' }];
+    saveCommunities.mockClear();
+    Object.assign((window as unknown as { cadrelWrite: object }).cadrelWrite, { listCommunities: async () => studio, saveCommunities });
+  });
+  const boxes = () => [...host.querySelectorAll<HTMLInputElement>('.toggle input[type="checkbox"]')].filter((b) => /Reader Discord|Facebook|Mailing list/.test(b.parentElement?.textContent ?? ''));
+
+  it('lists the Studio’s communities, all on for a book to begin with, and switches one off for this book only', async () => {
+    const f = await show(() => undefined);
+    expect(boxes().map((b) => b.checked)).toEqual([true, true]);
+    await act(async () => boxes()[0]!.click());
+    expect(f.get().back.community.off).toEqual(['a']);
+    expect(boxes().map((b) => b.checked)).toEqual([false, true]);
+    await act(async () => boxes()[0]!.click());
+    expect(f.get().back.community.off).toEqual([]);
+  });
+
+  it('defines communities for the whole Studio from the form, and says what is wrong with one', async () => {
+    await show(() => undefined);
+    await act(async () => button(/Edit the Studio’s communities/)!.click());
+    await act(async () => button(/Add a community/)!.click());
+    const set = async (el: HTMLInputElement, v: string) => act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(el, v);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const names = host.querySelectorAll<HTMLInputElement>('input[aria-label="Community name"]');
+    const urls = host.querySelectorAll<HTMLInputElement>('input[aria-label="Community address"]');
+    await set(names[2]!, 'Mailing list');
+    await set(urls[2]!, 'example.com/join');
+    await act(async () => button(/Save to Studio/)!.click());
+    expect(saveCommunities).toHaveBeenCalledTimes(1);
+    expect(saveCommunities.mock.calls[0]![0].map((l) => l.name)).toEqual(['Reader Discord', 'Facebook Group', 'Mailing list']);
+    expect(boxes()).toHaveLength(3); // back to the list, with the new one on
+    expect(boxes()[2]!.checked).toBe(true);
+  });
+
+  it('shows nothing where Write keeps no community links', async () => {
+    delete (window as unknown as { cadrelWrite: Record<string, unknown> }).cadrelWrite.listCommunities;
+    delete (window as unknown as { cadrelWrite: Record<string, unknown> }).cadrelWrite.saveCommunities;
+    await show(() => undefined);
+    expect(host.textContent).not.toMatch(/Community links/);
+  });
+});

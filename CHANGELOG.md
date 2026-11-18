@@ -2,6 +2,13 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.17.0 (a Community links page in the back matter, and the assistant can manage the links)
+
+- **Community links.** Define your communities once for the Studio (a reader Discord, a Facebook group, a mailing list) in Book Details → Back matter → **Community links** (**Add a community…** / **Edit the Studio's communities…**: a name and a web address each; `discord.gg/abc` is enough, https:// is added). Each book then has the **Community page** on by default, with every community **on** to begin with and a tick box to leave any one out of that book. A community added later is on in every book until switched off there. On the page each community is **one line: its name, then its address spelled out and hyperlinked** (a link in ebooks and Word, plain text in print), with a space between lines; the heading is "JOIN THE COMMUNITY" unless the book names its own. A community whose address is not a web address is left out and the export says so; if none are left the page is left out.
+- **The assistant can manage them.** New tools `community_links`, `community_add_link`, `community_update_link` and `community_delete_link` (a link is found by its id or its name). They change the same list Book Details shows, which picks the change up the next time it is opened; the assistant cannot reach any book's own on/off choices.
+- **Correction to 0.16.0's note on links.** In a print PDF a Continue the story or Also by link already shows its address spelled out after its label (`Label: https://…`); only ebooks and Word make it clickable.
+- **Upgrading.** Nothing on the Studio's server changes. AI apps pick the new tools up the next time they connect.
+
 ## 0.16.0 (filling in Book Details is quicker: saved text blocks, Also by from My Books, a Patreon page)
 
 - **Saved text blocks.** Beside every wording field in Book Details (the copyright notices, the dedication and epigraph, the Continue the story text, About the author, the Custom page, an Also by blurb, and the copyright page's extra lines) there is **Saved blocks** and **Save as block…**. Write the text once, save it under a name, and **Use** it in any other book: it fills an empty field, or follows what is there. Each place offers only its own kind (front matter, copyright page, back matter), saving under a name already used replaces that block, and a block can be deleted. They are kept per Studio, so a Studio's blocks are its own. They also work in the project and app default forms.
@@ -64,6 +71,10 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - **The background save asks the Studio one tiny question first** (its change counter, two rows) and skips the full pass when nothing changed on the Studio or in the folder, so an idle app costs the server one small read every few minutes.
 - **The phone and Reader ask the Studio whether anything changed before each minute's look**, and make a full pass (list the vault, people, projects, every file) only when it has. What you change on the phone still goes at once.
 - **Upgrading.** Each Studio's server needs **upgrading** (Admin → Studio Manager → Upgrade) for the CPU fix: this release is server revision 7; the database is unchanged (step 19). The app offers the upgrade by itself. Everything else in this release needs only the new app.
+
+## Cadrel Reader 0.13.3
+
+- Reader is built from Cadrel Write's code, so it carries the Community links changes (Reader has no export).
 
 ## Cadrel Reader 0.13.2
 
