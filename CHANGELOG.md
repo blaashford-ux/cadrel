@@ -2,7 +2,7 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (PDF: Contents without back matter, a proper Also by page)
+## 0.18.0 (PDF: Contents without back matter, a proper Also by page)
 
 - **Contents.** The PDF's Contents page lists the story only. Back-matter pages (Also by, About the author, Community…) are never listed, and neither is a Heading 1 in the manuscript that is plainly back matter (About the Author, Acknowledgements, Author's Note, Afterword, Also By, Other Books, a sneak peek…). Ebooks and Word keep their own contents.
 - **Also by layout.** Each book is set as its **title as a heading, its cover, its address below (clickable in the PDF), then its blurb**. Ebooks and Word get the title, clickable address and blurb (no cover image).
