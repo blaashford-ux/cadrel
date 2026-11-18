@@ -420,3 +420,40 @@ export function buildTrackerView(ctx: AgentContext, project: string, input: Buil
     return { view: input.view, ...(out.length === 1 ? { file: out[0].file } : { files: out }), ...(input.return_html && out.length === 1 ? { html: last } : {}) };
   });
 }
+
+// ---- reading a series' ledgers, for canon -------------------------------------------------------------------------------------
+
+export interface BookLedgers {
+  /** The Book's key in the series file (its project id), or the folder's name for a single-Book ledger. */
+  book: string;
+  name: string;
+  litrpg: LitrpgLedger | null;
+  timeline: TimelineLedger | null;
+}
+
+/**
+ * Every Book's ledgers in a series folder, read and changed in no way: from the series file where the Books share one, else the single Book ledger in
+ * the folder. Used to propose canon from what the trackers already hold. A ledger that cannot be read is skipped, not an error.
+ */
+export async function readSeriesLedgers(ctx: AgentContext, folder: string): Promise<BookLedgers[]> {
+  const dir = await projectDir(ctx, folder);
+  const books = new Map<string, BookLedgers>();
+  const entry = (key: string, name: string) => books.get(key) ?? (books.set(key, { book: key, name, litrpg: null, timeline: null }), books.get(key)!);
+  for (const kind of ['litrpg', 'timeline'] as const) {
+    const raw = await readJsonFile<unknown>(ctx, dir, TRACKER_PATHS[kind]).catch(() => null);
+    if (!isObj(raw)) continue;
+    const series = raw.series_ledger === 1 && isObj(raw.books) ? (raw.books as Record<string, { name?: unknown; ledger?: unknown }>) : null;
+    const items: [string, string, unknown][] = series ? Object.entries(series).map(([id, b]) => [id, typeof b?.name === 'string' ? b.name : id, b?.ledger]) : [[folder, folder, raw]];
+    for (const [id, name, ledger] of items) {
+      if (!isObj(ledger)) continue;
+      try {
+        const e = entry(id, name);
+        if (kind === 'litrpg') e.litrpg = normalizeLedger(ledger, name);
+        else e.timeline = normalizeTimeline(ledger, name);
+      } catch {
+        /* unreadable: left out */
+      }
+    }
+  }
+  return [...books.values()];
+}
