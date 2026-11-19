@@ -42,7 +42,7 @@ describe('briefs', () => {
   it('checks what it is given', async () => {
     const ok = { projectId: 'p1', kind: 'edit' as const, title: 'T', body: 'B' };
     expect(await code(createBrief(db, at(), { ...ok, projectId: '' }))).toBe('invalid');
-    expect(await code(createBrief(db, at(), { ...ok, kind: 'cover' as never }))).toBe('invalid');
+    expect(await code(createBrief(db, at(), { ...ok, kind: 'poster' as never }))).toBe('invalid');
     expect(await code(createBrief(db, at(), { ...ok, title: '  ' }))).toBe('invalid');
     expect(await code(createBrief(db, at(), { ...ok, body: '' }))).toBe('invalid');
     expect(await code(createBrief(db, at(), { ...ok, body: 'x'.repeat(100_001) }))).toBe('invalid');
