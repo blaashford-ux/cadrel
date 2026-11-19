@@ -60,6 +60,8 @@ import { inviteMailto } from './inviteMail';
 import { AssistantDoor } from './assistantDoor';
 import { loadLens } from './lens';
 import { Canon } from './canon';
+import { Art } from './art';
+import { Preflight } from './preflight';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -734,7 +736,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 
 /** Write's window shows the author's side (Write) or a Beta Reader's (Read): the same window, told which. */
 let writeMode: 'write' | 'read' = 'write';
@@ -1250,6 +1252,17 @@ function registerShellIpc(): void {
   manageLike('continuity:state', async (project?: string) => canon().continuity(project ? String(project) : undefined));
   manageLike('continuity:check', async (id: string) => canon().check(String(id)));
   manageLike('continuity:call', async (name: string, ...args: unknown[]) => canon().continuityCall(String(name), args));
+  const art = () => new Art(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('art:state', async (project?: string) => art().state(project ? String(project) : undefined));
+  manageLike('art:asset', async (id: string) => art().asset(String(id)));
+  manageLike('art:brief', async (id: string) => art().brief(String(id)));
+  manageLike('art:call', async (name: string, ...args: unknown[]) => art().call(String(name), args));
+  manageLike('art:preview', async (fileId: string, version: number) => art().preview(String(fileId), Number(version)));
+  const preflight = () => new Preflight(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('preflight:state', async (project?: string) => preflight().state(project ? String(project) : undefined));
+  manageLike('preflight:run', async (fileId: string, editionId: string | null) => preflight().run(String(fileId), editionId ? String(editionId) : null));
+  manageLike('preflight:get', async (runId: string) => preflight().get(String(runId)));
+  manageLike('preflight:waive', async (runId: string, seq: number, reason: string) => preflight().waive(String(runId), Number(seq), String(reason ?? '')));
   manageLike('editing:state', async () => editorial().state());
   manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
   manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));

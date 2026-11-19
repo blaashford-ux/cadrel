@@ -63,6 +63,16 @@ export class VaultHost {
   }
 
   /** The text of one version of a file, without touching the working folder. */
+  /** Every file in the vault with at least one version, with the project its data card names: what the Art and Preflight pages choose from. */
+  async files(): Promise<{ fileId: string; path: string; version: number; projectId: string | null; size: number | null }[]> {
+    return (await this.vault().list())
+      .filter((e) => e.fileId !== null && (e.version ?? 0) > 0 && !/(^|\/)\.cadrel\//.test(e.path))
+      .map((e) => ({ fileId: e.fileId!, path: e.path, version: e.version!, projectId: e.projectId ?? null, size: e.size }));
+  }
+  /** The bytes of one version of a file. */
+  async bytesOf(fileId: string, version: number): Promise<Uint8Array> {
+    return this.vault().read(await this.pathOf(fileId), version);
+  }
   async textOf(fileId: string, version: number): Promise<string> {
     return new TextDecoder().decode(await this.vault().read(await this.pathOf(fileId), version));
   }

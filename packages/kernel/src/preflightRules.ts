@@ -276,7 +276,7 @@ function consistencyRules({ epub, book }: PreflightFacts): Finding[] {
   if (!o?.wellFormed) return [];
   const out: Finding[] = [];
   const want = norm(book.title);
-  if (want && norm(o.title) && !norm(o.title).startsWith(want) && norm(o.title) !== norm(`${book.title} ${book.subtitle}`)) {
+  if (want && norm(o.title) && norm(o.title) !== want && norm(o.title) !== norm(`${book.title} ${book.subtitle}`)) {
     out.push({ ruleId: 'names.title', grade: 'error', what: 'The title in the EPUB is not the title in the catalogue.', location: o.path, measured: o.title ?? '', expected: book.subtitle ? `${book.title} (or ${book.title}: ${book.subtitle})` : book.title });
   }
   const tp = epub.titlePage;
@@ -344,7 +344,6 @@ function metadataRules({ book }: PreflightFacts, pack: RulePack): Finding[] {
   if (t.length > m.titleWithSubtitleMax) out.push({ ruleId: 'meta.title', grade: 'error', what: 'The title and subtitle together are too long.', location: 'catalogue', measured: `${t.length} characters`, expected: `at most ${m.titleWithSubtitleMax}` });
   if (!book.isbn && !book.asin) out.push({ ruleId: 'meta.identifier', grade: 'suggestion', what: 'The edition has neither an ISBN nor an ASIN in the catalogue.', location: 'catalogue', measured: 'none', expected: 'an ISBN, or leave it to KDP’s free ASIN' });
   if (book.price === null) out.push({ ruleId: 'meta.price', grade: 'warning', what: 'The edition has no price in the catalogue.', location: 'catalogue', measured: 'none', expected: 'a price' });
-  if (!book.language) out.push({ ruleId: 'meta.language', grade: 'suggestion', what: 'The catalogue holds no language for this book.', location: 'catalogue', measured: 'none', expected: 'a language' });
   if (book.blurb === null) out.push({ ruleId: 'meta.blurb', grade: 'warning', what: 'No blurb was found for this book.', location: 'Marketing/Blurb.md', measured: 'no file', expected: 'a blurb of at most ' + m.descriptionMax + ' characters' });
   else if (book.blurb.length > m.descriptionMax) out.push({ ruleId: 'meta.blurb', grade: 'error', what: 'The blurb is too long for KDP’s description.', location: 'Marketing/Blurb.md', measured: `${book.blurb.length} characters`, expected: `at most ${m.descriptionMax}` });
   if (book.keywords === null) out.push({ ruleId: 'meta.keywords', grade: 'warning', what: 'No keywords were found for this book.', location: 'Marketing/Keywords.md', measured: 'no file', expected: `up to ${m.keywordsMax} keywords` });

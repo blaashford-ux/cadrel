@@ -4,12 +4,12 @@ import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
+import type { Asset, AssetApproval, AssetReplacement, AssetUse, Concept, Feedback, FileUse, PreflightResult, PreflightRun, CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -1168,6 +1168,178 @@ export interface ScopeApi {
   onChange(cb: (scope: ScopeView) => void): () => void;
 }
 
+
+// ---- art, assets and Preflight (docs/M5-PLAN.md) ------------------------------------------------------------------------------
+
+/** What a person may do with the assets of the project being shown. */
+export interface ArtMay {
+  read: boolean;
+  /** Upload a version as an asset, add uses, submit concepts, propose a replacement. */
+  write: boolean;
+  comment: boolean;
+  /** Approve or revoke a version, decide a replacement, choose a concept. */
+  approve: boolean;
+  /** Licences, retiring. */
+  manage: boolean;
+  /** Write cover and art briefs. */
+  brief: boolean;
+}
+export interface AssetRow extends Asset {
+  projectName: string;
+  /** Where it lives in the vault, and its newest version. */
+  path: string;
+  latestVersion: number;
+  /** Versions that stand approved, newest last. */
+  approved: { version: number; hash: string; at: string; byName: string }[];
+  /** The newest approved version, or null. */
+  approvedNow: number | null;
+  /** Days until the licence runs out (negative once it has), or null for none. */
+  licenceDaysLeft: number | null;
+  licenceExpired: boolean;
+  /** Declared uses that wait on their owners ("needs update"), and all declared uses. */
+  needUpdate: number;
+  uses: number;
+  openFeedback: number;
+  /** A newer version exists than the one approved. */
+  newerThanApproved: boolean;
+}
+export interface ArtCandidate {
+  fileId: string;
+  path: string;
+  version: number;
+}
+export interface ArtBriefRow {
+  id: string;
+  title: string;
+  kind: 'cover' | 'art';
+  /** The newest version of the brief. */
+  version: number;
+  concepts: number;
+  chosen: boolean;
+  updatedAt: string;
+}
+export type ArtState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** The project in view: the book, or the series with its books. */
+      project: { id: string; name: string };
+      may: ArtMay;
+      assets: AssetRow[];
+      briefs: ArtBriefRow[];
+      /** Image and design files in the project that are not assets yet. */
+      candidates: ArtCandidate[];
+      /** Assets whose licence runs out within 60 days, or already has. */
+      licencesDue: { assetId: string; name: string; days: number }[];
+    };
+export interface VersionRow {
+  n: number;
+  hash: string;
+  at: string;
+  byName: string;
+  comment: string;
+  approved: boolean;
+}
+export interface FeedbackRow extends Feedback {
+  byName: string;
+}
+export interface ConceptRow extends Concept {
+  path: string;
+  byName: string;
+  feedback: FeedbackRow[];
+}
+export type AssetView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      asset: AssetRow;
+      may: ArtMay;
+      versions: VersionRow[];
+      approvals: (AssetApproval & { byName: string })[];
+      uses: AssetUse[];
+      fileUses: FileUse[];
+      replacements: (AssetReplacement & { proposerName: string })[];
+      feedback: FeedbackRow[];
+    };
+export type BriefView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      brief: { id: string; title: string; kind: 'cover' | 'art'; projectId: string; version: number; body: string; note: string; writtenAt: string; writtenByName: string };
+      versions: { n: number; body: string; note: string; writtenAt: string; writtenByName: string }[];
+      concepts: ConceptRow[];
+      may: ArtMay;
+      /** Files in the project a concept could be made of. */
+      candidates: ArtCandidate[];
+    };
+export const ART_CALLS = [
+  'create', 'update', 'submit', 'retire', 'approve', 'revoke', 'addUse', 'setUseState', 'proposeReplacement', 'decideReplacement', 'withdrawReplacement', 'comment', 'resolveFeedback',
+  'createBrief', 'reviseBrief', 'submitConcept', 'decideConcept', 'chooseConcept'
+] as const;
+export type ArtCallName = (typeof ART_CALLS)[number];
+export type PreviewView =
+  | { kind: 'image'; mime: string; dataUrl: string; width: number | null; height: number | null; format: string; note?: string }
+  | { kind: 'none'; reason: string; format?: string; width?: number | null; height?: number | null };
+export interface ArtApi {
+  /** The assets of the project in view (the book, or the series with its books). */
+  state(project?: string): Promise<ArtState>;
+  asset(id: string): Promise<AssetView>;
+  brief(id: string): Promise<BriefView>;
+  /** A change, by name: see ART_CALLS. Each takes what the service call takes (the asset id first, where there is one). */
+  call(name: ArtCallName, ...args: unknown[]): Promise<unknown>;
+  /** A picture of one version of a file: the file itself if it is a picture, or what a Photoshop file carries inside it. */
+  preview(fileId: string, version: number): Promise<PreviewView>;
+}
+
+export interface PreflightFileRow {
+  fileId: string;
+  path: string;
+  version: number;
+  /** The newest run on this file, or null. */
+  latest: PreflightRun | null;
+}
+export interface PreflightEdition {
+  id: string;
+  label: string;
+  bookTitle: string;
+  projectId: string | null;
+}
+export interface PackInfo {
+  id: string;
+  title: string;
+  version: string;
+  verified: string;
+  /** Whole months since the limits were read, or null when never. */
+  ageMonths: number | null;
+  sources: { rule: string; url: string; read: string; note?: string }[];
+  notChecked: string[];
+}
+export type PreflightState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      project: { id: string; name: string };
+      may: { read: boolean; run: boolean };
+      /** EPUB files in the project in view. */
+      files: PreflightFileRow[];
+      editions: PreflightEdition[];
+      pack: PackInfo;
+      /** epubcheck is installed on this computer, so a run adds its messages. */
+      epubcheck: boolean;
+    };
+export type PreflightRunView =
+  | { available: false; reason: string }
+  | { available: true; run: PreflightRun; results: PreflightResult[]; path: string; editionLabel: string | null; pack: PackInfo; may: { run: boolean }; byName: string; coverPath: string | null; /** Whether epubcheck added its messages to the run just made; null when looking at an earlier run. */ epubcheck: 'used' | 'not installed' | 'failed' | null };
+export interface PreflightApi {
+  state(project?: string): Promise<PreflightState>;
+  /** Checks one version of an EPUB (the newest, by default) against an edition's records and the approved cover, and records the run. */
+  run(fileId: string, editionId: string | null): Promise<PreflightRunView>;
+  get(runId: string): Promise<PreflightRunView>;
+  waive(runId: string, seq: number, reason: string): Promise<PreflightRunView>;
+}
+
 export interface CadrelApi {
   scope: ScopeApi;
   studios: StudiosApi;
@@ -1177,6 +1349,8 @@ export interface CadrelApi {
   lens: LensApi;
   canon: CanonApi;
   continuity: ContinuityApi;
+  art: ArtApi;
+  preflight: PreflightApi;
   work: WorkApi;
   editing: EditingApi;
   vault: VaultApi;
