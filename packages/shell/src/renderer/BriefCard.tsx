@@ -4,7 +4,7 @@ import type { EditingBriefs } from '../shared/api';
 
 const api = window.cadrel.editing;
 type Ready = Extract<EditingBriefs, { available: true }>;
-const KIND: Record<BriefKind, string> = { manuscript: 'Manuscript brief', edit: 'Edit brief' };
+const KIND: Record<BriefKind, string> = { manuscript: 'Manuscript brief', edit: 'Edit brief', cover: 'Cover brief', art: 'Art brief' };
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const day = (iso: string) => iso.slice(0, 10);
 

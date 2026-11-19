@@ -12,6 +12,10 @@ import {
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf, subtreeIds, getProject,
+  addFeedback, addUse, approveVersion, approvedAssets, approvalsOf, assetOfFile, assetWhereUsed, chooseConcept, conceptsOf, createAsset, decideConcept, decideReplacement, feedbackOf, getAsset, getConcept, getReplacement,
+  listAssets, proposeReplacement, replacementsOf, resolveFeedback, retireAsset, revokeApproval, setUseState, submitConcept, submitForReview, updateAsset, usesOf, withdrawReplacement, approvedVersions,
+  getRun, latestRun, listRuns, recordRun, waiveResult,
+  type ApprovedAsset, type Asset, type AssetApproval, type AssetFilter, type AssetKind, type AssetReplacement, type AssetUse, type AssetWhereUsed, type Concept, type Feedback, type LicenceInput, type NewAsset, type NewRun, type PreflightResult, type PreflightRun, type Region, type RunFilter, type UseKind,
   canonStamp, checkChange, decideProposal, entryVersions, getEntry, getFact, getProposal, listEntries, listFacts, listProposals, proposeChange, withdrawProposal,
   type CanonChange, type CanonEntry, type CanonEntryVersion, type CanonFact, type CanonProposal, type EntryFilter, type FactFilter, type ProposalFilter,
   closeCheck, decideFinding, deliverCheck, findingCounts, getCheck, getFinding, listChecks, listFindings, raiseFindings, startCheck, verifyFindings,
@@ -79,8 +83,8 @@ export interface ServiceOptions {
   projects?: () => Promise<ProjectTree | null>;
 }
 
-const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read' };
-const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign' };
+const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read', cover: 'asset.read', art: 'asset.read' };
+const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign', cover: 'brief.write', art: 'brief.write' };
 
 export class StudioService {
   constructor(private readonly o: ServiceOptions) {}
@@ -511,6 +515,203 @@ export class StudioAs {
     verify: async (checkId: string, v: { version: number; text: string }): Promise<{ fixed: ContinuityFinding[]; remaining: ContinuityFinding[] }> => {
       await this.deciderOf(await this.checkToRead(checkId));
       return verifyFindings(this.o.db, this.ctx(), checkId, v);
+    }
+  };
+
+
+  /**
+   * Assets: art, covers and other design files, governed. Reading needs asset.read on the project; uploading a version as an asset, adding uses,
+   * submitting a concept and proposing a replacement need asset.write; commenting needs asset.comment; approving or revoking a version, deciding a
+   * replacement and choosing a concept need asset.approve; licences and retiring need asset.manage. Nothing is approved except an exact version.
+   */
+  readonly assets = {
+    list: async (f: AssetFilter = {}): Promise<Asset[]> => {
+      await this.needWork('asset.read');
+      const reach = await this.reach('asset.read');
+      return (await listAssets(this.o.db, this.ctx(), f)).filter((a) => !reach || reach(a.projectId));
+    },
+    get: async (id: string): Promise<Asset | null> => {
+      await this.needWork('asset.read');
+      const a = await getAsset(this.o.db, this.ctx(), id);
+      const reach = await this.reach('asset.read');
+      return a && (!reach || reach(a.projectId)) ? a : null;
+    },
+    /** The asset a vault file is, if it is one. */
+    ofFile: async (fileId: string): Promise<Asset | null> => {
+      await this.needWork('asset.read');
+      const a = await assetOfFile(this.o.db, this.ctx(), fileId);
+      const reach = await this.reach('asset.read');
+      return a && (!reach || reach(a.projectId)) ? a : null;
+    },
+    create: async (i: NewAsset): Promise<Asset> => {
+      await this.mustReach(i?.projectId, 'asset.read');
+      await this.needWork('asset.write', i?.projectId);
+      if (i.licence) await this.needWork('asset.manage', i.projectId);
+      await this.mustHoldFileIn(i.fileId, i.projectId);
+      return createAsset(this.o.db, this.ctx(), i);
+    },
+    update: async (id: string, i: { name?: string; channel?: string; licence?: LicenceInput }): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork(i?.licence ? 'asset.manage' : 'asset.write', a.projectId);
+      return updateAsset(this.o.db, this.ctx(), id, i);
+    },
+    submit: async (id: string): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return submitForReview(this.o.db, this.ctx(), id);
+    },
+    retire: async (id: string, reason: string): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.manage', a.projectId);
+      return retireAsset(this.o.db, this.ctx(), id, reason);
+    },
+    approvals: async (id: string): Promise<AssetApproval[]> => {
+      const a = await this.assetToRead(id);
+      return approvalsOf(this.o.db, this.ctx(), a.id);
+    },
+    /** The versions that stand approved now. */
+    approved: async (id: string): Promise<AssetApproval[]> => {
+      const a = await this.assetToRead(id);
+      return approvedVersions(await approvalsOf(this.o.db, this.ctx(), a.id));
+    },
+    approve: async (id: string, version: number, note?: string): Promise<AssetApproval> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.approve', a.projectId);
+      return approveVersion(this.o.db, this.ctx(), id, version, note);
+    },
+    revoke: async (id: string, version: number, reason: string): Promise<AssetApproval> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.approve', a.projectId);
+      return revokeApproval(this.o.db, this.ctx(), id, version, reason);
+    },
+    uses: async (id: string): Promise<AssetUse[]> => usesOf(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    whereUsed: async (id: string): Promise<AssetWhereUsed> => assetWhereUsed(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    addUse: async (id: string, i: { kind: UseKind; label: string; ref?: string; version?: number | null; note?: string }): Promise<AssetUse> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return addUse(this.o.db, this.ctx(), id, i);
+    },
+    setUseState: async (useId: string, state: 'current' | 'done'): Promise<AssetUse> => {
+      const u = await this.o.db.first<{ assetId: string }>('SELECT asset_id AS assetId FROM asset_use WHERE id = ? AND studio_id = ?', [useId, this.o.studioId]);
+      if (!u) throw new Error('That use is not there.');
+      const a = await this.assetToRead(u.assetId);
+      await this.needWork('asset.write', a.projectId);
+      return setUseState(this.o.db, this.ctx(), useId, state);
+    },
+    replacements: async (id: string): Promise<AssetReplacement[]> => replacementsOf(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    proposeReplacement: async (id: string, i: { fromVersion: number; toVersion: number; reason: string }): Promise<AssetReplacement> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return proposeReplacement(this.o.db, this.ctx(), id, i);
+    },
+    decideReplacement: async (id: string, d: { approve: boolean; reason?: string }): Promise<{ replacement: AssetReplacement; needUpdate: AssetUse[] }> => {
+      const r = await getReplacement(this.o.db, this.ctx(), id);
+      if (!r) throw new Error('That replacement is not there.');
+      const a = await this.assetToRead(r.assetId);
+      await this.needWork('asset.approve', a.projectId);
+      return decideReplacement(this.o.db, this.ctx(), id, d);
+    },
+    withdrawReplacement: async (id: string): Promise<AssetReplacement> => {
+      const r = await getReplacement(this.o.db, this.ctx(), id);
+      if (!r) throw new Error('That replacement is not there.');
+      const a = await this.assetToRead(r.assetId);
+      if (r.proposedBy !== this.personId) await this.needWork('asset.approve', a.projectId);
+      else await this.needWork('asset.write', a.projectId);
+      return withdrawReplacement(this.o.db, this.ctx(), id);
+    },
+    concepts: async (briefId: string): Promise<Concept[]> => {
+      const b = await this.briefToRead(briefId);
+      await this.needWork('asset.read', b.projectId);
+      return conceptsOf(this.o.db, this.ctx(), b.id);
+    },
+    submitConcept: async (i: { briefId: string; briefVersion?: number; fileId: string; fileVersion?: number; note?: string }): Promise<Concept> => {
+      const b = await this.briefToRead(i?.briefId);
+      await this.needWork('asset.write', b.projectId);
+      await this.mustHoldFileIn(i.fileId, b.projectId);
+      return submitConcept(this.o.db, this.ctx(), i);
+    },
+    decideConcept: async (id: string, state: 'shortlisted' | 'rejected', note?: string): Promise<Concept> => {
+      const k = await this.conceptToRead(id);
+      await this.needWork('asset.approve', k.projectId);
+      return decideConcept(this.o.db, this.ctx(), id, state, note);
+    },
+    chooseConcept: async (id: string): Promise<{ concept: Concept; asset: Asset }> => {
+      const k = await this.conceptToRead(id);
+      await this.needWork('asset.approve', k.projectId);
+      return chooseConcept(this.o.db, this.ctx(), id);
+    },
+    feedback: async (targetKind: 'asset' | 'concept', targetId: string): Promise<Feedback[]> => {
+      if (targetKind === 'asset') await this.assetToRead(targetId);
+      else await this.conceptToRead(targetId);
+      return feedbackOf(this.o.db, this.ctx(), targetKind, targetId);
+    },
+    comment: async (i: { targetKind: 'asset' | 'concept'; targetId: string; fileVersion?: number; region?: Region | null; body: string }): Promise<Feedback> => {
+      const project = i?.targetKind === 'asset' ? (await this.assetToRead(i.targetId)).projectId : (await this.conceptToRead(i?.targetId)).projectId;
+      await this.needWork('asset.comment', project);
+      return addFeedback(this.o.db, this.ctx(), i);
+    },
+    resolveFeedback: async (id: string): Promise<Feedback> => {
+      const f = await this.o.db.first<{ projectId: string; by: string }>('SELECT project_id AS projectId, by FROM asset_feedback WHERE id = ? AND studio_id = ?', [id, this.o.studioId]);
+      if (!f) throw new Error('That feedback is not there.');
+      await this.mustReach(f.projectId, 'asset.read');
+      await this.needWork('asset.read', f.projectId);
+      if (f.by !== this.personId) await this.needWork('asset.write', f.projectId);
+      return resolveFeedback(this.o.db, this.ctx(), id);
+    },
+    /**
+     * What Launch reads: the approved assets of a kind in a project and everything in it (with each one's approved version), and the newest
+     * Preflight run of the project's editions, if this person may read it. The two facts a release plan needs, from records.
+     */
+    readiness: async (projectId: string, kind: AssetKind = 'cover'): Promise<{ assets: ApprovedAsset[]; preflight: PreflightRun | null }> => {
+      await this.mustReach(projectId, 'asset.read');
+      await this.needWork('asset.read', projectId);
+      const ids = await this.subtree(projectId);
+      const assets = await approvedAssets(this.o.db, this.ctx(), ids, kind);
+      let preflight: PreflightRun | null = null;
+      try {
+        await this.needWork('preflight.read', projectId);
+        preflight = await latestRun(this.o.db, this.ctx(), { projectIds: ids });
+      } catch {
+        preflight = null;
+      }
+      return { assets, preflight };
+    }
+  };
+
+  /**
+   * Preflight: graded checks of an EPUB before it is uploaded. The checking happens on the computer that has the file; the service keeps the run
+   * and its results. Reading needs preflight.read on the project; recording a run and waiving a result need preflight.run.
+   */
+  readonly preflight = {
+    list: async (f: RunFilter = {}): Promise<PreflightRun[]> => {
+      await this.needWork('preflight.read');
+      const reach = await this.reach('preflight.read');
+      return (await listRuns(this.o.db, this.ctx(), f)).filter((r) => !reach || reach(r.projectId));
+    },
+    get: async (id: string): Promise<{ run: PreflightRun; results: PreflightResult[] } | null> => {
+      await this.needWork('preflight.read');
+      const g = await getRun(this.o.db, this.ctx(), id);
+      const reach = await this.reach('preflight.read');
+      return g && (!reach || reach(g.run.projectId)) ? g : null;
+    },
+    latest: async (f: { editionId?: string; fileId?: string; projectId?: string }): Promise<PreflightRun | null> => {
+      await this.needWork('preflight.read');
+      const reach = await this.reach('preflight.read');
+      const run = await latestRun(this.o.db, this.ctx(), { ...(f.editionId ? { editionId: f.editionId } : {}), ...(f.fileId ? { fileId: f.fileId } : {}), ...(f.projectId ? { projectIds: await this.subtree(f.projectId) } : {}) });
+      return run && (!reach || reach(run.projectId)) ? run : null;
+    },
+    record: async (i: NewRun): Promise<{ run: PreflightRun; results: PreflightResult[] }> => {
+      await this.mustReach(i?.projectId, 'preflight.read');
+      await this.needWork('preflight.run', i?.projectId);
+      await this.mustHoldFileIn(i.fileId, i.projectId);
+      return recordRun(this.o.db, this.ctx(), i);
+    },
+    waive: async (runId: string, seq: number, reason: string): Promise<{ run: PreflightRun; results: PreflightResult[] }> => {
+      const g = await getRun(this.o.db, this.ctx(), runId);
+      if (!g) throw new Error('That run is not there.');
+      await this.mustReach(g.run.projectId, 'preflight.read');
+      await this.needWork('preflight.run', g.run.projectId);
+      return waiveResult(this.o.db, this.ctx(), runId, seq, reason);
     }
   };
 
@@ -1027,6 +1228,37 @@ export class StudioAs {
       await this.editorOf(p);
     } else await this.needWork(to === 'responded' ? 'edit.respond' : to === 'closed' ? 'edit.approve' : 'edit.assign', p.projectId);
     return movePass(this.o.db, this.ctx(), id, to);
+  }
+
+  private async assetToRead(id: string): Promise<Asset> {
+    const a = await getAsset(this.o.db, this.ctx(), id);
+    if (a) {
+      try {
+        await this.mustReach(a.projectId, 'asset.read');
+        await this.needWork('asset.read', a.projectId);
+        return a;
+      } catch {
+        /* falls through: it is not there for this person */
+      }
+    }
+    throw new Error('That asset is not there.');
+  }
+  private async conceptToRead(id: string): Promise<Concept> {
+    const k = await getConcept(this.o.db, this.ctx(), id);
+    if (k) {
+      try {
+        await this.mustReach(k.projectId, 'asset.read');
+        await this.needWork('asset.read', k.projectId);
+        return k;
+      } catch {
+        /* falls through */
+      }
+    }
+    throw new Error('That concept is not there.');
+  }
+  private async subtree(projectId: string): Promise<string[]> {
+    const tree = await this.o.projects?.();
+    return tree ? subtreeIds(tree, projectId) : [projectId];
   }
 
   private async mayReadBrief(b: BriefRecord): Promise<boolean> {
