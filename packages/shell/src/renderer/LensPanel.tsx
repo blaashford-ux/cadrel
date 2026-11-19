@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { LensDue, LensPass, LensState, Page } from '../shared/api';
 
 const api = window.cadrel;
-type Lens = 'director' | 'editor' | 'author';
-const LABEL: Record<Lens, string> = { director: 'Director', editor: 'Editor', author: 'Author' };
+type Lens = 'director' | 'editor' | 'author' | 'art';
+const LABEL: Record<Lens, string> = { director: 'Director', editor: 'Editor', author: 'Author', art: 'Art' };
 const KEY = 'cadrel.lens';
 const days = (n: number | null) => (n === null ? '' : n <= 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -88,6 +88,27 @@ export function LensPanel({ onGo, onProject, studioKey }: { onGo: (p: Page) => v
         </div>
       )}
 
+      {lens === 'director' && v.director && v.director.art.inReview > 0 && (
+        <p className="small"><span className="chip warn">{v.director.art.inReview}</span> {v.director.art.inReview === 1 ? 'asset is' : 'assets are'} in review, waiting for approval. <button type="button" className="link" onClick={() => onGo('art')}>Open Art</button></p>
+      )}
+      {lens === 'director' && v.director && v.director.art.notReady.length > 0 && (
+        <div>
+          <h4>Books not ready to upload <span className="chip">{v.director.art.notReady.length}</span></h4>
+          <ul className="plain work-list">
+            {v.director.art.notReady.map((n) => (
+              <li key={n.fileId}><button type="button" className="link" onClick={() => onProject(n.projectId)}>{n.projectName}</button> <span className="muted small">{n.path}</span> <span className="chip warn">{plural(n.errors, 'error')}</span> <button type="button" className="link" onClick={() => onGo('preflight')}>Open Preflight</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {lens === 'art' && v.art && (
+        <div className="lens-cols">
+          <ArtList title="Waiting for approval" rows={v.art.toApprove.map((a) => ({ key: a.assetId, project: a.projectName, projectId: a.projectId, text: a.name }))} empty="No asset is waiting for approval." onProject={onProject} onGo={() => onGo('art')} />
+          <ArtList title="Concepts to look at" rows={v.art.concepts.map((c) => ({ key: c.briefId, project: c.projectName, projectId: c.projectId, text: c.title, chip: plural(c.waiting, 'concept') }))} empty="No concept is waiting for a decision." onProject={onProject} onGo={() => onGo('art')} />
+          <ArtList title="Licences to renew" rows={v.art.licences.map((l) => ({ key: l.assetId, project: l.projectName, projectId: l.projectId, text: l.name, chip: l.days < 0 ? `ran out ${plural(-l.days, 'day')} ago` : `${plural(l.days, 'day')} left`, warn: l.days <= 14 }))} empty="No licence runs out soon." onProject={onProject} onGo={() => onGo('art')} />
+          <ArtList title="Uses to update" rows={v.art.toUpdate.map((u) => ({ key: u.assetId, project: u.projectName, projectId: u.projectId, text: u.name, chip: plural(u.uses, 'use') }))} empty="Nothing waits on a new version." onProject={onProject} onGo={() => onGo('art')} />
+        </div>
+      )}
       {lens === 'editor' && v.editor && (
         <div className="lens-cols">
           <PassList title="To start" rows={v.editor.toStart} empty="No pass is waiting for you to start it." onGo={onGo} />
@@ -138,5 +159,23 @@ function DueRow({ t, onProject }: { t: LensDue; onProject: (id: string) => void 
       <button type="button" className="link" onClick={() => onProject(t.projectId)}>{t.title}</button> <span className="muted small">on {t.projectName}</span>
       <span className={t.daysLate > 0 ? 'warn small' : 'muted small'}> · {t.daysLate > 0 ? `${plural(t.daysLate, 'day')} late` : `due ${t.due}`}</span>
     </li>
+  );
+}
+
+function ArtList({ title, rows, empty, onProject, onGo }: { title: string; rows: { key: string; project: string; projectId: string; text: string; chip?: string; warn?: boolean }[]; empty: string; onProject: (id: string) => void; onGo: () => void }) {
+  return (
+    <div>
+      <h4>{title} <span className="chip">{rows.length}</span></h4>
+      {rows.length === 0 ? <p className="muted small">{empty}</p> : (
+        <ul className="plain work-list">
+          {rows.map((r) => (
+            <li key={r.key}>
+              <button type="button" className="link" onClick={onGo}>{r.text}</button> <button type="button" className="link muted small" onClick={() => onProject(r.projectId)}>{r.project}</button>
+              {r.chip && <span className={`chip ${r.warn ? 'warn' : ''}`}>{r.chip}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

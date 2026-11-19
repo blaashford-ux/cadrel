@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildLens, loadLens, type LensSources } from '../src/main/lens';
+import type { ArtLensInput } from '../src/main/lens';
 import type { EditingPassRow, EditingState, PlanState } from '../src/shared/api';
 
 const TODAY = '2026-11-16';
@@ -133,5 +134,53 @@ describe('which views a person gets, and what it costs', () => {
   it('treats a capability check that fails as not held', async () => {
     const s = await loadLens({ mayAnywhere: async () => { throw new Error('away'); }, editing: async () => editing, plan: async () => plan }, 'x', TODAY);
     expect(s).toMatchObject({ lenses: [] });
+  });
+});
+
+describe('the Art view, and what the Director sees of art', () => {
+  const art: ArtLensInput = {
+    assets: [
+      { id: 'a1', name: 'Cover', projectId: 'b4', projectName: 'Book Four', state: 'in_review', licenceDaysLeft: null, needUpdate: 0 },
+      { id: 'a2', name: 'Banner', projectId: 'b4', projectName: 'Book Four', state: 'approved', licenceDaysLeft: 9, needUpdate: 2 },
+      { id: 'a3', name: 'Map', projectId: 'b1', projectName: 'Book One', state: 'approved', licenceDaysLeft: -3, needUpdate: 0 },
+      { id: 'a4', name: 'Old art', projectId: 'b1', projectName: 'Book One', state: 'retired', licenceDaysLeft: -300, needUpdate: 0 },
+      { id: 'a5', name: 'Far licence', projectId: 'b1', projectName: 'Book One', state: 'approved', licenceDaysLeft: 400, needUpdate: 0 }
+    ],
+    briefs: [
+      { id: 'br1', title: 'Cover for Book Four', projectId: 'b4', projectName: 'Book Four', submitted: 3, chosen: false },
+      { id: 'br2', title: 'Banner brief', projectId: 'b4', projectName: 'Book Four', submitted: 1, chosen: true }, // already chosen: nothing waits
+      { id: 'br3', title: 'Empty brief', projectId: 'b1', projectName: 'Book One', submitted: 0, chosen: false }
+    ],
+    runs: [
+      { fileId: 'e4', path: 'Book Four/book.epub', projectId: 'b4', projectName: 'Book Four', errors: 2 },
+      { fileId: 'e1', path: 'Book One/book.epub', projectId: 'b1', projectName: 'Book One', errors: 0 },
+      { fileId: 'e2', path: 'Book Two/book.epub', projectId: 'b2', projectName: 'Book Two', errors: 5 }
+    ]
+  };
+  const v = buildLens(['art'], { me: 'ada', today: TODAY, passes: [], tasks: [], art }).art!;
+
+  it('lists what waits for approval, the concepts nobody has chosen from, the licences, and the uses to update', () => {
+    expect(v.toApprove.map((a) => a.assetId)).toEqual(['a1']);
+    expect(v.concepts).toEqual([{ briefId: 'br1', title: 'Cover for Book Four', projectId: 'b4', projectName: 'Book Four', waiting: 3 }]);
+    expect(v.licences.map((l) => [l.assetId, l.days])).toEqual([['a3', -3], ['a2', 9]]); // soonest first; a retired asset and a far licence are not listed
+    expect(v.toUpdate).toEqual([{ assetId: 'a2', name: 'Banner', projectId: 'b4', projectName: 'Book Four', uses: 2 }]);
+  });
+
+  it('shows the Director how many assets are in review and which books are not ready, the worst first', () => {
+    const d = buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [], art }).director!;
+    expect(d.art.inReview).toBe(1);
+    expect(d.art.notReady.map((n) => [n.path, n.errors])).toEqual([['Book Two/book.epub', 5], ['Book Four/book.epub', 2]]);
+    expect(buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [] }).director!.art).toEqual({ inReview: 0, notReady: [] });
+  });
+
+  it('an Artist or Art Director gets the view; it is built only when asked for, and a failure to read art leaves it empty', async () => {
+    expect(buildLens(['author'], { me: 'x', today: TODAY, passes: [], tasks: [], art }).art).toBeUndefined();
+    const src = (caps: string[]): LensSources => ({ mayAnywhere: async (c) => caps.includes(c), editing: async () => ({ available: false, reason: 'no' }), plan: async () => { throw new Error('away'); }, art: async () => { throw new Error('away'); } });
+    const s = await loadLens(src(['asset.write']), 'x', TODAY);
+    expect(s).toMatchObject({ lenses: ['art'], views: { art: { toApprove: [], concepts: [], licences: [], toUpdate: [] } } });
+    const m = await loadLens(src(['asset.manage', 'manuscript.write']), 'x', TODAY);
+    expect(m.available && m.lenses).toEqual(['author', 'art']);
+    const both = await loadLens(src(['manuscript.write', 'asset.write']), 'x', TODAY);
+    expect(both.available && both.lenses).toEqual(['author']); // an author who may also upload keeps the author view only
   });
 });

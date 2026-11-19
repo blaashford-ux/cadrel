@@ -12,6 +12,7 @@ import { PermissionDenied } from '@cadrel/service';
 import {
   ART_CALLS, type ArtBriefRow, type ArtCallName, type ArtCandidate, type ArtMay, type ArtState, type AssetRow, type AssetView, type BriefView, type ConceptRow, type FeedbackRow, type PreviewView
 } from '../shared/api';
+import type { ArtLensInput } from './lens';
 import type { PeopleHost } from './people';
 import type { StudioService } from './studio';
 
@@ -274,4 +275,34 @@ export function previewOf(bytes: Uint8Array): PreviewView {
   if (bytes.length > PREVIEW_MAX_BYTES) return { kind: 'none', reason: 'This picture is too large to preview here.', ...base };
   const mime = { jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml' }[info.format as 'jpeg'];
   return { kind: 'image', mime, dataUrl: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`, ...base };
+}
+
+/**
+ * What the Home and Dashboard art views are built from: every asset and brief this person may read, and the newest Preflight run of each EPUB.
+ * A role that may read none of it gets nothing, not an error.
+ */
+export async function artLens(studio: StudioService, people: PeopleHost, files: Pick<ArtFiles, 'files'> | null = null, now: () => string = () => new Date().toISOString()): Promise<ArtLensInput> {
+  const svc = people.service;
+  if (!svc) return { assets: [], briefs: [], runs: [] };
+  const as = svc.as(people.me);
+  const tree = await studio.tree();
+  const name = (id: string) => tree.projects.find((p) => p.id === id)?.name ?? '';
+  const [assets, covers, arts, runs] = await Promise.all([as.assets.list().catch(() => []), as.briefs.list({ kind: 'cover' }).catch(() => []), as.briefs.list({ kind: 'art' }).catch(() => []), as.preflight.list({ limit: 200 }).catch(() => [])]);
+  const at = now();
+  const uses = await Promise.all(assets.map((a) => as.assets.uses(a.id).then((u) => u.filter((x) => x.state === 'needs_update').length).catch(() => 0)));
+  const briefs = await Promise.all(
+    [...covers, ...arts].map(async (b) => {
+      const cs = await as.assets.concepts(b.id).catch(() => []);
+      return { id: b.id, title: b.title, projectId: b.projectId, projectName: name(b.projectId), submitted: cs.filter((c) => c.state === 'submitted' || c.state === 'shortlisted').length, chosen: cs.some((c) => c.state === 'chosen') };
+    })
+  );
+  // the newest run of each file (the list is newest first)
+  const seen = new Set<string>();
+  const newest = runs.filter((r) => (seen.has(r.fileId) ? false : (seen.add(r.fileId), true)));
+  const paths = new Map((files ? await files.files().catch(() => []) : []).map((f) => [f.fileId, f.path]));
+  return {
+    assets: assets.map((a, i) => ({ id: a.id, name: a.name, projectId: a.projectId, projectName: name(a.projectId), state: a.state, licenceDaysLeft: licenceDaysLeft(a.licence, at), needUpdate: uses[i]! })),
+    briefs,
+    runs: newest.map((r) => ({ fileId: r.fileId, path: paths.get(r.fileId) ?? '', projectId: r.projectId, projectName: name(r.projectId), errors: r.errors }))
+  };
 }
