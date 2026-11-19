@@ -226,7 +226,7 @@ export function inspectEpub(bytes: Uint8Array): EpubFacts {
   if (coverItem?.present) {
     const b = files[coverItem.path]!;
     const info = imageInfo(b);
-    out.cover = { path: coverItem.path, format: info?.format ?? null, width: info?.width ?? null, height: info?.height ?? null, bytes: b.length, hash: createHash('sha256').update(b).digest('hex') };
+    out.cover = { path: coverItem.path, format: info?.format ?? null, width: info?.width ?? null, height: info?.height ?? null, bytes: b.length, hash: createHash('sha256').update(b).digest('hex'), colour: info?.colour ?? null, dpi: info?.dpi ?? null };
   }
 
   // the title page: the document typed as one, or the one called title

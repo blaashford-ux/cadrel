@@ -62,7 +62,7 @@ export interface EpubFacts {
   /** Content documents in reading order. */
   documents: DocumentFacts[];
   /** The cover image inside the EPUB. */
-  cover: null | { path: string; format: ImageFormat | null; width: number | null; height: number | null; bytes: number; hash: string };
+  cover: null | { path: string; format: ImageFormat | null; width: number | null; height: number | null; bytes: number; hash: string; colour: ColourModel | null; dpi: number | null };
   /** What the title page of the EPUB says. */
   titlePage: { title: string | null; author: string | null } | null;
   /** The size of the whole EPUB file. */
@@ -102,8 +102,6 @@ export interface PreflightFacts {
   book: BookFacts;
   /** The approved cover, or null when the book has none. */
   approvedCover: ApprovedCoverFacts | null;
-  /** The cover image's header read from the file inside the EPUB. */
-  epubCover: { colour: ColourModel | null; dpi: number | null } | null;
 }
 
 // ---- rule packs ------------------------------------------------------------------------------------------------------------------
@@ -305,7 +303,7 @@ function consistencyRules({ epub, book }: PreflightFacts): Finding[] {
   return out;
 }
 
-function coverRules({ epub, approvedCover, epubCover }: PreflightFacts, pack: RulePack): Finding[] {
+function coverRules({ epub, approvedCover }: PreflightFacts, pack: RulePack): Finding[] {
   const c = epub.cover;
   const out: Finding[] = [];
   if (!c) {
@@ -327,8 +325,8 @@ function coverRules({ epub, approvedCover, epubCover }: PreflightFacts, pack: Ru
       else if (long >= k.warnLongestBelow && long < k.recommended.height) out.push({ ruleId: 'cover.recommended', grade: 'suggestion', what: 'The cover is smaller than the recommended size.', location: c.path, measured: dims, expected: `${k.recommended.width} × ${k.recommended.height} pixels` });
     }
     if (c.bytes > k.maxBytes) out.push({ ruleId: 'cover.bytes', grade: 'error', what: 'The cover file is too large.', location: c.path, measured: `${(c.bytes / 1048576).toFixed(1)} MB`, expected: `at most ${k.maxBytes / 1048576} MB` });
-    if (epubCover?.colour === 'cmyk') out.push({ ruleId: 'cover.colour', grade: 'suggestion', what: 'The cover is CMYK; KDP converts it, and the colours may shift.', location: c.path, measured: 'CMYK', expected: 'RGB' });
-    if (epubCover?.dpi && epubCover.dpi < k.recommendedDpi && (c.width ?? 0) < k.recommended.width) out.push({ ruleId: 'cover.dpi', grade: 'suggestion', what: 'The cover declares a low resolution.', location: c.path, measured: `${epubCover.dpi} dpi`, expected: `${k.recommendedDpi} dpi` });
+    if (c.colour === 'cmyk') out.push({ ruleId: 'cover.colour', grade: 'suggestion', what: 'The cover is CMYK; KDP converts it, and the colours may shift.', location: c.path, measured: 'CMYK', expected: 'RGB' });
+    if (c.dpi && c.dpi < k.recommendedDpi && (c.width ?? 0) < k.recommended.width) out.push({ ruleId: 'cover.dpi', grade: 'suggestion', what: 'The cover declares a low resolution.', location: c.path, measured: `${c.dpi} dpi`, expected: `${k.recommendedDpi} dpi` });
   }
   // the cover in the EPUB is the approved one (docs/M5-PLAN.md: "used in Preflight")
   if (!approvedCover) {

@@ -30,8 +30,7 @@ const facts = (bytes: Uint8Array): PreflightFacts => {
   return {
     epub,
     book: { title: 'Dragon Rider', subtitle: 'Book Four', author: 'Ash Wilder', series: null, seriesNumber: null, isbn: '978-1-23456-789-7', asin: null, language: 'en', price: 4.99, publishedOn: null, blurb: 'A dragon.', keywords: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] },
-    approvedCover: { assetId: 'a', version: 1, hash: createHash('sha256').update(COVER).digest('hex'), format: 'jpeg', width: 1600, height: 2560, colour: 'rgb', dpi: null, bytes: COVER.length },
-    epubCover: { colour: 'rgb', dpi: null }
+    approvedCover: { assetId: 'a', version: 1, hash: createHash('sha256').update(COVER).digest('hex'), format: 'jpeg', width: 1600, height: 2560, colour: 'rgb', dpi: null, bytes: COVER.length }
   };
 };
 const rezip = (bytes: Uint8Array, edit: (files: Record<string, Uint8Array>) => void): Uint8Array => {

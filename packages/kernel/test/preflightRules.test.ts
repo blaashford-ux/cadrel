@@ -13,15 +13,14 @@ function good(): PreflightFacts {
     nav: { path: 'OEBPS/nav.xhtml', hasToc: true, entries: [{ label: 'One', href: 'ch1.xhtml', target: 'OEBPS/ch1.xhtml', resolved: true }, { label: 'Two', href: 'ch2.xhtml', target: 'OEBPS/ch2.xhtml', resolved: true }], landmarks: ['cover'] },
     ncx: true,
     documents: docs,
-    cover: { path: 'OEBPS/images/cover.jpg', format: 'jpeg', width: 1600, height: 2560, bytes: 900_000, hash: HASH },
+    cover: { path: 'OEBPS/images/cover.jpg', format: 'jpeg', width: 1600, height: 2560, bytes: 900_000, hash: HASH, colour: 'rgb', dpi: 300 },
     titlePage: { title: 'Dragon Rider: Book Four', author: 'Ash Wilder' },
     bytes: 2_000_000
   };
   return {
     epub,
     book: { title: 'Dragon Rider: Book Four', subtitle: '', author: 'Ash Wilder', series: 'Dragon Rider', seriesNumber: 4, isbn: '978-1-234-56789-7', asin: null, language: 'en', price: 4.99, publishedOn: null, blurb: 'A dragon at dusk.', keywords: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] },
-    approvedCover: { assetId: 'as1', version: 3, hash: HASH, format: 'jpeg', width: 1600, height: 2560, colour: 'rgb', dpi: 300, bytes: 900_000 },
-    epubCover: { colour: 'rgb', dpi: 300 }
+    approvedCover: { assetId: 'as1', version: 3, hash: HASH, format: 'jpeg', width: 1600, height: 2560, colour: 'rgb', dpi: 300, bytes: 900_000 }
   };
 }
 const ids = (f: PreflightFacts) => runPreflight(f).map((x) => `${x.grade}:${x.ruleId}`);
@@ -129,7 +128,8 @@ describe('Preflight rules', () => {
     g.epub.cover = null;
     expect(ids(g)).toContain('error:cover.missing');
     const c = good();
-    c.epubCover = { colour: 'cmyk', dpi: 72 };
+    c.epub.cover!.colour = 'cmyk';
+    c.epub.cover!.dpi = 72;
     c.epub.cover!.width = 1000;
     c.epub.cover!.height = 1600;
     expect(ids(c)).toEqual(expect.arrayContaining(['suggestion:cover.colour', 'suggestion:cover.dpi']));

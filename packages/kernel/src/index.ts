@@ -30,6 +30,7 @@ export * from './sql';
 export * from './viewScope';
 export * from './visibility';
 export * from './policy';
+export * from './preview';
 export * from './imageInfo';
 export * from './preflight';
 export * from './preflightRules';
