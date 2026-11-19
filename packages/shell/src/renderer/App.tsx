@@ -8,6 +8,8 @@ import { useStudios } from './useStudios';
 import { Assistants } from './Assistants';
 import { Editing } from './Editing';
 import { CanonPage } from './Canon';
+import { ArtPage } from './Art';
+import { PreflightPage } from './Preflight';
 import { Planner } from './Planner';
 import { Files } from './Files';
 import { Dashboard } from './Dashboard';
@@ -24,12 +26,12 @@ import { useScope } from './useScope';
 import { viewScopeOf } from '@cadrel/kernel';
 
 const api = window.cadrel;
-const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', read: 'Read', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', canon: 'Canon', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', people: 'People', profile: 'Profile', settings: 'Settings' };
+const TITLES: Record<Page, string> = { home: 'Home', mybooks: 'My Books', projects: 'Projects', notes: 'Notes', read: 'Read', dashboard: 'Dashboard', planner: 'Planner', editing: 'Editing', canon: 'Canon', art: 'Art', preflight: 'Preflight', files: 'Files', write: 'Write', market: 'Market', finance: 'Finance', assistants: 'Extensions', admin: 'Admin', people: 'People', profile: 'Profile', settings: 'Settings' };
 /** Pages the shell draws itself (the rest are modules in their own views). */
-const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'canon', 'files', 'assistants', 'admin', 'people', 'profile', 'settings']);
-const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+const OWN = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'assistants', 'admin', 'people', 'profile', 'settings']);
+const STUDIO_PAGES = new Set<Page>(['mybooks', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 const NEEDS_OVERVIEW = new Set<Page>(['home', 'projects', 'dashboard']);
-const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'canon', 'files']);
+const NEEDS_STUDIO = new Set<Page>(['home', 'mybooks', 'projects', 'notes', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files']);
 
 /** Puts the app's colours on this page: the shipped ones with the user's changes on top, for both schemes. */
 function usePaint() {
@@ -143,6 +145,8 @@ export function App() {
           {!blocked && page === 'planner' && <Planner studio={studio.state} onProject={openProject} />}
           {!blocked && page === 'editing' && <Editing studio={studio.state} onProject={openProject} />}
           {!blocked && page === 'canon' && <CanonPage studio={studio.state} onProject={openProject} />}
+          {!blocked && page === 'art' && <ArtPage studio={studio.state} />}
+          {!blocked && page === 'preflight' && <PreflightPage studio={studio.state} />}
           {!blocked && page === 'files' && <Files />}
           {page === 'assistants' && <Assistants />}
           {page === 'admin' && <Admin />}
