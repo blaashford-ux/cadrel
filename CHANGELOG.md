@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.19.1 (covers on the Also by page now stick)
+
+- **Fix.** Choosing a cover (or adding a book from My Books) on the Also by page showed "No cover" and left Save greyed out, because the desktop app's page policy blocked the image. Covers now load, show a preview and save. A file that cannot be read as an image says so.
+
 ## 0.19.0 (M4: canon, and continuity checks of a book against it)
 
 ### Canon
