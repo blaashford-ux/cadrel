@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.19.2 (Also by: each book on its own page)
+
+- **Also by.** In the PDF, Word and ebooks, every book after the first on the Also by page now starts on a new page (the first stays under the page heading), so a book's title, cover, link and blurb no longer run on from the one before. In Word the cover image is skipped, as before, without leaving a blank line.
+
 ## 0.19.1 (covers on the Also by page now stick)
 
 - **Fix.** Choosing a cover (or adding a book from My Books) on the Also by page showed "No cover" and left Save greyed out, because the desktop app's page policy blocked the image. Covers now load, show a preview and save. A file that cannot be read as an image says so.

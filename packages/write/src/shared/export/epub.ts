@@ -87,6 +87,7 @@ p.right { text-align: right; }
 p.al-center, p.al-right { text-indent: 0; }
 p.linkline { text-align: left; margin: 0 0 0.6em 0; }
 .backpage h1.matter { margin-top: 1em; }
+.backpage h2.bookhead ~ h2.bookhead { page-break-before: always; break-before: page; }
 p.cover { text-align: center; margin: 0; }
 img.cover { max-width: 100%; height: auto; }
 ${

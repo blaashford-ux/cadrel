@@ -309,4 +309,19 @@ describe('buildDocx — community links', () => {
     expect(p).toMatch(/<w:hyperlink[^>]*>[\s\S]*https:\/\/discord\.gg\/readers[\s\S]*<\/w:hyperlink>/);
     expect(p.match(/<w:hyperlink/g)).toHaveLength(1);
   });
+  it('starts every Also By book after the first on a new page, and leaves covers out', async () => {
+    const { doc } = await parts((d) => {
+      d.back.alsoBy = { enabled: true, heading: '', items: [
+        { title: 'Book One', url: '', blurb: '', cover: 'data:image/jpeg;base64,AAAA' },
+        { title: 'Book Two', url: 'https://example.com/2', blurb: 'Two.' },
+        { title: 'Book Three', url: '', blurb: '' }
+      ] };
+    });
+    const ps = paragraphs(doc);
+    const breaks = (title: string) => /<w:pageBreakBefore/.test(ps.find((x) => textOfPara(x) === title)!);
+    expect(breaks('Book One')).toBe(false);
+    expect(breaks('Book Two')).toBe(true);
+    expect(breaks('Book Three')).toBe(true);
+    expect(doc).not.toContain('<w:drawing');
+  });
 });

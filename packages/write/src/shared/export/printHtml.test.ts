@@ -12,6 +12,12 @@ const book = (edit: (d: BookDetails) => void = () => undefined): BookBuild => {
 };
 const layout = (gutter = 0.375) => ({ trimKey: '5.5x8.5', gutter, outer: 0.5, top: 0.75, bottom: 0.75 });
 
+describe('Also By pages', () => {
+  it('starts every book after the first on a new page', () => {
+    expect(printCss(book(), layout())).toContain('.backpage h2.bookhead ~ h2.bookhead { break-before: page; }');
+  });
+});
+
 describe('pageCss', () => {
   it('sets the exact trim size and mirrors the margins (gutter on the inside of each side)', () => {
     const css = pageCss(book(), layout(0.625));
