@@ -2,6 +2,31 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (M5: art, assets and Preflight)
+
+Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade).
+
+### Art
+- **An Art page** (in the rail) keeps the book's covers and other art as the Studio's records. A vault file becomes an **asset**; **approval names one exact version** (and its file hash), so a newer version is not approved until someone approves it. Only a person who may approve can, including for art they uploaded.
+- **Licences**: kind, licensor, reference, end date, territory and credit line. An expired licence stops a **new** version being approved; what is approved stays, flagged. The Art page and Home list licences that run out within 60 days.
+- **Where it is used**: listings, ads and banners you record, and the vault files (an EPUB) that reference the asset. **Replacing a version is a proposal**: approving it changes nothing, marks each use "needs update", and its owner marks it updated.
+- **Briefs and concepts**: cover and art briefs (versioned like any brief), concepts offered against an exact brief version with an exact file version, and feedback **pinned to a region of the picture at that version**. Choosing a concept makes it an asset in review.
+- **Pictures** are shown from the vault file itself; a Photoshop file shows the picture saved inside it (when it was saved with Maximize Compatibility), with no extra software.
+
+### Preflight
+- **A Preflight page** checks an EPUB before upload: its structure (zip, package, navigation, links and ids in every chapter), its names against the catalogue, its cover against the book's **approved cover** and the retailer's limits, and the blurb and keywords in the Marketing files. Each result is an **error, warning or suggestion** and says what was **measured** and what was **expected**.
+- **Rules are data with their sources.** The first pack is Amazon KDP (Kindle eBook), read from KDP's pages on 19 November 2026; the page says how old it is and where each limit came from, and lists **what it does not check**. epubcheck's messages are added when it is installed.
+- **Waivers need a reason** and carry onto later checks of the same file.
+
+### Around it
+- **An Art view on Home** for the Art Director, Artist and Owner (briefs' concepts to look at, assets in review, licences, uses to update), and the Director sees assets in review and books not ready to upload.
+- **Your assistant** can read assets, look at a cover, read briefs and where-used, pin a note to a region, and read the latest Preflight result (new **Preflight Review** skill). It cannot approve, choose, retire, run or waive anything.
+- **Two optional gates** (off unless an administrator adds them): *It has an approved cover*, and *Its latest Preflight check has no open errors*.
+- **What Launch will read** is there from the start: a book's approved cover and its newest Preflight run.
+
+### Also in this version
+- **Canon follows the project you are in.** The Canon page no longer asks which series; its checks and books follow the project and book selected. File pickers (Continuity, Editing's Plan a pass) offer only the files that belong to the current project.
+
 ## 0.19.2 (Also by: each book on its own page)
 
 - **Also by.** In the PDF, Word and ebooks, every book after the first on the Also by page now starts on a new page (the first stays under the page heading), so a book's title, cover, link and blurb no longer run on from the one before. In Word the cover image is skipped, as before, without leaving a blank line.

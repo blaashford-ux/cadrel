@@ -22,7 +22,7 @@ import {
   type CheckFilter, type ContinuityCheck, type ContinuityFinding, type FindingCounts, type FindingDecision, type FindingFilter, type NewFinding,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
-  editorialFacts, type EditorialFacts, continuityFacts, type ContinuityFacts,
+  editorialFacts, type EditorialFacts, continuityFacts, type ContinuityFacts, artFacts, type ArtFacts,
   listVerification, verifyPass, type VerificationRecord,
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
@@ -1022,6 +1022,12 @@ export class StudioAs {
       await this.needWork('task.read');
       const reach = await this.reach();
       return continuityFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
+    /** What a workflow gate sees of approved covers and Preflight runs on these projects (a project and its subprojects). Needs task.read, like the other gate facts. */
+    artFacts: async (projectIds: string[]): Promise<ArtFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return artFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
     },
     approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
     requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {

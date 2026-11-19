@@ -36,6 +36,7 @@ export * from './preflight';
 export * from './preflightRules';
 export * from './lens';
 export * from './bookFinance';
+export * from './artGate';
 export * from './asset';
 export * from './canon';
 export * from './continuity';

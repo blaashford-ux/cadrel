@@ -1,10 +1,26 @@
 # M5: Art, assets and Preflight, implementation plan
 
-Status: **planned, not started** (19 November 2026). Written against 0.19.0 (server revision 10, database step 22). Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M5; the asset records are in [ARCHITECTURE.md](ARCHITECTURE.md); file kinds and data cards in [FILES.md](FILES.md); the role matrix rows (Assets, art, covers; Preflight) in [PERMISSIONS.md](PERMISSIONS.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
+Status: **built on `dev` and not yet released** (19 November 2026; server revision 11, database step 23). Planned against 0.19.0. The decisions below were taken on 19 November 2026 as recommended: a built-in EPUB inspector always, epubcheck in addition when installed; Amazon KDP and generic EPUB first; concepts from vault files only; an expired licence blocks new approvals only; built straight through to the exit test. Branch `dev`. Scope comes from [PLAN.md](PLAN.md) section M5; the asset records are in [ARCHITECTURE.md](ARCHITECTURE.md); file kinds and data cards in [FILES.md](FILES.md); the role matrix rows (Assets, art, covers; Preflight) in [PERMISSIONS.md](PERMISSIONS.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
 
 **Folded into this milestone:** the post-0.19.0 change already on `dev` (`0262228`): the Canon page follows the selected project instead of asking for a series, and the manuscript pickers on Continuity and Editing offer only the current project's files. It ships with M5's first release and is listed in its CHANGELOG entry. It also sets a rule M5's new pages follow (see "Scope rule" below).
 
 **Exit (from PLAN.md):** a cover goes brief → concepts → approval → used in Preflight and visible to Launch.
+
+## What was built, and where it differs from the plan
+
+All ten slices are built and tested (kernel 384, service 196, MCP 118, shell 359 including `m5Exit.test.ts`; the Art and Preflight pages are also drawn and clicked in jsdom, `artPages.test.tsx`). The manual walk-through is [M5-EXIT-TEST.md](M5-EXIT-TEST.md) and has no recorded run. Where the build departs from the plan below, so the plan is not read as describing what shipped:
+
+- **Feedback is its own record, not a Note.** Notes live in files beside the manuscript and are shared through Drive; feedback on a picture needs a permission check of its own (`asset.comment`) and an exact file version, so it is `asset_feedback` (region as fractions, version, state) rather than a `NoteTarget`. Same idea, different table.
+- **Previews are read from the file, not derived and uploaded.** The Art page reads the picture from the vault file at that version (a PSD's saved composite is decoded in the app, shrunk, and written as a PNG with no image library). Nothing derived is stored on the server, so there is no thumbnail cache; a file over 12 MB (a PSD over 300 MB) is not previewed, and says why.
+- **The assistant cannot run Preflight.** It reads the latest run (`preflight_read`), looks at covers (`asset_read` with a picture), reads briefs and where-used, and pins a note to a region (`asset_comment`). Running needs the EPUB inspector and the catalogue, which live in the app; it is not offered to the assistant. A person runs it on the Preflight page.
+- **The EPUB inspector and the rules.** The inspector (zip, package, navigation, each content document's links and ids, cover, title page) is in the shell (`epubInspect.ts`); the rules are the kernel's (`preflightRules.ts`) and run over the facts. epubcheck is run in addition when `EPUBCHECK_JAR` or an `epubcheck` command is found, and the run says whether it was used.
+- **The rule pack was read from KDP's pages on 19 November 2026.** The two KDP pages on cover images disagree on the minimum (500 pixels on the longest side, or 625 by 1,000), so the lower is an error and the higher a warning; the recommended 1,600 by 2,560 is a suggestion. Descriptions are limited to 4,000 characters, seven keywords, and 200 characters for title and subtitle together. The 50 characters a keyword is the Studio's own rule from the keywords skill, not read from a KDP page, and the pack says so.
+- **Blurb and keywords come from the marketing files** (`Marketing/Blurb.md` before its structured block, `Marketing/Keywords.md` as bullet or numbered lines), because the catalogue holds neither. With none found, the run says so.
+- **Names are compared only when the Studio's catalogue can be read.** A role given only on one book cannot read the catalogue (a Studio-wide permission), so for such a person Preflight does not compare names and says so, as the stage options need a Studio-wide `task.read` (a known limit, not new). The exit test's Editor holds the Studio and is assigned to the book.
+- **Preflight run and waive need `preflight.run` on the book; reading needs `preflight.read`.** The default Editor and Art Director hold run; an Artist, a Director and a Series Lead read.
+- **The Editor can read assets but not comment** (the matrix gives Editor read on art), so the assistant of an Editor cannot pin notes; the Art Director's can.
+- **Art view for the Owner, Art Director and Artist.** The Director's Home also shows *assets in review* and *books not ready to upload*.
+- **Not built:** offline use of the Art and Preflight pages on a server Studio; replicating thumbnails; retailers other than KDP; print covers; a Launch page (the contract is `assets.readiness` and `preflight.latest`, which M6 reads).
 
 ## What this is for
 
