@@ -93,7 +93,7 @@ describe('Preflight rules', () => {
     expect(runPreflight(g).find((x) => x.ruleId === 'names.seriesnumber')).toMatchObject({ measured: '3', expected: '4' });
     const h = good();
     h.epub.opf!.series = null;
-    expect(ids(h)).toEqual(['warning:names.series']);
+    expect(ids(h)).toEqual(['suggestion:names.series']);
     const k = good();
     k.book.series = null;
     expect(ids(k)).toEqual(['warning:names.series']);

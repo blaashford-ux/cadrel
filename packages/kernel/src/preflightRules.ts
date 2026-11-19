@@ -291,7 +291,7 @@ function consistencyRules({ epub, book }: PreflightFacts): Finding[] {
     if (tp?.author && !norm(tp.author).includes(author)) out.push({ ruleId: 'names.authorpage', grade: 'warning', what: 'The title page names a different author from the catalogue.', location: 'title page', measured: tp.author, expected: book.author });
   }
   if (book.series) {
-    if (!o.series) out.push({ ruleId: 'names.series', grade: 'warning', what: 'The catalogue puts this book in a series, but the EPUB does not say so.', location: o.path, measured: 'no series metadata', expected: book.series });
+    if (!o.series) out.push({ ruleId: 'names.series', grade: 'suggestion', what: 'The catalogue puts this book in a series, but the EPUB does not say so.', location: o.path, measured: 'no series metadata', expected: book.series });
     else if (norm(o.series) !== norm(book.series)) out.push({ ruleId: 'names.series', grade: 'error', what: 'The series in the EPUB is not the series in the catalogue.', location: o.path, measured: o.series, expected: book.series });
     if (book.seriesNumber !== null && o.series && o.seriesIndex !== null && Number(o.seriesIndex) !== book.seriesNumber) out.push({ ruleId: 'names.seriesnumber', grade: 'error', what: 'The book’s number in the series differs from the catalogue.', location: o.path, measured: o.seriesIndex, expected: String(book.seriesNumber) });
   } else if (o.series) {
