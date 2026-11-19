@@ -249,7 +249,7 @@ describe('the app’s people host over a server Studio', () => {
     expect(await loadLens({ mayAnywhere: (c) => host.mayOn(c), ...quiet }, host.me, '2026-11-16')).toMatchObject({ available: true, lenses: ['author'] });
     const lead = new PeopleHost();
     await lead.openRemote({ client: s.owner, studioId: 'sabc123def4' });
-    expect(await loadLens({ mayAnywhere: (c) => lead.mayOn(c), ...quiet }, lead.me, '2026-11-16')).toMatchObject({ lenses: ['director', 'editor', 'author'] });
+    expect(await loadLens({ mayAnywhere: (c) => lead.mayOn(c), ...quiet }, lead.me, '2026-11-16')).toMatchObject({ lenses: ['director', 'editor', 'author', 'art'] });
     await lead.close();
     // the security policy: an Author reads it and may not change it; the owner may
     expect(await host.policyState()).toMatchObject({ available: true, may: false, policy: { inviteDays: 7, staleCheckoutDays: 7, assistantEnabled: true, guestDays: null } });
