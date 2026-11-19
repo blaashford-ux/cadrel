@@ -5,4 +5,5 @@ export { studioModule, registerStudioTools, STUDIO_INSTRUCTIONS } from './module
 export { recordsModule, registerRecordsTools, RECORDS_INSTRUCTIONS } from './modules/records.js';
 export { editorialModule, registerEditorialTools, findQuote, EDITORIAL_INSTRUCTIONS } from './modules/editorial.js';
 export { projectsModule, registerProjectsTools, PROJECTS_INSTRUCTIONS } from './modules/projects.js';
+export { artModule, registerArtTools, ART_INSTRUCTIONS } from './modules/art.js';
 export { canonModule, registerCanonTools, CANON_INSTRUCTIONS } from './modules/canon.js';
