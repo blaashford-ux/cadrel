@@ -94,6 +94,8 @@ p.linkline { text-align: left; text-indent: 0; margin: 0 0 0.6em; overflow-wrap:
 .backpage p { text-align: left; text-indent: 0; margin: 0 0 1.25em; }
 .backpage p.linkline, .backpage p.crline { margin: 0 0 1.25em; }
 /* Also By: title, cover, clickable address, blurb */
+/* every book after the first starts a new page (the first stays under the page heading) */
+.backpage h2.bookhead ~ h2.bookhead { break-before: page; }
 .backpage h2.bookhead { font-family: ${headStack}; font-size: 1.2em; font-weight: 700; text-align: center; margin: 1.6em 0 0.6em; break-after: avoid; }
 .backpage p.bookcover { text-align: center; margin: 0 0 0.6em; break-after: avoid; }
 .backpage p.bookcover img { max-height: 2.6in; max-width: 60%; width: auto; height: auto; box-shadow: none; }
