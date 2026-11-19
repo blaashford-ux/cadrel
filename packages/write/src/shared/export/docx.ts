@@ -243,7 +243,9 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
     );
   });
   for (const p of book.back) {
+    let books = 0; // each book on the Also By page after the first starts a new page
     p.blocks.forEach((b, i) => {
+      if (b.t === 'image') return; // covers are for the PDF
       if (i === 0 && b.t === 'heading') {
         bodyChildren.push(
           new Paragraph({
@@ -254,7 +256,7 @@ export async function buildDocx(book: BookBuild): Promise<Uint8Array> {
             pageBreakBefore: true
           })
         );
-      } else bodyChildren.push(pageBlock(b, i === 0, true));
+      } else bodyChildren.push(pageBlock(b, i === 0 || (b.t === 'subheading' && books++ > 0), true));
     });
   }
 
