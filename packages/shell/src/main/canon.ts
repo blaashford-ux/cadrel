@@ -6,7 +6,7 @@
  * Who may do what is the service's to say, not this file's: every change goes through it and a refusal comes back as it is. What this adds is
  * what the page needs to arrange itself.
  */
-import { ancestorsOf, childrenOf, getProject, pathOf, type CanonChange, type CanonEntry, type CanonFact, type CanonProposal, type ProjectTree } from '@cadrel/kernel';
+import { ancestorsOf, childrenOf, getProject, pathOf, subtreeIds, type CanonChange, type CanonEntry, type CanonFact, type CanonProposal, type ProjectTree } from '@cadrel/kernel';
 import { PermissionDenied } from '@cadrel/service';
 import {
   CANON_CALLS, CONTINUITY_CALLS, type CanonCallName, type CanonEntryRow, type CanonFactRow, type CanonProposalRow, type CanonState, type ContinuityCallName, type ContinuityCheckRow, type ContinuityCheckView,
@@ -14,7 +14,7 @@ import {
 } from '../shared/api';
 import type { PeopleHost } from './people';
 import type { StudioService } from './studio';
-import type { EditorialFiles } from './editorial';
+import { manuscriptsIn, type EditorialFiles } from './editorial';
 
 export class CanonError extends Error {}
 
@@ -51,21 +51,25 @@ export class Canon {
 
   private async stateOf(as: NonNullable<ReturnType<Canon['as']>>, seriesRef?: string): Promise<CanonState> {
     const tree = await this.studio.tree();
-    const roots = tree.projects.filter((p) => !p.parentId && p.status !== 'archived').sort((a, b) => a.name.localeCompare(b.name));
-    const readable: { id: string; name: string }[] = [];
-    for (const r of roots) {
-      try {
-        await as.canon.stamp(r.id);
-        readable.push({ id: r.id, name: r.name });
-      } catch (e) {
-        if (!(e instanceof PermissionDenied) && !(e instanceof Error && /^There is no/.test(e.message))) throw e;
-      }
-    }
-    if (!readable.length) return { available: false, reason: roots.length ? 'Your role does not let you see the series bible.' : 'There are no projects yet, so there is no series to keep canon for.' };
-    let current = readable[0]!;
+    let current: { id: string; name: string } | null = null;
     if (seriesRef) {
+      // the app is showing this project: its series' canon is what is shown, with nothing to choose
       const want = await as.canon.seriesOf(seriesRef).catch(() => null);
-      current = readable.find((r) => r.id === want?.seriesId) ?? current;
+      if (!want) return { available: false, reason: 'That project is not there.' };
+      await as.canon.stamp(want.seriesId); // refuses, with the reason, a role that may not read this series' canon
+      current = { id: want.seriesId, name: want.name };
+    } else {
+      // nothing is in view: the first series this person can read
+      for (const r of tree.projects.filter((p) => !p.parentId && p.status !== 'archived').sort((a, b) => a.name.localeCompare(b.name))) {
+        try {
+          await as.canon.stamp(r.id);
+          current = { id: r.id, name: r.name };
+          break;
+        } catch (e) {
+          if (!(e instanceof PermissionDenied) && !(e instanceof Error && /^There is no/.test(e.message))) throw e;
+        }
+      }
+      if (!current) return { available: false, reason: tree.projects.length ? 'Your role does not let you see the series bible.' : 'There are no projects yet, so there is no series to keep canon for.' };
     }
     const [entries, facts, proposals, names, waiting] = await Promise.all([
       as.canon.listEntries({ projectId: current.id }),
@@ -89,7 +93,6 @@ export class Canon {
     return {
       available: true,
       me: this.people.me,
-      series: readable,
       current,
       may,
       entries: rows,
@@ -140,25 +143,33 @@ export class Canon {
 
   // ---- continuity ---------------------------------------------------------------------------------------------------------
 
-  /** The checks this person can see, and the manuscripts one could be started on. */
-  async continuity(): Promise<ContinuityState> {
+  /**
+   * The checks this person can see in the project in view (a book, or a project and its books; with none, every one), the books a check could be
+   * started on there, and the manuscripts of those books. A manuscript belongs to a book when its data card names that book (or something in it).
+   */
+  async continuity(scopeRef?: string): Promise<ContinuityState> {
     const as = this.as();
     if (!as) return { available: false, reason: 'Continuity checks for this Studio are managed by its owner.' };
     try {
-      const [tree, checks, names] = await Promise.all([this.studio.tree(), as.continuity.list({}), this.people.peopleList().catch(() => [] as { id: string; name: string }[])]);
+      const [tree, all, names] = await Promise.all([this.studio.tree(), as.continuity.list({}), this.people.peopleList().catch(() => [] as { id: string; name: string }[])]);
+      const inView = scopeRef && getProject(tree, scopeRef) ? new Set(subtreeIds(tree, scopeRef)) : null;
+      const checks = inView ? all.filter((k) => inView.has(k.projectId)) : all;
       const counts = checks.length ? await as.continuity.counts(checks.map((k) => k.id)) : {};
       const empty = { open: 0, fixed: 0, accepted_as_canon: 0, dismissed: 0 };
       const rows: ContinuityCheckRow[] = checks
         .map((k) => this.checkRow(k, tree, names, counts[k.id] ?? empty))
         .sort((a, b) => Number(a.state === 'closed') - Number(b.state === 'closed') || b.createdAt.localeCompare(a.createdAt));
-      const manuscripts = this.files ? await this.files.manuscripts().catch(() => []) : [];
+      // a book is a project with nothing under it that is still live; the series that holds them is not one
+      const live = (id: string) => tree.projects.find((p) => p.id === id)?.status !== 'archived' && !ancestorsOf(tree, id).some((a) => a.status === 'archived');
       const books: { id: string; name: string }[] = [];
       for (const p of tree.projects) {
-        if (p.status === 'archived' || ancestorsOf(tree, p.id).some((a) => a.status === 'archived')) continue;
+        if (!live(p.id) || (inView && !inView.has(p.id)) || childrenOf(tree, p.id).some((c) => live(c.id))) continue;
         if ((await this.people.mayOn('canon.propose', p.id)) || (await this.people.mayOn('canon.approve', p.id))) books.push({ id: p.id, name: pathOf(tree, p.id) });
       }
       books.sort((a, b) => a.name.localeCompare(b.name));
-      return { available: true, me: this.people.me, may: { start: books.length > 0 && manuscripts.length > 0 }, checks: rows, books, manuscripts };
+      const inBooks = new Set(books.flatMap((b) => subtreeIds(tree, b.id)));
+      const manuscripts = manuscriptsIn(this.files ? await this.files.manuscripts().catch(() => []) : [], tree, null).filter((f) => !!f.projectId && inBooks.has(f.projectId));
+      return { available: true, me: this.people.me, may: { start: books.length > 0 && manuscripts.length > 0 }, checks: rows, books, manuscripts: manuscripts.map((f) => ({ fileId: f.fileId, path: f.path, version: f.version, projectId: f.projectId! })) };
     } catch (e) {
       if (e instanceof PermissionDenied) return { available: false, reason: 'Your role does not let you see continuity checks.' };
       throw e;

@@ -1247,7 +1247,7 @@ function registerShellIpc(): void {
   const canon = () => new Canon(studio, peopleHost, peopleHost.service ? vaultHost() : null);
   manageLike('canon:state', async (seriesRef?: string) => canon().state(seriesRef ? String(seriesRef) : undefined));
   manageLike('canon:call', async (name: string, ...args: unknown[]) => canon().call(String(name), args));
-  manageLike('continuity:state', async () => canon().continuity());
+  manageLike('continuity:state', async (project?: string) => canon().continuity(project ? String(project) : undefined));
   manageLike('continuity:check', async (id: string) => canon().check(String(id)));
   manageLike('continuity:call', async (name: string, ...args: unknown[]) => canon().continuityCall(String(name), args));
   manageLike('editing:state', async () => editorial().state());

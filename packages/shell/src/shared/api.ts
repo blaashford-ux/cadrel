@@ -933,8 +933,7 @@ export type CanonState =
   | {
       available: true;
       me: string;
-      /** The series this person can read canon of (every top-level project), and the one shown. */
-      series: { id: string; name: string }[];
+      /** The series shown: the one the project in view belongs to. */
       current: { id: string; name: string };
       may: CanonMay;
       entries: CanonEntryRow[];
@@ -962,7 +961,7 @@ export type ContinuityState =
       checks: ContinuityCheckRow[];
       /** The books this person may start a check of, and the manuscripts in the vault one could be run on (the service checks the file is the book's). */
       books: { id: string; name: string }[];
-      manuscripts: { fileId: string; path: string; version: number }[];
+      manuscripts: { fileId: string; path: string; version: number; /** The project its data card names. */ projectId: string }[];
     };
 /** A finding with what a person needs to judge it: the passage in its surroundings, and the canon facts it cites. */
 export interface FindingView extends ContinuityFinding {
@@ -985,12 +984,14 @@ export type ContinuityCheckView =
 export const CONTINUITY_CALLS = ['start', 'deliver', 'decide', 'close', 'verify'] as const;
 export type ContinuityCallName = (typeof CONTINUITY_CALLS)[number];
 export interface CanonApi {
-  state(seriesRef?: string): Promise<CanonState>;
+  /** The canon of the series the given project belongs to (the project in view). With none, the first series this person can read. */
+  state(project?: string): Promise<CanonState>;
   /** One change to canon, by name: see CANON_CALLS. `propose` and `apply` take the series and the change; the rest take a proposal id (reject also a reason). */
   call(name: CanonCallName, ...args: unknown[]): Promise<unknown>;
 }
 export interface ContinuityApi {
-  state(): Promise<ContinuityState>;
+  /** The checks, books and manuscripts of the project in view (a book, or a project and its books); with no project, all of them. */
+  state(project?: string): Promise<ContinuityState>;
   check(id: string): Promise<ContinuityCheckView>;
   call(name: ContinuityCallName, ...args: unknown[]): Promise<unknown>;
 }

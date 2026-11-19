@@ -121,7 +121,7 @@ const api: CadrelApi = {
   },
   lens: { state: () => studioCall('shell:lens:state') },
   canon: { state: (series) => studioCall('shell:canon:state', series), call: (name, ...args) => studioCall('shell:canon:call', name, ...args) },
-  continuity: { state: () => studioCall('shell:continuity:state'), check: (id) => studioCall('shell:continuity:check', id), call: (name, ...args) => studioCall('shell:continuity:call', name, ...args) },
+  continuity: { state: (project) => studioCall('shell:continuity:state', project), check: (id) => studioCall('shell:continuity:check', id), call: (name, ...args) => studioCall('shell:continuity:call', name, ...args) },
   policy: {
     state: () => studioCall('shell:policy:state'),
     set: (change) => studioCall('shell:policy:set', change)

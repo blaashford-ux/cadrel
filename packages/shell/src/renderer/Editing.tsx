@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useScope } from './useScope';
 import type { EditingCompare, EditingItem, EditingLaterVersion, EditingPassRow, EditingPassState, EditingPlanning, EditingState, EditingText, StudioState } from '../shared/api';
 
 const api = window.cadrel.editing;
@@ -227,6 +228,8 @@ const KINDS: { value: EditingPassRow['kind']; label: string }[] = [
 
 /** Plans a pass: which book, which manuscript, what kind, who edits it, and (if the book has one) which edit brief it follows. */
 function PlanForm({ onDone, onError }: { onDone: (newId?: string) => void; onError: (m: string | null) => void }) {
+  const scope = useScope();
+  const inView = scope?.book ?? scope?.project ?? null; // a pass is planned on the book the app is showing, unless another is chosen here
   const [plan, setPlan] = useState<EditingPlanning | null>(null);
   const [projectId, setProjectId] = useState('');
   const [fileId, setFileId] = useState('');
@@ -242,7 +245,7 @@ function PlanForm({ onDone, onError }: { onDone: (newId?: string) => void; onErr
         if (!live) return;
         setPlan(p);
         if (!p.available) return;
-        if (!projectId && p.projects[0]) setProjectId(p.projects[0].id);
+        if (!projectId && p.projects[0]) setProjectId((p.projects.find((x) => x.id === inView) ?? p.projects[0]).id);
         setFileId((f) => (p.files.some((x) => x.fileId === f) ? f : p.files[0]?.fileId ?? ''));
         setEditorId((e) => (p.editors.some((x) => x.id === e) ? e : p.editors[0]?.id ?? ''));
         setBriefId((b) => (p.briefs.some((x) => x.id === b) ? b : ''));
@@ -252,7 +255,7 @@ function PlanForm({ onDone, onError }: { onDone: (newId?: string) => void; onErr
     return () => {
       live = false;
     };
-  }, [projectId, onError]);
+  }, [projectId, onError, inView]);
   if (!plan) return <p className="muted">Loading…</p>;
   if (!plan.available) return <section className="card"><p className="muted">{plan.reason}</p><button type="button" className="quiet" onClick={() => onDone()}>Close</button></section>;
   const file = plan.files.find((f) => f.fileId === fileId);

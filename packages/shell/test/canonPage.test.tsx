@@ -7,7 +7,14 @@ import type { CanonState, ContinuityCheckView, ContinuityState } from '../src/sh
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const bridge = { canon: { state: vi.fn(), call: vi.fn() }, continuity: { state: vi.fn(), check: vi.fn(), call: vi.fn() } };
+const scopeListeners: ((s: unknown) => void)[] = [];
+const scopeOf = (project: string | null, book: string | null = null) => ({ project, book, projectName: project && 'Dragon Rider', bookName: book && 'Book Four', bookImplied: false, links: [], hidden: [] });
+const bridge = {
+  canon: { state: vi.fn(), call: vi.fn() },
+  continuity: { state: vi.fn(), check: vi.fn(), call: vi.fn() },
+  scope: { get: vi.fn(async () => scopeOf('s')), onChange: (f: (s: unknown) => void) => void scopeListeners.push(f), set: vi.fn(), openMenu: vi.fn() }
+};
+const changeScope = async (project: string | null, book: string | null = null) => act(async () => scopeListeners.forEach((f) => f(scopeOf(project, book))));
 let CanonPage: typeof import('../src/renderer/Canon').CanonPage;
 let root: Root;
 let host: HTMLElement;
@@ -18,6 +25,7 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   for (const m of [...Object.values(bridge.canon), ...Object.values(bridge.continuity)]) m.mockReset();
+  scopeListeners.forEach((f) => f(scopeOf('s'))); // every test starts with the series in view and no book
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -30,7 +38,7 @@ afterEach(() => {
 const T = '2026-11-18T10:00:00.000Z';
 const fact = (o: object = {}) => ({ id: 'f1', projectId: 's', entryId: 'e1', text: 'Mara has grey eyes.', status: 'canon', source: { fileId: 'x', version: 1, anchor: { quote: 'grey eyes', prefix: '', suffix: '', start: 9 } }, bookProjectId: 'b1', chapter: 1, supersedesId: null, proposalId: null, createdAt: T, createdBy: 'lea', retiredAt: null, retiredBy: null, retiredReason: null, sourcePath: 'Book One/book.md', established: 'Dragon Rider / Book One, chapter 1', ...o });
 const state = (o: Partial<Extract<CanonState, { available: true }>> & { approve?: boolean; propose?: boolean } = {}): CanonState => ({
-  available: true, me: 'ann', series: [{ id: 's', name: 'Dragon Rider' }], current: { id: 's', name: 'Dragon Rider' }, may: { read: true, propose: o.propose ?? true, approve: o.approve ?? false },
+  available: true, me: 'ann', current: { id: 's', name: 'Dragon Rider' }, may: { read: true, propose: o.propose ?? true, approve: o.approve ?? false },
   entries: [{ id: 'e1', projectId: 's', kind: 'character', name: 'Mara', aliases: ['the Ferrywoman'], state: 'active', summary: 'A ferrywoman.', version: 1, createdAt: T, createdBy: 'lea', updatedAt: T, facts: [fact() as never], pending: 1 }],
   proposals: [{ id: 'p1', projectId: 's', change: 'add_fact', payload: { change: 'add_fact', entryId: 'e1', text: 'Mara limps.' }, state: 'open', reason: null, findingId: null, proposedBy: 'ann', proposedAt: T, decidedBy: null, decidedAt: null, proposerName: 'you', summary: 'Add a fact about Mara: Mara limps.', fromFinding: false }],
   books: [{ id: 'b1', name: 'Book One' }], waitingOnMe: o.approve ? 1 : 0, ...o
@@ -122,7 +130,7 @@ describe('the Continuity tab', () => {
     context: { before: 'Mara walked to the ford with her ', quote: 'green eyes', after: ' narrowed.' }, facts: [{ id: 'f1', entry: 'Mara', text: 'Mara has grey eyes.', status: 'canon', established: 'Dragon Rider / Book One, chapter 1', sourcePath: 'Book One/book.md', passage: 'grey eyes' }], proposal: null, ...o });
   const view = (decide = true, f: object = {}, c: object = {}): ContinuityCheckView => ({ available: true, check: check(c) as never, findings: [finding(f) as never], may: { decide, deliver: true, close: decide }, newerVersion: null, people: [] });
   const open = async (v: ContinuityCheckView) => {
-    bridge.continuity.state.mockResolvedValue({ available: true, me: 'ann', may: { start: true }, checks: [check()], books: [{ id: 'b4', name: 'Dragon Rider / Book Four' }], manuscripts: [{ fileId: 'f4', path: 'Book Four/book.md', version: 2 }] } as ContinuityState);
+    bridge.continuity.state.mockResolvedValue({ available: true, me: 'ann', may: { start: true }, checks: [check()], books: [{ id: 'b4', name: 'Dragon Rider / Book Four' }], manuscripts: [{ fileId: 'f4', path: 'Book Four/book.md', version: 2, projectId: 'b4' }] } as ContinuityState);
     bridge.continuity.check.mockResolvedValue(v);
     await draw(state());
     await click(byText('Continuity checks'));
@@ -188,5 +196,32 @@ describe('the Continuity tab', () => {
     await click(byText('Re-check version 3'));
     expect(bridge.continuity.call).toHaveBeenCalledWith('verify', 'k1', 3);
     expect(host.textContent).toContain('Checked against version 3: 1 finding fixed, 2 still there.');
+  });
+});
+
+describe('following the project in view', () => {
+  it('asks for the canon of the project in view, offers no series to choose, and follows a change of project', async () => {
+    bridge.canon.state.mockResolvedValue(state());
+    await draw(state());
+    expect(bridge.canon.state).toHaveBeenLastCalledWith('s');
+    expect(host.querySelector('select[aria-label="Series"]')).toBeNull();
+    await changeScope('s2');
+    expect(bridge.canon.state).toHaveBeenLastCalledWith('s2');
+  });
+
+  it('starts a check on the book in view, offering only its own manuscripts', async () => {
+    const tree = { projects: [{ id: 's', parentId: null, name: 's', order: 0 }, { id: 'b4', parentId: 's', name: 'b4', order: 0 }, { id: 'b1', parentId: 's', name: 'b1', order: 1 }], links: [] };
+    bridge.continuity.state.mockResolvedValue({ available: true, me: 'ann', may: { start: true }, checks: [], books: [{ id: 'b4', name: 'Dragon Rider / Book Four' }, { id: 'b1', name: 'Dragon Rider / Book One' }], manuscripts: [{ fileId: 'f4', path: 'Book Four/book.md', version: 2, projectId: 'b4' }, { fileId: 'f1', path: 'Book One/book.md', version: 1, projectId: 'b1' }] } as ContinuityState);
+    bridge.canon.state.mockResolvedValue(state());
+    await act(async () => root.render(<CanonPage studio={{ tree } as never} onProject={() => undefined} />));
+    await changeScope('s', 'b4');
+    await click(byText('Continuity checks'));
+    await act(async () => undefined);
+    expect(bridge.continuity.state).toHaveBeenLastCalledWith('b4');
+    const form = host.querySelector('form')!.textContent!;
+    expect(form).toContain('Book Four/book.md (version 2)'); // the one manuscript of the book in view, picked for the person
+    expect(form).not.toContain('Book One/book.md');
+    expect(host.querySelector('select[aria-label="Book"]')).toBeNull(); // no book to choose: it is the one in view
+    expect((byText('Start a check') as HTMLButtonElement).disabled).toBe(false);
   });
 });

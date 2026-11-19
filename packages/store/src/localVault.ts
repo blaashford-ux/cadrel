@@ -80,6 +80,8 @@ export interface VaultEntry {
   size: number | null;
   /** The file's state in its own workflow (draft, approved…). */
   state: string | null;
+  /** The project its data card names (what decides who may see it), or null: not in a project, or not in the vault. */
+  projectId?: string | null;
 }
 
 export interface VaultOptions {
@@ -194,12 +196,12 @@ export class LocalVault {
     return (await this.store.list()).find((f) => f.path.toLowerCase() === rel.toLowerCase()) ?? null;
   }
 
-  private async entry(f: VaultFileRow, st: LocalState): Promise<VaultEntry> {
+  private async entry(f: VaultFileRow & { projectId?: string | null }, st: LocalState): Promise<VaultEntry> {
     const local = st.files[f.path];
     const disk = await this.readLocal(f.path);
     const diskHash = disk ? sha256(disk) : null;
     const mine = f.lock && f.lock.personId === this.o.personId && f.lock.machine === this.o.machine;
-    const base: Omit<VaultEntry, 'status' | 'modified'> = { path: f.path, kind: fileKind(f.path), fileId: f.id, version: f.currentVersion, localVersion: local?.version ?? null, lock: f.lock && { personId: f.lock.personId, machine: f.lock.machine, since: f.lock.since }, size: disk ? disk.length : f.size, state: f.state };
+    const base: Omit<VaultEntry, 'status' | 'modified'> = { path: f.path, kind: fileKind(f.path), fileId: f.id, version: f.currentVersion, localVersion: local?.version ?? null, lock: f.lock && { personId: f.lock.personId, machine: f.lock.machine, since: f.lock.since }, size: disk ? disk.length : f.size, state: f.state, projectId: f.projectId ?? null };
     const changed = !!diskHash && !!local && diskHash !== local.hash;
     if (mine) return { ...base, status: disk ? 'checked-out-by-me' : 'missing', modified: changed };
     if (f.lock) return { ...base, status: 'checked-out-by-other', modified: changed };

@@ -6,7 +6,7 @@
  * the page needs to arrange itself: which passes wait on this person and for what, and the items of one pass with the decision and the check of the
  * revision joined to each.
  */
-import { compareTexts, getProject, makeAnchor, type CompareRow, type FileVersion, type NewQuery, type PassRecord } from '@cadrel/kernel';
+import { compareTexts, getProject, makeAnchor, subtreeIds, type CompareRow, type FileVersion, type NewQuery, type PassRecord } from '@cadrel/kernel';
 import { PermissionDenied } from '@cadrel/service';
 import type { EditingBriefs, EditingCall, EditingCompare, EditingCompareRow, EditingItem, EditingLaterVersion, EditingPassRow, EditingPassState, EditingPlanning, EditingState, EditingText, NewEditingItem, NewEditingPass } from '../shared/api';
 import type { PeopleHost } from './people';
@@ -20,7 +20,8 @@ const PASS_CALLS = new Set<EditingCall>(['start', 'deliver', 'respond', 'close',
 
 /** What the page needs from the vault: the manuscripts there, and the text and versions of one. Given by the vault host (see vaultHost.ts). */
 export interface EditorialFiles {
-  manuscripts(): Promise<{ fileId: string; path: string; version: number }[]>;
+  /** `projectId` is the project the file's data card names (what a book's manuscripts are picked by); absent or null for a file in none. */
+  manuscripts(): Promise<{ fileId: string; path: string; version: number; projectId?: string | null }[]>;
   textOf(fileId: string, version: number): Promise<string>;
   versionsOf(fileId: string): Promise<FileVersion[]>;
 }
@@ -55,6 +56,16 @@ export function collapseRows(rows: CompareRow[], keep = 1): EditingCompareRow[] 
     i = j;
   }
   return out;
+}
+
+/**
+ * The manuscripts that belong to a project (and what is under it): those whose data card names a project in its subtree. With no project, all of
+ * them. A file in no project is in none, so it is offered under none.
+ */
+export function manuscriptsIn<T extends { projectId?: string | null }>(files: T[], tree: Parameters<typeof subtreeIds>[0], projectId: string | null | undefined): T[] {
+  if (!projectId) return files;
+  const inside = new Set(subtreeIds(tree, projectId));
+  return files.filter((f) => !!f.projectId && inside.has(f.projectId));
 }
 
 export class Editorial {
@@ -207,8 +218,9 @@ export class Editorial {
       const mine: { id: string; name: string }[] = [];
       for (const p of tree.projects) if (p.status !== 'archived' && (await this.people.mayOn('edit.assign', p.id))) mine.push({ id: p.id, name: p.name });
       if (!mine.length) return { available: false, reason: 'Your role does not let you plan editorial passes.' };
-      const files = await this.files.manuscripts();
       const chosen = projectId && mine.some((p) => p.id === projectId) ? projectId : null;
+      // a pass is planned over one of the chosen book's manuscripts: with a book chosen, only the files its data cards name inside it are offered
+      const files = manuscriptsIn(await this.files.manuscripts(), tree, chosen).map(({ fileId, path, version }) => ({ fileId, path, version }));
       const [editors, briefs] = chosen
         ? await Promise.all([as.work.assignable(chosen), as.briefs.list({ projectId: chosen, kind: 'edit' })])
         : [[], []];

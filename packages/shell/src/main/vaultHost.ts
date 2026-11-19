@@ -50,10 +50,10 @@ export class VaultHost {
   }
 
   /** The manuscripts in the vault (with at least one version): what an editorial pass can be planned over. */
-  async manuscripts(): Promise<{ fileId: string; path: string; version: number }[]> {
+  async manuscripts(): Promise<{ fileId: string; path: string; version: number; projectId: string | null }[]> {
     return (await this.vault().list())
       .filter((e) => e.kind === 'manuscript' && e.fileId !== null && (e.version ?? 0) > 0)
-      .map((e) => ({ fileId: e.fileId!, path: e.path, version: e.version! }));
+      .map((e) => ({ fileId: e.fileId!, path: e.path, version: e.version!, projectId: e.projectId ?? null }));
   }
 
   private async pathOf(fileId: string): Promise<string> {
