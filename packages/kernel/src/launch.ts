@@ -516,6 +516,32 @@ export async function planView(db: Db, c: Pick<Ctx, 'studioId'>, planId: string,
   };
 }
 
+/**
+ * Marks done the tasks of items whose requirement the records now meet (an approved cover ticks "Cover approved"), so the Planner and each person's
+ * Home tell the truth without anyone ticking. Dependencies are respected: it goes round until nothing more can be done. Never reopens a task.
+ */
+export async function syncItems(db: Db, c: Ctx, planId: string, f: PlanFacts): Promise<string[]> {
+  const items = (await itemsOf(db, planId)).filter((i) => i.requirement.kind !== 'manual' && requirementMet(i.requirement, f).met);
+  const done: string[] = [];
+  for (let pass = 0; pass < items.length + 1; pass++) {
+    let moved = false;
+    for (const it of items) {
+      if (done.includes(it.key)) continue;
+      const t = await getTask(db, c, it.taskId);
+      if (!t || t.state !== 'open') continue;
+      try {
+        await setTaskState(db, c, t.id, 'done');
+        done.push(it.key);
+        moved = true;
+      } catch (e) {
+        if (!(e instanceof WorkError) || e.code !== 'blocked') throw e;
+      }
+    }
+    if (!moved) break;
+  }
+  return done;
+}
+
 // ---- moving the date --------------------------------------------------------------------------------------------------------------
 
 export interface DateChange {

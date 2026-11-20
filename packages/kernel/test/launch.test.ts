@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEMPLATES, NO_FACTS, WorkError, addDays, applyDateProposal, approvePlan, archiveTemplate, assignItem, cancelPlan, cleanTemplateItems, createPerson, createPlan, createTemplate, daysBetween,
   dateProposalsOf, ensureDefaultTemplates, getPlan, getTask, goLive, hashText, itemsOf, launchFactsOf, linkItemRequest, listPlans, listTemplates, markItem, planRevision, planView, proposeDate,
-  rejectDateProposal, requirementMet, reviseTemplate, setTaskState, updatePlan, type Ctx, type Db, type PlanFacts
+  rejectDateProposal, requirementMet, reviseTemplate, setTaskState, syncItems, updatePlan, type Ctx, type Db, type PlanFacts
 } from '../src';
 import { memoryDb } from './sqlite';
 
@@ -169,9 +169,12 @@ describe('what is outstanding is computed from the records', () => {
     expect(status(v, 'arc').status).toBe('done'); // twelve readers have the file; the record is what counts
     v = await view(plan.id, { ...f, requests: { req1: { fulfilled: true, title: 'Banner for the preorder' } } });
     expect(status(v, 'art').status).toBe('done');
-    // a manual item: done when its task is, and then not outstanding
+    // the records tick the tasks of what they meet; a manual item is done when its task is
+    const ready0 = facts({ cover: { approved: true, licenceExpired: false }, preflight: { checked: 1, openErrors: 0 } });
+    expect(await syncItems(db, at(), plan.id, ready0)).toEqual(['cover', 'preflight']);
+    expect(await syncItems(db, at(), plan.id, ready0)).toEqual([]); // nothing more to tick
     const pre = (await pairs(plan.id)).find((p) => p.item.key === 'preflight')!;
-    await setTaskState(db, at(), pre.task.id, 'done');
+    expect((await getTask(db, at(), pre.task.id))!.state).toBe('done');
     const ready = facts({ cover: { approved: true, licenceExpired: false }, preflight: { checked: 1, openErrors: 0 } });
     expect(status(await view(plan.id, ready), 'upload').status).toBe('outstanding');
     await markItem(db, at(), plan.id, 'upload', true);

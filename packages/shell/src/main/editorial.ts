@@ -304,7 +304,7 @@ export class Editorial {
     try {
       await this.studio.assertVisible(String(projectId));
       const [briefs, manuscript, edit] = await Promise.all([as.briefs.list({ projectId: String(projectId) }), this.people.mayOn('task.edit', projectId), this.people.mayOn('edit.assign', projectId)]);
-      // cover and art briefs belong to the Art page, not to editing
+      // cover, art and marketing briefs belong to the Art and Launch pages, not to editing
       return { available: true, may: { manuscript, edit }, briefs: briefs.filter((b) => b.kind === 'manuscript' || b.kind === 'edit'), people: await this.people.peopleList().catch(() => [] as { id: string; name: string }[]) };
     } catch (e) {
       if (e instanceof PermissionDenied) return { available: false, reason: 'Your role does not let you see the briefs of this project.' };

@@ -83,8 +83,8 @@ export interface ServiceOptions {
   projects?: () => Promise<ProjectTree | null>;
 }
 
-const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read', cover: 'asset.read', art: 'asset.read' };
-const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign', cover: 'brief.write', art: 'brief.write' };
+const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read', cover: 'asset.read', art: 'asset.read', launch: 'launch.read', campaign: 'launch.read' };
+const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign', cover: 'brief.write', art: 'brief.write', launch: 'launch.manage', campaign: 'launch.manage' };
 
 export class StudioService {
   constructor(private readonly o: ServiceOptions) {}

@@ -9,7 +9,7 @@ import type { Ctx } from './catalogue';
 import type { Db } from './vault';
 import { WorkError } from './work';
 
-export const BRIEF_KINDS = ['manuscript', 'edit', 'cover', 'art'] as const;
+export const BRIEF_KINDS = ['manuscript', 'edit', 'cover', 'art', 'launch', 'campaign'] as const;
 export type BriefKind = (typeof BRIEF_KINDS)[number];
 
 const MAX_TITLE = 200;
@@ -102,7 +102,7 @@ export interface NewBrief {
 }
 export async function createBrief(db: Db, c: Ctx, i: NewBrief): Promise<BriefRecord> {
   if (typeof i?.projectId !== 'string' || !i.projectId) fail('invalid', 'A project is needed.');
-  if (!BRIEF_KINDS.includes(i.kind)) fail('invalid', 'A brief is for a manuscript, an edit, a cover or art.');
+  if (!BRIEF_KINDS.includes(i.kind)) fail('invalid', 'A brief is for a manuscript, an edit, a cover, art, a launch or a campaign.');
   const title = clean(i.title, 'The title', MAX_TITLE, true);
   const body = clean(i.body, 'The brief', MAX_BODY, true);
   const id = newRecordId();
