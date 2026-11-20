@@ -174,7 +174,7 @@ export async function deliverRequest(db: Db, c: Ctx, id: string, d: { assetId: s
   const v = await db.first<{ n: number }>('SELECT n FROM file_version WHERE file_id = ? AND n = ?', [a.fileId, d.version]);
   if (!v) return fail('not-found', 'That version of the asset is not there.');
   const problems = checkSpec(q.spec, d.info);
-  if (problems.length) return fail('invalid', `That file does not meet what was asked for (${describeSpec(q.spec)}).`, problems);
+  if (problems.length) return fail('invalid', `That file does not meet what was asked for (${describeSpec(q.spec)}). ${problems.join(' ')}`, problems);
   await db.batch([
     { sql: "UPDATE asset_request SET state = 'delivered', asset_id = ?, delivered_version = ?, measured = ?, updated_at = ? WHERE id = ? AND studio_id = ?", params: [a.id, d.version, JSON.stringify(d.info), c.now, id, c.studioId] },
     audit(c, 'launch.request_deliver', id, { assetId: a.id, version: d.version, measured: `${d.info.width}×${d.info.height} ${d.info.format}` })

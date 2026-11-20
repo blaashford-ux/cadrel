@@ -63,6 +63,7 @@ import { artLens } from './art';
 import { Canon } from './canon';
 import { Art } from './art';
 import { Preflight } from './preflight';
+import { Launch } from './launch';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -737,7 +738,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'launch', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 
 /** Write's window shows the author's side (Write) or a Beta Reader's (Read): the same window, told which. */
 let writeMode: 'write' | 'read' = 'write';
@@ -1263,6 +1264,16 @@ function registerShellIpc(): void {
   manageLike('preflight:state', async (project?: string) => preflight().state(project ? String(project) : undefined));
   manageLike('preflight:run', async (fileId: string, editionId: string | null) => preflight().run(String(fileId), editionId ? String(editionId) : null));
   manageLike('preflight:get', async (runId: string) => preflight().get(String(runId)));
+  const launch = () => new Launch(studio, peopleHost, peopleHost.service ? vaultHost() : null, market.service.status().libraryRoot ? { history: (asin) => market.service.book(asin)?.history ?? [] } : null);
+  manageLike('launch:state', async (project?: string) => launch().state(project ? String(project) : undefined));
+  manageLike('launch:plan', async (id: string) => launch().plan(String(id)));
+  manageLike('launch:readers', async (id: string) => launch().readers(String(id)));
+  manageLike('launch:brief', async (id: string) => launch().brief(String(id)));
+  manageLike('launch:market', async (project?: string) => launch().market(project ? String(project) : undefined));
+  manageLike('launch:call', async (name: string, ...args: unknown[]) => launch().call(String(name), args));
+  manageLike('launch:deliver', async (requestId: string, assetId: string, version: number) => launch().deliver(String(requestId), String(assetId), Number(version)));
+  manageLike('launch:publishFigures', async (project?: string) => launch().publishFigures(project ? String(project) : undefined));
+  manageLike('launch:window', async (id: string, days: number) => launch().decisionWindow(String(id), Number(days)));
   manageLike('preflight:waive', async (runId: string, seq: number, reason: string) => preflight().waive(String(runId), Number(seq), String(reason ?? '')));
   manageLike('editing:state', async () => editorial().state());
   manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));

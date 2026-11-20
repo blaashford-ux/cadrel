@@ -25,6 +25,7 @@ const TOP: Item[] = [
   { page: 'canon', label: 'Canon', icon: svg('M4 5.5A1.5 1.5 0 0 1 5.5 4H20v14H5.5A1.5 1.5 0 0 0 4 19.5v-14ZM4 19.5A1.5 1.5 0 0 0 5.5 21H20M12 8v5m0 2.5v.5') },
   { page: 'art', label: 'Art', icon: svg('M4 5h16v14H4zM4 15l4.5-4.5 4 4 3-3L20 16M15.5 8.5h.01') },
   { page: 'preflight', label: 'Preflight', icon: svg('M5 12.5l4.5 4.5L19 7.5M4 4h16v16H4z') },
+  { page: 'launch', label: 'Launch', icon: svg('M5 19c1-5 4-9 9-12l5-2-2 5c-3 5-7 8-12 9ZM9 15l-3 3M15 9h.01') },
   { page: 'projects', label: 'Projects', icon: svg('M3 7.5A1.5 1.5 0 0 1 4.5 6H9l2 2h8.5A1.5 1.5 0 0 1 21 9.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5v-10Z') },
   { page: 'files', label: 'Files', icon: svg('M6 3.5h8l4 4V20.5H6V3.5ZM14 3.5V8h4M9 13h6M9 16.5h6') },
   { page: 'notes', label: 'Notes', icon: svg('M5 4.5h14v11.5l-4 4H5v-15.5ZM15 20v-4h4M8 9h8M8 12.5h5') }

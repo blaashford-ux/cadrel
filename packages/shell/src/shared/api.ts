@@ -1,15 +1,15 @@
-import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { Asset, AssetApproval, AssetReplacement, AssetUse, Concept, Feedback, FileUse, PreflightResult, PreflightRun, CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
+import type { ArcCampaign, ArcCounts, ArcReader, AssetRequest, BriefComp, CompSet, DateProposalRecord, DecisionWindow, ItemStatus, LaunchReview, MarketDecision, MarketFigure, MarketReport, PlanItem, PlanView, ReleasePlan, RequestView, ReviewCrossCheck, TaskRecord, Asset, AssetApproval, AssetReplacement, AssetUse, Concept, Feedback, FileUse, PreflightResult, PreflightRun, CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'launch', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -1365,6 +1365,127 @@ export interface PreflightApi {
   waive(runId: string, seq: number, reason: string): Promise<PreflightRunView>;
 }
 
+
+// ---- launch and market (docs/M6-PLAN.md) -----------------------------------------------------------------------------------------
+
+export interface LaunchMay {
+  read: boolean;
+  /** Plans, ARC rounds, requests, reviews, decisions, templates; reader details. */
+  manage: boolean;
+  /** Approve a plan (and apply a change of date to one that was approved). */
+  approve: boolean;
+  /** Publish Market figures from this computer's library; save a report. */
+  capture: boolean;
+}
+export interface PlanSummary {
+  plan: ReleasePlan;
+  projectName: string;
+  editionLabel: string | null;
+  counts: Record<ItemStatus, number>;
+  /** Required items not done. */
+  outstanding: number;
+  late: number;
+  blocked: number;
+  daysToRelease: number;
+  changedSinceApproval: boolean;
+}
+export interface LaunchBriefRow {
+  id: string;
+  title: string;
+  kind: 'launch' | 'campaign';
+  version: number;
+  projectName: string;
+  comps: number;
+  updatedAt: string;
+}
+export type LaunchState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      project: { id: string; name: string };
+      may: LaunchMay;
+      plans: PlanSummary[];
+      templates: { id: string; name: string; version: number; items: number }[];
+      /** The editions of the books in view, to choose a plan's edition from. */
+      editions: { id: string; label: string; asin: string | null; projectId: string | null }[];
+      /** People who may be given a plan's work (assigned to the book). */
+      people: { id: string; name: string }[];
+      briefs: LaunchBriefRow[];
+      requests: (RequestView & { projectName: string; assigneeName: string | null })[];
+    };
+export interface LaunchItemRow {
+  view: PlanView['items'][number];
+  assigneeName: string | null;
+}
+export type LaunchPlanView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      plan: ReleasePlan;
+      projectName: string;
+      editionLabel: string | null;
+      asin: string | null;
+      may: LaunchMay;
+      items: LaunchItemRow[];
+      outstanding: LaunchItemRow[];
+      counts: Record<ItemStatus, number>;
+      revision: string;
+      changedSinceApproval: boolean;
+      daysToRelease: number;
+      approvedByName: string | null;
+      proposals: (DateProposalRecord & { proposerName: string })[];
+      campaigns: (ArcCampaign & { counts: ArcCounts; cross: ReviewCrossCheck })[];
+      requests: (RequestView & { assigneeName: string | null })[];
+      review: LaunchReview | null;
+      /** Figures of the edition: how many have been published and the newest. */
+      figures: { count: number; latest: MarketFigure | null };
+    };
+export type LaunchBriefView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      brief: { id: string; title: string; kind: 'launch' | 'campaign'; projectId: string; version: number; body: string; note: string; writtenAt: string; writtenByName: string };
+      versions: { n: number; body: string; note: string; writtenAt: string; writtenByName: string }[];
+      comps: BriefComp[];
+      may: LaunchMay;
+      /** A newer figure than the one pinned exists for each of these ASINs. */
+      newer: string[];
+    };
+export type LaunchMarketView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      project: { id: string; name: string };
+      may: LaunchMay;
+      editions: { id: string; label: string; asin: string | null; figures: number; latest: MarketFigure | null }[];
+      compSets: CompSet[];
+      reports: Omit<MarketReport, 'payload'>[];
+      decisions: (MarketDecision & { editionLabel: string; byName: string })[];
+    };
+export const LAUNCH_CALLS = [
+  'createPlan', 'updatePlan', 'assign', 'mark', 'approve', 'goLive', 'cancel', 'proposeDate', 'applyDate', 'rejectDate', 'ask', 'cancelRequest', 'createCampaign', 'reportReviews', 'closeCampaign',
+  'addReader', 'setReader', 'eraseReader', 'openReview', 'refreshReview', 'writeReview', 'finishReview', 'createBrief', 'reviseBrief', 'pinComps', 'createCompSet', 'saveReport', 'decide',
+  'createTemplate', 'reviseTemplate'
+] as const;
+export type LaunchCallName = (typeof LAUNCH_CALLS)[number];
+export interface LaunchApi {
+  /** The release plans of the project in view (the book, or the series with its books), with what is outstanding. */
+  state(project?: string): Promise<LaunchState>;
+  plan(id: string): Promise<LaunchPlanView>;
+  /** Reader names and emails of an ARC round: managers only, and logged. */
+  readers(campaignId: string): Promise<{ readers: ArcReader[] } | { available: false; reason: string }>;
+  brief(id: string): Promise<LaunchBriefView>;
+  market(project?: string): Promise<LaunchMarketView>;
+  /** A change, by name: see LAUNCH_CALLS. */
+  call(name: LaunchCallName, ...args: unknown[]): Promise<unknown>;
+  /** Offers an asset's version against a request; the file is measured here, and one that does not meet the spec is refused with what was found. */
+  deliver(requestId: string, assetId: string, version: number): Promise<unknown>;
+  /** Publishes this computer's captured figures for the books in view to the Studio. */
+  publishFigures(project?: string): Promise<{ added: number; skipped: number; books: number } | { available: false; reason: string }>;
+  decisionWindow(decisionId: string, days: number): Promise<DecisionWindow | { available: false; reason: string }>;
+}
+
 export interface CadrelApi {
   scope: ScopeApi;
   studios: StudiosApi;
@@ -1376,6 +1497,7 @@ export interface CadrelApi {
   continuity: ContinuityApi;
   art: ArtApi;
   preflight: PreflightApi;
+  launch: LaunchApi;
   work: WorkApi;
   editing: EditingApi;
   vault: VaultApi;
