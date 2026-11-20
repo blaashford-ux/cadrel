@@ -76,6 +76,9 @@ describe('notes', () => {
     expect(queryNotes(notes, { origin: 'human', status: 'any' })).toHaveLength(2);
     expect(queryNotes(notes, { status: 'any', category: 'Pricing' }).map((n) => n.body)).toEqual(['alpha']);
     expect(queryNotes(notes, { text: 'EPIC' }).map((n) => n.body)).toEqual(['beta']); // matches the target label
+    expect(queryNotes(notes, { status: 'any', excludeModules: ['write'] }).map((n) => n.body)).toEqual(['alpha', 'beta']);
+    expect(queryNotes(notes, { status: 'any', excludeModules: ['market'] }).map((n) => n.body)).not.toContain('beta');
+    expect(queryNotes(notes, { status: 'any', excludeCategories: ['Pricing'] }).map((n) => n.body)).toEqual(['gamma', 'beta']);
     notes = deleteNote(notes, a);
     expect(queryNotes(notes, { status: 'any' })).toHaveLength(2);
     expect(queryNotes(notes, { status: 'deleted' })).toHaveLength(1);

@@ -88,9 +88,20 @@ export function NotesPanel({ notes, api, addTo, projectName, act, onOpenModule }
   const [body, setBody] = useState('');
   const [topic, setTopic] = useState('');
 
+  const [noSources, setNoSources] = useState<string[]>([]);
+  const [noTopics, setNoTopics] = useState<string[]>([]);
+
   const modules = useMemo(() => [...new Set(notes.map((n) => n.target?.module).filter((m): m is string => !!m))].sort(), [notes]);
-  const shown = useMemo(() => queryNotes(notes, { status, text: text.trim() || undefined, module: mod || undefined }), [notes, status, text, mod]);
-  const topics = useMemo(() => [...new Set([...STANDARD_TOPICS, ...notes.map((n) => n.category).filter((c): c is string => !!c)])], [notes]);
+  // Sources a note can come from: each module, and the studio itself for notes with no module.
+  const sources = useMemo(() => [...new Set(notes.map((n) => n.target?.module ?? 'studio'))].sort(), [notes]);
+  const usedTopics = useMemo(() => [...new Set(notes.map((n) => n.category).filter((c): c is string => !!c))].sort(), [notes]);
+  const shown = useMemo(
+    () => queryNotes(notes, { status, text: text.trim() || undefined, module: mod || undefined, excludeModules: noSources, excludeCategories: noTopics }),
+    [notes, status, text, mod, noSources, noTopics]
+  );
+  const topics = useMemo(() => [...new Set([...STANDARD_TOPICS, ...usedTopics])], [usedTopics]);
+  const toggle = (set: React.Dispatch<React.SetStateAction<string[]>>, v: string) => set((cur) => (cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v]));
+  const excluded = noSources.length + noTopics.length;
 
   return (
     <div className="cn-panel">
@@ -129,6 +140,32 @@ export function NotesPanel({ notes, api, addTo, projectName, act, onOpenModule }
         )}
         <input type="search" value={text} onChange={(e) => setText(e.target.value)} placeholder="Search notes" aria-label="Search notes" />
       </div>
+      {(sources.length > 1 || usedTopics.length > 0) && (
+        <details className="cn-exclude">
+          <summary>Exclude{excluded > 0 ? ` (${excluded})` : ''}</summary>
+          {sources.length > 1 && (
+            <fieldset>
+              <legend className="cn-muted">Hide sources</legend>
+              {sources.map((s) => (
+                <label key={s} className="inline">
+                  <input type="checkbox" checked={noSources.includes(s)} onChange={() => toggle(setNoSources, s)} /> {s === 'studio' ? 'Studio' : MODULE_NAMES[s] ?? s}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {usedTopics.length > 0 && (
+            <fieldset>
+              <legend className="cn-muted">Hide topics</legend>
+              {usedTopics.map((t) => (
+                <label key={t} className="inline">
+                  <input type="checkbox" checked={noTopics.includes(t)} onChange={() => toggle(setNoTopics, t)} /> {t}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {excluded > 0 && <button type="button" className="quiet" onClick={() => { setNoSources([]); setNoTopics([]); }}>Clear exclusions</button>}
+        </details>
+      )}
       {shown.length === 0 ? (
         <p className="cn-muted">{notes.length === 0 ? 'No notes yet.' : 'No notes match.'}</p>
       ) : (

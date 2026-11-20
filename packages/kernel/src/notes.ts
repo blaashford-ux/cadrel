@@ -188,14 +188,22 @@ export interface NoteQuery {
   kind?: NoteKind;
   /** Notes whose body, replies or target label contain this. */
   text?: string;
+  /** Leave out notes from these sources: module ids, or `studio` for notes made in the studio itself. */
+  excludeModules?: string[];
+  /** Leave out notes with these topics. */
+  excludeCategories?: string[];
 }
 
 /** Newest first. Deleted notes are only returned when asked for by status. */
 export function queryNotes<T extends Pick<Note, 'projectId' | 'target' | 'status' | 'origin' | 'category' | 'kind' | 'body' | 'replies' | 'updatedAt'>>(notes: T[], q: NoteQuery = {}): T[] {
   const ids = q.projectIds && new Set(q.projectIds);
   const needle = q.text?.toLowerCase();
+  const noMods = q.excludeModules?.length ? new Set(q.excludeModules) : null;
+  const noCats = q.excludeCategories?.length ? new Set(q.excludeCategories.map((c) => normalizeCategory(c))) : null;
   return notes
     .filter((n) => {
+      if (noMods && noMods.has(n.target?.module ?? 'studio')) return false; // notes with no module are the studio's own
+      if (noCats && n.category && noCats.has(n.category)) return false;
       if (ids && !(n.projectId !== null && ids.has(n.projectId))) return false;
       if (q.module && n.target?.module !== q.module) return false;
       const status = q.status ?? 'open';
