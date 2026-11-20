@@ -1,8 +1,22 @@
 # M6: Launch and market, implementation plan
 
-Status: **planned, not started** (19 November 2026). Written against `dev` with M5 built (server revision 11, database step 23); the next step would be **server revision 12, database step 24**. Scope comes from [PLAN.md](PLAN.md) section M6; roles in [PERMISSIONS.md](PERMISSIONS.md) (the Launch and Market rows); the connected book record in [ARCHITECTURE.md](ARCHITECTURE.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
+Status: **built on `dev` and not yet released** (20 November 2026; server revision 12, database step 24). The decisions below were taken on 20 November 2026 as recommended: ARC is tracked, not sent; market numbers are published to the Studio from a computer with the library; moving the date is a proposal; reader details are kept for managers and erasable; no rating is stored per reader; two releases. Planned against `dev` with M5 built. Scope comes from [PLAN.md](PLAN.md) section M6; roles in [PERMISSIONS.md](PERMISSIONS.md) (the Launch and Market rows); the connected book record in [ARCHITECTURE.md](ARCHITECTURE.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
 
 **Exit (from PLAN.md):** a release is planned, executed and reviewed from one record.
+
+## What was built, and where it differs from the plan
+
+All ten slices are built and tested (kernel 419, service 203, MCP 124, shell 386 including `m6Exit.test.ts`; the Launch page is also drawn and clicked in jsdom, `launchPage.test.tsx`). The manual walk-through is [M6-EXIT-TEST.md](M6-EXIT-TEST.md) and has no recorded run. Where the build departs from the plan below, so the plan is not read as describing what shipped:
+
+- **A request's state is open, delivered or cancelled; "approved" is computed.** Whether it is fulfilled (delivered, meets the spec as measured, that version approved) is worked out when it is read, and its task is ticked then.
+- **An ARC round's minimum is part of the template.** The plan's "send ARC copies" item asks for ten readers (fifteen for a series launch) to have the file; a manager edits the template to change that. The round's own target is separate.
+- **The review is opened by a manager, not on a schedule.** The launch view on Home lists launches more than a month past release that have none.
+- **The Market figures carry price, rank, ratings count and average, not categories.** The library's history does not hold them per capture; the column is there for when it does.
+- **Names are compared and editions listed only when the catalogue can be read.** A role given only on one book cannot read the catalogue (a Studio-wide permission), as for Preflight; the exit test's Marketing holds the Studio and is assigned to the series.
+- **`launch_ready` holds until every required item is done**, since an item that is only waiting counts as blocked. A plan needs to exist for it to pass.
+- **Marketing can approve a plan** (managing launches includes approving them in the default roles) as well as the Director.
+- **Not built as screens:** editing a template (the calls exist), creating a comp set or saving a report by hand (the assistant saves reports; the calls exist), and a Home calendar of releases beyond the Planner's tasks.
+- **Not built:** offline use; ARC copies sent by Cadrel; retailer integration; money (M7).
 
 ## What this is for
 

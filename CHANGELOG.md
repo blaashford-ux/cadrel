@@ -2,6 +2,28 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (M6: launch and market)
+
+Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).
+
+### Launch
+- **A Launch page** (in the rail) holds a book's **release plan**, made from a template for a release date and **worked backwards from it**: each item is a task, due exactly that many days before or after, so it is in the Planner and on people's Home. Two templates ship (Ebook launch, Series launch); a manager can revise them (each revision is a new version).
+- **What is outstanding is worked out from the records, not typed in.** An approved cover (Art), a clear Preflight result, a sign-off, a delivered campaign banner, a marketing brief and ARC readers who have the file each clear their item and tick its task. Every item that cannot be done says **why**, in words.
+- **Moving the release date makes a proposal**: each open item's old and new date is listed (done items keep theirs), and nothing changes until it is applied. **Approving a plan is of an exact revision**: change it afterwards and it says so and needs approving again.
+- **Ask Art** for a banner or an ad with a size and format. A file of the wrong size is **refused with what was found**; the request is fulfilled when a version that meets the spec is approved.
+- **ARC rounds** keep count of who has the file and who has reviewed it, against a target, with the file's exact version. Everyone who can read the plan sees **counts**; names and emails are for those who manage launches, every look is logged, and a reader can be **erased** (the count stays). **No star rating is kept and nothing asks for a favourable review.** Cadrel keeps count; it does not send the file.
+- **After the launch**, the review fills from published figures at 7, 30 and 90 days, each with its capture date, with what was planned kept apart from what was measured.
+
+### Market in the Studio
+- **Figures are published to the Studio** from a computer's Market library (price, rank, ratings, each with when it was captured), once each; the pages stay where they were captured.
+- **A marketing brief pins its comps' figures as of their capture dates**; newer captures do not change it, and it says when they exist.
+- **Changes to cover, blurb, keywords and price are recorded with why**, and Cadrel shows the figures in the days before and after, how many points there are on each side, and the other changes in the same days. It never says a change caused anything.
+
+### Around it
+- **A Launch view on Home** for Marketing (launches, art waiting, reviews due) and **launches at risk** on the Director's Home.
+- **Your assistant** can read what is outstanding, ARC counts, figures and comps, read and draft marketing briefs (a new version a person keeps or reverts) and save a report, with two new skills (Launch Review, Marketing Brief from Comps). It cannot approve a plan, apply a date, change a reader or publish figures.
+- **An optional gate** (off unless an administrator adds it): *Its release plan has no late or blocked required item*.
+
 ## Unreleased (M5: art, assets and Preflight)
 
 Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade).
