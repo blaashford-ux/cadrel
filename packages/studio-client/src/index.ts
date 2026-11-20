@@ -34,7 +34,9 @@ const READS = new Set([
   'canon.seriesOf', 'canon.listEntries', 'canon.getEntry', 'canon.entryVersions', 'canon.listFacts', 'canon.getFact', 'canon.stamp', 'canon.listProposals', 'canon.waitingForMe', 'canon.getProposal',
   'continuity.list', 'continuity.get', 'continuity.findings', 'continuity.counts',
   'assets.list', 'assets.get', 'assets.ofFile', 'assets.approvals', 'assets.approved', 'assets.uses', 'assets.whereUsed', 'assets.replacements', 'assets.concepts', 'assets.feedback', 'assets.readiness',
-  'preflight.list', 'preflight.get', 'preflight.latest'
+  'preflight.list', 'preflight.get', 'preflight.latest',
+  'launch.template', 'launch.plans', 'launch.dates', 'launch.requests', 'launch.request', 'launch.campaigns', 'launch.crossCheck', 'launch.review',
+  'marketing.figures', 'marketing.latest', 'marketing.compSets', 'marketing.briefComps', 'marketing.reports', 'marketing.report', 'marketing.decisions', 'marketing.window'
 ]);
 /** How long the Studio's change counter is trusted before it is asked again. */
 export const FRESH_MS = 3_000;
