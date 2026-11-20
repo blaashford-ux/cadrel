@@ -29,6 +29,7 @@ export * from './editGate';
 export * from './sql';
 export * from './viewScope';
 export * from './visibility';
+export * from './launch';
 export * from './policy';
 export * from './preview';
 export * from './imageInfo';

@@ -12,7 +12,7 @@ export const RECORD_TABLES = [
   'person', 'pen_name', 'pen_name_person', 'team', 'team_member', 'role', 'role_capability', 'assignment', 'capability_seen',
   'workflow', 'workflow_stage', 'workflow_transition', 'workflow_transition_role',
   'ip', 'series', 'book', 'edition', 'book_project', 'task', 'task_dependency', 'approval', 'approval_approver', 'decision', 'brief', 'brief_version',
-  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card', 'beta_read', 'beta_note', 'edit_pass', 'edit_query', 'edit_decision', 'edit_verification', 'studio_policy', 'book_finance', 'canon_entry', 'canon_entry_version', 'canon_fact', 'canon_proposal', 'continuity_check', 'continuity_finding', 'asset', 'asset_approval', 'asset_use', 'asset_replacement', 'concept', 'asset_feedback', 'preflight_run', 'preflight_result',
+  'vault_file', 'file_version', 'checkout', 'orphan', 'file_reference', 'file_card', 'beta_read', 'beta_note', 'edit_pass', 'edit_query', 'edit_decision', 'edit_verification', 'studio_policy', 'book_finance', 'canon_entry', 'canon_entry_version', 'canon_fact', 'canon_proposal', 'continuity_check', 'continuity_finding', 'asset', 'asset_approval', 'asset_use', 'asset_replacement', 'concept', 'asset_feedback', 'preflight_run', 'preflight_result', 'release_template', 'release_template_version', 'release_plan', 'release_item', 'date_proposal', 'asset_request', 'market_figure', 'comp_set', 'brief_comp', 'market_report', 'arc_campaign', 'arc_reader', 'launch_review', 'market_decision',
   'contribution', 'credit', 'rights', 'revenue_share', 'audit'
 ] as const;
 
