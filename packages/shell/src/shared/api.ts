@@ -1047,6 +1047,16 @@ export interface LensViews {
     canonWaiting: number;
     /** Art: assets awaiting approval, and EPUBs whose latest Preflight run has errors (0 and empty where this person sees none). */
     art: { inReview: number; notReady: LensNotReady[] };
+    /** Launches near their date with late or blocked required items. */
+    launchAtRisk: LensPlan[];
+  };
+  launch?: {
+    /** Plans not yet reviewed, soonest release first, each with what is late and blocked. */
+    upcoming: LensPlan[];
+    /** Campaign asset requests nobody has fulfilled yet. */
+    requests: { id: string; title: string; projectName: string; due: string | null }[];
+    /** Launches more than a month past release that have no review yet. */
+    reviewsDue: { planId: string; name: string; projectName: string }[];
   };
   art?: {
     /** Assets in review: a version waiting for someone to approve it. */
@@ -1058,6 +1068,18 @@ export interface LensViews {
     /** Assets with uses that wait on their owners after a replacement. */
     toUpdate: (LensAsset & { uses: number })[];
   };
+}
+export interface LensPlan {
+  planId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+  releaseDate: string;
+  daysToRelease: number;
+  late: number;
+  blocked: number;
+  outstanding: number;
+  state: string;
 }
 export interface LensAsset {
   assetId: string;
@@ -1074,7 +1096,7 @@ export interface LensNotReady {
 }
 export type LensState =
   | { available: false; reason: string }
-  | { available: true; today: string; /** In order of reach: the first is the default. Empty: this person's role has no working view. */ lenses: ('director' | 'editor' | 'author' | 'art')[]; views: LensViews };
+  | { available: true; today: string; /** In order of reach: the first is the default. Empty: this person's role has no working view. */ lenses: ('director' | 'editor' | 'author' | 'art' | 'launch')[]; views: LensViews };
 export interface LensApi {
   state(): Promise<LensState>;
 }

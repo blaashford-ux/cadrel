@@ -27,7 +27,7 @@ const READS = new Set([
   'catalogue.ips', 'catalogue.series', 'catalogue.books', 'catalogue.book', 'catalogue.byAsin', 'catalogue.projectLinks',
   'people.list', 'people.get', 'people.teams', 'people.directory', 'people.penNames', 'people.penNameNames', 'people.roles', 'people.assignments', 'people.capabilityReview', 'people.explainAccess', 'people.effectiveCapabilities',
   'business.contributions', 'business.credits', 'business.rights', 'business.shares',
-  'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.artFacts', 'work.continuityFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
+  'work.tasks', 'work.task', 'work.openTaskCount', 'work.assignable', 'work.approvals', 'work.waitingForMe', 'work.editorialFacts', 'work.artFacts', 'work.launchFacts', 'work.continuityFacts', 'work.approvedLabels', 'work.decisions', 'work.decision',
   'briefs.list', 'briefs.get', 'briefs.versions', 'passes.list', 'passes.get', 'queries.list', 'queries.counts', 'queries.decisions', 'queries.verification',
   'workflows.list', 'workflows.defaultFor', 'workflows.stageOptions', 'workflows.allowMove',
   'policy.get',

@@ -4,7 +4,7 @@
  * them. Nothing here widens access: the passes and tasks it is given are already what the service lets this person read.
  */
 import { LENS_CAPABILITIES, lensesFor } from '@cadrel/kernel';
-import type { EditingPassRow, EditingState, LensAsset, LensDue, LensNotReady, LensPass, LensState, LensViews, PlanState } from '../shared/api';
+import type { EditingPassRow, EditingState, LensAsset, LensDue, LensNotReady, LensPass, LensPlan, LensState, LensViews, PlanState } from '../shared/api';
 
 type Task = Extract<PlanState, { available: true }>['tasks'][number];
 
@@ -22,7 +22,15 @@ export interface LensInput {
   canonWaiting?: number;
   /** What the person may see of art and Preflight. */
   art?: ArtLensInput;
+  /** What the person may see of launches. */
+  launch?: LaunchLensInput;
 }
+export interface LaunchLensInput {
+  plans: { id: string; name: string; projectId: string; projectName: string; releaseDate: string; daysToRelease: number; late: number; blocked: number; outstanding: number; state: string }[];
+  requests: { id: string; title: string; projectName: string; due: string | null }[];
+  reviewsDue: { planId: string; name: string; projectName: string }[];
+}
+const planOf = (p: LaunchLensInput['plans'][number]): LensPlan => ({ planId: p.id, name: p.name, projectId: p.projectId, projectName: p.projectName, releaseDate: p.releaseDate, daysToRelease: p.daysToRelease, late: p.late, blocked: p.blocked, outstanding: p.outstanding, state: p.state });
 /** What the art views are built from: the assets and briefs the service lets this person read, and the latest Preflight run of each EPUB. */
 export interface ArtLensInput {
   assets: { id: string; name: string; projectId: string; projectName: string; state: string; licenceDaysLeft: number | null; needUpdate: number }[];
@@ -45,7 +53,7 @@ const due = (t: Task, today: string): LensDue => ({ id: t.id, title: t.title, pr
 const longestWait = (a: LensPass, b: LensPass) => (b.waitingDays ?? 0) - (a.waitingDays ?? 0) || a.projectName.localeCompare(b.projectName);
 
 /** Builds the views for the lenses a person holds. A view that is not asked for is not built. */
-export function buildLens(lenses: readonly ('director' | 'editor' | 'author' | 'art')[], i: LensInput): LensViews {
+export function buildLens(lenses: readonly ('director' | 'editor' | 'author' | 'art' | 'launch')[], i: LensInput): LensViews {
   const views: LensViews = {};
   const live = i.passes.filter((p) => p.state !== 'closed' && p.state !== 'cancelled');
   const openTasks = i.tasks.filter((t) => t.state === 'open' && t.due);
@@ -92,7 +100,16 @@ export function buildLens(lenses: readonly ('director' | 'editor' | 'author' | '
     const art = i.art;
     views.director = {
       lateBooks, unanswered, totals: { lateBooks: lateBooks.length, unansweredQueries: unanswered.reduce((n, u) => n + u.queries, 0) }, canonWaiting: i.canonWaiting ?? 0,
+      launchAtRisk: (i.launch?.plans ?? []).filter((p) => p.state !== 'cancelled' && p.state !== 'reviewed' && p.daysToRelease >= -7 && p.daysToRelease <= 45 && (p.late > 0 || (p.blocked > 0 && p.daysToRelease <= 14))).map(planOf).sort((a, b) => a.daysToRelease - b.daysToRelease),
       art: { inReview: art ? art.assets.filter((a) => a.state === 'in_review').length : 0, notReady: art ? art.runs.filter((r) => r.errors > 0).map((r): LensNotReady => ({ ...r })).sort((a, b) => b.errors - a.errors || a.path.localeCompare(b.path)) : [] }
+    };
+  }
+  if (lenses.includes('launch')) {
+    const l = i.launch ?? { plans: [], requests: [], reviewsDue: [] };
+    views.launch = {
+      upcoming: l.plans.filter((p) => p.state !== 'cancelled' && p.state !== 'reviewed').map(planOf).sort((a, b) => a.daysToRelease - b.daysToRelease || a.name.localeCompare(b.name)),
+      requests: l.requests,
+      reviewsDue: l.reviewsDue
     };
   }
   if (lenses.includes('art')) {
@@ -117,6 +134,8 @@ export interface LensSources {
   canonWaiting?(): Promise<number>;
   /** What the person may see of art and Preflight (asked for a Director's or an Art view). */
   art?(): Promise<ArtLensInput>;
+  /** What the person may see of launches (asked for a Director's or a Launch view). */
+  launch?(): Promise<LaunchLensInput>;
 }
 
 /**
@@ -124,15 +143,16 @@ export interface LensSources {
  * A role that may not read editorial passes or the plan (a refusal comes back as "not available") simply has an empty list there.
  */
 export async function loadLens(src: LensSources, me: string, today: string): Promise<LensState> {
-  const [rolesManage, editApprove, editRun, manuscriptWrite, assetWrite, assetManage] = await Promise.all(
-    [LENS_CAPABILITIES.rolesManage, LENS_CAPABILITIES.editApprove, LENS_CAPABILITIES.editRun, LENS_CAPABILITIES.manuscriptWrite, LENS_CAPABILITIES.assetWrite, LENS_CAPABILITIES.assetManage].map((c) => src.mayAnywhere(c).catch(() => false))
+  const [rolesManage, editApprove, editRun, manuscriptWrite, assetWrite, assetManage, launchManage] = await Promise.all(
+    [LENS_CAPABILITIES.rolesManage, LENS_CAPABILITIES.editApprove, LENS_CAPABILITIES.editRun, LENS_CAPABILITIES.manuscriptWrite, LENS_CAPABILITIES.assetWrite, LENS_CAPABILITIES.assetManage, LENS_CAPABILITIES.launchManage].map((c) => src.mayAnywhere(c).catch(() => false))
   );
-  const lenses = lensesFor({ rolesManage, editApprove, editRun, manuscriptWrite, assetWrite, assetManage });
+  const lenses = lensesFor({ rolesManage, editApprove, editRun, manuscriptWrite, assetWrite, assetManage, launchManage });
   if (!lenses.length) return { available: true, today, lenses, views: {} };
   const [editing, plan] = await Promise.all([src.editing().catch(() => null), src.plan().catch(() => null)]);
   const canonWaiting = lenses.includes('director') && src.canonWaiting ? await src.canonWaiting().catch(() => 0) : 0;
   const passes = editing && editing.available ? editing.passes : [];
   const tasks = plan && plan.available ? plan.tasks : [];
   const art = (lenses.includes('director') || lenses.includes('art')) && src.art ? await src.art().catch(() => undefined) : undefined;
-  return { available: true, today, lenses, views: buildLens(lenses, { me, today, passes, tasks, canonWaiting, ...(art ? { art } : {}) }) };
+  const launch = (lenses.includes('director') || lenses.includes('launch')) && src.launch ? await src.launch().catch(() => undefined) : undefined;
+  return { available: true, today, lenses, views: buildLens(lenses, { me, today, passes, tasks, canonWaiting, ...(art ? { art } : {}), ...(launch ? { launch } : {}) }) };
 }

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { LensDue, LensPass, LensState, Page } from '../shared/api';
 
 const api = window.cadrel;
-type Lens = 'director' | 'editor' | 'author' | 'art';
-const LABEL: Record<Lens, string> = { director: 'Director', editor: 'Editor', author: 'Author', art: 'Art' };
+type Lens = 'director' | 'editor' | 'author' | 'art' | 'launch';
+const LABEL: Record<Lens, string> = { director: 'Director', editor: 'Editor', author: 'Author', art: 'Art', launch: 'Launch' };
 const KEY = 'cadrel.lens';
 const days = (n: number | null) => (n === null ? '' : n <= 0 ? 'today' : n === 1 ? '1 day' : `${n} days`);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -99,6 +99,33 @@ export function LensPanel({ onGo, onProject, studioKey }: { onGo: (p: Page) => v
               <li key={n.fileId}><button type="button" className="link" onClick={() => onProject(n.projectId)}>{n.projectName}</button> <span className="muted small">{n.path}</span> <span className="chip warn">{plural(n.errors, 'error')}</span> <button type="button" className="link" onClick={() => onGo('preflight')}>Open Preflight</button></li>
             ))}
           </ul>
+        </div>
+      )}
+      {lens === 'director' && v.director && v.director.launchAtRisk.length > 0 && (
+        <div>
+          <h4>Launches at risk <span className="chip">{v.director.launchAtRisk.length}</span></h4>
+          <ul className="plain work-list">
+            {v.director.launchAtRisk.map((p) => (
+              <li key={p.planId}><button type="button" className="link" onClick={() => onProject(p.projectId)}>{p.projectName}</button> <span className="muted small">{p.releaseDate} ({p.daysToRelease === 0 ? 'today' : p.daysToRelease > 0 ? `${p.daysToRelease} days` : `${-p.daysToRelease} days ago`})</span> {p.late > 0 && <span className="chip warn">{plural(p.late, 'late item')}</span>} {p.blocked > 0 && <span className="chip">{plural(p.blocked, 'blocked item')}</span>} <button type="button" className="link" onClick={() => onGo('launch')}>Open Launch</button></li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {lens === 'launch' && v.launch && (
+        <div className="lens-cols">
+          <div>
+            <h4>Launches <span className="chip">{v.launch.upcoming.length}</span></h4>
+            {v.launch.upcoming.length === 0 ? <p className="muted small">No launch is planned.</p> : (
+              <ul className="plain work-list">
+                {v.launch.upcoming.map((p) => (
+                  <li key={p.planId}><button type="button" className="link" onClick={() => onGo('launch')}>{p.name}</button> <button type="button" className="link muted small" onClick={() => onProject(p.projectId)}>{p.projectName}</button> <span className="muted small">{p.releaseDate}</span>
+                    {p.late > 0 && <span className="chip warn">{plural(p.late, 'late item')}</span>}{p.blocked > 0 && <span className="chip">{plural(p.blocked, 'blocked item')}</span>}<span className="chip">{p.outstanding} outstanding</span></li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <ArtList title="Art requests waiting" rows={v.launch.requests.map((r) => ({ key: r.id, project: r.projectName, projectId: '', text: r.title, chip: r.due ? `due ${r.due}` : undefined }))} empty="Nothing waits on Art." onProject={() => undefined} onGo={() => onGo('launch')} />
+          <ArtList title="Reviews due" rows={v.launch.reviewsDue.map((r) => ({ key: r.planId, project: r.projectName, projectId: '', text: r.name }))} empty="No launch is waiting for its review." onProject={() => undefined} onGo={() => onGo('launch')} />
         </div>
       )}
       {lens === 'art' && v.art && (

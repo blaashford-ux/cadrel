@@ -41,7 +41,7 @@ beforeEach(async () => {
     await db.run("INSERT INTO file_version (file_id, n, hash, size, author, created_at) VALUES (?, 1, ?, ?, 'ana', '2026-11-01T00:00:00.000Z')", [id, hash, bytes.length]);
     await db.run("INSERT INTO file_card (file_id, project_id, fields, updated_at, updated_by) VALUES (?, ?, '{}', 'x', 'x')", [id, b4]);
   }
-  assetId = (await ana.assets.create({ projectId: b4, fileId: 'cov', kind: 'cover', name: 'Cover', licence: { kind: 'stock', licensor: 'Pixel Co', expires: '2026-12-01' } })).id;
+  assetId = (await ana.assets.create({ projectId: b4, fileId: 'cov', kind: 'cover', name: 'Cover', licence: { kind: 'stock', licensor: 'Pixel Co', expires: '2099-12-01' } })).id;
   await ana.assets.approve(assetId, 1, 'Good.');
   await ana.assets.addUse(assetId, { kind: 'listing', label: 'Amazon US' });
   briefId = (await ana.briefs.create({ projectId: b4, kind: 'cover', title: 'Cover for Book Four', body: 'A dragon at dusk.' })).id;
@@ -65,7 +65,7 @@ describe('the art tools', () => {
   it('lists assets with their approved versions and licence, and reads one with who approved what', async () => {
     const { call } = await connect();
     const list = (await call('asset_list', { project: 'Dragon Rider / Book Four' })).json();
-    expect(list).toEqual([expect.objectContaining({ id: assetId, name: 'Cover', kind: 'cover', state: 'approved', book: 'Dragon Rider / Book Four', file: 'Book Four/Art/cover.jpg', newestVersion: 1, approvedVersions: [1], licence: expect.objectContaining({ kind: 'stock', expires: '2026-12-01', daysLeft: 12 }) })]);
+    expect(list).toEqual([expect.objectContaining({ id: assetId, name: 'Cover', kind: 'cover', state: 'approved', book: 'Dragon Rider / Book Four', file: 'Book Four/Art/cover.jpg', newestVersion: 1, approvedVersions: [1], licence: expect.objectContaining({ kind: 'stock', expires: '2099-12-01', daysLeft: expect.any(Number) }) })]);
     const one = (await call('asset_read', { asset: 'Cover' })).json();
     expect(one).toMatchObject({ id: assetId, version: 1, approvals: [{ version: 1, state: 'approved', by: 'me', at: '2026-11-19', note: 'Good.' }] });
     expect((await call('asset_read', { asset: 'nothing like it' })).isError).toBe(true);

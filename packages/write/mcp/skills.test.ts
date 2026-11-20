@@ -13,12 +13,12 @@ import { SKILLS } from './skills.generated';
 const at = (p: string) => fileURLToPath(new URL(`../${p}`, import.meta.url));
 const allFolders = readdirSync(at('skills'), { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
 const REVIEW = ['cadrel-copy-edit', 'cadrel-developmental-edit', 'cadrel-line-edit'];
-const AUTHOR = ['cadrel-continuity-check', 'cadrel-litrpg-tracker', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords', 'cadrel-preflight-review', 'cadrel-premise-to-outline', 'cadrel-series-developer', 'cadrel-timeline-tracker'];
+const AUTHOR = ['cadrel-continuity-check', 'cadrel-launch-review', 'cadrel-litrpg-tracker', 'cadrel-marketing-brief', 'cadrel-outline-to-blurb', 'cadrel-outline-to-keywords', 'cadrel-preflight-review', 'cadrel-premise-to-outline', 'cadrel-series-developer', 'cadrel-timeline-tracker'];
 const folders = REVIEW;
 const read = (f: string) => readFileSync(at(`skills/${f}/SKILL.md`), 'utf8');
 
 describe('the skills', () => {
-  it('are the three editing passes and the eight authoring skills', () => {
+  it('are the three editing passes and the ten authoring skills', () => {
     expect([...allFolders].sort()).toEqual([...REVIEW, ...AUTHOR].sort());
     expect(SKILLS.filter((s) => s.kind === 'author').map((s) => s.name)).toEqual(AUTHOR);
   });
@@ -84,7 +84,7 @@ describe('the skills', () => {
     const [a, b] = InMemoryTransport.createLinkedPair();
     const client = new Client({ name: 'openai-mcp', version: '1' });
     await Promise.all([server.connect(a), client.connect(b)]);
-    expect((await client.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(['continuity_check', 'copy_edit', 'developmental_edit', 'line_edit', 'litrpg_tracker', 'outline_to_blurb', 'outline_to_keywords', 'preflight_review', 'premise_to_outline', 'series_developer', 'timeline_tracker']);
+    expect((await client.listPrompts()).prompts.map((p) => p.name).sort()).toEqual(['continuity_check', 'copy_edit', 'developmental_edit', 'launch_review', 'line_edit', 'litrpg_tracker', 'marketing_brief', 'outline_to_blurb', 'outline_to_keywords', 'preflight_review', 'premise_to_outline', 'series_developer', 'timeline_tracker']);
     const withArgs = await client.getPrompt({ name: 'line_edit', arguments: { project: 'Novel', file: 'Manuscript/Book.md' } });
     const text = (withArgs.messages[0].content as { text: string }).text;
     expect(text).toContain('# Line Edit (Cadrel Write)');

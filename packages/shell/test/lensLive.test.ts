@@ -41,7 +41,7 @@ afterEach(async () => {
 describe('the working views on real records', () => {
   it('gives the Owner the Director’s view first, then the Editor’s, the Author’s and the Art view', async () => {
     const s = await lens();
-    expect(s).toMatchObject({ available: true, lenses: ['director', 'editor', 'author', 'art'] });
+    expect(s).toMatchObject({ available: true, lenses: ['director', 'editor', 'author', 'art', 'launch'] });
   });
 
   it('follows a pass from planned to delivered: the Editor’s lists, then the queries waiting on the author, for the Director and the Author', async () => {

@@ -93,6 +93,7 @@ export function registerProjectsTools(server: McpServer, o: ProjectsToolOptions)
       approved: await as().work.approvedLabels(id),
       continuity: await as().work.continuityFacts(live).catch(() => undefined),
       art: await as().work.artFacts(live).catch(() => undefined),
+      launch: await as().work.launchFacts(live).catch(() => undefined),
       hasManuscript: linksOf(t, id, 'write').length > 0,
       openNotes: open,
       subprojects: childrenOf(t, id).filter((c) => c.status !== 'archived').map(category)

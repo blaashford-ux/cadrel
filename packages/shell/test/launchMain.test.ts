@@ -137,7 +137,7 @@ describe('the Launch page: requests, ARC and the lens', () => {
     expect(v.campaigns[0]).toMatchObject({ counts: { withFile: 1, total: 1 }, reportedReviews: 3, cross: { reported: 3, measured: null } });
     expect(JSON.stringify(v)).not.toMatch(/Rae|rae@example/);
     const people = await page.readers(k.id);
-    expect('readers' in people && people.readers[0]).toMatchObject({ name: 'Rae Reader', email: 'rae@example.com' });
+    expect('readers' in people && people.readers![0]).toMatchObject({ name: 'Rae Reader', email: 'rae@example.com' });
     await go('eraseReader', r.id);
     const after = await page.plan(made.plan.id);
     expect(after.available && after.campaigns[0]!.counts.withFile).toBe(1);

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DEFAULT_TEMPLATES, NO_FACTS, WorkError, addDays, applyDateProposal, approvePlan, archiveTemplate, assignItem, cancelPlan, cleanTemplateItems, createPerson, createPlan, createTemplate, daysBetween,
   dateProposalsOf, ensureDefaultTemplates, getPlan, getTask, goLive, hashText, itemsOf, launchFactsOf, linkItemRequest, listPlans, listTemplates, markItem, planRevision, planView, proposeDate,
-  rejectDateProposal, requirementMet, reviseTemplate, setTaskState, syncItems, updatePlan, type Ctx, type Db, type PlanFacts
+  rejectDateProposal, requirementMet, unmetConditions, CONDITION_KINDS, cleanConditions, type ProjectFacts, reviseTemplate, setTaskState, syncItems, updatePlan, type Ctx, type Db, type PlanFacts
 } from '../src';
 import { memoryDb } from './sqlite';
 
@@ -271,3 +271,20 @@ describe('approval of an exact revision, and the release', () => {
     expect(await code(cancelPlan(db, at(), plan.id, ''))).toBe('invalid');
   });
 });
+
+describe('the launch gate condition', () => {
+  const pf = (over: Partial<ProjectFacts> = {}): ProjectFacts => ({ hasManuscript: false, openNotes: 0, subprojects: [], openTasks: 0, approved: [], ...over });
+  it('is a condition an administrator can add, with no label to give', () => {
+    expect(CONDITION_KINDS.launch_ready).toMatch(/no late or blocked required item/);
+    expect(cleanConditions([{ kind: 'launch_ready' }, { kind: 'launch_ready' }])).toEqual([{ kind: 'launch_ready' }]);
+  });
+  it('asks for a plan first, then for no required item late or blocked', () => {
+    const cond = [{ kind: 'launch_ready' as const }];
+    expect(unmetConditions(pf(), cond)).toEqual(['Needs a release plan']);
+    expect(unmetConditions(pf({ launch: { plans: 0, late: 0, blocked: 0 } }), cond)).toEqual(['Needs a release plan']);
+    expect(unmetConditions(pf({ launch: { plans: 1, late: 1, blocked: 0 } }), cond)).toEqual(['1 required item of the release plan is late or blocked']);
+    expect(unmetConditions(pf({ launch: { plans: 2, late: 2, blocked: 3 } }), cond)).toEqual(['5 required items of the release plan are late or blocked']);
+    expect(unmetConditions(pf({ launch: { plans: 1, late: 0, blocked: 0 } }), cond)).toEqual([]);
+  });
+});
+

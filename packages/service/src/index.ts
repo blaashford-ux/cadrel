@@ -19,7 +19,7 @@ import {
   dateProposalsOf, decisionWindow, deliverRequest, ensureDefaultTemplates, eraseReader, finishReview, getCampaign, getDateProposal, getPlan, getRequest, getReview, getTemplate, goLive, itemsOf, linkItemRequest,
   listCampaigns, listCompSets, listFigures, listMarketDecisions, listPlans, listReports, listRequests, listTemplates, markItem, openReview, pinBriefComps, planRevision, planView, proposeDate, publishFigures,
   readersOf, recordMarketDecision, refreshReview, rejectDateProposal, reportReviews, requestFacts, requestView, reviewCrossCheck, reviseTemplate, saveReport, getReport, setReaderState, syncItems, syncRequest,
-  updatePlan, writeReview, briefComps, latestFigure, NO_FACTS,
+  updatePlan, writeReview, briefComps, latestFigure, NO_FACTS, launchFactsOf, type LaunchGateFacts,
   type ArcCampaign, type ArcCounts, type ArcReader, type AssetRequest, type BriefComp, type CompSet, type DateProposalRecord, type DecisionWindow, type LaunchReview, type MarketDecision, type MarketFigure,
   type MarketReport, type NewFigure, type NewPlan, type NewRequest, type PlanFacts, type PlanFilter, type PlanItem, type PlanView, type ReaderState, type ReleasePlan, type ReleaseTemplate, type RequestView, type TemplateItem,
   type PlanTargets, type RequestFilter, type ReviewCrossCheck, type ImageInfo, type CompRole, type MarketDecisionKind, type ReportKind, type RequestSpec,
@@ -1274,6 +1274,18 @@ export class StudioAs {
       await this.needWork('task.read');
       const reach = await this.reach();
       return artFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
+    /** What a workflow gate sees of release plans on these projects: how many required items are late or blocked. Needs task.read, like the other gate facts. */
+    launchFacts: async (projectIds: string[]): Promise<LaunchGateFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      const ids = reach ? projectIds.filter((p) => reach(p)) : projectIds;
+      const views: PlanView[] = [];
+      for (const p of await listPlans(this.o.db, this.ctx(), { projectIds: ids })) {
+        const v = await planView(this.o.db, this.ctx(), p.id, await this.planFacts(p));
+        if (v) views.push(v);
+      }
+      return launchFactsOf(views);
     },
     approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
     requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {

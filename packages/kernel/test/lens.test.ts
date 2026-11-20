@@ -4,12 +4,12 @@ import { LENS_CAPABILITIES, ROLE_KEYS, defaultRole, lensesFor, type LensCapabili
 const of = (key: (typeof ROLE_KEYS)[number]): LensCapabilities => {
   const r = defaultRole(key);
   const has = (c: string) => r.all === true || r.capabilities.includes(c);
-  return { rolesManage: has(LENS_CAPABILITIES.rolesManage), editApprove: has(LENS_CAPABILITIES.editApprove), editRun: has(LENS_CAPABILITIES.editRun), manuscriptWrite: has(LENS_CAPABILITIES.manuscriptWrite), assetWrite: has(LENS_CAPABILITIES.assetWrite), assetManage: has(LENS_CAPABILITIES.assetManage) };
+  return { rolesManage: has(LENS_CAPABILITIES.rolesManage), editApprove: has(LENS_CAPABILITIES.editApprove), editRun: has(LENS_CAPABILITIES.editRun), manuscriptWrite: has(LENS_CAPABILITIES.manuscriptWrite), assetWrite: has(LENS_CAPABILITIES.assetWrite), assetManage: has(LENS_CAPABILITIES.assetManage), launchManage: has(LENS_CAPABILITIES.launchManage) };
 };
 
 describe('the working view a role leads with', () => {
   it.each([
-    ['owner', ['director', 'editor', 'author', 'art']], // the Owner leads with the Director's view and may switch to the others
+    ['owner', ['director', 'editor', 'author', 'art', 'launch']], // the Owner leads with the Director's view and may switch to the others
     ['admin', ['director']],
     ['director', ['director']],
     ['series_lead', ['director']],
@@ -17,7 +17,7 @@ describe('the working view a role leads with', () => {
     ['author', ['author']],
     ['art_director', ['art']],
     ['artist', ['art']], // an Artist uploads art and writes no manuscripts
-    ['marketing', []],
+    ['marketing', ['launch']],
     ['analyst', []],
     ['finance', []],
     ['guest', []],

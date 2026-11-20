@@ -63,7 +63,7 @@ import { artLens } from './art';
 import { Canon } from './canon';
 import { Art } from './art';
 import { Preflight } from './preflight';
-import { Launch } from './launch';
+import { Launch, launchLens } from './launch';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -1204,7 +1204,7 @@ function registerShellIpc(): void {
   });
   manageLike('lens:state', async () => {
     const work = () => new ProjectWork(studio, peopleHost, stages);
-    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan(), canonWaiting: async () => (await peopleHost.service?.as(peopleHost.me).canon.waitingForMe())?.length ?? 0, art: () => artLens(studio, peopleHost, peopleHost.service ? vaultHost() : null) }, peopleHost.me, new Date().toISOString().slice(0, 10));
+    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan(), canonWaiting: async () => (await peopleHost.service?.as(peopleHost.me).canon.waitingForMe())?.length ?? 0, art: () => artLens(studio, peopleHost, peopleHost.service ? vaultHost() : null), launch: () => launchLens(studio, peopleHost) }, peopleHost.me, new Date().toISOString().slice(0, 10));
   });
   manageLike('policy:state', async () => peopleHost.policyState());
   manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));
