@@ -114,4 +114,4 @@ Unrelated to Editing, tracked here so it is not lost. Reported behaviour: Rewrit
 3. Make the original pane load the original's text regardless of chapter clamping; align chapters by position with a clamp only for the rewrite.
 4. Tests for each of the above; Reader version bump (`packages/write` changes), plus VERSION and CHANGELOG.
 
-Question for you: when the rewrite is blank, should the original pane still scroll with the rewrite (by chapter), or sit on the chapter you were reading?
+Decided: when the rewrite starts blank, the original pane still scrolls along with it by chapter. So the chapter link (`followChapter`, `useRewriteScroll`) stays on for blank rewrites. The rewrite has fewer chapters at first, so the pair maps by chapter position: while the rewrite has no chapter at that position, the original is the one that moves, and the rewrite pane shows its nearest chapter (or a blank page) without being reset. Add a test for blank rewrite plus chapter navigation in both directions.
