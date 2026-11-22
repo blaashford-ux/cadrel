@@ -18,7 +18,7 @@ import type { Progress } from '../shared/progress';
 import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
 import { chapterLabel } from './treeRows';
 import { basename, dirname, isInside, joinPath, remapPath } from '../shared/paths';
-import { addRewriteLink, dropRewriteLinksUnder, remapRewriteLinks, removeRewriteLink, rewriteFileName, rewriteLinkOf, type RewriteLink } from '../shared/rewrite';
+import { addRewriteLink, dropRewriteLinksUnder, pairChapter, remapRewriteLinks, removeRewriteLink, rewriteFileName, rewriteLinkOf, type RewriteLink } from '../shared/rewrite';
 import { collectFiles, collectOrphans, findNode, flattenPaths } from '../shared/tree';
 import { analyzeManuscript, type ChapterInput } from '../shared/analysis/analyze';
 import { renderReport } from '../shared/analysis/report';
@@ -514,6 +514,7 @@ export class Workspace {
 
   /** Opens `file` at `chapter` in its tab (creating the tab if needed) and activates it. */
   async openChapter(file: string, chapter: number): Promise<void> {
+    chapter = this.withinRewrite(file, chapter);
     let tab = this.tabForFile(file);
     if (!tab) {
       try {
@@ -726,7 +727,23 @@ export class Workspace {
     }
   }
 
-  /** Turns rewrite mode on or off for the link `file` is in, from either file. Turning it on opens both and makes `file` the active one. */
+  /**
+   * While rewrite mode is on, a file of the pair cannot go to a chapter past the end of the rewrite: the rewrite sets the limit. Any other
+   * file, or any file while the mode is off, is not held. (To look ahead in the original, open it in a tab of its own: with the mode off it is
+   * an ordinary file.)
+   */
+  private withinRewrite(file: string, chapter: number): number {
+    const pair = this.rewritePair();
+    if (!pair || (file !== pair.original && file !== pair.rewrite)) return chapter;
+    const doc = this.state.docs.get(pair.rewrite);
+    return doc ? pairChapter(chapter, doc.chapters.length) : chapter;
+  }
+
+  /**
+   * Turns rewrite mode on or off for the link `file` is in, from either file. Turning it on brings up whichever of the two is not open, so it
+   * works the same from the rewrite as from the original, and makes `file` the active one. The original is always shown as it is; the rewrite
+   * (a blank page or a copy) sets how far the pair can go.
+   */
   async setRewriteMode(file: string, on: boolean, chapterAt?: number): Promise<boolean> {
     const project = this.state.project;
     if (!project) return false;
@@ -739,13 +756,26 @@ export class Workspace {
       this.set({ rewriteOn: null });
       return true;
     }
+    const original = joinPath(project.path, at.link.original);
+    const rewrite = joinPath(project.path, at.link.rewrite);
     // the original becomes read only: unsaved edits in it are settled first, so a locked pane never holds work that is not saved
-    const originalTab = this.tabForFile(joinPath(project.path, at.link.original));
+    const originalTab = this.tabForFile(original);
     if (originalTab && originalTab.draft !== null && !(await this.leaveTab(originalTab))) return false;
-    const partner = joinPath(project.path, at.other);
-    const chapter = chapterAt ?? this.tabForFile(file)?.chapter ?? 0;
-    await this.openChapter(partner, chapter);
-    if (!this.state.docs.has(partner)) return false; // it could not be opened; the error says why
+    // both documents are loaded before either pane is placed, so the limit (the rewrite's last chapter) is known and neither pane opens empty
+    for (const f of [original, rewrite]) {
+      if (this.state.docs.has(f)) continue;
+      try {
+        await this.loadDoc(f);
+      } catch (e) {
+        this.set({ error: String(e instanceof Error ? e.message : e) });
+        return false;
+      }
+    }
+    const rewriteDoc = this.state.docs.get(rewrite);
+    if (!rewriteDoc || !this.state.docs.has(original)) return false;
+    const chapter = pairChapter(chapterAt ?? this.tabForFile(file)?.chapter ?? 0, rewriteDoc.chapters.length);
+    const other = file === original ? rewrite : original;
+    await this.openChapter(other, chapter); // not yet in the mode, so nothing holds it back
     await this.openChapter(file, chapter);
     this.set({ rewriteOn: at.link.original });
     return true;
@@ -764,7 +794,7 @@ export class Workspace {
     const tab = this.tabForFile(file);
     const doc = this.state.docs.get(file);
     if (!tab || !doc) return;
-    const target = Math.max(0, Math.min(chapter, doc.chapters.length - 1));
+    const target = Math.max(0, Math.min(this.withinRewrite(file, chapter), doc.chapters.length - 1));
     if (target === tab.chapter) return;
     if (!(await this.leaveTab(tab))) return;
     this.patchTab(tab.id, (t) => ({ chapter: target, draft: null, conflict: null, savedHere: false, markDeclined: false, reloadKey: t.reloadKey + 1 }));

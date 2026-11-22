@@ -2,6 +2,11 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.19.3 (Rewrite mode: the rewrite sets the limit)
+
+- **Rewrite mode.** The two panes of a rewrite can no longer go past the end of the rewrite: a blank rewrite keeps both on its first chapter instead of the original running ahead, and the pair advances as the rewrite grows. The original is always the original. To look ahead in it, open it in a tab of its own with the mode off. Turning the mode on from the rewrite loads both files first, so neither pane opens empty. Scrolling stops in the original where the rewrite runs out.
+- **Under way.** The Editing workspace plan is in docs/PLAN-EDITING.md; nothing of it is built yet.
+
 ## 0.19.2 (Also by: each book on its own page)
 
 - **Also by.** In the PDF, Word and ebooks, every book after the first on the Also by page now starts on a new page (the first stays under the page heading), so a book's title, cover, link and blurb no longer run on from the one before. In Word the cover image is skipped, as before, without leaving a blank line.
