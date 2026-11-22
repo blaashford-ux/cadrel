@@ -51,7 +51,8 @@ Sections:
 ## Confirmed scope (after review)
 
 In: editing rounds; handling of moved or cut notes; Word export with real comments and tracked changes (accepted suggestions-in-waiting become Word tracked changes the author can accept in Word); tagging notes by edit type (developmental, line, copy, proof) and by source (human, AI, which editor). Roles as proposed: editors add notes and edit the report, authors read and accept.
-Out: Word tracked-changes import; client-facing mode, report snapshots, style sheet, sign-off (revisit later).
+Also in: Word tracked-changes and comments IMPORT. An outside editor's .docx is read with its tracked insertions/deletions/replacements and comments; each becomes a note (a replacement or deletion becomes a one-click suggestion, an insertion or comment a comment), tagged source=outside editor, with the author name and date from the docx. Imported text is the accepted-or-original base, so anchors match the converted Markdown.
+Out: client-facing mode, report snapshots, style sheet, sign-off (revisit later).
 
 Implementation notes for the confirmed items:
 - Round, edit type and source are fields on the note (`round`, `editType`; source is the existing `origin` plus `author`). They are optional so existing review files still load, and `add_notes` gains optional `editType` and `round` so AI notes carry them too.
@@ -78,9 +79,9 @@ Implementation notes for the confirmed items:
 
 ## Phases
 
-1. Foundations: move shared pieces (review model, `docxToMarkdown`, analysis) to shared packages; no behaviour change; tests green.
+1. Foundations (revised after checking the code): no package move needed. The shell already imports Write code directly (`@cadrel/write/src/...`, e.g. Admin.tsx, Settings.tsx), and `ReviewPanel.tsx` is presentational, driven by `ReviewState` from `useReview(api: WriteApi)`. So Editing reuses `ReviewPanel`, `useReview`, `reviewPlugin`, `docxToMarkdown` and the analysis modules in place. Phase 1 becomes: (a) add the optional note fields (`round`, `editType`) to `ReviewItem` and `add_notes`, with tests; (b) give the shell a thin `WriteApi` adapter over the project folder so `useReview` runs there; (c) a Reader version bump because `packages/write` changes.
 2. Workspace: new Editing page with manuscript picker (filtered), reading pane, shared Notes panel, add comment/suggestion, accept/reject. MCP parity test: an `add_notes` call shows up live.
-3. Upload: docx and md into the Manuscript folder, open in workspace.
+3. Upload and import: docx and md into the Manuscript folder; tracked changes and comments in the docx become notes. Needs a new parser for w:ins, w:del and comments.xml on top of the existing `docxToMarkdown`, with the base text taken as the document before the outside editor's changes so quotes anchor exactly.
 4. Report: auto sections, manual sections, attach analysis, live updates.
 5. PDF export, snapshots, client-facing mode.
 6. Archive tab for old passes; retire the old UI; docs (`docs/FILES.md`, `UI-MODEL.md`), CHANGELOG, version bumps.
