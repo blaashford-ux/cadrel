@@ -33,8 +33,14 @@ export function useRewriteScroll(o: { on: boolean; left: string | null; right: s
         put.delete(from);
         return;
       }
-      to.scrollTop = mapScroll(blocksOf(from), blocksOf(to), from.scrollTop);
+      const want = mapScroll(blocksOf(from), blocksOf(to), from.scrollTop);
+      to.scrollTop = want;
       put.set(to, { top: to.scrollTop, at: Date.now() }); // as the browser kept it (rounded, or held inside the pane)
+      // The other pane has run out of text (a rewrite that is shorter than its original): this one stops at the matching place instead of going on.
+      if (want - to.scrollTop > 1.5) {
+        from.scrollTop = mapScroll(blocksOf(to), blocksOf(from), to.scrollTop);
+        put.set(from, { top: from.scrollTop, at: Date.now() });
+      }
     };
     const a = carry(l, r);
     const b = carry(r, l);

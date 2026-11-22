@@ -18,8 +18,8 @@ interface Props {
   onProject: (id: string) => void;
 }
 
-/** Editorial passes: what waits on you, and one pass at a time with its queries, comments and suggestions. */
-export function Editing({ studio, onProject }: Props) {
+/** Editorial passes: what waits on you, and one pass at a time with its queries, comments and suggestions. Kept as the "Earlier passes" of the Editing page. */
+export function Passes({ studio, onProject }: Props) {
   const [state, setState] = useState<EditingState | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
