@@ -61,8 +61,8 @@ export interface ReviewItem {
   editType?: EditType
   /** The editing round it was made in ("First read", "Round 2"), so a report can show progress between rounds. Optional. */
   round?: string
-  /** Who made it. Absent means a person. */
-  origin?: 'human' | 'ai'
+  /** Who made it. Absent means a person. `outside` is an editor who worked in Word: their tracked changes and comments imported from a .docx. */
+  origin?: 'human' | 'ai' | 'outside'
   author: string
   createdAt: string
   updatedAt: string
