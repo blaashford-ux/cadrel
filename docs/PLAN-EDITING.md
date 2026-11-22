@@ -1,6 +1,6 @@
 # Plan: Editing workspace overhaul
 
-Status: proposal, nothing built yet. Decisions already made: replace the pass workflow (keep its data), design for a professional editor with client authors, uploads convert into the project's Manuscript folder, the report is living (auto sections plus typed text).
+Status: built in 0.20.0 (workspace, notes on the Write code path, upload with tracked-changes import, Word export, living Editing Report with analysis and PDF). Not built: client-facing mode, report snapshots, style sheet, sign-off, and MCP tools that write to the report (an assistant can read the report file as a project file). Decisions already made: replace the pass workflow (keep its data), design for a professional editor with client authors, uploads convert into the project's Manuscript folder, the report is living (auto sections plus typed text).
 
 ## Goal
 

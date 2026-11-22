@@ -396,3 +396,48 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 /* The working view above Home and the Dashboard (LensPanel.tsx) */
 .lens-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px 22px; }
 .lens h4 { margin: 4px 0 6px; font-size: 13px; }
+
+/* ---- Editing desk ---- */
+.desk-bar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.desk-pick { display: flex; flex-direction: column; gap: 2px; }
+.desk-pick select { min-width: 280px; max-width: 460px; }
+.desk-tabs { margin: 4px 0 10px; }
+.desk-cols { display: grid; grid-template-columns: 200px minmax(0, 1fr) 380px; gap: 12px; align-items: start; }
+@media (max-width: 1100px) { .desk-cols { grid-template-columns: 1fr; } }
+.desk-chapters { position: sticky; top: 8px; max-height: calc(100vh - 160px); overflow: auto; }
+.desk-chapters .link-row { display: flex; justify-content: space-between; gap: 6px; width: 100%; text-align: left; background: none; border: 0; padding: 5px 8px; border-radius: 8px; color: var(--fg); }
+.desk-chapters .link-row.on { background: var(--selected); color: var(--accent); font-weight: 600; }
+.desk-text { background: var(--card, transparent); border: 1px solid color-mix(in srgb, var(--fg) 14%, transparent); border-radius: 12px; padding: 16px 22px; font-family: Georgia, 'Times New Roman', serif; font-size: 1.05rem; line-height: 1.7; max-height: calc(100vh - 160px); overflow: auto; user-select: text; }
+.desk-text h3 { font-family: inherit; margin-top: 0; }
+.desk-para { margin: 0 0 .9em; }
+.desk-mark { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom: 2px solid var(--accent); cursor: pointer; border-radius: 2px; }
+.desk-mark.suggestion { background: color-mix(in srgb, #d19a00 24%, transparent); border-bottom-color: #d19a00; }
+.desk-mark.accepted, .desk-mark.rejected, .desk-mark.resolved { background: none; border-bottom: 1px dotted color-mix(in srgb, var(--fg) 40%, transparent); }
+.desk-mark.focus { outline: 2px solid var(--accent); }
+.desk-notes { position: sticky; top: 8px; max-height: calc(100vh - 160px); overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.desk-filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.desk-filters select { max-width: 130px; }
+.desk-list { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.desk-note { border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 10px; padding: 8px 10px; }
+.desk-note.focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.desk-note.accepted, .desk-note.rejected, .desk-note.resolved { opacity: .72; }
+.desk-note p { margin: 4px 0; }
+.desk-quote { background: none; border: 0; padding: 0; text-align: left; color: var(--accent); font-style: italic; }
+.desk-sug del { color: var(--danger, #b3261e); } .desk-sug ins { color: #1b7f3b; text-decoration: none; background: color-mix(in srgb, #1b7f3b 14%, transparent); }
+.desk-reply { padding-left: 8px; border-left: 2px solid color-mix(in srgb, var(--fg) 20%, transparent); }
+.desk-tags { display: flex; gap: 6px; margin-top: 4px; } .desk-tags input { width: 90px; }
+.desk-add textarea { width: 100%; }
+.desk-report { display: flex; flex-direction: column; gap: 10px; max-width: 880px; }
+.desk-report textarea { width: 100%; }
+.desk-section { margin: 0 0 10px; display: flex; flex-direction: column; gap: 4px; } .desk-section .row input { flex: 1; }
+.desk-tiles { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.desk-tile { flex: 1 1 90px; border: 1px solid color-mix(in srgb, var(--fg) 16%, transparent); border-radius: 10px; padding: 8px; text-align: center; }
+.desk-tile b { display: block; font-size: 1.4rem; } .desk-tile span { font-size: .8rem; color: var(--muted); }
+.desk-bars h4 { margin: 8px 0 4px; font-size: .9rem; color: var(--muted); }
+.desk-bar-row { display: flex; align-items: center; gap: 8px; font-size: .85rem; margin: 2px 0; }
+.desk-bar-row .bl { flex: 0 0 10em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.desk-bar-row .bt { flex: 1; background: color-mix(in srgb, var(--fg) 10%, transparent); height: 8px; border-radius: 4px; overflow: hidden; }
+.desk-bar-row .bt i { display: block; height: 100%; background: var(--accent); }
+.desk-bar-row .bv { flex: 0 0 2.5em; text-align: right; }
+.plain li.desk-note { display: block; }
+.desk-chapters .plain li { display: block; }
