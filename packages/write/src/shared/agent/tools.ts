@@ -17,6 +17,9 @@ import {
   makeAnchor,
   newReviewFile,
   normalizeCategory,
+  normalizeEditType,
+  normalizeRound,
+  type EditType,
   parseReviewFile,
   serializeReviewFile,
   type ItemStatus,
@@ -302,6 +305,8 @@ export interface NoteView {
   status: ItemStatus;
   reviewer: string;
   category?: string;
+  editType?: EditType;
+  round?: string;
   quote: string;
   body: string;
   replacement?: string;
@@ -326,6 +331,8 @@ const view = (i: ReviewItem, reviewer: string): NoteView => ({
   status: i.status,
   reviewer,
   ...(i.category ? { category: i.category } : {}),
+  ...(i.editType ? { editType: i.editType } : {}),
+  ...(i.round ? { round: i.round } : {}),
   quote: i.anchor.quote,
   body: i.body,
   ...(i.replacement !== undefined ? { replacement: i.replacement } : {}),
@@ -340,6 +347,8 @@ export interface NoteFilter {
   /** Substring of the reviewer's name, e.g. "Line edit" or "Sam". */
   reviewer?: string;
   category?: string;
+  editType?: EditType;
+  round?: string;
 }
 
 async function collect(ctx: AgentContext, project: string, f: NoteFilter): Promise<{ item: ReviewItem; reviewer: string }[]> {
@@ -351,6 +360,8 @@ async function collect(ctx: AgentContext, project: string, f: NoteFilter): Promi
       if (f.status && i.status !== f.status) continue;
       if (f.kind && i.kind !== f.kind) continue;
       if (f.category && i.category !== f.category) continue;
+      if (f.editType && i.editType !== f.editType) continue;
+      if (f.round && i.round?.toLowerCase() !== f.round.toLowerCase()) continue;
       if (f.reviewer && !file.reviewer.name.toLowerCase().includes(f.reviewer.toLowerCase())) continue;
       out.push({ item: i, reviewer: file.reviewer.name });
     }
@@ -442,6 +453,10 @@ export interface NoteInput {
   /** Suggestions: the text that should replace the quote. */
   replacement?: string;
   category?: string;
+  /** developmental, line, copy or proof. Defaults to the skill's own type when the notes come from a known skill. */
+  editType?: string;
+  /** The editing round, e.g. "First read". */
+  round?: string;
   /** Text immediately before / after the quote, to pick one of several matches. */
   before?: string;
   after?: string;
@@ -511,6 +526,8 @@ function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: s
     ...(replacement !== undefined ? { replacement } : {}),
     status: 'open',
     ...(normalizeCategory(input.category) ? { category: normalizeCategory(input.category) } : {}),
+    ...(normalizeEditType(input.editType) ? { editType: normalizeEditType(input.editType) } : {}),
+    ...(normalizeRound(input.round) ? { round: normalizeRound(input.round) } : {}),
     origin: 'ai',
     author: reviewer.name,
     createdAt: now,
@@ -535,8 +552,11 @@ async function readFile(ctx: AgentContext, dir: string, id: string): Promise<Rev
 }
 
 /** Adds up to 50 notes. Each is checked on its own: the good ones are saved and the rest come back with the reason. */
-export function addNotes(ctx: AgentContext, project: string, skill: string | undefined, notes: NoteInput[]): Promise<NoteResult[]> {
+export function addNotes(ctx: AgentContext, project: string, skill: string | undefined, rawNotes: NoteInput[], round?: string): Promise<NoteResult[]> {
   const reviewer = reviewerFor(ctx, skill);
+  // a known skill says what kind of edit its notes are; a note or the call can say more, or something else
+  const skillType = normalizeEditType(skill);
+  const notes = Array.isArray(rawNotes) ? rawNotes.map((n) => ({ ...n, editType: n.editType ?? skillType, round: n.round ?? round })) : rawNotes;
   if (!Array.isArray(notes) || !notes.length) throw new AgentError('notes must be a list with at least one note.');
   if (notes.length > LIMITS.notesPerCall) throw new AgentError(`At most ${LIMITS.notesPerCall} notes per call; send the rest in another call.`);
   return serial(`${ctx.root}/${project}`, async () => {

@@ -2,6 +2,10 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.19.4 (Notes can carry an edit type and an editing round)
+
+- **Notes.** A note can now be tagged with the kind of edit it belongs to (developmental, line, copy or proof) and the editing round it was made in ("First read", "Round 2"). Both are optional, so existing notes and review files are unchanged. The `add_notes` tool takes `editType` and `round` (per note, and `round` for the whole call); notes from the developmental, line and copy skills get their type automatically. `get_notes` can filter on either. This is the first step of the Editing workspace plan (docs/PLAN-EDITING.md).
+
 ## 0.19.3 (Rewrite mode: the rewrite sets the limit)
 
 - **Rewrite mode.** The two panes of a rewrite can no longer go past the end of the rewrite: a blank rewrite keeps both on its first chapter instead of the original running ahead, and the pair advances as the rewrite grows. The original is always the original. To look ahead in it, open it in a tab of its own with the mode off. Turning the mode on from the rewrite loads both files first, so neither pane opens empty. Scrolling stops in the original where the rewrite runs out.

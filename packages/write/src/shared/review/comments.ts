@@ -25,6 +25,26 @@ export interface Reply {
 /** `deleted` is kept (not removed) so the deletion travels to the other side when files are merged. */
 export type ItemStatus = 'open' | 'resolved' | 'accepted' | 'rejected' | 'deleted'
 
+/** What kind of editing a note belongs to; the four passes of an edit. Optional on a note, so older files and quick comments stay as they are. */
+export const EDIT_TYPES = ['developmental', 'line', 'copy', 'proof'] as const
+export type EditType = (typeof EDIT_TYPES)[number]
+
+export const ROUND_MAX = 40
+
+/** An edit type as stored: one of EDIT_TYPES (any case, with "-editing", " edit" or "reading" on the end allowed), or undefined. */
+export function normalizeEditType(raw: unknown): EditType | undefined {
+  if (typeof raw !== 'string') return undefined
+  const t = raw.trim().toLowerCase().replace(/[\s_-]*(editing|edit|reading|read)$/, '')
+  return (EDIT_TYPES as readonly string[]).includes(t) ? (t as EditType) : t === 'proofread' || t === 'proofreading' ? 'proof' : undefined
+}
+
+/** A round label as stored ("First read", "Round 2"): trimmed, one line, at most ROUND_MAX characters. Undefined when there is nothing left. */
+export function normalizeRound(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined
+  const t = raw.replace(/\s+/g, ' ').trim().slice(0, ROUND_MAX).trim()
+  return t || undefined
+}
+
 export interface ReviewItem {
   id: string
   kind: 'comment' | 'suggestion'
@@ -37,6 +57,10 @@ export interface ReviewItem {
   status: ItemStatus
   /** What kind of point it makes (e.g. "pacing", "spelling"); set by AI reviewers, shown as a chip. Optional. */
   category?: string
+  /** The pass it belongs to: developmental, line, copy or proof. Optional. */
+  editType?: EditType
+  /** The editing round it was made in ("First read", "Round 2"), so a report can show progress between rounds. Optional. */
+  round?: string
   /** Who made it. Absent means a person. */
   origin?: 'human' | 'ai'
   author: string
