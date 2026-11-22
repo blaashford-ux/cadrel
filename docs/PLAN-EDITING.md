@@ -48,7 +48,17 @@ Sections:
 ### 5. Passes data
 - Existing passes stay readable in an "Earlier passes" archive tab; records, permissions and `edit.*` capabilities remain in the kernel. The new Editing page does not create passes. Nothing is deleted.
 
-## Things you did not ask for but I recommend
+## Confirmed scope (after review)
+
+In: editing rounds; handling of moved or cut notes; Word export with real comments and tracked changes (accepted suggestions-in-waiting become Word tracked changes the author can accept in Word); tagging notes by edit type (developmental, line, copy, proof) and by source (human, AI, which editor). Roles as proposed: editors add notes and edit the report, authors read and accept.
+Out: Word tracked-changes import; client-facing mode, report snapshots, style sheet, sign-off (revisit later).
+
+Implementation notes for the confirmed items:
+- Round, edit type and source are fields on the note (`round`, `editType`; source is the existing `origin` plus `author`). They are optional so existing review files still load, and `add_notes` gains optional `editType` and `round` so AI notes carry them too.
+- Moved or cut notes: reuse `locateAnchor` statuses (same-place, moved, reflowed, gone). The notes panel gets a "Needs attention" filter; a cut note can be re-anchored by selecting new text, or resolved.
+- Word export: build on the existing `docx` library (`packages/write/src/shared/export/docx.ts`). Comments become Word comments anchored to the quoted range; a suggestion becomes a tracked deletion plus insertion attributed to its author. Needs a LibreOffice round-trip check, which the repo already uses for docx tests.
+
+## Other ideas considered (not in scope unless you say so)
 
 1. Rounds: group notes and the report by editing round (First read, Second read) so progress between rounds is visible. Small cost: a `round` label on the report, notes filter by date range.
 2. Stale-anchor handling: when the manuscript changes after notes were written, show "moved/reflowed/gone" states (the anchor code already computes these) and offer re-anchor.
