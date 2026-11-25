@@ -249,7 +249,7 @@ describe('the app’s people host over a server Studio', () => {
     expect(await loadLens({ mayAnywhere: (c) => host.mayOn(c), ...quiet }, host.me, '2026-11-16')).toMatchObject({ available: true, lenses: ['author'] });
     const lead = new PeopleHost();
     await lead.openRemote({ client: s.owner, studioId: 'sabc123def4' });
-    expect(await loadLens({ mayAnywhere: (c) => lead.mayOn(c), ...quiet }, lead.me, '2026-11-16')).toMatchObject({ lenses: ['director', 'editor', 'author'] });
+    expect(await loadLens({ mayAnywhere: (c) => lead.mayOn(c), ...quiet }, lead.me, '2026-11-16')).toMatchObject({ lenses: ['director', 'editor', 'author', 'art', 'launch'] });
     await lead.close();
     // the security policy: an Author reads it and may not change it; the owner may
     expect(await host.policyState()).toMatchObject({ available: true, may: false, policy: { inviteDays: 7, staleCheckoutDays: 7, assistantEnabled: true, guestDays: null } });
@@ -304,7 +304,7 @@ describe('backing up and restoring a server Studio’s records', () => {
     const made = await backupServerRecords({ client: s.owner, file, studio: { id: 'sabc123def4', name: 'Acme' } });
     expect(made.rows).toBeGreaterThan(20);
     const saved = JSON.parse(await readFile(file, 'utf8'));
-    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 22 });
+    expect(saved).toMatchObject({ format: 'cadrel-server-records', studio: { name: 'Acme' }, schema: 24 });
     expect(saved.tables.book).toHaveLength(1);
     expect(JSON.stringify(saved)).not.toContain('public_key'); // who may sign in is not in it
 

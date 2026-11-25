@@ -91,6 +91,22 @@ export function addCommunitySource(db: Db, root: string, categoryKey: string, su
   return listCommunitySources(db, r.category.key);
 }
 
+/** Move a subreddit one place up or down the order a sync reads a category's subreddits in (the order is `added_at`, renumbered here so ties cannot hide a move). */
+export function moveCommunitySource(db: Db, root: string, categoryKey: string, subreddit: string, direction: 'up' | 'down'): CommunitySource[] {
+  const sub = cleanSubreddit(subreddit);
+  const order = listCommunitySources(db, categoryKey).map((s) => s.subreddit);
+  const i = order.indexOf(sub);
+  const j = direction === 'up' ? i - 1 : i + 1;
+  if (i < 0 || j < 0 || j >= order.length) return listCommunitySources(db, categoryKey);
+  [order[i], order[j]] = [order[j]!, order[i]!];
+  const base = Date.now() - order.length;
+  db.transaction(() => {
+    order.forEach((s, k) => db.prepare('UPDATE community_source SET added_at = ? WHERE category_key = ? AND subreddit = ?').run(new Date(base + k).toISOString(), categoryKey, s));
+  })();
+  writeSources(db, root);
+  return listCommunitySources(db, categoryKey);
+}
+
 /** Unlink a subreddit from a category. Its stored text is deleted too unless another category still uses it. */
 export function removeCommunitySource(db: Db, root: string, categoryKey: string, subreddit: string): CommunitySource[] {
   const sub = cleanSubreddit(subreddit);

@@ -16,7 +16,7 @@ let dir: string, host: PeopleHost, studio: StudioService, series: string, book1:
 const BOOK4 = ['Mara walked to the ford with her green eyes narrowed.', 'She counted nine days since the battle.'].join('\n\n');
 const texts: Record<string, string> = { 'f4:1': BOOK4, 'f4:2': BOOK4.replace('green eyes', 'grey eyes') };
 const files: EditorialFiles = {
-  manuscripts: async () => [{ fileId: 'f4', path: 'Book Four/book.md', version: 2 }],
+  manuscripts: async () => [{ fileId: 'f4', path: 'Book Four/book.md', version: 2, projectId: book4 }],
   textOf: async (id, v) => texts[`${id}:${v}`] ?? '',
   versionsOf: async () => [{ n: 2 }, { n: 1 }] as never
 };
@@ -107,8 +107,8 @@ describe('the continuity checks on the page', () => {
   it('offers the books and manuscripts a check can be started on, starts one, and shows its findings with the passage in its surroundings and the cited canon', async () => {
     const before = await page.continuity();
     if (!before.available) throw new Error('unavailable');
-    expect(before.books.map((b) => b.name)).toEqual(['Dragon Rider', 'Dragon Rider / Book Four', 'Dragon Rider / Book One']);
-    expect(before.manuscripts).toEqual([{ fileId: 'f4', path: 'Book Four/book.md', version: 2 }]);
+    expect(before.books.map((b) => b.name)).toEqual(['Dragon Rider / Book Four', 'Dragon Rider / Book One']); // the books themselves, not the series that holds them
+    expect(before.manuscripts).toEqual([{ fileId: 'f4', path: 'Book Four/book.md', version: 2, projectId: book4 }]);
     // the page starts a check on version 2 (the newest); here the pinned text is version 1, so pin it that way
     const k = (await page.continuityCall('start', [book4, 'f4'])) as { id: string };
     await db().run("UPDATE continuity_check SET file_version = 1 WHERE id = ?", [k.id]);
@@ -139,6 +139,28 @@ describe('the continuity checks on the page', () => {
     expect(v.available && v.check.state).toBe('closed');
     await expect(page.continuityCall('verify', [k.id, 'x'])).rejects.toBeInstanceOf(CanonError);
     await expect(page.continuityCall('wipe', [k.id])).rejects.toBeInstanceOf(CanonError);
+  });
+
+  it('follows the project it is given: that book, or the series with its books, and only the manuscripts inside', async () => {
+    const one = await page.continuity(book1);
+    if (!one.available) throw new Error('unavailable');
+    expect(one.books.map((b) => b.id)).toEqual([book1]);
+    expect(one.manuscripts).toEqual([]); // Book Four's manuscript is not Book One's
+    const four = await page.continuity(book4);
+    if (!four.available) throw new Error('unavailable');
+    expect(four.books.map((b) => b.id)).toEqual([book4]);
+    expect(four.manuscripts.map((m) => m.fileId)).toEqual(['f4']);
+    const all = await page.continuity(series);
+    if (!all.available) throw new Error('unavailable');
+    expect(all.books.map((b) => b.id).sort()).toEqual([book1, book4].sort());
+    expect(all.manuscripts.map((m) => m.fileId)).toEqual(['f4']);
+  });
+
+  it('shows the canon of the project in view, from a book as from the series, and says so for one that is not there', async () => {
+    const fromBook = await page.state(book4);
+    expect(fromBook).toMatchObject({ available: true, current: { id: series, name: 'Dragon Rider' } });
+    expect(await page.state(series)).toMatchObject({ available: true, current: { id: series } });
+    expect(await page.state('nope')).toMatchObject({ available: false });
   });
 
   it('says so for a check that is not there', async () => {

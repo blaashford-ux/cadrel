@@ -53,7 +53,10 @@ export const CONDITION_KINDS = {
   approved: 'It has been signed off',
   pass_closed: 'An editorial pass has been closed',
   queries_resolved: 'Every editor’s query has been answered',
-  continuity_clear: 'Its latest continuity check has no open high-severity finding'
+  continuity_clear: 'Its latest continuity check has no open high-severity finding',
+  cover_approved: 'It has an approved cover',
+  preflight_clear: 'Its latest Preflight check has no open errors',
+  launch_ready: 'Its release plan has no late or blocked required item'
 } as const;
 export type ConditionKind = keyof typeof CONDITION_KINDS;
 export interface Condition {
@@ -352,6 +355,24 @@ export interface ProjectFacts {
   editorial?: EditorialFacts;
   /** Continuity checks of the manuscripts on the project and everything under it. Absent where the Studio holds none: nothing has been checked. */
   continuity?: ContinuityFacts;
+  /** Approved covers and Preflight runs on the project and everything under it. Absent where the Studio holds none: nothing is approved or checked. */
+  art?: ArtFacts;
+  /** Release plans on the project and everything under it. Absent where the Studio holds none. */
+  launch?: LaunchGateFacts;
+}
+export interface LaunchGateFacts {
+  /** Live plans (not cancelled or reviewed). */
+  plans: number;
+  late: number;
+  blocked: number;
+}
+export interface ArtFacts {
+  /** Cover assets with an approved version. */
+  approvedCovers: number;
+  /** EPUB files whose newest Preflight run is counted. */
+  checked: number;
+  /** Errors still open in those newest runs. */
+  openErrors: number;
 }
 export interface ContinuityFacts {
   /** Manuscripts whose newest check has been handed over for decisions (or closed). */
@@ -390,6 +411,22 @@ export function unmetConditions(facts: ProjectFacts, conditions: Condition[]): s
       if (!c || c.checked + c.underway === 0) out.push('Needs a continuity check');
       else if (c.underway > 0) out.push(`${c.underway === 1 ? 'A continuity check is' : `${c.underway} continuity checks are`} still being made`);
       else if (c.openHigh > 0) out.push(`${c.openHigh} high-severity continuity finding${c.openHigh === 1 ? ' is' : 's are'} still open`);
+      continue;
+    }
+    if (kind === 'cover_approved') {
+      if (!facts.art || facts.art.approvedCovers === 0) out.push('Needs an approved cover');
+      continue;
+    }
+    if (kind === 'preflight_clear') {
+      const a = facts.art;
+      if (!a || a.checked === 0) out.push('Needs a Preflight check');
+      else if (a.openErrors > 0) out.push(`${a.openErrors} Preflight error${a.openErrors === 1 ? ' is' : 's are'} still open`);
+      continue;
+    }
+    if (kind === 'launch_ready') {
+      const l = facts.launch;
+      if (!l || l.plans === 0) out.push('Needs a release plan');
+      else if (l.late + l.blocked > 0) out.push(`${l.late + l.blocked} required item${l.late + l.blocked === 1 ? '' : 's'} of the release plan ${l.late + l.blocked === 1 ? 'is' : 'are'} late or blocked`);
       continue;
     }
     if (kind === 'queries_resolved') {

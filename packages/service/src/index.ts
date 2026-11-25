@@ -12,13 +12,25 @@ import {
   deleteRole, deleteTeam, effectiveCapabilities, explain, getBook, getPerson, getRole, grantRole, keepsAnOwner, listAssignments, listBooks, listIps, listPenNames, listPeople, listRoles, listSeries, listTeams,
   loadAccess, moveBook, renameTeam, resetRole, revokeAssignment, setAssignmentExpiry, setCatalogueArchived, deleteBook, setPenNamePeople, setPersonActive, setTeamMember, updateBook, updateEdition,
   updatePerson, updateRole, defaultRoles, projectVisibility, ancestorsOf, subtreeIds, getProject,
+  addFeedback, addUse, approveVersion, approvedAssets, approvalsOf, assetOfFile, assetWhereUsed, chooseConcept, conceptsOf, createAsset, decideConcept, decideReplacement, feedbackOf, getAsset, getConcept, getReplacement,
+  listAssets, proposeReplacement, replacementsOf, resolveFeedback, retireAsset, revokeApproval, setUseState, submitConcept, submitForReview, updateAsset, usesOf, withdrawReplacement, approvedVersions,
+  getRun, latestRun, listRuns, recordRun, waiveResult,
+  addReader, applyDateProposal, approvePlan, arcSent, archiveTemplate, assignItem, cancelPlan, cancelRequest, closeCampaign, countsOf, createCampaign, createCompSet, createPlan, createRequest, createTemplate,
+  dateProposalsOf, decisionWindow, deliverRequest, ensureDefaultTemplates, eraseReader, finishReview, getCampaign, getDateProposal, getPlan, getRequest, getReview, getTemplate, goLive, itemsOf, linkItemRequest,
+  listCampaigns, listCompSets, listFigures, listMarketDecisions, listPlans, listReports, listRequests, listTemplates, markItem, openReview, pinBriefComps, planRevision, planView, proposeDate, publishFigures,
+  readersOf, recordMarketDecision, refreshReview, rejectDateProposal, reportReviews, requestFacts, requestView, reviewCrossCheck, reviseTemplate, saveReport, getReport, setReaderState, syncItems, syncRequest,
+  updatePlan, writeReview, briefComps, latestFigure, NO_FACTS, launchFactsOf, type LaunchGateFacts,
+  type ArcCampaign, type ArcCounts, type ArcReader, type AssetRequest, type BriefComp, type CompSet, type DateProposalRecord, type DecisionWindow, type LaunchReview, type MarketDecision, type MarketFigure,
+  type MarketReport, type NewFigure, type NewPlan, type NewRequest, type PlanFacts, type PlanFilter, type PlanItem, type PlanView, type ReaderState, type ReleasePlan, type ReleaseTemplate, type RequestView, type TemplateItem,
+  type PlanTargets, type RequestFilter, type ReviewCrossCheck, type ImageInfo, type CompRole, type MarketDecisionKind, type ReportKind, type RequestSpec,
+  type ApprovedAsset, type Asset, type AssetApproval, type AssetFilter, type AssetKind, type AssetReplacement, type AssetUse, type AssetWhereUsed, type Concept, type Feedback, type LicenceInput, type NewAsset, type NewRun, type PreflightResult, type PreflightRun, type Region, type RunFilter, type UseKind,
   canonStamp, checkChange, decideProposal, entryVersions, getEntry, getFact, getProposal, listEntries, listFacts, listProposals, proposeChange, withdrawProposal,
   type CanonChange, type CanonEntry, type CanonEntryVersion, type CanonFact, type CanonProposal, type EntryFilter, type FactFilter, type ProposalFilter,
   closeCheck, decideFinding, deliverCheck, findingCounts, getCheck, getFinding, listChecks, listFindings, raiseFindings, startCheck, verifyFindings,
   type CheckFilter, type ContinuityCheck, type ContinuityFinding, type FindingCounts, type FindingDecision, type FindingFilter, type NewFinding,
   type Assignment, type AssignmentRecord, type Actor, type Book, type BookWithEditions, type Db, type Decision, type Edition, type Ip, type PenName, type PermissionContext, type Person, type Resource, type Role,
   type Contribution, type Credit, type Rights, type RevenueShare, type Subject,
-  editorialFacts, type EditorialFacts, continuityFacts, type ContinuityFacts,
+  editorialFacts, type EditorialFacts, continuityFacts, type ContinuityFacts, artFacts, type ArtFacts,
   listVerification, verifyPass, type VerificationRecord,
   decideQuery, listEditDecisions, type EditDecisionFilter, type EditDecisionRecord, type NewEditDecision,
   answerQuery, getQuery, listQueries, queriesFromNotes, queryCounts, raiseQueries, resolveQuery, withdrawQuery, type NewQuery, type QueryCounts, type QueryFilter, type QueryRecord,
@@ -79,8 +91,8 @@ export interface ServiceOptions {
   projects?: () => Promise<ProjectTree | null>;
 }
 
-const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read' };
-const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign' };
+const BRIEF_READ: Record<BriefKind, string> = { manuscript: 'task.read', edit: 'edit.read', cover: 'asset.read', art: 'asset.read', launch: 'launch.read', campaign: 'launch.read' };
+const BRIEF_WRITE: Record<BriefKind, string> = { manuscript: 'task.edit', edit: 'edit.assign', cover: 'brief.write', art: 'brief.write', launch: 'launch.manage', campaign: 'launch.manage' };
 
 export class StudioService {
   constructor(private readonly o: ServiceOptions) {}
@@ -514,6 +526,441 @@ export class StudioAs {
     }
   };
 
+
+  /**
+   * Assets: art, covers and other design files, governed. Reading needs asset.read on the project; uploading a version as an asset, adding uses,
+   * submitting a concept and proposing a replacement need asset.write; commenting needs asset.comment; approving or revoking a version, deciding a
+   * replacement and choosing a concept need asset.approve; licences and retiring need asset.manage. Nothing is approved except an exact version.
+   */
+  readonly assets = {
+    list: async (f: AssetFilter = {}): Promise<Asset[]> => {
+      await this.needWork('asset.read');
+      const reach = await this.reach('asset.read');
+      return (await listAssets(this.o.db, this.ctx(), f)).filter((a) => !reach || reach(a.projectId));
+    },
+    get: async (id: string): Promise<Asset | null> => {
+      await this.needWork('asset.read');
+      const a = await getAsset(this.o.db, this.ctx(), id);
+      const reach = await this.reach('asset.read');
+      return a && (!reach || reach(a.projectId)) ? a : null;
+    },
+    /** The asset a vault file is, if it is one. */
+    ofFile: async (fileId: string): Promise<Asset | null> => {
+      await this.needWork('asset.read');
+      const a = await assetOfFile(this.o.db, this.ctx(), fileId);
+      const reach = await this.reach('asset.read');
+      return a && (!reach || reach(a.projectId)) ? a : null;
+    },
+    create: async (i: NewAsset): Promise<Asset> => {
+      await this.mustReach(i?.projectId, 'asset.read');
+      await this.needWork('asset.write', i?.projectId);
+      if (i.licence) await this.needWork('asset.manage', i.projectId);
+      await this.mustHoldFileIn(i.fileId, i.projectId);
+      return createAsset(this.o.db, this.ctx(), i);
+    },
+    update: async (id: string, i: { name?: string; channel?: string; licence?: LicenceInput }): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork(i?.licence ? 'asset.manage' : 'asset.write', a.projectId);
+      return updateAsset(this.o.db, this.ctx(), id, i);
+    },
+    submit: async (id: string): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return submitForReview(this.o.db, this.ctx(), id);
+    },
+    retire: async (id: string, reason: string): Promise<Asset> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.manage', a.projectId);
+      return retireAsset(this.o.db, this.ctx(), id, reason);
+    },
+    approvals: async (id: string): Promise<AssetApproval[]> => {
+      const a = await this.assetToRead(id);
+      return approvalsOf(this.o.db, this.ctx(), a.id);
+    },
+    /** The versions that stand approved now. */
+    approved: async (id: string): Promise<AssetApproval[]> => {
+      const a = await this.assetToRead(id);
+      return approvedVersions(await approvalsOf(this.o.db, this.ctx(), a.id));
+    },
+    approve: async (id: string, version: number, note?: string): Promise<AssetApproval> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.approve', a.projectId);
+      return approveVersion(this.o.db, this.ctx(), id, version, note);
+    },
+    revoke: async (id: string, version: number, reason: string): Promise<AssetApproval> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.approve', a.projectId);
+      return revokeApproval(this.o.db, this.ctx(), id, version, reason);
+    },
+    uses: async (id: string): Promise<AssetUse[]> => usesOf(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    whereUsed: async (id: string): Promise<AssetWhereUsed> => assetWhereUsed(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    addUse: async (id: string, i: { kind: UseKind; label: string; ref?: string; version?: number | null; note?: string }): Promise<AssetUse> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return addUse(this.o.db, this.ctx(), id, i);
+    },
+    setUseState: async (useId: string, state: 'current' | 'done'): Promise<AssetUse> => {
+      const u = await this.o.db.first<{ assetId: string }>('SELECT asset_id AS assetId FROM asset_use WHERE id = ? AND studio_id = ?', [useId, this.o.studioId]);
+      if (!u) throw new Error('That use is not there.');
+      const a = await this.assetToRead(u.assetId);
+      await this.needWork('asset.write', a.projectId);
+      return setUseState(this.o.db, this.ctx(), useId, state);
+    },
+    replacements: async (id: string): Promise<AssetReplacement[]> => replacementsOf(this.o.db, this.ctx(), (await this.assetToRead(id)).id),
+    proposeReplacement: async (id: string, i: { fromVersion: number; toVersion: number; reason: string }): Promise<AssetReplacement> => {
+      const a = await this.assetToRead(id);
+      await this.needWork('asset.write', a.projectId);
+      return proposeReplacement(this.o.db, this.ctx(), id, i);
+    },
+    decideReplacement: async (id: string, d: { approve: boolean; reason?: string }): Promise<{ replacement: AssetReplacement; needUpdate: AssetUse[] }> => {
+      const r = await getReplacement(this.o.db, this.ctx(), id);
+      if (!r) throw new Error('That replacement is not there.');
+      const a = await this.assetToRead(r.assetId);
+      await this.needWork('asset.approve', a.projectId);
+      return decideReplacement(this.o.db, this.ctx(), id, d);
+    },
+    withdrawReplacement: async (id: string): Promise<AssetReplacement> => {
+      const r = await getReplacement(this.o.db, this.ctx(), id);
+      if (!r) throw new Error('That replacement is not there.');
+      const a = await this.assetToRead(r.assetId);
+      if (r.proposedBy !== this.personId) await this.needWork('asset.approve', a.projectId);
+      else await this.needWork('asset.write', a.projectId);
+      return withdrawReplacement(this.o.db, this.ctx(), id);
+    },
+    concepts: async (briefId: string): Promise<Concept[]> => {
+      const b = await this.briefToRead(briefId);
+      await this.needWork('asset.read', b.projectId);
+      return conceptsOf(this.o.db, this.ctx(), b.id);
+    },
+    submitConcept: async (i: { briefId: string; briefVersion?: number; fileId: string; fileVersion?: number; note?: string }): Promise<Concept> => {
+      const b = await this.briefToRead(i?.briefId);
+      await this.needWork('asset.write', b.projectId);
+      await this.mustHoldFileIn(i.fileId, b.projectId);
+      return submitConcept(this.o.db, this.ctx(), i);
+    },
+    decideConcept: async (id: string, state: 'shortlisted' | 'rejected', note?: string): Promise<Concept> => {
+      const k = await this.conceptToRead(id);
+      await this.needWork('asset.approve', k.projectId);
+      return decideConcept(this.o.db, this.ctx(), id, state, note);
+    },
+    chooseConcept: async (id: string): Promise<{ concept: Concept; asset: Asset }> => {
+      const k = await this.conceptToRead(id);
+      await this.needWork('asset.approve', k.projectId);
+      return chooseConcept(this.o.db, this.ctx(), id);
+    },
+    feedback: async (targetKind: 'asset' | 'concept', targetId: string): Promise<Feedback[]> => {
+      if (targetKind === 'asset') await this.assetToRead(targetId);
+      else await this.conceptToRead(targetId);
+      return feedbackOf(this.o.db, this.ctx(), targetKind, targetId);
+    },
+    comment: async (i: { targetKind: 'asset' | 'concept'; targetId: string; fileVersion?: number; region?: Region | null; body: string }): Promise<Feedback> => {
+      const project = i?.targetKind === 'asset' ? (await this.assetToRead(i.targetId)).projectId : (await this.conceptToRead(i?.targetId)).projectId;
+      await this.needWork('asset.comment', project);
+      return addFeedback(this.o.db, this.ctx(), i);
+    },
+    resolveFeedback: async (id: string): Promise<Feedback> => {
+      const f = await this.o.db.first<{ projectId: string; by: string }>('SELECT project_id AS projectId, by FROM asset_feedback WHERE id = ? AND studio_id = ?', [id, this.o.studioId]);
+      if (!f) throw new Error('That feedback is not there.');
+      await this.mustReach(f.projectId, 'asset.read');
+      await this.needWork('asset.read', f.projectId);
+      if (f.by !== this.personId) await this.needWork('asset.write', f.projectId);
+      return resolveFeedback(this.o.db, this.ctx(), id);
+    },
+    /**
+     * What Launch reads: the approved assets of a kind in a project and everything in it (with each one's approved version), and the newest
+     * Preflight run of the project's editions, if this person may read it. The two facts a release plan needs, from records.
+     */
+    readiness: async (projectId: string, kind: AssetKind = 'cover'): Promise<{ assets: ApprovedAsset[]; preflight: PreflightRun | null }> => {
+      await this.mustReach(projectId, 'asset.read');
+      await this.needWork('asset.read', projectId);
+      const ids = await this.subtree(projectId);
+      const assets = await approvedAssets(this.o.db, this.ctx(), ids, kind);
+      let preflight: PreflightRun | null = null;
+      try {
+        await this.needWork('preflight.read', projectId);
+        preflight = await latestRun(this.o.db, this.ctx(), { projectIds: ids });
+      } catch {
+        preflight = null;
+      }
+      return { assets, preflight };
+    }
+  };
+
+  /**
+   * Preflight: graded checks of an EPUB before it is uploaded. The checking happens on the computer that has the file; the service keeps the run
+   * and its results. Reading needs preflight.read on the project; recording a run and waiving a result need preflight.run.
+   */
+  readonly preflight = {
+    list: async (f: RunFilter = {}): Promise<PreflightRun[]> => {
+      await this.needWork('preflight.read');
+      const reach = await this.reach('preflight.read');
+      return (await listRuns(this.o.db, this.ctx(), f)).filter((r) => !reach || reach(r.projectId));
+    },
+    get: async (id: string): Promise<{ run: PreflightRun; results: PreflightResult[] } | null> => {
+      await this.needWork('preflight.read');
+      const g = await getRun(this.o.db, this.ctx(), id);
+      const reach = await this.reach('preflight.read');
+      return g && (!reach || reach(g.run.projectId)) ? g : null;
+    },
+    latest: async (f: { editionId?: string; fileId?: string; projectId?: string }): Promise<PreflightRun | null> => {
+      await this.needWork('preflight.read');
+      const reach = await this.reach('preflight.read');
+      const run = await latestRun(this.o.db, this.ctx(), { ...(f.editionId ? { editionId: f.editionId } : {}), ...(f.fileId ? { fileId: f.fileId } : {}), ...(f.projectId ? { projectIds: await this.subtree(f.projectId) } : {}) });
+      return run && (!reach || reach(run.projectId)) ? run : null;
+    },
+    record: async (i: NewRun): Promise<{ run: PreflightRun; results: PreflightResult[] }> => {
+      await this.mustReach(i?.projectId, 'preflight.read');
+      await this.needWork('preflight.run', i?.projectId);
+      await this.mustHoldFileIn(i.fileId, i.projectId);
+      return recordRun(this.o.db, this.ctx(), i);
+    },
+    waive: async (runId: string, seq: number, reason: string): Promise<{ run: PreflightRun; results: PreflightResult[] }> => {
+      const g = await getRun(this.o.db, this.ctx(), runId);
+      if (!g) throw new Error('That run is not there.');
+      await this.mustReach(g.run.projectId, 'preflight.read');
+      await this.needWork('preflight.run', g.run.projectId);
+      return waiveResult(this.o.db, this.ctx(), runId, seq, reason);
+    }
+  };
+
+
+  /**
+   * Release plans and the launch around them. Reading needs launch.read on the book; creating and changing plans, templates, ARC rounds, requests, reviews
+   * and decisions needs launch.manage; approving a plan (and applying a change of date to one that was approved) needs launch.approve. Reader names and
+   * emails need launch.manage and each read is logged: everyone who may read a plan sees counts. What is outstanding is computed from the other records.
+   */
+  readonly launch = {
+    templates: async (): Promise<ReleaseTemplate[]> => {
+      await this.needWork('launch.read');
+      await ensureDefaultTemplates(this.o.db, this.ctx()).catch(() => undefined);
+      return listTemplates(this.o.db, this.ctx());
+    },
+    template: async (id: string, version?: number): Promise<ReleaseTemplate | null> => (await this.needWork('launch.read'), getTemplate(this.o.db, this.ctx(), id, version)),
+    createTemplate: async (i: { name: string; items: TemplateItem[] }): Promise<ReleaseTemplate> => (await this.needWork('launch.manage'), createTemplate(this.o.db, this.ctx(), i)),
+    reviseTemplate: async (id: string, i: { items: TemplateItem[]; name?: string; note?: string; basedOn: number }): Promise<ReleaseTemplate> => (await this.needWork('launch.manage'), reviseTemplate(this.o.db, this.ctx(), id, i)),
+    archiveTemplate: async (id: string): Promise<void> => (await this.needWork('launch.manage'), archiveTemplate(this.o.db, this.ctx(), id)),
+
+    plans: async (f: PlanFilter = {}): Promise<ReleasePlan[]> => {
+      await this.needWork('launch.read');
+      const reach = await this.reach('launch.read');
+      return (await listPlans(this.o.db, this.ctx(), f)).filter((p) => !reach || reach(p.projectId));
+    },
+    /** One plan with every item's status worked out from the records. Whoever may manage launches also has the records' truth ticked onto the tasks. */
+    plan: async (id: string): Promise<PlanView | null> => {
+      const p = await getPlan(this.o.db, this.ctx(), id);
+      if (!p || !(await this.mayReadPlan(p))) return null;
+      let facts = await this.planFacts(p);
+      if (await this.holds('launch.manage', p.projectId, true)) {
+        if ((await syncItems(this.o.db, this.ctx(), id, facts)).length) facts = await this.planFacts(p);
+      }
+      return planView(this.o.db, this.ctx(), id, facts);
+    },
+    create: async (i: NewPlan): Promise<{ plan: ReleasePlan; items: PlanItem[] }> => {
+      await this.mustReach(i?.projectId, 'launch.read');
+      await this.needWork('launch.manage', i?.projectId);
+      for (const personId of Object.values(i.assignees ?? {})) if (personId) await this.mustBeAssigned([personId], i.projectId, 'a release plan');
+      return createPlan(this.o.db, this.ctx(), i);
+    },
+    update: async (id: string, patch: { name?: string; targets?: PlanTargets; editionId?: string | null }): Promise<ReleasePlan> => {
+      const p = await this.planToManage(id);
+      return updatePlan(this.o.db, this.ctx(), p.id, patch);
+    },
+    assign: async (id: string, key: string, personId: string | null): Promise<void> => {
+      const p = await this.planToManage(id);
+      if (personId) await this.mustBeAssigned([personId], p.projectId, 'a release item');
+      return assignItem(this.o.db, this.ctx(), p.id, key, personId);
+    },
+    /** Ticks a manual item (or reopens it). The person it is assigned to may as well as a manager. */
+    mark: async (id: string, key: string, done: boolean): Promise<void> => {
+      const p = await getPlan(this.o.db, this.ctx(), id);
+      if (!p || !(await this.mayReadPlan(p))) throw new Error('That plan is not there.');
+      const it = (await itemsOf(this.o.db, id)).find((x) => x.key === key);
+      const task = it ? await getTask(this.o.db, this.ctx(), it.taskId) : null;
+      if (!(task && task.assigneeId === this.personId && (await this.holds('task.edit', p.projectId, true))) ) await this.needWork('launch.manage', p.projectId);
+      await markItem(this.o.db, this.ctx(), id, key, done);
+    },
+    approve: async (id: string, revision: string): Promise<ReleasePlan> => {
+      const p = await getPlan(this.o.db, this.ctx(), id);
+      if (!p || !(await this.mayReadPlan(p))) throw new Error('That plan is not there.');
+      await this.needWork('launch.approve', p.projectId);
+      return approvePlan(this.o.db, this.ctx(), id, revision, await this.pairsOf(id));
+    },
+    goLive: async (id: string): Promise<ReleasePlan> => {
+      const p = await this.planToManage(id);
+      return goLive(this.o.db, this.ctx(), p.id, await this.pairsOf(id));
+    },
+    cancel: async (id: string, reason: string): Promise<ReleasePlan> => {
+      const p = await this.planToManage(id);
+      return cancelPlan(this.o.db, this.ctx(), p.id, reason);
+    },
+    dates: async (id: string): Promise<DateProposalRecord[]> => {
+      const p = await getPlan(this.o.db, this.ctx(), id);
+      if (!p || !(await this.mayReadPlan(p))) return [];
+      return dateProposalsOf(this.o.db, this.ctx(), id);
+    },
+    proposeDate: async (id: string, newDate: string, reason?: string): Promise<DateProposalRecord> => {
+      const p = await this.planToManage(id);
+      return proposeDate(this.o.db, this.ctx(), p.id, newDate, reason);
+    },
+    applyDate: async (proposalId: string): Promise<{ proposal: DateProposalRecord; plan: ReleasePlan }> => {
+      const d = await getDateProposal(this.o.db, this.ctx(), proposalId);
+      const p = d ? await getPlan(this.o.db, this.ctx(), d.planId) : null;
+      if (!d || !p || !(await this.mayReadPlan(p))) throw new Error('That change of date is not there.');
+      await this.needWork(p.state === 'approved' ? 'launch.approve' : 'launch.manage', p.projectId);
+      return applyDateProposal(this.o.db, this.ctx(), proposalId);
+    },
+    rejectDate: async (proposalId: string, reason: string): Promise<DateProposalRecord> => {
+      const d = await getDateProposal(this.o.db, this.ctx(), proposalId);
+      const p = d ? await getPlan(this.o.db, this.ctx(), d.planId) : null;
+      if (!d || !p || !(await this.mayReadPlan(p))) throw new Error('That change of date is not there.');
+      await this.needWork('launch.manage', p.projectId);
+      return rejectDateProposal(this.o.db, this.ctx(), proposalId, reason);
+    },
+
+    // ---- campaign asset requests --------------------------------------------------------------------------------------------
+    requests: async (f: RequestFilter = {}): Promise<RequestView[]> => {
+      await this.needWork('launch.read');
+      const reach = await this.reach('launch.read');
+      const all = (await listRequests(this.o.db, this.ctx(), f)).filter((q) => !reach || reach(q.projectId));
+      return Promise.all(all.map((q) => requestView(this.o.db, this.ctx(), q)));
+    },
+    request: async (id: string): Promise<RequestView | null> => {
+      const q = await getRequest(this.o.db, this.ctx(), id);
+      if (!q) return null;
+      await this.needWork('launch.read', q.projectId);
+      await this.mustReach(q.projectId, 'launch.read');
+      return requestView(this.o.db, this.ctx(), q);
+    },
+    ask: async (i: NewRequest): Promise<AssetRequest> => {
+      await this.mustReach(i?.projectId, 'launch.read');
+      await this.needWork('launch.manage', i?.projectId);
+      if (i.assigneeId) await this.mustBeAssigned([i.assigneeId], i.projectId, 'a request');
+      const q = await createRequest(this.o.db, this.ctx(), i);
+      if (i.planId) {
+        const plan = await getPlan(this.o.db, this.ctx(), i.planId);
+        const slot = plan ? (await itemsOf(this.o.db, plan.id)).find((x) => x.requirement.kind === 'asset_request' && !(x.requirement as { requestId?: string }).requestId) : undefined;
+        if (slot) await linkItemRequest(this.o.db, this.ctx(), plan!.id, slot.key, q.id);
+      }
+      return q;
+    },
+    /** An asset's version offered against a request. `info` is what the file's header says (the app measured it); a file that does not meet the spec is refused. */
+    deliver: async (id: string, d: { assetId: string; version: number; info: ImageInfo }): Promise<AssetRequest> => {
+      const q = await getRequest(this.o.db, this.ctx(), id);
+      if (!q) throw new Error('That request is not there.');
+      await this.mustReach(q.projectId, 'launch.read');
+      await this.needWork('asset.write', q.projectId);
+      const out = await deliverRequest(this.o.db, this.ctx(), id, d);
+      await syncRequest(this.o.db, this.ctx(), id).catch(() => false);
+      return out;
+    },
+    cancelRequest: async (id: string, reason: string): Promise<AssetRequest> => {
+      const q = await getRequest(this.o.db, this.ctx(), id);
+      if (!q) throw new Error('That request is not there.');
+      await this.mustReach(q.projectId, 'launch.read');
+      await this.needWork('launch.manage', q.projectId);
+      return cancelRequest(this.o.db, this.ctx(), id, reason);
+    },
+
+    // ---- ARC ---------------------------------------------------------------------------------------------------------------------
+    campaigns: async (planId: string): Promise<(ArcCampaign & { counts: ArcCounts })[]> => {
+      const p = await getPlan(this.o.db, this.ctx(), planId);
+      if (!p || !(await this.mayReadPlan(p))) return [];
+      return Promise.all((await listCampaigns(this.o.db, this.ctx(), { planId })).map(async (k) => ({ ...k, counts: await countsOf(this.o.db, this.ctx(), k.id) })));
+    },
+    createCampaign: async (i: Parameters<typeof createCampaign>[2]): Promise<ArcCampaign> => {
+      const p = await this.planToManage(i?.planId);
+      return createCampaign(this.o.db, this.ctx(), { ...i, planId: p.id });
+    },
+    reportReviews: async (campaignId: string, n: number): Promise<ArcCampaign> => (await this.campaignToManage(campaignId), reportReviews(this.o.db, this.ctx(), campaignId, n)),
+    closeCampaign: async (campaignId: string): Promise<ArcCampaign> => (await this.campaignToManage(campaignId), closeCampaign(this.o.db, this.ctx(), campaignId)),
+    /** The details of the people in a round: only for those who manage launches, and logged. */
+    readers: async (campaignId: string): Promise<ArcReader[]> => (await this.campaignToManage(campaignId), readersOf(this.o.db, this.ctx(), campaignId)),
+    addReader: async (campaignId: string, i: Parameters<typeof addReader>[3]): Promise<ArcReader> => (await this.campaignToManage(campaignId), addReader(this.o.db, this.ctx(), campaignId, i)),
+    setReader: async (readerId: string, state: ReaderState, o?: { reviewUrl?: string | null; at?: string }): Promise<ArcReader> => {
+      await this.campaignToManage(await this.campaignOfReader(readerId));
+      return setReaderState(this.o.db, this.ctx(), readerId, state, o);
+    },
+    eraseReader: async (readerId: string): Promise<void> => (await this.campaignToManage(await this.campaignOfReader(readerId)), eraseReader(this.o.db, this.ctx(), readerId)),
+    /** What the studio reports against what the figures measure. */
+    crossCheck: async (campaignId: string): Promise<ReviewCrossCheck> => {
+      const k = await getCampaign(this.o.db, this.ctx(), campaignId);
+      const p = k ? await getPlan(this.o.db, this.ctx(), k.planId) : null;
+      if (!k || !p || !(await this.mayReadPlan(p))) throw new Error('That campaign is not there.');
+      return reviewCrossCheck(this.o.db, this.ctx(), campaignId, await this.asinOfPlan(p), this.ctx().now);
+    },
+
+    // ---- the review --------------------------------------------------------------------------------------------------------------
+    review: async (planId: string): Promise<LaunchReview | null> => {
+      const p = await getPlan(this.o.db, this.ctx(), planId);
+      if (!p || !(await this.mayReadPlan(p))) return null;
+      return getReview(this.o.db, this.ctx(), planId);
+    },
+    openReview: async (planId: string): Promise<LaunchReview> => {
+      const p = await this.planToManage(planId);
+      return openReview(this.o.db, this.ctx(), p.id, await this.asinOfPlan(p), this.ctx().now.slice(0, 10));
+    },
+    refreshReview: async (planId: string): Promise<LaunchReview> => {
+      const p = await this.planToManage(planId);
+      return refreshReview(this.o.db, this.ctx(), p.id, await this.asinOfPlan(p), this.ctx().now.slice(0, 10));
+    },
+    writeReview: async (planId: string, i: { worked?: string; didNot?: string; next?: string }): Promise<LaunchReview> => (await this.planToManage(planId), writeReview(this.o.db, this.ctx(), planId, i)),
+    finishReview: async (planId: string): Promise<LaunchReview> => (await this.planToManage(planId), finishReview(this.o.db, this.ctx(), planId))
+  };
+
+  /**
+   * Market in the Studio: figures published from a computer's library, the comps a brief was written against, saved reports, and the history of changes to a
+   * book's cover, blurb, keywords and price with the figures around each. Reading needs market.read; publishing and saving reports needs market.capture;
+   * pinning comps to a brief and recording a change needs launch.manage.
+   */
+  readonly marketing = {
+    publish: async (figures: NewFigure[]): Promise<{ added: number; skipped: number }> => (await this.needWork('market.capture'), publishFigures(this.o.db, this.ctx(), figures)),
+    figures: async (f: { asin: string; from?: string; to?: string; limit?: number }): Promise<MarketFigure[]> => (await this.needWork('market.read'), listFigures(this.o.db, this.ctx(), f)),
+    latest: async (asin: string): Promise<MarketFigure | null> => (await this.needWork('market.read'), latestFigure(this.o.db, this.ctx(), asin)),
+    compSets: async (f: { projectIds?: string[] } = {}): Promise<CompSet[]> => {
+      await this.needWork('market.read');
+      const reach = await this.reach('market.read');
+      return (await listCompSets(this.o.db, this.ctx(), f)).filter((s) => !reach || reach(s.projectId));
+    },
+    createCompSet: async (i: { projectId: string; name: string; asins: string[]; note?: string }): Promise<CompSet> => {
+      await this.mustReach(i?.projectId, 'market.read');
+      await this.needWork('launch.manage', i?.projectId);
+      return createCompSet(this.o.db, this.ctx(), i);
+    },
+    /** Names the comps of a marketing brief at one of its versions, pinning the newest figure of each as of now. */
+    pinComps: async (briefId: string, version: number, comps: { asin: string; role?: CompRole; note?: string }[]): Promise<void> => {
+      const b = await this.briefToRead(briefId);
+      await this.needWork('launch.manage', b.projectId);
+      return pinBriefComps(this.o.db, this.ctx(), briefId, version, comps);
+    },
+    briefComps: async (briefId: string, version: number): Promise<BriefComp[]> => {
+      const b = await this.briefToRead(briefId);
+      await this.needWork('market.read', b.projectId);
+      return briefComps(this.o.db, this.ctx(), briefId, version, this.ctx().now.slice(0, 10));
+    },
+    reports: async (f: { projectIds?: string[]; kind?: ReportKind } = {}): Promise<Omit<MarketReport, 'payload'>[]> => {
+      await this.needWork('market.read');
+      const reach = await this.reach('market.read');
+      return (await listReports(this.o.db, this.ctx(), f)).filter((r) => !reach || reach(r.projectId));
+    },
+    report: async (id: string): Promise<MarketReport | null> => {
+      await this.needWork('market.read');
+      const r = await getReport(this.o.db, this.ctx(), id);
+      const reach = await this.reach('market.read');
+      return r && (!reach || reach(r.projectId)) ? r : null;
+    },
+    saveReport: async (i: { projectId: string; kind: ReportKind; title: string; asOf: string; payload: unknown }): Promise<MarketReport> => {
+      await this.mustReach(i?.projectId, 'market.read');
+      await this.needWork('market.capture', i?.projectId);
+      return saveReport(this.o.db, this.ctx(), i);
+    },
+    decisions: async (f: { editionId?: string; editionIds?: string[] } = {}): Promise<MarketDecision[]> => (await this.needWork('market.read'), listMarketDecisions(this.o.db, this.ctx(), f)),
+    decide: async (i: { editionId: string; asin?: string | null; kind: MarketDecisionKind; from?: string; to?: string; reason: string; assetId?: string | null; briefId?: string | null; projectId?: string | null; decidedAt?: string }): Promise<MarketDecision> => {
+      await this.needWork('launch.manage', i?.projectId ?? undefined);
+      return recordMarketDecision(this.o.db, this.ctx(), i);
+    },
+    window: async (decisionId: string, days = 30): Promise<DecisionWindow> => (await this.needWork('market.read'), decisionWindow(this.o.db, this.ctx(), decisionId, days))
+  };
+
   /**
    * The Studio's security policy (docs/PERMISSIONS.md §5). Anyone in the Studio may read it (the app needs the stale check-out warning and the
    * assistant switch); changing it needs studio.settings, and every change leaves an audit row.
@@ -822,6 +1269,24 @@ export class StudioAs {
       const reach = await this.reach();
       return continuityFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
     },
+    /** What a workflow gate sees of approved covers and Preflight runs on these projects (a project and its subprojects). Needs task.read, like the other gate facts. */
+    artFacts: async (projectIds: string[]): Promise<ArtFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      return artFacts(this.o.db, this.ctx(), reach ? projectIds.filter((p) => reach(p)) : projectIds);
+    },
+    /** What a workflow gate sees of release plans on these projects: how many required items are late or blocked. Needs task.read, like the other gate facts. */
+    launchFacts: async (projectIds: string[]): Promise<LaunchGateFacts> => {
+      await this.needWork('task.read');
+      const reach = await this.reach();
+      const ids = reach ? projectIds.filter((p) => reach(p)) : projectIds;
+      const views: PlanView[] = [];
+      for (const p of await listPlans(this.o.db, this.ctx(), { projectIds: ids })) {
+        const v = await planView(this.o.db, this.ctx(), p.id, await this.planFacts(p));
+        if (v) views.push(v);
+      }
+      return launchFactsOf(views);
+    },
     approvedLabels: async (projectId: string): Promise<string[]> => (await this.mustReach(projectId), await this.needWork('task.read', projectId), approvedLabels(this.o.db, this.ctx(), projectId)),
     requestApproval: async (i: NewApproval): Promise<ApprovalRecord> => {
       await this.mustReach(i?.projectId);
@@ -1027,6 +1492,99 @@ export class StudioAs {
       await this.editorOf(p);
     } else await this.needWork(to === 'responded' ? 'edit.respond' : to === 'closed' ? 'edit.approve' : 'edit.assign', p.projectId);
     return movePass(this.o.db, this.ctx(), id, to);
+  }
+
+  private async mayReadPlan(p: ReleasePlan): Promise<boolean> {
+    try {
+      await this.mustReach(p.projectId, 'launch.read');
+      await this.needWork('launch.read', p.projectId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  private async planToManage(id: string): Promise<ReleasePlan> {
+    const p = await getPlan(this.o.db, this.ctx(), id);
+    if (!p || !(await this.mayReadPlan(p))) throw new Error('That plan is not there.');
+    await this.needWork('launch.manage', p.projectId);
+    return p;
+  }
+  private async campaignToManage(id: string): Promise<ArcCampaign> {
+    const k = await getCampaign(this.o.db, this.ctx(), id);
+    if (!k) throw new Error('That campaign is not there.');
+    await this.planToManage(k.planId);
+    return k;
+  }
+  private async campaignOfReader(readerId: string): Promise<string> {
+    const r = await this.o.db.first<{ campaignId: string }>('SELECT campaign_id AS campaignId FROM arc_reader WHERE id = ? AND studio_id = ?', [readerId, this.o.studioId]);
+    if (!r) throw new Error('That reader is not there.');
+    return r.campaignId;
+  }
+  private async pairsOf(planId: string) {
+    return Promise.all((await itemsOf(this.o.db, planId)).map(async (item) => ({ item, task: (await getTask(this.o.db, this.ctx(), item.taskId))! })));
+  }
+  private async asinOfPlan(p: ReleasePlan): Promise<string | null> {
+    if (!p.editionId) return null;
+    for (const b of await listBooks(this.o.db, this.ctx(), {})) {
+      const e = b.editions.find((x) => x.id === p.editionId);
+      if (e) return e.asin;
+    }
+    return null;
+  }
+  /** What the records say, for judging a plan's items: the cover, Preflight, sign-offs, requests, briefs and ARC readers of the book and what is under it. */
+  private async planFacts(p: ReleasePlan): Promise<PlanFacts> {
+    const tree = await this.o.projects?.();
+    const ids = tree ? subtreeIds(tree, p.projectId) : [p.projectId];
+    const c = this.ctx();
+    const [covers, art, approvals, briefs, sent, items] = await Promise.all([
+      approvedAssets(this.o.db, c, ids, 'cover'),
+      artFacts(this.o.db, c, ids),
+      approvedLabels(this.o.db, c, p.projectId),
+      Promise.all(['launch', 'campaign'].map((k) => listBriefs(this.o.db, c, { projectIds: ids, kind: k as BriefKind }))),
+      arcSent(this.o.db, c, p.id),
+      itemsOf(this.o.db, p.id)
+    ]);
+    const requestIds = items.flatMap((i) => (i.requirement.kind === 'asset_request' && i.requirement.requestId ? [i.requirement.requestId] : []));
+    return {
+      today: c.now.slice(0, 10),
+      cover: { approved: covers.length > 0, licenceExpired: covers.some((x) => x.licenceExpired) },
+      preflight: { checked: art.checked, openErrors: art.openErrors },
+      approvals,
+      requests: await requestFacts(this.o.db, c, requestIds),
+      briefs: [...new Set(briefs.flat().map((b) => b.kind))],
+      arcSent: sent
+    };
+  }
+
+  private async assetToRead(id: string): Promise<Asset> {
+    const a = await getAsset(this.o.db, this.ctx(), id);
+    if (a) {
+      try {
+        await this.mustReach(a.projectId, 'asset.read');
+        await this.needWork('asset.read', a.projectId);
+        return a;
+      } catch {
+        /* falls through: it is not there for this person */
+      }
+    }
+    throw new Error('That asset is not there.');
+  }
+  private async conceptToRead(id: string): Promise<Concept> {
+    const k = await getConcept(this.o.db, this.ctx(), id);
+    if (k) {
+      try {
+        await this.mustReach(k.projectId, 'asset.read');
+        await this.needWork('asset.read', k.projectId);
+        return k;
+      } catch {
+        /* falls through */
+      }
+    }
+    throw new Error('That concept is not there.');
+  }
+  private async subtree(projectId: string): Promise<string[]> {
+    const tree = await this.o.projects?.();
+    return tree ? subtreeIds(tree, projectId) : [projectId];
   }
 
   private async mayReadBrief(b: BriefRecord): Promise<boolean> {

@@ -2,6 +2,58 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.21.0 (M6: launch and market, and Market sync fixes)
+
+Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).
+
+### Market sync and small screens
+- **Community sync is gentler on Arctic Shift.** Requests are spaced further apart (and wider still after a timeout), which stops the 422 "Timeout" errors.
+- **One subreddit failing no longer blocks the rest.** Each subreddit can also be synced on its own (Sync / Resume on its row), and the order a sync reads them in can be changed with the ↑ / ↓ buttons.
+- **Cadrel fits small screens.** The window never opens larger than the screen it is on, and the rail scrolls and tightens on short screens, so Settings and Profile can always be reached.
+
+### Launch
+- **A Launch page** (in the rail) holds a book's **release plan**, made from a template for a release date and **worked backwards from it**: each item is a task, due exactly that many days before or after, so it is in the Planner and on people's Home. Two templates ship (Ebook launch, Series launch); a manager can revise them (each revision is a new version).
+- **What is outstanding is worked out from the records, not typed in.** An approved cover (Art), a clear Preflight result, a sign-off, a delivered campaign banner, a marketing brief and ARC readers who have the file each clear their item and tick its task. Every item that cannot be done says **why**, in words.
+- **Moving the release date makes a proposal**: each open item's old and new date is listed (done items keep theirs), and nothing changes until it is applied. **Approving a plan is of an exact revision**: change it afterwards and it says so and needs approving again.
+- **Ask Art** for a banner or an ad with a size and format. A file of the wrong size is **refused with what was found**; the request is fulfilled when a version that meets the spec is approved.
+- **ARC rounds** keep count of who has the file and who has reviewed it, against a target, with the file's exact version. Everyone who can read the plan sees **counts**; names and emails are for those who manage launches, every look is logged, and a reader can be **erased** (the count stays). **No star rating is kept and nothing asks for a favourable review.** Cadrel keeps count; it does not send the file.
+- **After the launch**, the review fills from published figures at 7, 30 and 90 days, each with its capture date, with what was planned kept apart from what was measured.
+
+### Market in the Studio
+- **Figures are published to the Studio** from a computer's Market library (price, rank, ratings, each with when it was captured), once each; the pages stay where they were captured.
+- **A marketing brief pins its comps' figures as of their capture dates**; newer captures do not change it, and it says when they exist.
+- **Changes to cover, blurb, keywords and price are recorded with why**, and Cadrel shows the figures in the days before and after, how many points there are on each side, and the other changes in the same days. It never says a change caused anything.
+
+### Around it
+- **A Launch view on Home** for Marketing (launches, art waiting, reviews due) and **launches at risk** on the Director's Home.
+- **Your assistant** can read what is outstanding, ARC counts, figures and comps, read and draft marketing briefs (a new version a person keeps or reverts) and save a report, with two new skills (Launch Review, Marketing Brief from Comps). It cannot approve a plan, apply a date, change a reader or publish figures.
+- **An optional gate** (off unless an administrator adds it): *Its release plan has no late or blocked required item*.
+
+## Unreleased (M5: art, assets and Preflight)
+
+Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade).
+
+### Art
+- **An Art page** (in the rail) keeps the book's covers and other art as the Studio's records. A vault file becomes an **asset**; **approval names one exact version** (and its file hash), so a newer version is not approved until someone approves it. Only a person who may approve can, including for art they uploaded.
+- **Licences**: kind, licensor, reference, end date, territory and credit line. An expired licence stops a **new** version being approved; what is approved stays, flagged. The Art page and Home list licences that run out within 60 days.
+- **Where it is used**: listings, ads and banners you record, and the vault files (an EPUB) that reference the asset. **Replacing a version is a proposal**: approving it changes nothing, marks each use "needs update", and its owner marks it updated.
+- **Briefs and concepts**: cover and art briefs (versioned like any brief), concepts offered against an exact brief version with an exact file version, and feedback **pinned to a region of the picture at that version**. Choosing a concept makes it an asset in review.
+- **Pictures** are shown from the vault file itself; a Photoshop file shows the picture saved inside it (when it was saved with Maximize Compatibility), with no extra software.
+
+### Preflight
+- **A Preflight page** checks an EPUB before upload: its structure (zip, package, navigation, links and ids in every chapter), its names against the catalogue, its cover against the book's **approved cover** and the retailer's limits, and the blurb and keywords in the Marketing files. Each result is an **error, warning or suggestion** and says what was **measured** and what was **expected**.
+- **Rules are data with their sources.** The first pack is Amazon KDP (Kindle eBook), read from KDP's pages on 19 November 2026; the page says how old it is and where each limit came from, and lists **what it does not check**. epubcheck's messages are added when it is installed.
+- **Waivers need a reason** and carry onto later checks of the same file.
+
+### Around it
+- **An Art view on Home** for the Art Director, Artist and Owner (briefs' concepts to look at, assets in review, licences, uses to update), and the Director sees assets in review and books not ready to upload.
+- **Your assistant** can read assets, look at a cover, read briefs and where-used, pin a note to a region, and read the latest Preflight result (new **Preflight Review** skill). It cannot approve, choose, retire, run or waive anything.
+- **Two optional gates** (off unless an administrator adds them): *It has an approved cover*, and *Its latest Preflight check has no open errors*.
+- **What Launch will read** is there from the start: a book's approved cover and its newest Preflight run.
+
+### Also in this version
+- **Canon follows the project you are in.** The Canon page no longer asks which series; its checks and books follow the project and book selected. File pickers (Continuity, Editing's Plan a pass) offer only the files that belong to the current project.
+
 ## 0.20.0 (Editing: a workspace for editors, with a living report)
 
 - **Editing is now a workspace.** Pick a manuscript (only real manuscripts, filtered by the Project and Book on screen), read it by chapter, select text and leave a comment or a one-click suggestion, with an edit type (developmental, line, copy, proof), a topic and an editing round. Notes are Write's own notes: the same review files, the same code as the `add_notes` assistant tool, so notes an AI leaves through MCP appear here and the other way round. Accepting a suggestion marks the decision; the text stays the author's.

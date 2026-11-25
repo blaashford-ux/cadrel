@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
+import { subtreeIds } from '@cadrel/kernel';
+import { useScope } from './useScope';
 import type { CanonEntryRow, CanonFactRow, CanonProposalRow, CanonState, ContinuityCheckRow, ContinuityCheckView, ContinuityState, FindingView, StudioState } from '../shared/api';
 
 const canon = window.cadrel.canon;
@@ -22,17 +24,24 @@ interface Props {
 
 /** A series' canon, the proposals waiting on someone, and the continuity checks of its books. Everything is a request the Studio decides. */
 export function CanonPage({ studio, onProject }: Props) {
+  // The canon shown is the canon of the project the app is showing, and its checks are those of the book (or the books of the project) in view:
+  // there is nothing to choose on this page.
+  const scope = useScope();
+  const project = scope?.project ?? undefined;
+  const view = scope?.book ?? scope?.project ?? undefined;
   const [state, setState] = useState<CanonState | null>(null);
-  const [series, setSeries] = useState<string | undefined>();
   const [tab, setTab] = useState<'canon' | 'proposals' | 'continuity'>('canon');
   const [error, setError] = useState<string | null>(null);
-  const reload = useCallback(() => canon.state(series).then((s) => (setState(s), setError(null)), (e) => setError(message(e))), [series]);
+  const reload = useCallback(() => canon.state(project).then((s) => (setState(s), setError(null)), (e) => setError(message(e))), [project]);
   useEffect(() => {
-    void reload();
-  }, [reload, studio]);
+    setState(null);
+  }, [project]);
+  useEffect(() => {
+    if (scope) void reload();
+  }, [reload, studio, scope]);
 
   if (error && !state) return <div className="banner error" role="alert">{error}</div>;
-  if (!state) return <p className="muted">Loading…</p>;
+  if (!scope || !state) return <p className="muted">Loading…</p>;
   if (!state.available) return <section className="card"><p className="muted">{state.reason}</p></section>;
   const open = state.proposals.filter((p) => p.state === 'open');
   /** Runs a change, then shows the Studio as it is now. A refusal is shown in the Studio's own words. */
@@ -52,25 +61,20 @@ export function CanonPage({ studio, onProject }: Props) {
     <div className="canon">
       <div className="row">
         <h2 style={{ margin: 0 }}>Canon</h2>
-        {state.series.length > 1 ? (
-          <select aria-label="Series" value={state.current.id} onChange={(e) => setSeries(e.target.value)}>
-            {state.series.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        ) : (
-          <span className="chip">{state.current.name}</span>
-        )}
+        <span className="chip" title="The project in view">{state.current.name}</span>
+        {scope.bookName && <span className="chip" title="The book in view">{scope.bookName}</span>}
         {state.waitingOnMe > 0 && <span className="chip warn" title="Proposals you may approve, in every series">{state.waitingOnMe} waiting on you</span>}
       </div>
-      <p className="muted small">What the series has agreed about its characters, places, rules, events and terms. Nothing becomes canon until someone who may approve it does; every fact says where it was established.</p>
+      <p className="muted small">What the series has agreed about its characters, places, rules, events and terms. It follows the project you are in. Nothing becomes canon until someone who may approve it does; every fact says where it was established.</p>
       <div className="tabs" role="tablist" aria-label="Canon">
         {([['canon', `Canon (${state.entries.length})`], ['proposals', open.length ? `Proposals (${open.length})` : 'Proposals'], ['continuity', 'Continuity checks']] as const).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
       {error && <div className="banner error" role="alert">{error}</div>}
-      {tab === 'canon' && <CanonTab s={state} act={act} />}
+      {tab === 'canon' && <CanonTab s={state} act={act} book={scope.book} />}
       {tab === 'proposals' && <ProposalsTab s={state} act={act} />}
-      {tab === 'continuity' && <ContinuityTab onProject={onProject} onCanon={reload} studio={studio} />}
+      {tab === 'continuity' && <ContinuityTab view={view} book={scope.book} onProject={onProject} onCanon={reload} studio={studio} />}
     </div>
   );
 }
@@ -79,7 +83,7 @@ type Act = (job: () => Promise<unknown>) => Promise<boolean>;
 
 // ---- canon --------------------------------------------------------------------------------------------------------------------
 
-function CanonTab({ s, act }: { s: Ready; act: Act }) {
+function CanonTab({ s, act, book }: { s: Ready; act: Act; book: string | null }) {
   const [kind, setKind] = useState<string>('');
   const [q, setQ] = useState('');
   const [adding, setAdding] = useState(false);
@@ -100,7 +104,7 @@ function CanonTab({ s, act }: { s: Ready; act: Act }) {
       {adding && <EntryForm verb={verb} onSend={async (c) => { if (await send(c)) setAdding(false); }} />}
       {!s.may.propose && <p className="muted small">You can read this series' canon. Proposing changes needs the right to propose canon on one of its books.</p>}
       {s.entries.length === 0 && <section className="card"><p className="muted">No canon yet. {s.may.propose ? 'Add the first entry, or ask your assistant to propose canon from the series’ tracker ledgers (canon_seed).' : ''}</p></section>}
-      {shown.map((e) => <Entry key={e.id} e={e} s={s} verb={verb} send={send} />)}
+      {shown.map((e) => <Entry key={e.id} e={e} s={s} verb={verb} send={send} book={book} />)}
     </>
   );
 }
@@ -123,10 +127,10 @@ function EntryForm({ verb, onSend }: { verb: string; onSend: (change: unknown) =
   );
 }
 
-function Entry({ e, s, verb, send }: { e: CanonEntryRow; s: Ready; verb: string; send: (c: unknown) => Promise<boolean> }) {
+function Entry({ e, s, verb, send, book: inView }: { e: CanonEntryRow; s: Ready; verb: string; send: (c: unknown) => Promise<boolean>; book: string | null }) {
   const [mode, setMode] = useState<'fact' | 'edit' | 'retire' | null>(null);
   const [text, setText] = useState('');
-  const [book, setBook] = useState('');
+  const [book, setBook] = useState(inView && s.books.some((b) => b.id === inView) ? inView : ''); // the book in view is where a new fact was most likely established
   const [chapter, setChapter] = useState('');
   const [summary, setSummary] = useState(e.summary);
   const [reason, setReason] = useState('');
@@ -266,16 +270,22 @@ function Proposal({ p, s, act }: { p: CanonProposalRow; s: Ready; act: Act }) {
 
 // ---- continuity ---------------------------------------------------------------------------------------------------------------
 
-function ContinuityTab({ onProject, onCanon, studio }: { onProject: (id: string) => void; onCanon: () => Promise<unknown>; studio: StudioState | null }) {
+function ContinuityTab({ view, book: scopedBook, onProject, onCanon, studio }: { view: string | undefined; book: string | null; onProject: (id: string) => void; onCanon: () => Promise<unknown>; studio: StudioState | null }) {
   const [state, setState] = useState<ContinuityState | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [book, setBook] = useState('');
+  const [chosenBook, setChosenBook] = useState('');
   const [file, setFile] = useState('');
-  const reload = useCallback(() => continuity.state().then((s) => (setState(s), setError(null)), (e) => setError(message(e))), []);
+  const reload = useCallback(() => continuity.state(view).then((s) => (setState(s), setError(null)), (e) => setError(message(e))), [view]);
   useEffect(() => {
     void reload();
   }, [reload, studio]);
+  // The book to check follows the book in view; with only one to choose from, that one. Only when there is a real choice is there a choice to make.
+  const books = state && state.available ? state.books : [];
+  const book = scopedBook && books.some((b) => b.id === scopedBook) ? scopedBook : books.some((b) => b.id === chosenBook) ? chosenBook : books.length === 1 ? books[0]!.id : '';
+  // and its manuscripts are the files whose data cards name that book (or something in it)
+  const files = state && state.available && book ? state.manuscripts.filter((f) => (studio ? subtreeIds(studio.tree, book).includes(f.projectId) : true)) : [];
+  const theFile = files.some((f) => f.fileId === file) ? file : files.length === 1 ? files[0]!.fileId : '';
   if (error && !state) return <div className="banner error" role="alert">{error}</div>;
   if (!state) return <p className="muted">Loading…</p>;
   if (!state.available) return <section className="card"><p className="muted">{state.reason}</p></section>;
@@ -287,13 +297,20 @@ function ContinuityTab({ onProject, onCanon, studio }: { onProject: (id: string)
       {error && <div className="banner error" role="alert">{error}</div>}
       <p className="muted small">A check reads one book's manuscript, at an exact version, against the series' canon. Your assistant does the reading (ask it for a continuity check); every finding quotes the passage and cites the canon fact it conflicts with, and you decide each one.</p>
       {state.may.start && (
-        <form className="row" onSubmit={async (ev) => { ev.preventDefault(); try { const k = (await continuity.call('start', book, file)) as { id: string }; await reload(); setOpen(k.id); } catch (e) { setError(message(e)); } }}>
-          <select aria-label="Book" value={book} onChange={(ev) => setBook(ev.target.value)}><option value="">Book…</option>{state.books.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
-          <select aria-label="Manuscript" value={file} onChange={(ev) => setFile(ev.target.value)}><option value="">Manuscript…</option>{state.manuscripts.map((f) => <option key={f.fileId} value={f.fileId}>{f.path} (version {f.version})</option>)}</select>
-          <button type="submit" disabled={!book || !file}>Start a check</button>
+        <form className="row" onSubmit={async (ev) => { ev.preventDefault(); try { const k = (await continuity.call('start', book, theFile)) as { id: string }; await reload(); setOpen(k.id); } catch (e) { setError(message(e)); } }}>
+          {books.length > 1 && !scopedBook ? (
+            <select aria-label="Book" value={book} onChange={(ev) => (setChosenBook(ev.target.value), setFile(''))}><option value="">Book…</option>{books.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+          ) : (
+            book && <span className="chip" title="The book in view">{books.find((b) => b.id === book)?.name}</span>
+          )}
+          {book && files.length === 0 && <span className="muted small">This book has no manuscript in the vault yet.</span>}
+          {files.length === 1 ? <span className="muted small">{files[0]!.path} (version {files[0]!.version})</span> : files.length > 1 && (
+            <select aria-label="Manuscript" value={theFile} onChange={(ev) => setFile(ev.target.value)}><option value="">Manuscript…</option>{files.map((f) => <option key={f.fileId} value={f.fileId}>{f.path} (version {f.version})</option>)}</select>
+          )}
+          <button type="submit" disabled={!book || !theFile}>Start a check</button>
         </form>
       )}
-      {state.checks.length === 0 && <section className="card"><p className="muted">No continuity checks yet.</p></section>}
+      {state.checks.length === 0 && <section className="card"><p className="muted">No continuity checks {view ? 'here' : ''} yet.</p></section>}
       {live.length > 0 && <CheckList title="Under way" rows={live} onOpen={setOpen} />}
       {closed.length > 0 && <CheckList title="Closed" rows={closed} onOpen={setOpen} />}
     </>

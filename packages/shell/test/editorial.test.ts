@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryFs } from '@cadrel/write/src/shared/memoryFs';
-import { Editorial, EditingError, collapseRows, type EditorialFiles } from '../src/main/editorial';
+import { Editorial, EditingError, collapseRows, manuscriptsIn, type EditorialFiles } from '../src/main/editorial';
 import { compareTexts } from '@cadrel/kernel';
 import { ProjectManager, type WriteFolders } from '../src/main/manage';
 import { PeopleHost } from '../src/main/people';
@@ -223,6 +223,32 @@ describe('planning a pass', () => {
     expect(chosen.editors.map((e) => e.name)).toEqual(['Ana Reyes']);
     expect(chosen.briefs).toEqual([{ id: expect.any(String), title: 'Line edit brief', version: 1 }]); // only edit briefs
     expect(((await fpage().planning('not-a-project')) as { editors: unknown[] }).editors).toEqual([]);
+  });
+
+  it('offers, for the book chosen, only the manuscripts that belong to it', async () => {
+    const other = (await mgr.create({ name: 'Other Book', template: null })).id;
+    const files: EditorialFiles = {
+      ...fakeFiles(),
+      manuscripts: async () => [
+        { fileId: 'f1', path: 'Lead Me/book.md', version: 2, projectId },
+        { fileId: 'f2', path: 'Other Book/book.md', version: 1, projectId: other },
+        { fileId: 'f3', path: 'loose.md', version: 1, projectId: null }
+      ]
+    };
+    const planning = async (id?: string) => ((await new Editorial(studio, host, files).planning(id)) as { files: { fileId: string }[] }).files.map((f) => f.fileId);
+    expect(await planning()).toEqual(['f1', 'f2', 'f3']); // no book chosen yet: everything, so the page has something to show
+    expect(await planning(projectId)).toEqual(['f1']);
+    expect(await planning(other)).toEqual(['f2']);
+    expect(((await new Editorial(studio, host, files).planning(projectId)) as { files: object[] }).files[0]).toEqual({ fileId: 'f1', path: 'Lead Me/book.md', version: 2 }); // the page is not sent what it did not ask for
+  });
+
+  it('picks manuscripts by the project they are in, or in something under it; a file in no project is in none', () => {
+    const mk = (id: string, parentId: string | null) => ({ id, parentId, name: id, order: 0 });
+    const tree = { projects: [mk('s', null), mk('b1', 's'), mk('ch', 'b1'), mk('b2', 's'), mk('x', null)], links: [] } as never;
+    const files = [{ n: 1, projectId: 'b1' }, { n: 2, projectId: 'ch' }, { n: 3, projectId: 'b2' }, { n: 4, projectId: 'x' }, { n: 5, projectId: null }, { n: 6 }];
+    expect(manuscriptsIn(files, tree, 'b1').map((f) => f.n)).toEqual([1, 2]);
+    expect(manuscriptsIn(files, tree, 's').map((f) => f.n)).toEqual([1, 2, 3]);
+    expect(manuscriptsIn(files, tree, null).map((f) => f.n)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it('says why when there is no vault here or the person may plan nowhere', async () => {

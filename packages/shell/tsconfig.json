@@ -31,6 +31,8 @@
     "test/m3Exit.test.ts",
     "test/assistantDoor.test.ts",
     "test/m4Exit.test.ts",
+    "test/m5Exit.test.ts",
+    "test/m6Exit.test.ts",
     "test/fakeCloudflare.ts",
     "test/shell.e2e.test.ts"
   ]

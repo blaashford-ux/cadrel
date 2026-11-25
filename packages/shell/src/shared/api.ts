@@ -1,15 +1,15 @@
-import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskRecord, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
+import type { BriefKind, BriefRecord, BriefVersion, CompareRow, DataCard, FileRef, FileVersion, ApprovalRecord, DecisionRecord, EditDecisionRecord, PassRecord, QueryCounts, QueryRecord, VerificationRecord, NewApproval, NewTask, TaskPatch, TaskState, AssignmentRecord, PenName, Person, RoleRecord, Team, WorkflowDraft, WorkflowRecord, WorkflowUsage } from '@cadrel/kernel';
 import type { ThemeCustom } from '@cadrel/write/src/shared/theme';
 import type { ThemeSource } from './theme';
 import type { Attachment, ProfilePatch, UserProfile } from '@cadrel/kernel';
 import type { ProjectTemplate } from '@cadrel/write/src/shared/projects';
 import type { AiRemoteStatus } from '@cadrel/write/src/shared/agent/config';
-import type { CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
+import type { ArcCampaign, ArcCounts, ArcReader, AssetRequest, BriefComp, CompSet, DateProposalRecord, DecisionWindow, ItemStatus, LaunchReview, MarketDecision, MarketFigure, MarketReport, PlanItem, PlanView, ReleasePlan, RequestView, ReviewCrossCheck, TaskRecord, Asset, AssetApproval, AssetReplacement, AssetUse, Concept, Feedback, FileUse, PreflightResult, PreflightRun, CanonEntry, CanonFact, CanonProposal, ContinuityCheck, ContinuityFinding, FindingCounts, NoteStatus, NoteTarget, NoteView, ProjectTree, ResolvedViewScope, ScopeLink, ViewScope } from '@cadrel/kernel';
 
 /** What the shell's own page (rail, Home, Dashboard) can ask of the shell. Write and Market keep their own bridges. */
 
 /** The places the rail can go. Home and Dashboard are drawn by the shell; the rest are modules in their own views. */
-export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
+export const PAGES = ['home', 'mybooks', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'launch', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance', 'assistants', 'admin', 'people', 'profile', 'settings'] as const;
 export type Page = (typeof PAGES)[number];
 export type ModuleId = 'write' | 'market' | 'finance';
 export const isPage = (v: unknown): v is Page => typeof v === 'string' && (PAGES as readonly string[]).includes(v);
@@ -933,8 +933,7 @@ export type CanonState =
   | {
       available: true;
       me: string;
-      /** The series this person can read canon of (every top-level project), and the one shown. */
-      series: { id: string; name: string }[];
+      /** The series shown: the one the project in view belongs to. */
       current: { id: string; name: string };
       may: CanonMay;
       entries: CanonEntryRow[];
@@ -962,7 +961,7 @@ export type ContinuityState =
       checks: ContinuityCheckRow[];
       /** The books this person may start a check of, and the manuscripts in the vault one could be run on (the service checks the file is the book's). */
       books: { id: string; name: string }[];
-      manuscripts: { fileId: string; path: string; version: number }[];
+      manuscripts: { fileId: string; path: string; version: number; /** The project its data card names. */ projectId: string }[];
     };
 /** A finding with what a person needs to judge it: the passage in its surroundings, and the canon facts it cites. */
 export interface FindingView extends ContinuityFinding {
@@ -985,12 +984,14 @@ export type ContinuityCheckView =
 export const CONTINUITY_CALLS = ['start', 'deliver', 'decide', 'close', 'verify'] as const;
 export type ContinuityCallName = (typeof CONTINUITY_CALLS)[number];
 export interface CanonApi {
-  state(seriesRef?: string): Promise<CanonState>;
+  /** The canon of the series the given project belongs to (the project in view). With none, the first series this person can read. */
+  state(project?: string): Promise<CanonState>;
   /** One change to canon, by name: see CANON_CALLS. `propose` and `apply` take the series and the change; the rest take a proposal id (reject also a reason). */
   call(name: CanonCallName, ...args: unknown[]): Promise<unknown>;
 }
 export interface ContinuityApi {
-  state(): Promise<ContinuityState>;
+  /** The checks, books and manuscripts of the project in view (a book, or a project and its books); with no project, all of them. */
+  state(project?: string): Promise<ContinuityState>;
   check(id: string): Promise<ContinuityCheckView>;
   call(name: ContinuityCallName, ...args: unknown[]): Promise<unknown>;
 }
@@ -1044,11 +1045,58 @@ export interface LensViews {
     totals: { lateBooks: number; unansweredQueries: number };
     /** Canon proposals this person may approve, across every series (0 where they may approve none). */
     canonWaiting: number;
+    /** Art: assets awaiting approval, and EPUBs whose latest Preflight run has errors (0 and empty where this person sees none). */
+    art: { inReview: number; notReady: LensNotReady[] };
+    /** Launches near their date with late or blocked required items. */
+    launchAtRisk: LensPlan[];
   };
+  launch?: {
+    /** Plans not yet reviewed, soonest release first, each with what is late and blocked. */
+    upcoming: LensPlan[];
+    /** Campaign asset requests nobody has fulfilled yet. */
+    requests: { id: string; title: string; projectName: string; due: string | null }[];
+    /** Launches more than a month past release that have no review yet. */
+    reviewsDue: { planId: string; name: string; projectName: string }[];
+  };
+  art?: {
+    /** Assets in review: a version waiting for someone to approve it. */
+    toApprove: LensAsset[];
+    /** Briefs with concepts offered and no concept chosen yet. */
+    concepts: { briefId: string; title: string; projectId: string; projectName: string; waiting: number }[];
+    /** Licences that have run out or will within 60 days, soonest first. */
+    licences: (LensAsset & { days: number })[];
+    /** Assets with uses that wait on their owners after a replacement. */
+    toUpdate: (LensAsset & { uses: number })[];
+  };
+}
+export interface LensPlan {
+  planId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+  releaseDate: string;
+  daysToRelease: number;
+  late: number;
+  blocked: number;
+  outstanding: number;
+  state: string;
+}
+export interface LensAsset {
+  assetId: string;
+  name: string;
+  projectId: string;
+  projectName: string;
+}
+export interface LensNotReady {
+  fileId: string;
+  path: string;
+  projectId: string;
+  projectName: string;
+  errors: number;
 }
 export type LensState =
   | { available: false; reason: string }
-  | { available: true; today: string; /** In order of reach: the first is the default. Empty: this person's role has no working view. */ lenses: ('director' | 'editor' | 'author')[]; views: LensViews };
+  | { available: true; today: string; /** In order of reach: the first is the default. Empty: this person's role has no working view. */ lenses: ('director' | 'editor' | 'author' | 'art' | 'launch')[]; views: LensViews };
 export interface LensApi {
   state(): Promise<LensState>;
 }
@@ -1167,6 +1215,299 @@ export interface ScopeApi {
   onChange(cb: (scope: ScopeView) => void): () => void;
 }
 
+
+// ---- art, assets and Preflight (docs/M5-PLAN.md) ------------------------------------------------------------------------------
+
+/** What a person may do with the assets of the project being shown. */
+export interface ArtMay {
+  read: boolean;
+  /** Upload a version as an asset, add uses, submit concepts, propose a replacement. */
+  write: boolean;
+  comment: boolean;
+  /** Approve or revoke a version, decide a replacement, choose a concept. */
+  approve: boolean;
+  /** Licences, retiring. */
+  manage: boolean;
+  /** Write cover and art briefs. */
+  brief: boolean;
+}
+export interface AssetRow extends Asset {
+  projectName: string;
+  /** Where it lives in the vault, and its newest version. */
+  path: string;
+  latestVersion: number;
+  /** Versions that stand approved, newest last. */
+  approved: { version: number; hash: string; at: string; byName: string }[];
+  /** The newest approved version, or null. */
+  approvedNow: number | null;
+  /** Days until the licence runs out (negative once it has), or null for none. */
+  licenceDaysLeft: number | null;
+  licenceExpired: boolean;
+  /** Declared uses that wait on their owners ("needs update"), and all declared uses. */
+  needUpdate: number;
+  uses: number;
+  openFeedback: number;
+  /** A newer version exists than the one approved. */
+  newerThanApproved: boolean;
+}
+export interface ArtCandidate {
+  fileId: string;
+  path: string;
+  version: number;
+}
+export interface ArtBriefRow {
+  id: string;
+  title: string;
+  kind: 'cover' | 'art';
+  /** The newest version of the brief. */
+  version: number;
+  concepts: number;
+  chosen: boolean;
+  updatedAt: string;
+}
+export type ArtState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      /** The project in view: the book, or the series with its books. */
+      project: { id: string; name: string };
+      may: ArtMay;
+      assets: AssetRow[];
+      briefs: ArtBriefRow[];
+      /** Image and design files in the project that are not assets yet. */
+      candidates: ArtCandidate[];
+      /** Assets whose licence runs out within 60 days, or already has. */
+      licencesDue: { assetId: string; name: string; days: number }[];
+    };
+export interface VersionRow {
+  n: number;
+  hash: string;
+  at: string;
+  byName: string;
+  comment: string;
+  approved: boolean;
+}
+export interface FeedbackRow extends Feedback {
+  byName: string;
+}
+export interface ConceptRow extends Concept {
+  path: string;
+  byName: string;
+  feedback: FeedbackRow[];
+}
+export type AssetView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      asset: AssetRow;
+      may: ArtMay;
+      versions: VersionRow[];
+      approvals: (AssetApproval & { byName: string })[];
+      uses: AssetUse[];
+      fileUses: FileUse[];
+      replacements: (AssetReplacement & { proposerName: string })[];
+      feedback: FeedbackRow[];
+    };
+export type BriefView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      brief: { id: string; title: string; kind: 'cover' | 'art'; projectId: string; version: number; body: string; note: string; writtenAt: string; writtenByName: string };
+      versions: { n: number; body: string; note: string; writtenAt: string; writtenByName: string }[];
+      concepts: ConceptRow[];
+      may: ArtMay;
+      /** Files in the project a concept could be made of. */
+      candidates: ArtCandidate[];
+    };
+export const ART_CALLS = [
+  'create', 'update', 'submit', 'retire', 'approve', 'revoke', 'addUse', 'setUseState', 'proposeReplacement', 'decideReplacement', 'withdrawReplacement', 'comment', 'resolveFeedback',
+  'createBrief', 'reviseBrief', 'submitConcept', 'decideConcept', 'chooseConcept'
+] as const;
+export type ArtCallName = (typeof ART_CALLS)[number];
+export type PreviewView =
+  | { kind: 'image'; mime: string; dataUrl: string; width: number | null; height: number | null; format: string; note?: string }
+  | { kind: 'none'; reason: string; format?: string; width?: number | null; height?: number | null };
+export interface ArtApi {
+  /** The assets of the project in view (the book, or the series with its books). */
+  state(project?: string): Promise<ArtState>;
+  asset(id: string): Promise<AssetView>;
+  brief(id: string): Promise<BriefView>;
+  /** A change, by name: see ART_CALLS. Each takes what the service call takes (the asset id first, where there is one). */
+  call(name: ArtCallName, ...args: unknown[]): Promise<unknown>;
+  /** A picture of one version of a file: the file itself if it is a picture, or what a Photoshop file carries inside it. */
+  preview(fileId: string, version: number): Promise<PreviewView>;
+}
+
+export interface PreflightFileRow {
+  fileId: string;
+  path: string;
+  version: number;
+  /** The newest run on this file, or null. */
+  latest: PreflightRun | null;
+}
+export interface PreflightEdition {
+  id: string;
+  label: string;
+  bookTitle: string;
+  projectId: string | null;
+}
+export interface PackInfo {
+  id: string;
+  title: string;
+  version: string;
+  verified: string;
+  /** Whole months since the limits were read, or null when never. */
+  ageMonths: number | null;
+  sources: { rule: string; url: string; read: string; note?: string }[];
+  notChecked: string[];
+}
+export type PreflightState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      project: { id: string; name: string };
+      may: { read: boolean; run: boolean };
+      /** EPUB files in the project in view. */
+      files: PreflightFileRow[];
+      editions: PreflightEdition[];
+      pack: PackInfo;
+      /** epubcheck is installed on this computer, so a run adds its messages. */
+      epubcheck: boolean;
+    };
+export type PreflightRunView =
+  | { available: false; reason: string }
+  | { available: true; run: PreflightRun; results: PreflightResult[]; path: string; editionLabel: string | null; pack: PackInfo; may: { run: boolean }; byName: string; coverPath: string | null; /** Whether epubcheck added its messages to the run just made; null when looking at an earlier run. */ epubcheck: 'used' | 'not installed' | 'failed' | null };
+export interface PreflightApi {
+  state(project?: string): Promise<PreflightState>;
+  /** Checks one version of an EPUB (the newest, by default) against an edition's records and the approved cover, and records the run. */
+  run(fileId: string, editionId: string | null): Promise<PreflightRunView>;
+  get(runId: string): Promise<PreflightRunView>;
+  waive(runId: string, seq: number, reason: string): Promise<PreflightRunView>;
+}
+
+
+// ---- launch and market (docs/M6-PLAN.md) -----------------------------------------------------------------------------------------
+
+export interface LaunchMay {
+  read: boolean;
+  /** Plans, ARC rounds, requests, reviews, decisions, templates; reader details. */
+  manage: boolean;
+  /** Approve a plan (and apply a change of date to one that was approved). */
+  approve: boolean;
+  /** Publish Market figures from this computer's library; save a report. */
+  capture: boolean;
+}
+export interface PlanSummary {
+  plan: ReleasePlan;
+  projectName: string;
+  editionLabel: string | null;
+  counts: Record<ItemStatus, number>;
+  /** Required items not done. */
+  outstanding: number;
+  late: number;
+  blocked: number;
+  daysToRelease: number;
+  changedSinceApproval: boolean;
+}
+export interface LaunchBriefRow {
+  id: string;
+  title: string;
+  kind: 'launch' | 'campaign';
+  version: number;
+  projectName: string;
+  comps: number;
+  updatedAt: string;
+}
+export type LaunchState =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      me: string;
+      project: { id: string; name: string };
+      may: LaunchMay;
+      plans: PlanSummary[];
+      templates: { id: string; name: string; version: number; items: number }[];
+      /** The editions of the books in view, to choose a plan's edition from. */
+      editions: { id: string; label: string; asin: string | null; projectId: string | null }[];
+      /** People who may be given a plan's work (assigned to the book). */
+      people: { id: string; name: string }[];
+      briefs: LaunchBriefRow[];
+      requests: (RequestView & { projectName: string; assigneeName: string | null })[];
+    };
+export interface LaunchItemRow {
+  view: PlanView['items'][number];
+  assigneeName: string | null;
+}
+export type LaunchPlanView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      plan: ReleasePlan;
+      projectName: string;
+      editionLabel: string | null;
+      asin: string | null;
+      may: LaunchMay;
+      items: LaunchItemRow[];
+      outstanding: LaunchItemRow[];
+      counts: Record<ItemStatus, number>;
+      revision: string;
+      changedSinceApproval: boolean;
+      daysToRelease: number;
+      approvedByName: string | null;
+      proposals: (DateProposalRecord & { proposerName: string })[];
+      campaigns: (ArcCampaign & { counts: ArcCounts; cross: ReviewCrossCheck })[];
+      requests: (RequestView & { assigneeName: string | null })[];
+      review: LaunchReview | null;
+      /** Figures of the edition: how many have been published and the newest. */
+      figures: { count: number; latest: MarketFigure | null };
+    };
+export type LaunchBriefView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      brief: { id: string; title: string; kind: 'launch' | 'campaign'; projectId: string; version: number; body: string; note: string; writtenAt: string; writtenByName: string };
+      versions: { n: number; body: string; note: string; writtenAt: string; writtenByName: string }[];
+      comps: BriefComp[];
+      may: LaunchMay;
+      /** A newer figure than the one pinned exists for each of these ASINs. */
+      newer: string[];
+    };
+export type LaunchMarketView =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      project: { id: string; name: string };
+      may: LaunchMay;
+      editions: { id: string; label: string; asin: string | null; figures: number; latest: MarketFigure | null }[];
+      compSets: CompSet[];
+      reports: Omit<MarketReport, 'payload'>[];
+      decisions: (MarketDecision & { editionLabel: string; byName: string })[];
+    };
+export const LAUNCH_CALLS = [
+  'createPlan', 'updatePlan', 'assign', 'mark', 'approve', 'goLive', 'cancel', 'proposeDate', 'applyDate', 'rejectDate', 'ask', 'cancelRequest', 'createCampaign', 'reportReviews', 'closeCampaign',
+  'addReader', 'setReader', 'eraseReader', 'openReview', 'refreshReview', 'writeReview', 'finishReview', 'createBrief', 'reviseBrief', 'pinComps', 'createCompSet', 'saveReport', 'decide',
+  'createTemplate', 'reviseTemplate'
+] as const;
+export type LaunchCallName = (typeof LAUNCH_CALLS)[number];
+export interface LaunchApi {
+  /** The release plans of the project in view (the book, or the series with its books), with what is outstanding. */
+  state(project?: string): Promise<LaunchState>;
+  plan(id: string): Promise<LaunchPlanView>;
+  /** Reader names and emails of an ARC round: managers only, and logged. */
+  readers(campaignId: string): Promise<{ readers: ArcReader[] } | { available: false; reason: string }>;
+  brief(id: string): Promise<LaunchBriefView>;
+  market(project?: string): Promise<LaunchMarketView>;
+  /** A change, by name: see LAUNCH_CALLS. */
+  call(name: LaunchCallName, ...args: unknown[]): Promise<unknown>;
+  /** Offers an asset's version against a request; the file is measured here, and one that does not meet the spec is refused with what was found. */
+  deliver(requestId: string, assetId: string, version: number): Promise<unknown>;
+  /** Publishes this computer's captured figures for the books in view to the Studio. */
+  publishFigures(project?: string): Promise<{ added: number; skipped: number; books: number } | { available: false; reason: string }>;
+  decisionWindow(decisionId: string, days: number): Promise<DecisionWindow | { available: false; reason: string }>;
+}
+
 // ---- the Editing desk (an editor's view of a manuscript and its notes) ----------------------------------------------------------
 
 /** A manuscript an editor can open: a file in a project's Manuscript folder, with how many notes are on it. */
@@ -1264,6 +1605,9 @@ export interface CadrelApi {
   lens: LensApi;
   canon: CanonApi;
   continuity: ContinuityApi;
+  art: ArtApi;
+  preflight: PreflightApi;
+  launch: LaunchApi;
   work: WorkApi;
   editing: EditingApi;
   desk: DeskApi;

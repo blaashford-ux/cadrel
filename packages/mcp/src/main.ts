@@ -32,6 +32,8 @@ import { DbVaultStore, type VaultStore } from '@cadrel/kernel';
 import { DoorClient, RemoteVaultStore, remoteService } from '@cadrel/studio-client';
 import { EDITORIAL_INSTRUCTIONS } from './modules/editorial.js';
 import { CANON_INSTRUCTIONS } from './modules/canon.js';
+import { ART_INSTRUCTIONS } from './modules/art.js';
+import { LAUNCH_INSTRUCTIONS } from './modules/launch.js';
 import { RECORDS_INSTRUCTIONS } from './modules/records.js';
 import { watchLifecycle } from './lifecycle.js';
 import { expandActive } from './active.js';
@@ -108,13 +110,15 @@ async function findRecords(open: boolean, write?: Found<{ options: WriteOptions 
   const person = flag('person');
   const studioId = flag('studio-id');
   if ((!file && !door) || !person || !studioId) return { ok: false, reason: 'no records given (Cadrel passes --records, or --door for a Studio on a server, with --person and --studio-id)' };
-  const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: `${RECORDS_INSTRUCTIONS} ${EDITORIAL_INSTRUCTIONS} ${CANON_INSTRUCTIONS} ${PROJECTS_INSTRUCTIONS}`, register: () => undefined };
+  const stub: McpModule = { id: 'records', title: "Tasks, sign-offs, decisions, books and files (the studio's records)", instructions: `${RECORDS_INSTRUCTIONS} ${EDITORIAL_INSTRUCTIONS} ${CANON_INSTRUCTIONS} ${ART_INSTRUCTIONS} ${LAUNCH_INSTRUCTIONS} ${PROJECTS_INSTRUCTIONS}`, register: () => undefined };
   if (!open) return { ok: true, value: { module: stub, close: () => undefined } };
   let db: StudioDb | undefined;
   try {
     const { recordsModule } = await import('./modules/records.js');
     const { editorialModule } = await import('./modules/editorial.js');
     const { canonModule } = await import('./modules/canon.js');
+    const { artModule } = await import('./modules/art.js');
+    const { launchModule } = await import('./modules/launch.js');
     const { readSeriesLedgers } = await import('@cadrel/write/src/shared/agent/trackers');
     // Where the records are: a file on this computer, or the Studio's server through the app's door. Either way the same service answers.
     let service: StudioService;
@@ -149,9 +153,9 @@ async function findRecords(open: boolean, write?: Found<{ options: WriteOptions 
     const closedBooks: ClosedBooks = async () => closedBookIds((await studio.read()).tree, await service.as(person).workflows.list().catch(() => []));
     // The tracker ledgers sit in the series' manuscript folder on this computer (the Write projects), for canon_seed.
     const ledgers = write?.ok ? (name: string) => readSeriesLedgers({ fs: nodeFs, root: write.value.options.root, agent: 'claude', agentName: 'Claude' }, name) : undefined;
-    const parts = [recordsModule({ service, personId: person, studio, studioId, vault }), editorialModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}) }), canonModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}), ...(ledgers ? { ledgers } : {}) })];
+    const parts = [recordsModule({ service, personId: person, studio, studioId, vault }), editorialModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}) }), canonModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}), ...(ledgers ? { ledgers } : {}) }), artModule({ service, personId: person, studio, vault, ...(blobs ? { blobs } : {}) }), launchModule({ service, personId: person, studio })];
     // The project tools (create, move, stage) change the project tree, which only the owner does on a server; they are served for a local Studio.
-    const module = db ? both(both(both(parts[0]!, parts[1]!), parts[2]!), projectsModule({ service, personId: person, studio, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })) : both(both(parts[0]!, parts[1]!), parts[2]!);
+    const module = db ? both(both(both(both(both(parts[0]!, parts[1]!), parts[2]!), parts[3]!), parts[4]!), projectsModule({ service, personId: person, studio, view, ...(write?.ok ? { write: { fs: nodeFs, root: write.value.options.root } } : {}) })) : both(both(both(both(parts[0]!, parts[1]!), parts[2]!), parts[3]!), parts[4]!);
     return { ok: true, value: { module, close, closedBooks, view, stageForNewBook } };
   } catch (e) {
     db?.close();

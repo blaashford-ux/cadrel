@@ -60,7 +60,11 @@ import { joinStudio, StudioClient } from './studioClient';
 import { inviteMailto } from './inviteMail';
 import { AssistantDoor } from './assistantDoor';
 import { loadLens } from './lens';
+import { artLens } from './art';
 import { Canon } from './canon';
+import { Art } from './art';
+import { Preflight } from './preflight';
+import { Launch, launchLens } from './launch';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
 import { syncCaptures } from './sharedCaptures';
 import { backupServerRecords, moveRecordsToServer, restoreServerRecords } from './moveRecords';
@@ -631,16 +635,23 @@ const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(h
 
 function restoredBounds(): Partial<Electron.Rectangle> & { width: number; height: number } {
   const w = settings.get().window;
-  const fallback = { width: 1280, height: 820 };
+  const primary = screen.getPrimaryDisplay().workArea;
+  // Never open larger than the screen it lands on (a small laptop, or a saved size from a bigger monitor): a window taller than the
+  // screen has its bottom, and the controls there, out of reach.
+  const fit = (size: { width: number; height: number }, a: Electron.Rectangle) => ({ width: Math.min(size.width, a.width), height: Math.min(size.height, a.height) });
+  const fallback = fit({ width: 1280, height: 820 }, primary);
   if (!w) return fallback;
-  const size = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
-  if (w.x === undefined || w.y === undefined) return size;
+  const wanted = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
+  if (w.x === undefined || w.y === undefined) return fit(wanted, primary);
   // Only reuse the saved position if it still lands on a connected display.
-  const visible = screen.getAllDisplays().some((d) => {
+  const on = screen.getAllDisplays().find((d) => {
     const a = d.workArea;
-    return w.x! < a.x + a.width - 50 && w.x! + size.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
+    return w.x! < a.x + a.width - 50 && w.x! + wanted.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
   });
-  return visible ? { ...size, x: w.x, y: w.y } : size;
+  if (!on) return fit(wanted, primary);
+  const a = on.workArea;
+  const size = fit(wanted, a);
+  return { ...size, x: Math.min(Math.max(w.x, a.x), a.x + a.width - size.width), y: Math.min(Math.max(w.y, a.y), a.y + a.height - size.height) };
 }
 
 function saveWindowState(): void {
@@ -735,7 +746,7 @@ function ensureView(id: ModuleId): WebContentsView {
 }
 
 /** Pages that show a Studio's own data. A Studio that is not connected here has none, so they say so instead of showing another Studio's. */
-const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
+const STUDIO_PAGES = new Set<Page>(['home', 'dashboard', 'planner', 'editing', 'canon', 'art', 'preflight', 'launch', 'files', 'projects', 'notes', 'write', 'read', 'market', 'finance']);
 
 /** Write's window shows the author's side (Write) or a Beta Reader's (Read): the same window, told which. */
 let writeMode: 'write' | 'read' = 'write';
@@ -808,8 +819,9 @@ function showPage(next: Page): void {
 function createWindow(): void {
   win = new BrowserWindow({
     ...restoredBounds(),
-    minWidth: 800,
-    minHeight: 500,
+    // the least size never exceeds the screen, or a small display could not fit the window
+    minWidth: Math.min(800, screen.getPrimaryDisplay().workArea.width),
+    minHeight: Math.min(500, screen.getPrimaryDisplay().workArea.height),
     title: DEV_BUILD ? 'Cadrel Dev' : 'Cadrel',
     // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
     // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
@@ -1201,7 +1213,7 @@ function registerShellIpc(): void {
   });
   manageLike('lens:state', async () => {
     const work = () => new ProjectWork(studio, peopleHost, stages);
-    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan(), canonWaiting: async () => (await peopleHost.service?.as(peopleHost.me).canon.waitingForMe())?.length ?? 0 }, peopleHost.me, new Date().toISOString().slice(0, 10));
+    return loadLens({ mayAnywhere: (c) => peopleHost.mayOn(c), editing: () => editorial().state(), plan: () => work().plan(), canonWaiting: async () => (await peopleHost.service?.as(peopleHost.me).canon.waitingForMe())?.length ?? 0, art: () => artLens(studio, peopleHost, peopleHost.service ? vaultHost() : null), launch: () => launchLens(studio, peopleHost) }, peopleHost.me, new Date().toISOString().slice(0, 10));
   });
   manageLike('policy:state', async () => peopleHost.policyState());
   manageLike('policy:set', async (change: unknown) => peopleHost.setPolicy(checkPolicyChange(change)));
@@ -1248,9 +1260,30 @@ function registerShellIpc(): void {
   const canon = () => new Canon(studio, peopleHost, peopleHost.service ? vaultHost() : null);
   manageLike('canon:state', async (seriesRef?: string) => canon().state(seriesRef ? String(seriesRef) : undefined));
   manageLike('canon:call', async (name: string, ...args: unknown[]) => canon().call(String(name), args));
-  manageLike('continuity:state', async () => canon().continuity());
+  manageLike('continuity:state', async (project?: string) => canon().continuity(project ? String(project) : undefined));
   manageLike('continuity:check', async (id: string) => canon().check(String(id)));
   manageLike('continuity:call', async (name: string, ...args: unknown[]) => canon().continuityCall(String(name), args));
+  const art = () => new Art(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('art:state', async (project?: string) => art().state(project ? String(project) : undefined));
+  manageLike('art:asset', async (id: string) => art().asset(String(id)));
+  manageLike('art:brief', async (id: string) => art().brief(String(id)));
+  manageLike('art:call', async (name: string, ...args: unknown[]) => art().call(String(name), args));
+  manageLike('art:preview', async (fileId: string, version: number) => art().preview(String(fileId), Number(version)));
+  const preflight = () => new Preflight(studio, peopleHost, peopleHost.service ? vaultHost() : null);
+  manageLike('preflight:state', async (project?: string) => preflight().state(project ? String(project) : undefined));
+  manageLike('preflight:run', async (fileId: string, editionId: string | null) => preflight().run(String(fileId), editionId ? String(editionId) : null));
+  manageLike('preflight:get', async (runId: string) => preflight().get(String(runId)));
+  const launch = () => new Launch(studio, peopleHost, peopleHost.service ? vaultHost() : null, market.service.status().libraryRoot ? { history: (asin) => market.service.book(asin)?.history ?? [] } : null);
+  manageLike('launch:state', async (project?: string) => launch().state(project ? String(project) : undefined));
+  manageLike('launch:plan', async (id: string) => launch().plan(String(id)));
+  manageLike('launch:readers', async (id: string) => launch().readers(String(id)));
+  manageLike('launch:brief', async (id: string) => launch().brief(String(id)));
+  manageLike('launch:market', async (project?: string) => launch().market(project ? String(project) : undefined));
+  manageLike('launch:call', async (name: string, ...args: unknown[]) => launch().call(String(name), args));
+  manageLike('launch:deliver', async (requestId: string, assetId: string, version: number) => launch().deliver(String(requestId), String(assetId), Number(version)));
+  manageLike('launch:publishFigures', async (project?: string) => launch().publishFigures(project ? String(project) : undefined));
+  manageLike('launch:window', async (id: string, days: number) => launch().decisionWindow(String(id), Number(days)));
+  manageLike('preflight:waive', async (runId: string, seq: number, reason: string) => preflight().waive(String(runId), Number(seq), String(reason ?? '')));
   /** The Editing desk: the manuscripts of this Studio's Write projects and their notes (the project folders are the truth; nothing is copied). */
   const desk = async () => {
     const l = await write.listProjects();

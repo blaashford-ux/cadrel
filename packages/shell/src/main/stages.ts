@@ -68,6 +68,8 @@ export class ProjectStages {
       approved: work ? await work.approvedLabels(p.id) : [],
       editorial: work ? await work.editorialFacts(live).catch(() => undefined) : undefined,
       continuity: work ? await work.continuityFacts(live).catch(() => undefined) : undefined,
+      art: work ? await work.artFacts(live).catch(() => undefined) : undefined,
+      launch: work ? await work.launchFacts(live).catch(() => undefined) : undefined,
       hasManuscript: linksOf(tree, p.id, 'write').length > 0,
       openNotes: state.openByProject[p.id] ?? 0,
       subprojects: childrenOf(tree, p.id).filter((c) => c.status !== 'archived').map(categoryOf)

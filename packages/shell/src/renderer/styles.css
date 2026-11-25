@@ -69,7 +69,11 @@ input[type='checkbox'] { padding: 0; }
 .shell.has-controls::before { content: ''; position: absolute; top: 40px; right: 10px; width: 14px; height: 14px; background: radial-gradient(circle at 0 100%, transparent 13.5px, var(--shell) 14px); pointer-events: none; z-index: 1; }
 
 /* ---- rail: sits on the window ---- */
-.rail { width: 64px; flex: none; background: var(--shell); display: flex; flex-direction: column; align-items: stretch; -webkit-app-region: drag; padding-bottom: 8px; }
+.rail { width: 64px; flex: none; background: var(--shell); display: flex; flex-direction: column; align-items: stretch; -webkit-app-region: drag; padding-bottom: 8px; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+/* On a short screen (a small laptop, or Windows display scaling) the rail would run off the bottom and hide Profile and Settings: tighten it, and it scrolls if it still does not fit. */
+@media (max-height: 820px) { .rail-btn { padding: 4px 0 3px; } .rail-sep { margin: 4px auto 2px; } .rail-mark { height: 40px; } }
+@media (max-height: 640px) { .rail-label { display: none; } }
 .rail-mark { height: 52px; display: grid; place-items: center; }
 .mark-tile { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; background: #faf8f3; box-shadow: inset 0 0 0 1px #d1c7b8; }
 .rail ul { list-style: none; margin: 4px 0 0; padding: 0 6px; }

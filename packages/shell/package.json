@@ -1,6 +1,6 @@
 {
   "name": "@cadrel/shell",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "private": true,
   "description": "Cadrel: the studio suite",
   "main": "dist/main.mjs",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@huggingface/transformers": "^3.7.0",
     "@tesseract.js-data/eng": "^1.0.0",
+    "@xmldom/xmldom": "^0.9.12",
     "pdfjs-dist": "^4.10.38",
     "sharp": "^0.34.0",
     "sqlite-vec": "^0.1.9",

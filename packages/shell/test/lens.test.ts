@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildLens, loadLens, type LensSources } from '../src/main/lens';
+import type { ArtLensInput } from '../src/main/lens';
 import type { EditingPassRow, EditingState, PlanState } from '../src/shared/api';
 
 const TODAY = '2026-11-16';
@@ -135,3 +136,95 @@ describe('which views a person gets, and what it costs', () => {
     expect(s).toMatchObject({ lenses: [] });
   });
 });
+
+describe('the Art view, and what the Director sees of art', () => {
+  const art: ArtLensInput = {
+    assets: [
+      { id: 'a1', name: 'Cover', projectId: 'b4', projectName: 'Book Four', state: 'in_review', licenceDaysLeft: null, needUpdate: 0 },
+      { id: 'a2', name: 'Banner', projectId: 'b4', projectName: 'Book Four', state: 'approved', licenceDaysLeft: 9, needUpdate: 2 },
+      { id: 'a3', name: 'Map', projectId: 'b1', projectName: 'Book One', state: 'approved', licenceDaysLeft: -3, needUpdate: 0 },
+      { id: 'a4', name: 'Old art', projectId: 'b1', projectName: 'Book One', state: 'retired', licenceDaysLeft: -300, needUpdate: 0 },
+      { id: 'a5', name: 'Far licence', projectId: 'b1', projectName: 'Book One', state: 'approved', licenceDaysLeft: 400, needUpdate: 0 }
+    ],
+    briefs: [
+      { id: 'br1', title: 'Cover for Book Four', projectId: 'b4', projectName: 'Book Four', submitted: 3, chosen: false },
+      { id: 'br2', title: 'Banner brief', projectId: 'b4', projectName: 'Book Four', submitted: 1, chosen: true }, // already chosen: nothing waits
+      { id: 'br3', title: 'Empty brief', projectId: 'b1', projectName: 'Book One', submitted: 0, chosen: false }
+    ],
+    runs: [
+      { fileId: 'e4', path: 'Book Four/book.epub', projectId: 'b4', projectName: 'Book Four', errors: 2 },
+      { fileId: 'e1', path: 'Book One/book.epub', projectId: 'b1', projectName: 'Book One', errors: 0 },
+      { fileId: 'e2', path: 'Book Two/book.epub', projectId: 'b2', projectName: 'Book Two', errors: 5 }
+    ]
+  };
+  const v = buildLens(['art'], { me: 'ada', today: TODAY, passes: [], tasks: [], art }).art!;
+
+  it('lists what waits for approval, the concepts nobody has chosen from, the licences, and the uses to update', () => {
+    expect(v.toApprove.map((a) => a.assetId)).toEqual(['a1']);
+    expect(v.concepts).toEqual([{ briefId: 'br1', title: 'Cover for Book Four', projectId: 'b4', projectName: 'Book Four', waiting: 3 }]);
+    expect(v.licences.map((l) => [l.assetId, l.days])).toEqual([['a3', -3], ['a2', 9]]); // soonest first; a retired asset and a far licence are not listed
+    expect(v.toUpdate).toEqual([{ assetId: 'a2', name: 'Banner', projectId: 'b4', projectName: 'Book Four', uses: 2 }]);
+  });
+
+  it('shows the Director how many assets are in review and which books are not ready, the worst first', () => {
+    const d = buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [], art }).director!;
+    expect(d.art.inReview).toBe(1);
+    expect(d.art.notReady.map((n) => [n.path, n.errors])).toEqual([['Book Two/book.epub', 5], ['Book Four/book.epub', 2]]);
+    expect(buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [] }).director!.art).toEqual({ inReview: 0, notReady: [] });
+  });
+
+  it('an Artist or Art Director gets the view; it is built only when asked for, and a failure to read art leaves it empty', async () => {
+    expect(buildLens(['author'], { me: 'x', today: TODAY, passes: [], tasks: [], art }).art).toBeUndefined();
+    const src = (caps: string[]): LensSources => ({ mayAnywhere: async (c) => caps.includes(c), editing: async () => ({ available: false, reason: 'no' }), plan: async () => { throw new Error('away'); }, art: async () => { throw new Error('away'); } });
+    const s = await loadLens(src(['asset.write']), 'x', TODAY);
+    expect(s).toMatchObject({ lenses: ['art'], views: { art: { toApprove: [], concepts: [], licences: [], toUpdate: [] } } });
+    const m = await loadLens(src(['asset.manage', 'manuscript.write']), 'x', TODAY);
+    expect(m.available && m.lenses).toEqual(['author', 'art']);
+    const both = await loadLens(src(['manuscript.write', 'asset.write']), 'x', TODAY);
+    expect(both.available && both.lenses).toEqual(['author']); // an author who may also upload keeps the author view only
+  });
+});
+
+describe('the Launch view, and which launches the Director sees at risk', () => {
+  const plan = (o: object) => ({ id: 'p', name: 'Book Four launch', projectId: 'b4', projectName: 'Book Four', releaseDate: '2026-12-10', daysToRelease: 20, late: 0, blocked: 0, outstanding: 6, state: 'draft', ...o });
+  const launch = {
+    plans: [
+      plan({ id: 'p1', daysToRelease: 20, late: 2, blocked: 1 }),
+      plan({ id: 'p2', name: 'Soon', daysToRelease: 5, blocked: 3 }),
+      plan({ id: 'p3', name: 'Far and blocked', daysToRelease: 40, blocked: 4 }),
+      plan({ id: 'p4', name: 'Done', daysToRelease: -60, state: 'reviewed', late: 5 }),
+      plan({ id: 'p5', name: 'Cancelled', daysToRelease: 3, late: 1, state: 'cancelled' }),
+      plan({ id: 'p6', name: 'Clean', daysToRelease: 10 })
+    ],
+    requests: [{ id: 'q1', title: 'Preorder banner', projectName: 'Book Four', due: '2026-11-30' }],
+    reviewsDue: [{ planId: 'p7', name: 'Book Three launch', projectName: 'Book Three' }]
+  };
+
+  it('lists live plans soonest first with what is late and blocked, the art asked for, and the reviews due', () => {
+    const v = buildLens(['launch'], { me: 'mia', today: TODAY, passes: [], tasks: [], launch }).launch!;
+    expect(v.upcoming.map((p) => p.planId)).toEqual(['p2', 'p6', 'p1', 'p3']); // not the reviewed, not the cancelled
+    expect(v.upcoming[2]).toMatchObject({ late: 2, blocked: 1 });
+    expect(v.requests).toEqual(launch.requests);
+    expect(v.reviewsDue).toEqual(launch.reviewsDue);
+    expect(buildLens(['author'], { me: 'x', today: TODAY, passes: [], tasks: [], launch }).launch).toBeUndefined();
+  });
+
+  it('shows the Director launches near their date that are late, or blocked within two weeks; not far ones, finished ones or clean ones', () => {
+    const d = buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [], launch }).director!;
+    expect(d.launchAtRisk.map((p) => p.planId)).toEqual(['p2', 'p1']);
+    expect(buildLens(['director'], { me: 'dana', today: TODAY, passes: [], tasks: [] }).director!.launchAtRisk).toEqual([]);
+  });
+
+  it('is given to a person who manages launches, built only when asked for, and empty when the records cannot be read', async () => {
+    const src = (caps: string[]): LensSources => ({ mayAnywhere: async (c) => caps.includes(c), editing: async () => ({ available: false, reason: 'no' }), plan: async () => { throw new Error('away'); }, launch: async () => { throw new Error('away'); } });
+    const s = await loadLens(src(['launch.manage']), 'x', TODAY);
+    expect(s).toMatchObject({ lenses: ['launch'], views: { launch: { upcoming: [], requests: [], reviewsDue: [] } } });
+    const asked: string[] = [];
+    const counting = { ...src(['launch.manage']), launch: async () => (asked.push('launch'), launch) };
+    const l = await loadLens(counting, 'x', TODAY);
+    expect(l.available && l.views.launch!.upcoming).toHaveLength(4);
+    await loadLens({ ...counting, mayAnywhere: async (c) => c === 'manuscript.write' }, 'x', TODAY);
+    expect(asked).toEqual(['launch']); // an Author's view does not ask
+  });
+});
+

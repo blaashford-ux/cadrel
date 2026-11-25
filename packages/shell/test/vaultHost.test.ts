@@ -72,11 +72,22 @@ describe('manuscripts and their versions, for editorial passes', () => {
     await fsp.writeFile(path.join(dir, 'Vault', 'ch1.md'), 'two — with “quotes”');
     await v.call('checkIn', ['ch1.md', 'second']);
     const ms = await v.manuscripts();
-    expect(ms).toEqual([{ fileId: expect.any(String), path: 'ch1.md', version: 2 }]); // not the cover, not the file nobody added
+    expect(ms).toEqual([{ fileId: expect.any(String), path: 'ch1.md', version: 2, projectId: null }]); // not the cover, not the file nobody added; in no project yet
     expect(await v.textOf(ms[0]!.fileId, 1)).toBe('one');
     expect(await v.textOf(ms[0]!.fileId, 2)).toBe('two — with “quotes”');
     expect((await v.versionsOf(ms[0]!.fileId)).map((x) => [x.n, x.comment])).toEqual([[2, 'second'], [1, 'first']]);
     await expect(v.textOf(ms[0]!.fileId, 9)).rejects.toThrow(/no such version/);
     await expect(v.textOf('nope', 1)).rejects.toThrow(/not in the vault/);
+  });
+
+  it('says which project each manuscript belongs to, by the project its data card names', async () => {
+    await v.state();
+    for (const f of ['one.md', 'two.md', 'loose.md']) await fsp.writeFile(path.join(dir, 'Vault', f), f);
+    await v.call('add', ['one.md']);
+    await v.call('add', ['two.md']);
+    await v.call('add', ['loose.md']);
+    await v.call('setCard', ['one.md', {}, 'book-a']);
+    await v.call('setCard', ['two.md', {}, 'book-b']);
+    expect((await v.manuscripts()).map((m) => [m.path, m.projectId])).toEqual([['loose.md', null], ['one.md', 'book-a'], ['two.md', 'book-b']]);
   });
 });
