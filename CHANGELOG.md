@@ -6,6 +6,9 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 
 Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).
 
+### Market: community scans from Claude
+- **Claude (or a scheduled task in Claude Cowork) can run community source scans.** `start_community_sync` reads a week of a category's subreddits, one subreddit, or **Sync All** (every linked subreddit, one after another: categories alphabetically unless `order` lists them, a subreddit shared by two categories read once). It returns a job id at once; `community_sync_status` with `wait_seconds` holds until the scan **finishes** and then lists each subreddit's outcome and what was added; `stop_community_sync` stops it. One subreddit failing does not stop the rest of a Sync All. Only one sync runs at a time in the AI server, and the app's own Sync button is separate, so do not start both at once.
+
 ### Launch
 - **A Launch page** (in the rail) holds a book's **release plan**, made from a template for a release date and **worked backwards from it**: each item is a task, due exactly that many days before or after, so it is in the Planner and on people's Home. Two templates ship (Ebook launch, Series launch); a manager can revise them (each revision is a new version).
 - **What is outstanding is worked out from the records, not typed in.** An approved cover (Art), a clear Preflight result, a sign-off, a delivered campaign banner, a marketing brief and ARC readers who have the file each clear their item and tick its task. Every item that cannot be done says **why**, in words.
