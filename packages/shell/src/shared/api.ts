@@ -1508,6 +1508,94 @@ export interface LaunchApi {
   decisionWindow(decisionId: string, days: number): Promise<DecisionWindow | { available: false; reason: string }>;
 }
 
+// ---- the Editing desk (an editor's view of a manuscript and its notes) ----------------------------------------------------------
+
+/** A manuscript an editor can open: a file in a project's Manuscript folder, with how many notes are on it. */
+export interface DeskManuscript { project: string; file: string; name: string; words: number; chapters: number; notes: number; open: number }
+export interface DeskChapter { index: number; title: string; /** The chapter as the text the notes are anchored to: formatting marks removed, paragraphs on separate lines. */ text: string; words: number }
+export interface DeskReply { author: string; body: string; createdAt: string }
+export interface DeskNote {
+  id: string;
+  kind: 'comment' | 'suggestion';
+  status: 'open' | 'resolved' | 'accepted' | 'rejected';
+  /** The chapter the note is in and where its text is in that chapter now; -1 when its text is gone. */
+  chapter: number;
+  start: number;
+  end: number;
+  /** `same` where it was written, `moved` (the text has shifted), `gone` (it was cut): the notes that need a look. */
+  state: 'same' | 'moved' | 'gone';
+  quote: string;
+  body: string;
+  replacement?: string;
+  category?: string;
+  editType?: 'developmental' | 'line' | 'copy' | 'proof';
+  round?: string;
+  origin: 'human' | 'ai' | 'outside';
+  author: string;
+  createdAt: string;
+  replies: DeskReply[];
+}
+export interface DeskText { project: string; file: string; name: string; chapters: DeskChapter[]; notes: DeskNote[]; /** The rounds used so far in this manuscript's notes. */ rounds: string[]; me: string }
+export interface NewDeskNote {
+  kind: 'comment' | 'suggestion';
+  quote: string;
+  body?: string;
+  replacement?: string;
+  category?: string;
+  editType?: string;
+  round?: string;
+  /** A little text before and after the quote, to tell repeated phrases apart; and the chapter it is in. */
+  before?: string;
+  after?: string;
+  chapter?: number;
+}
+export interface DeskImportResult { project: string; file: string; words: number; chapters: number; /** Tracked changes and comments found in the document. */ found: number; added: number; /** The changes that could not be placed in the text, each with why. */ notPlaced: string[] }
+export interface ReportSectionView { id: string; title: string; body: string }
+export interface ReportAnalysisView { generated: string; words: number; sentences: number; readingGrade: number; averageSentence: number; dialogueShare: number; adverbsPer1000: number; passiveShare: number; findings: { level: 'look' | 'note'; text: string }[] }
+export interface ReportStatsView {
+  total: number;
+  byStatus: Record<'open' | 'accepted' | 'rejected' | 'resolved', number>;
+  byKind: { comment: number; suggestion: number };
+  byEditType: Record<string, number>;
+  byRound: Record<string, number>;
+  bySource: { human: number; ai: number; outside: number };
+  suggestions: { open: number; accepted: number; rejected: number };
+  themes: { topic: string; count: number; examples: string[] }[];
+  perChapter: { index: number; title: string; count: number; open: number }[];
+  open: { chapter: number; chapterTitle: string; kind: 'comment' | 'suggestion'; editType?: string; quote: string; body: string }[];
+}
+export interface DeskReport {
+  project: string;
+  file: string;
+  data: { manuscript: string; editor: string; round?: string; summary?: string; sections: ReportSectionView[]; analysis?: ReportAnalysisView; updatedAt: string };
+  stats: ReportStatsView;
+  /** The summary written from the numbers, shown when the editor has not written one. */
+  autoSummary: string;
+  /** The report is kept in the project already (it is made the first time it is changed or exported). */
+  saved: boolean;
+}
+/** What the editor types into the report. Anything left out stays as it was. */
+export interface ReportPatch { summary?: string; round?: string; editor?: string; sections?: ReportSectionView[]; removeAnalysis?: boolean }
+export interface DeskApi {
+  /** Manuscripts only, of the Write projects named (the Project and Book on screen), or of every project. */
+  manuscripts(folders?: string[]): Promise<DeskManuscript[]>;
+  read(project: string, file: string): Promise<DeskText>;
+  addNotes(project: string, file: string, notes: NewDeskNote[]): Promise<{ added: number; errors: string[] }>;
+  setStatus(project: string, id: string, status: DeskNote['status']): Promise<void>;
+  tag(project: string, id: string, tags: { editType?: string | null; round?: string | null; category?: string | null }): Promise<void>;
+  reply(project: string, id: string, body: string): Promise<void>;
+  remove(project: string, id: string): Promise<void>;
+  /** Asks for a Word document and brings it into the project, with its tracked changes and comments as notes. Null if cancelled. */
+  upload(project: string): Promise<DeskImportResult | null>;
+  /** Asks where to save, then writes the manuscript with its open notes as a Word file. Null if cancelled. */
+  exportDocx(project: string, file: string): Promise<{ path: string; placed: number; skipped: number } | null>;
+  report(project: string, file: string): Promise<DeskReport>;
+  saveReport(project: string, file: string, patch: ReportPatch): Promise<DeskReport>;
+  attachAnalysis(project: string, file: string): Promise<DeskReport>;
+  /** Asks where to save, then writes the report as a PDF. Null if cancelled. */
+  exportReportPdf(project: string, file: string): Promise<string | null>;
+}
+
 export interface CadrelApi {
   scope: ScopeApi;
   studios: StudiosApi;
@@ -1522,6 +1610,7 @@ export interface CadrelApi {
   launch: LaunchApi;
   work: WorkApi;
   editing: EditingApi;
+  desk: DeskApi;
   vault: VaultApi;
   people: PeopleApi;
   myBooks: MyBooksApi;

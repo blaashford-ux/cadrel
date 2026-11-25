@@ -2,9 +2,14 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (M6: launch and market)
+## 0.21.0 (M6: launch and market, and Market sync fixes)
 
 Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).
+
+### Market sync and small screens
+- **Community sync is gentler on Arctic Shift.** Requests are spaced further apart (and wider still after a timeout), which stops the 422 "Timeout" errors.
+- **One subreddit failing no longer blocks the rest.** Each subreddit can also be synced on its own (Sync / Resume on its row), and the order a sync reads them in can be changed with the ↑ / ↓ buttons.
+- **Cadrel fits small screens.** The window never opens larger than the screen it is on, and the rail scrolls and tightens on short screens, so Settings and Profile can always be reached.
 
 ### Market: community scans from Claude
 - **Claude (or a scheduled task in Claude Cowork) can run community source scans.** `start_community_sync` reads a week of a category's subreddits, one subreddit, or **Sync All** (every linked subreddit, one after another: categories alphabetically unless `order` lists them, a subreddit shared by two categories read once). It returns a job id at once; `community_sync_status` with `wait_seconds` holds until the scan **finishes** and then lists each subreddit's outcome and what was added; `stop_community_sync` stops it. One subreddit failing does not stop the rest of a Sync All. Only one sync runs at a time in the AI server, and the app's own Sync button is separate, so do not start both at once.
@@ -51,6 +56,26 @@ Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade
 
 ### Also in this version
 - **Canon follows the project you are in.** The Canon page no longer asks which series; its checks and books follow the project and book selected. File pickers (Continuity, Editing's Plan a pass) offer only the files that belong to the current project.
+
+## 0.20.0 (Editing: a workspace for editors, with a living report)
+
+- **Editing is now a workspace.** Pick a manuscript (only real manuscripts, filtered by the Project and Book on screen), read it by chapter, select text and leave a comment or a one-click suggestion, with an edit type (developmental, line, copy, proof), a topic and an editing round. Notes are Write's own notes: the same review files, the same code as the `add_notes` assistant tool, so notes an AI leaves through MCP appear here and the other way round. Accepting a suggestion marks the decision; the text stays the author's.
+- **Notes whose text moved or was cut** are marked, and a "Needs attention" filter lists them.
+- **Upload a document edited elsewhere.** A Word (.docx) file comes into the project's Manuscript folder as Markdown, with the original kept under Editing/Originals. Its tracked changes become suggestions and its comments become comments, signed by their Word authors as an outside editor. The manuscript is the text before those changes, so each one is a note the author can accept or reject.
+- **Export to Word.** The manuscript with its open notes as real Word comments and tracked changes.
+- **The Editing Report.** Worked out from the notes each time it is opened (counts by status, type, source, round and chapter; themes; what is still open), so it follows the editing. The editor adds a summary and sections of their own, which are kept as typed; a text analysis can be attached; and the whole report exports to PDF. It is kept in the project as Editing/<name> - Editing Report.md.
+- **Earlier passes.** The old editorial-pass workflow is on its own tab on the Editing page; nothing was removed.
+- **Fix.** The installer version is in step with the app again (it had been left at 0.19.2 by the last two releases' version bumps).
+- Under the hood: `add_notes` and the editor's notes share one code path; a Word file's tracked changes and comments are read by a new parser in Write's shared code.
+
+## 0.19.4 (Notes can carry an edit type and an editing round)
+
+- **Notes.** A note can now be tagged with the kind of edit it belongs to (developmental, line, copy or proof) and the editing round it was made in ("First read", "Round 2"). Both are optional, so existing notes and review files are unchanged. The `add_notes` tool takes `editType` and `round` (per note, and `round` for the whole call); notes from the developmental, line and copy skills get their type automatically. `get_notes` can filter on either. This is the first step of the Editing workspace plan (docs/PLAN-EDITING.md).
+
+## 0.19.3 (Rewrite mode: the rewrite sets the limit)
+
+- **Rewrite mode.** The two panes of a rewrite can no longer go past the end of the rewrite: a blank rewrite keeps both on its first chapter instead of the original running ahead, and the pair advances as the rewrite grows. The original is always the original. To look ahead in it, open it in a tab of its own with the mode off. Turning the mode on from the rewrite loads both files first, so neither pane opens empty. Scrolling stops in the original where the rewrite runs out.
+- **Under way.** The Editing workspace plan is in docs/PLAN-EDITING.md; nothing of it is built yet.
 
 ## 0.19.2 (Also by: each book on its own page)
 

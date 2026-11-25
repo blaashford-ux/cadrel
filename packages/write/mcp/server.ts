@@ -106,6 +106,8 @@ const note = z.object({
   body: z.string().optional().describe('Comments: the point you are making (required). Suggestions: a one-line reason (optional).'),
   replacement: z.string().optional().describe('Suggestions only: the text that replaces the quote. Must stay within one paragraph. Empty string means delete the quote.'),
   category: z.string().optional().describe('A short label such as "pacing", "continuity", "rhythm", "spelling".'),
+  editType: z.enum(['developmental', 'line', 'copy', 'proof']).optional().describe('The kind of edit this note belongs to. Defaults to the skill\'s own type when notes come from the developmental, line or copy skill.'),
+  round: z.string().optional().describe('The editing round this note was made in, e.g. "First read". Overrides the call-level round.'),
   before: z.string().optional().describe('If the quote appears more than once: the few words immediately before it.'),
   after: z.string().optional().describe('If the quote appears more than once: the few words immediately after it.'),
   chapter: z.number().int().min(0).optional().describe('Limit the search for the quote to this chapter number.'),
@@ -222,10 +224,12 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         kind: z.enum(['comment', 'suggestion']).optional(),
         reviewer: z.string().optional().describe('Part of the reviewer\'s name, e.g. "Line edit".'),
         category: z.string().optional(),
+        editType: z.enum(['developmental', 'line', 'copy', 'proof']).optional(),
+        round: z.string().optional().describe('Only notes from this editing round.'),
       },
       annotations: readOnly,
     },
-    (a) => run(async (c) => getNotes(c, await ref(a, 'book'), { file: a.file, status: a.status, kind: a.kind, reviewer: a.reviewer, category: a.category }))()
+    (a) => run(async (c) => getNotes(c, await ref(a, 'book'), { file: a.file, status: a.status, kind: a.kind, reviewer: a.reviewer, category: a.category, editType: a.editType, round: a.round }))()
   );
 
   server.registerTool(
@@ -235,10 +239,10 @@ export function registerWriteTools(server: McpServer, o: ServerOptions): void {
         `Add up to ${LIMITS.notesPerCall} comments and suggestions in one call. Each note is checked separately: valid ones are saved and appear in the author's Notes panel, ` +
         'and any that fail come back with the reason (quote not found, quote matches several places, and so on) so you can fix and resend just those. ' +
         'A suggestion must sit inside one paragraph. Notes never change the manuscript, but a chapter the author had marked as edited loses that mark when it is given a note (the result says so), because it is no longer finished.',
-      inputSchema: { project, book, skill, notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
+      inputSchema: { project, book, skill, round: z.string().optional().describe('The editing round for every note in this call unless a note sets its own, e.g. "First read".'), notes: z.array(note).min(1).max(LIMITS.notesPerCall) },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     },
-    (a) => run(async (c) => addNotes(c, await ref(a, 'book', true), a.skill, a.notes))()
+    (a) => run(async (c) => addNotes(c, await ref(a, 'book', true), a.skill, a.notes, a.round))()
   );
 
   server.registerTool(

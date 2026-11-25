@@ -251,6 +251,7 @@ export function createMarketModule(host: MarketHost): MarketModule {
     communitySources: (c: string) => service.communitySources(c),
     addCommunitySource: (c: string, s: string) => service.addCommunitySource(c, s),
     removeCommunitySource: (c: string, s: string) => service.removeCommunitySource(c, s),
+    moveCommunitySource: (c: string, s: string, d: 'up' | 'down') => service.moveCommunitySource(c, s, d),
     syncCommunity: (c: string, s?: string) => service.syncCommunity(c, s),
     communityStatus: () => service.communityStatus(),
     keywordTable: (s: string, c?: string) => service.keywordTable(s, c),

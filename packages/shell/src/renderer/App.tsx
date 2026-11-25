@@ -6,7 +6,7 @@ import { People } from './People';
 import { NotConnected } from './NotConnected';
 import { useStudios } from './useStudios';
 import { Assistants } from './Assistants';
-import { Editing } from './Editing';
+import { Editing } from './EditingDeskPage';
 import { CanonPage } from './Canon';
 import { ArtPage } from './Art';
 import { PreflightPage } from './Preflight';
