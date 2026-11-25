@@ -45,7 +45,7 @@ export class ArcticTimeout extends Error {}
 const QUICK_WAITS = [2000, 4000];
 const PATIENT_WAITS = [10000, 30000, 60000, 60000, 60000];
 /** After a timeout, requests are spaced further apart (up to this), and ease back after a run of clean answers. */
-const MAX_PACE_MS = 15000;
+const MAX_PACE_MS = 8000;
 
 const POST_FIELDS = 'id,title,selftext,created_utc,score,link_flair_text,author';
 const COMMENT_FIELDS = 'id,link_id,parent_id,body,created_utc,score,author';
