@@ -82,6 +82,7 @@ it.skipIf(!have)('briefs on a book, planning a pass, raising an item from select
 
     // ---- plan a pass over the manuscript, under that brief
     await shell.getByRole('button', { name: 'Editing', exact: true }).click();
+    await shell.getByRole('tab', { name: 'Earlier passes' }).click(); // the new Editing desk opens first; the editorial passes are on their own tab
     await shell.getByRole('button', { name: 'Plan a pass…' }).click();
     const form = shell.getByRole('region', { name: 'Plan a pass' });
     await form.getByLabel('Manuscript').selectOption({ label: 'Lead Me/book.md (version 2)' });

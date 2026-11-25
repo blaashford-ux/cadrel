@@ -119,6 +119,21 @@ const api: CadrelApi = {
     createBrief: (input) => studioCall('shell:editing:createBrief', input),
     reviseBrief: (id, input) => studioCall('shell:editing:reviseBrief', id, input)
   },
+  desk: {
+    manuscripts: (folders) => studioCall('shell:desk:manuscripts', folders),
+    read: (project, file) => studioCall('shell:desk:read', project, file),
+    addNotes: (project, file, notes) => studioCall('shell:desk:addNotes', project, file, notes),
+    setStatus: (project, id, status) => studioCall('shell:desk:setStatus', project, id, status),
+    tag: (project, id, tags) => studioCall('shell:desk:tag', project, id, tags),
+    reply: (project, id, body) => studioCall('shell:desk:reply', project, id, body),
+    remove: (project, id) => studioCall('shell:desk:remove', project, id),
+    upload: (project) => studioCall('shell:desk:upload', project),
+    exportDocx: (project, file) => studioCall('shell:desk:exportDocx', project, file),
+    report: (project, file) => studioCall('shell:desk:report', project, file),
+    saveReport: (project, file, patch) => studioCall('shell:desk:saveReport', project, file, patch),
+    attachAnalysis: (project, file) => studioCall('shell:desk:attachAnalysis', project, file),
+    exportReportPdf: (project, file) => studioCall('shell:desk:exportReportPdf', project, file)
+  },
   lens: { state: () => studioCall('shell:lens:state') },
   canon: { state: (series) => studioCall('shell:canon:state', series), call: (name, ...args) => studioCall('shell:canon:call', name, ...args) },
   continuity: { state: (project) => studioCall('shell:continuity:state', project), check: (id) => studioCall('shell:continuity:check', id), call: (name, ...args) => studioCall('shell:continuity:call', name, ...args) },

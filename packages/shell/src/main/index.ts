@@ -37,6 +37,7 @@ import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
 import { Editorial } from './editorial';
+import { EditingDesk } from './editingDesk';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
@@ -1283,6 +1284,59 @@ function registerShellIpc(): void {
   manageLike('launch:publishFigures', async (project?: string) => launch().publishFigures(project ? String(project) : undefined));
   manageLike('launch:window', async (id: string, days: number) => launch().decisionWindow(String(id), Number(days)));
   manageLike('preflight:waive', async (runId: string, seq: number, reason: string) => preflight().waive(String(runId), Number(seq), String(reason ?? '')));
+  /** The Editing desk: the manuscripts of this Studio's Write projects and their notes (the project folders are the truth; nothing is copied). */
+  const desk = async () => {
+    const l = await write.listProjects();
+    if (!l.exists) throw new Error('There is no Write folder to edit in yet. Open Write and make a project first.');
+    return new EditingDesk({
+      fs: nodeFs,
+      root: l.root,
+      editor: authorName,
+      keep: async (abs, bytes) => {
+        await fsp.mkdir(path.dirname(abs), { recursive: true });
+        await fsp.writeFile(abs, bytes);
+      }
+    });
+  };
+  manageLike('desk:manuscripts', async (folders?: string[]) => (await desk()).manuscripts(Array.isArray(folders) ? folders.map(String) : undefined));
+  manageLike('desk:read', async (p: string, f: string) => (await desk()).read(String(p), String(f)));
+  manageLike('desk:addNotes', async (p: string, f: string, notes: never) => (await desk()).addNotes(String(p), String(f), notes));
+  manageLike('desk:setStatus', async (p: string, id: string, status: 'open' | 'resolved' | 'accepted' | 'rejected') => (await desk()).setStatus(String(p), String(id), status));
+  manageLike('desk:tag', async (p: string, id: string, tags: never) => (await desk()).tag(String(p), String(id), tags));
+  manageLike('desk:reply', async (p: string, id: string, body: string) => (await desk()).reply(String(p), String(id), String(body)));
+  manageLike('desk:remove', async (p: string, id: string) => (await desk()).remove(String(p), String(id)));
+  manageLike('desk:upload', async (p: string) => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Choose a Word document', filters: [{ name: 'Word documents', extensions: ['docx'] }], properties: ['openFile'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return (await desk()).importDocx(String(p), new Uint8Array(await fsp.readFile(r.filePaths[0])), path.basename(r.filePaths[0]));
+  });
+  manageLike('desk:exportDocx', async (p: string, f: string) => {
+    const made = await (await desk()).exportDocx(String(p), String(f));
+    const r = await dialog.showSaveDialog(win!, { title: 'Save the manuscript with its notes', defaultPath: path.join(app.getPath('documents'), made.name), filters: [{ name: 'Word document', extensions: ['docx'] }] });
+    if (r.canceled || !r.filePath) return null;
+    await fsp.writeFile(r.filePath, made.bytes);
+    return { path: r.filePath, placed: made.placed, skipped: made.skipped };
+  });
+  manageLike('desk:report', async (p: string, f: string) => (await desk()).report(String(p), String(f)));
+  manageLike('desk:saveReport', async (p: string, f: string, patch: never) => (await desk()).saveReport(String(p), String(f), patch));
+  manageLike('desk:attachAnalysis', async (p: string, f: string) => (await desk()).attachAnalysis(String(p), String(f)));
+  manageLike('desk:exportReportPdf', async (p: string, f: string) => {
+    const page = await (await desk()).reportPage(String(p), String(f));
+    const r = await dialog.showSaveDialog(win!, { title: 'Save the Editing Report', defaultPath: path.join(app.getPath('documents'), page.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (r.canceled || !r.filePath) return null;
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-editing-report-'));
+    const printer = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false } });
+    try {
+      const file = path.join(tmp, 'report.html');
+      await fsp.writeFile(file, page.html, 'utf8');
+      await printer.loadFile(file);
+      await fsp.writeFile(r.filePath, await printer.webContents.printToPDF({ printBackground: true, pageSize: 'Letter', margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } }));
+      return r.filePath;
+    } finally {
+      if (!printer.isDestroyed()) printer.destroy();
+      await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
   manageLike('editing:state', async () => editorial().state());
   manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
   manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));

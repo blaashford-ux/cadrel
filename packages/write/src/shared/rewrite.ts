@@ -85,6 +85,17 @@ export function rewriteFileName(original: string, taken: ReadonlySet<string>): s
   }
 }
 
+// ---- chapters ------------------------------------------------------------------------------------------------------------------
+
+/**
+ * The chapter a pair of rewrite panes may show: the one asked for, held inside the rewrite. The rewrite sets the limit, so a blank rewrite
+ * (one chapter) keeps both panes on its first chapter and the original does not run ahead of what has been written. Looking further ahead in
+ * the original is done in an ordinary tab of its own.
+ */
+export function pairChapter(want: number, rewriteChapters: number): number {
+  return Math.max(0, Math.min(want, Math.max(1, rewriteChapters) - 1));
+}
+
 // ---- scrolling together ---------------------------------------------------------------------------------------------------------
 
 /** Where the blocks (paragraphs, headings) of a pane start, top to bottom in px from the top of its content, and how tall the content is. */
