@@ -667,7 +667,7 @@ describe('community sources', () => {
     const now = Math.floor(Date.now() / 1000);
     const urls: string[] = [];
     const s = new AppService({
-      userData, openExternal: () => {}, revealInFolder: () => {},
+      userData, openExternal: () => {}, revealInFolder: () => {}, communityDelayMs: 0,
       fetch: (async (url: string) => {
         urls.push(url);
         const u = new URL(url);

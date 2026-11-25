@@ -45,7 +45,7 @@ export class ArcticTimeout extends Error {}
 const QUICK_WAITS = [2000, 4000];
 const PATIENT_WAITS = [10000, 30000, 60000, 60000, 60000];
 /** After a timeout, requests are spaced further apart (up to this), and ease back after a run of clean answers. */
-const MAX_PACE_MS = 5000;
+const MAX_PACE_MS = 15000;
 
 const POST_FIELDS = 'id,title,selftext,created_utc,score,link_flair_text,author';
 const COMMENT_FIELDS = 'id,link_id,parent_id,body,created_utc,score,author';
@@ -65,7 +65,7 @@ export class ArcticShift {
   constructor(o: ArcticOptions = {}) {
     this.base = (o.baseUrl ?? ARCTIC_SHIFT_URL).replace(/\/$/, '');
     this.doFetch = o.fetch ?? fetch;
-    this.delayMs = o.delayMs ?? 300;
+    this.delayMs = o.delayMs ?? 1200;
     this.pace = this.delayMs;
     this.onWait = o.onWait;
     this.signal = o.signal;
@@ -77,7 +77,7 @@ export class ArcticShift {
   }
 
   private slowDown(): void {
-    this.pace = Math.min(Math.max(this.pace * 2, 1000), MAX_PACE_MS);
+    this.pace = Math.min(Math.max(this.pace * 2, 3000), MAX_PACE_MS);
     this.clean = 0;
   }
 

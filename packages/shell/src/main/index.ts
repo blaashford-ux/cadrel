@@ -634,16 +634,23 @@ const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(h
 
 function restoredBounds(): Partial<Electron.Rectangle> & { width: number; height: number } {
   const w = settings.get().window;
-  const fallback = { width: 1280, height: 820 };
+  const primary = screen.getPrimaryDisplay().workArea;
+  // Never open larger than the screen it lands on (a small laptop, or a saved size from a bigger monitor): a window taller than the
+  // screen has its bottom, and the controls there, out of reach.
+  const fit = (size: { width: number; height: number }, a: Electron.Rectangle) => ({ width: Math.min(size.width, a.width), height: Math.min(size.height, a.height) });
+  const fallback = fit({ width: 1280, height: 820 }, primary);
   if (!w) return fallback;
-  const size = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
-  if (w.x === undefined || w.y === undefined) return size;
+  const wanted = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
+  if (w.x === undefined || w.y === undefined) return fit(wanted, primary);
   // Only reuse the saved position if it still lands on a connected display.
-  const visible = screen.getAllDisplays().some((d) => {
+  const on = screen.getAllDisplays().find((d) => {
     const a = d.workArea;
-    return w.x! < a.x + a.width - 50 && w.x! + size.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
+    return w.x! < a.x + a.width - 50 && w.x! + wanted.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
   });
-  return visible ? { ...size, x: w.x, y: w.y } : size;
+  if (!on) return fit(wanted, primary);
+  const a = on.workArea;
+  const size = fit(wanted, a);
+  return { ...size, x: Math.min(Math.max(w.x, a.x), a.x + a.width - size.width), y: Math.min(Math.max(w.y, a.y), a.y + a.height - size.height) };
 }
 
 function saveWindowState(): void {
@@ -811,8 +818,9 @@ function showPage(next: Page): void {
 function createWindow(): void {
   win = new BrowserWindow({
     ...restoredBounds(),
-    minWidth: 800,
-    minHeight: 500,
+    // the least size never exceeds the screen, or a small display could not fit the window
+    minWidth: Math.min(800, screen.getPrimaryDisplay().workArea.width),
+    minHeight: Math.min(500, screen.getPrimaryDisplay().workArea.height),
     title: DEV_BUILD ? 'Cadrel Dev' : 'Cadrel',
     // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
     // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
