@@ -2,6 +2,11 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.22.0 (Market: community scans from Claude)
+
+### Market: community scans from Claude
+- **Claude (or a scheduled task in Claude Cowork) can run community source scans.** `start_community_sync` reads a week of a category's subreddits, one subreddit, or **Sync All** (every linked subreddit, one after another: categories alphabetically unless `order` lists them, a subreddit shared by two categories read once). It returns a job id at once; `community_sync_status` with `wait_seconds` holds until the scan **finishes** and then lists each subreddit's outcome and what was added; `stop_community_sync` stops it. One subreddit failing does not stop the rest of a Sync All. Only one sync runs at a time in the AI server, and the app's own Sync button is separate, so do not start both at once.
+
 ## 0.21.0 (M6: launch and market, and Market sync fixes)
 
 Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).
@@ -10,9 +15,6 @@ Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade
 - **Community sync is gentler on Arctic Shift.** Requests are spaced further apart (and wider still after a timeout), which stops the 422 "Timeout" errors.
 - **One subreddit failing no longer blocks the rest.** Each subreddit can also be synced on its own (Sync / Resume on its row), and the order a sync reads them in can be changed with the ↑ / ↓ buttons.
 - **Cadrel fits small screens.** The window never opens larger than the screen it is on, and the rail scrolls and tightens on short screens, so Settings and Profile can always be reached.
-
-### Market: community scans from Claude
-- **Claude (or a scheduled task in Claude Cowork) can run community source scans.** `start_community_sync` reads a week of a category's subreddits, one subreddit, or **Sync All** (every linked subreddit, one after another: categories alphabetically unless `order` lists them, a subreddit shared by two categories read once). It returns a job id at once; `community_sync_status` with `wait_seconds` holds until the scan **finishes** and then lists each subreddit's outcome and what was added; `stop_community_sync` stops it. One subreddit failing does not stop the rest of a Sync All. Only one sync runs at a time in the AI server, and the app's own Sync button is separate, so do not start both at once.
 
 ### Launch
 - **A Launch page** (in the rail) holds a book's **release plan**, made from a template for a release date and **worked backwards from it**: each item is a task, due exactly that many days before or after, so it is in the Planner and on people's Home. Two templates ship (Ebook launch, Series launch); a manager can revise them (each revision is a new version).
