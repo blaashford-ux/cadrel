@@ -34,7 +34,7 @@ Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade
 - **Your assistant** can read what is outstanding, ARC counts, figures and comps, read and draft marketing briefs (a new version a person keeps or reverts) and save a report, with two new skills (Launch Review, Marketing Brief from Comps). It cannot approve a plan, apply a date, change a reader or publish figures.
 - **An optional gate** (off unless an administrator adds it): *Its release plan has no late or blocked required item*.
 
-## Unreleased (M5: art, assets and Preflight)
+## 0.21.0, also in it (M5: art, assets and Preflight)
 
 Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade).
 
