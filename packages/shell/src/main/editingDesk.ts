@@ -151,10 +151,10 @@ export class EditingDesk {
     await this.assertManuscript(project, file);
     const ctx = this.ctx;
     const list = await listChapters(ctx, project, file);
-    const chapters: { index: number; title: string; text: string; words: number }[] = [];
+    const chapters: { index: number; key: string; title: string; text: string; words: number }[] = [];
     for (const c of list.chapters) {
       const r = await readChapter(ctx, project, file, c.index);
-      chapters.push({ index: c.index, title: c.title, text: r.text, words: c.words });
+      chapters.push({ index: c.index, key: c.key, title: c.title, text: r.text, words: c.words });
     }
     const items = (await this.items(project)).filter((i) => i.file === file && i.status !== 'deleted');
     const placed = new Map<string, { chapter: number; start: number; end: number; state: DeskNote['state'] }>();
@@ -190,10 +190,14 @@ export class EditingDesk {
     return { project, file, name: stem(file), chapters: chapters.map((c): DeskChapter => c), notes, rounds, me: this.reviewer().name };
   }
 
-  /** Where a note is now: in the chapter it was written in if its text is still there (and where it was or has moved to), else any chapter that has it. */
-  private home(chapters: { index: number; text: string }[], i: ReviewItem) {
+  /**
+   * Where a note is now: in the chapter it says it is in (a note with a place), and there where its text is; for an old note, the first
+   * chapter that has its text (the apps give old notes a place when they open the file, after which this finds them in their own chapter).
+   */
+  private home(chapters: { index: number; key: string; text: string }[], i: ReviewItem) {
     if (i.anchor.gone) return null;
-    for (const c of chapters) {
+    const own = i.anchor.v === 2 && i.anchor.chapter !== undefined && chapters.some((c) => c.key === i.anchor.chapter);
+    for (const c of own ? chapters.filter((x) => x.key === i.anchor.chapter) : chapters) {
       const at = locateAnchor(c.text, i.anchor);
       if (at) return { chapter: c.index, start: at.start, end: at.end, state: (at.start === i.anchor.start ? 'same' : 'moved') as DeskNote['state'] };
     }

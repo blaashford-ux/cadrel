@@ -576,6 +576,10 @@ code.path { background: var(--raised); padding: 1px 6px; border-radius: 6px; }
 .review-mark { background: color-mix(in srgb, var(--gold) 28%, transparent); border-bottom: 2px solid var(--gold); cursor: pointer; }
 .review-mark.review-suggestion { background: color-mix(in srgb, var(--accent) 22%, transparent); border-bottom-color: var(--accent); }
 .review-mark.review-active { background: color-mix(in srgb, var(--gold) 50%, transparent); }
+/* a note whose text changed (or whose exact place is not certain): a marker at the start of its paragraph, not on a word */
+.review-pin { display: inline-block; width: 0.55em; height: 0.55em; margin: 0 0.25em 0 -0.9em; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 30%, transparent); cursor: pointer; vertical-align: middle; }
+.review-pin.review-suggestion { background: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.review-pin.review-active { box-shadow: 0 0 0 4px color-mix(in srgb, var(--gold) 50%, transparent); }
 .review-panel { position: fixed; z-index: 35; top: 96px; right: 16px; bottom: 56px; width: 340px; max-width: calc(100vw - 32px); display: flex; flex-direction: column; gap: 8px; padding: 14px; overflow: hidden; background: var(--panel); border-radius: 16px; box-shadow: var(--shadow-pop); }
 .review-head { display: flex; align-items: center; justify-content: space-between; }
 .review-head h3 { margin: 0; font-size: 15px; }
