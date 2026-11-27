@@ -156,7 +156,7 @@ export interface DraftRecord {
 }
 
 /** Fields of a project's metadata that can be changed after it is created. */
-export type ProjectPatch = Partial<Pick<ProjectMeta, 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'excludedFolders' | 'editedChapters' | 'rewriteLinks'>> & {
+export type ProjectPatch = Partial<Pick<ProjectMeta, 'notes' | 'archived' | 'goal' | 'activeManuscript' | 'manuscriptGoals' | 'manuscripts' | 'omnibus' | 'excludedFolders' | 'editedChapters' | 'rewriteLinks'>> & {
   overrides?: Partial<ProjectMeta['overrides']>;
 };
 
@@ -270,6 +270,12 @@ export interface ExportApi {
   /** Native image picker for the EPUB cover. */
   pickCoverImage(): Promise<string | null>;
 
+  /** For the omnibus dialog: each of these manuscripts (relative to the project) with its Book Details and how much text it has. Those that cannot be read are left out. */
+  omnibusBooks?(project: string, files: string[]): Promise<import('./export/omnibus').OmnibusBookInfo[]>;
+  /** Where an omnibus of these manuscripts would be written, and anything wrong with the recipe. */
+  planOmnibus?(project: string, recipe: import('./export/omnibus').OmnibusRecipe): Promise<ExportPlan & { errors: string[]; warnings: string[] }>;
+  /** Builds the omnibus: the manuscripts in the recipe as one book, with the omnibus's own details. */
+  runOmnibus?(project: string, recipe: import('./export/omnibus').OmnibusRecipe): Promise<ExportResult>;
   /** Where an export would write. Pass the dialog's current (unsaved) details to preview them. */
   planExport(file: string, details?: BookDetails): Promise<ExportPlan>;
   /** Builds the enabled outputs from the book's saved details and the manuscript as saved on disk. */

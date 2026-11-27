@@ -63,6 +63,7 @@ const api: CadrelApi = {
     state: () => studioCall('shell:vault:state'),
     syncNow: () => studioCall('shell:vault:sync'),
     add: (path, comment) => studioCall('shell:vault:call', 'add', path, comment),
+    setManuscript: (path, on) => studioCall('shell:vault:setManuscript', path, on),
     checkOut: (path, o) => studioCall('shell:vault:call', 'checkOut', path, o),
     checkIn: (path, comment) => studioCall('shell:vault:call', 'checkIn', path, comment),
     undoCheckOut: (path) => studioCall('shell:vault:call', 'undoCheckOut', path),

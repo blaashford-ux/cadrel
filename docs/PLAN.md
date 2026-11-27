@@ -70,6 +70,7 @@ Each milestone has a stated exit test and is delivered as a series of PRs into `
 | M7 to M8 | Business, Coordinator | Not started. |
 | not in the plan | Releases 0.4.0 to 0.18.0, Android and Cadrel Reader | Built; see "Released outside the milestones". |
 | not in the plan | Cover Designer (under Art: Create asset → Cover → eBook, Paperback) | **Built on `dev`, not yet released**: a freeform cover designer with smart layout, effects, textures, a library and a KDP paperback template overlay; saves an editable design and a flattened picture as one cover asset. Automated exit test `coverExit.test.ts` and a real-Chromium export test; `COVER-DESIGNER-EXIT-TEST.md` has no recorded run. Not built: offline use, the assistant reading a design. See [COVER-DESIGNER-PLAN.md](COVER-DESIGNER-PLAN.md). |
+| not in the plan | Omnibus, Set as Manuscript, and file filters | **Built on `dev`, not yet released**: an omnibus creator in Write (pick manuscripts, their Book Details introduce each, one export of all), a **Set as Manuscript** right-click item (any number per project, separate from the active manuscript), **Manuscripts only** in Write's tree and the Files page, a project filter on the Files page, and the manuscript pickers in Editing, Canon and the Editing desk following the set. See [OMNIBUS-AND-FILTERS-PLAN.md](OMNIBUS-AND-FILTERS-PLAN.md). |
 
 ### M0: One app (shipped as 0.2.0)
 Merge and harmonise. No new features; behaviour of both apps is unchanged and their tests are the proof.

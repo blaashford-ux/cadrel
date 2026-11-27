@@ -3,6 +3,7 @@ import { clampLevel } from './chapters';
 import { sanitizeRewriteLinks, type RewriteLink } from './rewrite';
 import { applyOverrides, diffOverrides, overridesFromLegacyBook, projectLayer, sanitizeOverrides, type Overrides } from './export/layers';
 import { sanitizeBookDetails, type BookDetails } from './export/model';
+import { sanitizeOmnibusRecipe, type OmnibusRecipe } from './export/omnibus';
 import { isDate, sanitizeGoal, type Goal } from './progress';
 import { validateName } from './paths';
 
@@ -215,6 +216,10 @@ export interface ProjectMeta {
   activeManuscript: string | null;
   /** A goal per manuscript, keyed by its relative path. */
   manuscriptGoals: Record<string, Goal>;
+  /** Files set as manuscripts (relative, "/" separated), any number of them: the books, as opposed to notes, outlines and character sheets. The active manuscript is one too. */
+  manuscripts: string[];
+  /** The omnibus last made from this project's manuscripts, so it can be made again. */
+  omnibus: OmnibusRecipe | null;
   /** Folders (relative, "/" separated) whose words do not count toward the goal. */
   excludedFolders: string[];
   /** Chapters marked as edited, per file (relative path): the chapter ids from `chapterIds`. Kept whatever the project's stage. */
@@ -247,6 +252,8 @@ export function newProjectMeta(opts: { id: string; name: string; template: Proje
     goal: null,
     activeManuscript: null,
     manuscriptGoals: {},
+    manuscripts: [],
+    omnibus: null,
     excludedFolders: uncountedFolders(t.folders),
     editedChapters: {},
     rewriteLinks: [],
@@ -270,6 +277,8 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
     goal: sanitizeGoal(r.goal, today),
     activeManuscript: typeof r.activeManuscript === 'string' && safeRelPath(r.activeManuscript.replace(/\\/g, '/')) ? r.activeManuscript.replace(/\\/g, '/') : null,
     manuscriptGoals: sanitizeManuscriptGoals(r.manuscriptGoals, today),
+    manuscripts: sanitizePaths(r.manuscripts),
+    omnibus: sanitizeOmnibusRecipe(r.omnibus, (p) => safeRelPath(p)),
     excludedFolders: Array.isArray(r.excludedFolders)
       ? r.excludedFolders.filter((x): x is string => typeof x === 'string' && safeRelPath(x.replace(/\\/g, '/'))).map((x) => x.replace(/\\/g, '/')).slice(0, 200)
       : [],
@@ -281,6 +290,25 @@ export function sanitizeProjectMeta(raw: unknown, fallbackName: string, today: s
       book: isObj(o.book) ? (isObj(o.book.copyright) ? overridesFromLegacyBook(o.book) : projectLayer(sanitizeOverrides(o.book))) : {}
     }
   };
+}
+
+/** A list of relative paths, each once, in order, keeping only safe ones. */
+function sanitizePaths(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out = raw.filter((x): x is string => typeof x === 'string').map((x) => x.replace(/\\/g, '/')).filter((x) => safeRelPath(x));
+  return [...new Set(out)].slice(0, 500);
+}
+
+/** Every file that is a manuscript: those set as one, and the active manuscript (which is one whether or not it was also set). */
+export function manuscriptPaths(meta: Pick<ProjectMeta, 'manuscripts' | 'activeManuscript'>): string[] {
+  return meta.activeManuscript && !meta.manuscripts.includes(meta.activeManuscript) ? [...meta.manuscripts, meta.activeManuscript] : meta.manuscripts;
+}
+export const isManuscriptPath = (meta: Pick<ProjectMeta, 'manuscripts' | 'activeManuscript'>, rel: string): boolean => manuscriptPaths(meta).includes(rel);
+
+/** The list with `rel` added or taken out. Taking out a manuscript that is only the active one is not this list's to do. */
+export function withManuscript(list: readonly string[], rel: string, on: boolean): string[] {
+  const without = list.filter((x) => x !== rel);
+  return on ? [...without, rel] : without;
 }
 
 function sanitizeManuscriptGoals(raw: unknown, today: string): Record<string, Goal> {

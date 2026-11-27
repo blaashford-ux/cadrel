@@ -263,3 +263,30 @@ describe('the order of the switch-to list', () => {
     expect(sanitizeProjectsSettings({ recentProjects: 'nope' }).recentProjects).toEqual([]);
   });
 });
+
+
+describe('manuscripts set on a project', () => {
+  const meta = () => newProjectMeta({ id: 'x', name: 'S', template: templatesForManuscriptTests().find((t) => t.id === 'series')!, now: new Date('2026-10-05T10:00:00Z') });
+  it('start empty, and are read back as safe, relative, "/" separated paths, each once', () => {
+    expect(meta().manuscripts).toEqual([]);
+    expect(meta().omnibus).toBeNull();
+    const m = sanitizeProjectMeta({ ...meta(), manuscripts: ['Manuscripts/Book 1.md', 'Manuscripts\\Book 2.md', 'Manuscripts/Book 1.md', '../evil.md', '/abs.md', 7] }, 'S', '2026-10-05');
+    expect(m.manuscripts).toEqual(['Manuscripts/Book 1.md', 'Manuscripts/Book 2.md']);
+    expect(sanitizeProjectMeta({ ...meta(), manuscripts: 'nope' }, 'S', '2026-10-05').manuscripts).toEqual([]);
+  });
+  it('the active manuscript is one even when it was not set, and a list can have one added or taken out', async () => {
+    const { manuscriptPaths, isManuscriptPath, withManuscript } = await import('./projects');
+    const m = { manuscripts: ['A.md'], activeManuscript: 'B.md' as string | null };
+    expect(manuscriptPaths(m)).toEqual(['A.md', 'B.md']);
+    expect(isManuscriptPath(m, 'B.md')).toBe(true);
+    expect(isManuscriptPath(m, 'C.md')).toBe(false);
+    expect(manuscriptPaths({ manuscripts: ['A.md'], activeManuscript: 'A.md' })).toEqual(['A.md']);
+    expect(withManuscript(['A.md', 'B.md'], 'A.md', true)).toEqual(['B.md', 'A.md']);
+    expect(withManuscript(['A.md', 'B.md'], 'A.md', false)).toEqual(['B.md']);
+  });
+  it('keep the omnibus last made, with only safe files in it', () => {
+    const m = sanitizeProjectMeta({ ...meta(), omnibus: { title: 'All', files: ['A.md', '../x.md'], outputs: { epub: true, pdf: false, docx: false } } }, 'S', '2026-10-05');
+    expect(m.omnibus).toMatchObject({ title: 'All', files: ['A.md'], outputs: { epub: true, pdf: false, docx: false }, numberBooks: true });
+    expect(sanitizeProjectMeta({ ...meta(), omnibus: 'x' }, 'S', '2026-10-05').omnibus).toBeNull();
+  });
+});

@@ -13,8 +13,36 @@ export class VaultHostError extends Error {}
 /** The changes the page may ask for, by name. A list, so inherited names such as `constructor` are not reachable. */
 export const VAULT_CALL_NAMES = ['add', 'checkOut', 'checkIn', 'undoCheckOut', 'discardLocalChanges', 'getLatest', 'forceRelease', 'saveVersionAs', 'addReference', 'setReferenceVersion', 'removeReference', 'setCard'] as const;
 
+/**
+ * Which files are manuscripts: a setting each project keeps in its own metadata (Write's "Set as Manuscript"), read and changed here so the Files
+ * page and the pages that offer a manuscript agree with Write. Absent where Write's projects cannot be read.
+ */
+export interface ManuscriptSource {
+  /** Every project folder in the Projects folder, its name, and its manuscripts (relative to it, "/" separated; the active manuscript is one). */
+  projects(): Promise<{ folder: string; name: string; manuscripts: string[] }[]>;
+  set(folder: string, rel: string, on: boolean): Promise<void>;
+}
+
+/** The project folder a vault path is in (its first part), or '' for a file in the Projects folder itself. */
+export const folderOf = (rel: string): string => (rel.includes('/') ? rel.slice(0, rel.indexOf('/')) : '');
+
 export class VaultHost {
-  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; alwaysWritable?: (rel: string) => boolean; writableWhenIdle?: boolean }) {}
+  constructor(private readonly people: PeopleHost, private readonly where: { dir: string; blobsDir: string; machine: string; stateDir?: string; ignore?: (rel: string) => boolean; alwaysWritable?: (rel: string) => boolean; writableWhenIdle?: boolean }, private readonly source: ManuscriptSource | null = null) {}
+
+  /** What each project says its manuscripts are; nothing when it cannot be read. */
+  private async designations(): Promise<{ projects: { folder: string; name: string }[]; manuscripts: string[]; withAny: Set<string> }> {
+    const list = (await this.source?.projects().catch(() => [])) ?? [];
+    const manuscripts = list.flatMap((p) => p.manuscripts.map((m) => `${p.folder}/${m}`));
+    return { projects: list.map((p) => ({ folder: p.folder, name: p.name })), manuscripts, withAny: new Set(list.filter((p) => p.manuscripts.length > 0).map((p) => p.folder)) };
+  }
+
+  /** Sets a file as a manuscript of its project, or takes it back out. */
+  async setManuscript(rel: string, on: boolean): Promise<void> {
+    const folder = folderOf(rel);
+    if (!folder || !this.source) throw new VaultHostError('Only a file inside a project can be set as a manuscript.');
+    if (!/\.(md|markdown)$/i.test(rel)) throw new VaultHostError('Only a Markdown file can be set as a manuscript.');
+    await this.source.set(folder, rel.slice(folder.length + 1), on);
+  }
 
   /** The vault itself, for what keeps the folder and the Studio in step. */
   get localVault(): LocalVault | null {
@@ -35,7 +63,8 @@ export class VaultHost {
     const away = () => this.people.offline;
     // the rest also comes from the server: when it is away they are empty, not an error
     const [people, force, orphans, staleDays] = await Promise.all([this.people.peopleList().catch(() => []), this.people.may('vault.force').catch(() => false), v.orphans(), this.people.staleCheckoutDays()]);
-    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, staleDays, entries, kept, orphans, sync: null, ...(away() ? { offline: true } : {}) };
+    const d = await this.designations();
+    return { available: true, dir: this.where.dir, machine: this.where.machine, me: this.people.me, people, may: { force }, staleDays, entries, kept, orphans, sync: null, projects: d.projects, manuscripts: d.manuscripts, ...(away() ? { offline: true } : {}) };
   }
 
   async call(name: string, args: unknown[]): Promise<unknown> {
@@ -51,8 +80,12 @@ export class VaultHost {
 
   /** The manuscripts in the vault (with at least one version): what an editorial pass can be planned over. */
   async manuscripts(): Promise<{ fileId: string; path: string; version: number; projectId: string | null }[]> {
+    const d = await this.designations();
+    const set = new Set(d.manuscripts);
     return (await this.vault().list())
       .filter((e) => e.kind === 'manuscript' && e.fileId !== null && (e.version ?? 0) > 0)
+      // once a project has set any file as a manuscript, only those are offered; until then every text file is, as before
+      .filter((e) => !d.withAny.has(folderOf(e.path)) || set.has(e.path))
       .map((e) => ({ fileId: e.fileId!, path: e.path, version: e.version!, projectId: e.projectId ?? null }));
   }
 

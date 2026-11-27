@@ -79,6 +79,8 @@ export interface DeskOptions {
   newId?: () => string;
   /** Keeps an uploaded file as it came (a binary write, which the text-only file port cannot do). */
   keep?: (abs: string, bytes: Uint8Array) => Promise<void>;
+  /** The files a project has set as manuscripts (relative to it). Once it has any, they are the manuscripts; until then the Manuscript folder is. */
+  designated?: (project: string) => Promise<string[]>;
 }
 
 export class EditingDesk {
@@ -115,7 +117,8 @@ export class EditingDesk {
       if (only && !only.has(project.toLowerCase())) continue;
       let files: Awaited<ReturnType<typeof listFiles>> = [];
       try {
-        files = (await listFiles(ctx, project)).filter((f) => isManuscript(f.file));
+        const set = (await this.o.designated?.(project).catch(() => [] as string[])) ?? [];
+        files = (await listFiles(ctx, project)).filter((f) => (set.length > 0 ? set.includes(f.file) && /\.(md|markdown)$/i.test(f.file) : isManuscript(f.file)));
       } catch {
         continue;
       }

@@ -836,6 +836,10 @@ export type VaultState =
       orphans: { path: string; savedAs: string; removedBy: string; removedAt: string; reason: string; version: number }[];
       /** How the Projects folder and the Studio are keeping in step (files are saved to the Studio automatically). */
       sync: VaultSyncStatus | null;
+      /** The projects whose files are listed, for the project filter: the folder (the first part of every path in it) and the name to show. */
+      projects: { folder: string; name: string }[];
+      /** The paths (from the Projects folder) of the files set as manuscripts in their project, the active manuscript included. */
+      manuscripts: string[];
     };
 /** What the automatic saving of the Projects folder is doing and has done. */
 export interface VaultSyncStatus {
@@ -850,6 +854,8 @@ export interface VaultApi {
   syncNow(): Promise<VaultSyncStatus>;
   /** Puts a file from the working folder into the vault as its first version. */
   add(path: string, comment?: string): Promise<void>;
+  /** Sets a file as a manuscript of its project, or takes it back out (the same setting Write's right-click menu changes). */
+  setManuscript(path: string, on: boolean): Promise<void>;
   /** Takes a file to edit it (nobody else can then). With `keepChanges`, a file that was changed without a check-out is taken as it is. */
   checkOut(path: string, o?: { keepChanges?: boolean }): Promise<void>;
   /** Saves the file as a new version and releases it; nothing changed means it is released with no new version. */

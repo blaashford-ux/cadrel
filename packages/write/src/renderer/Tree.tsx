@@ -8,6 +8,8 @@ import { navigate, type NavKey, type Row } from './treeRows';
 interface Props {
   /** True for the file that goals follow (the project's active manuscript). */
   isManuscript?(row: Row): boolean;
+  /** True for a file set as a manuscript (the active one is one too). */
+  isSetManuscript?(row: Row): boolean;
   rows: Row[];
   focusKey: string | null;
   /** Key of the chapter row shown in the active tab. */
@@ -120,6 +122,11 @@ export function Tree(p: Props) {
               </span>
             )}
             {r.kind === 'file' && !r.html && p.lockOf && <FileLockBadge lock={p.lockOf(r.path)} />}
+            {p.isSetManuscript?.(r) && !p.isManuscript?.(r) && (
+              <span className="ms-set-badge" title="Set as a manuscript" aria-label="manuscript">
+                <Icon name="pages" size={14} />
+              </span>
+            )}
             {p.isManuscript?.(r) && (
               <span className="ms-badge" title="Active manuscript: word-count goals follow this file" aria-label="active manuscript">
                 <Icon name="target" size={14} />

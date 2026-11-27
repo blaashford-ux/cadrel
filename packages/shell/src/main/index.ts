@@ -40,7 +40,7 @@ import { Editorial } from './editorial';
 import { EditingDesk } from './editingDesk';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
-import { VaultHost } from './vaultHost';
+import { VaultHost, type ManuscriptSource } from './vaultHost';
 import { ProjectSync, isNotesFile, vaultIgnores } from './projectSync';
 import { migrateVaultFolder } from './vaultMigration';
 import { createFileControl } from './fileLocks';
@@ -1229,13 +1229,33 @@ function registerShellIpc(): void {
   manageLike('stages:close', async (bookId: string) => stages.closeBook(String(bookId)));
   manageLike('stages:reopen', async (bookId: string, to: string) => stages.reopenBook(String(bookId), String(to)));
   manageLike('stages:clear', async (projectId: string) => stages.clearStage(String(projectId)));
-  const vaultHost = () => new VaultHost(peopleHost, vaultWhere());
+  /** Which files are manuscripts: read from, and written to, each Write project's own metadata, so this agrees with Write's right-click menu. */
+  const manuscriptSource: ManuscriptSource = {
+    projects: async () => {
+      const { projects } = await write.listProjects();
+      return (await Promise.all(projects.map(async (p) => {
+        const m = await write.readProject(p.path).catch(() => null);
+        return m ? { folder: p.name, name: m.name || p.name, manuscripts: [...new Set([...m.manuscripts, ...(m.activeManuscript ? [m.activeManuscript] : [])])] } : null;
+      }))).filter((x): x is NonNullable<typeof x> => !!x);
+    },
+    set: async (folder, rel, on) => {
+      const { projects } = await write.listProjects();
+      const p = projects.find((x) => x.name === folder);
+      const m = p ? await write.readProject(p.path) : null;
+      if (!p || !m) throw new Error('That project could not be found.');
+      const list = on ? [...m.manuscripts.filter((x) => x !== rel), rel] : m.manuscripts.filter((x) => x !== rel);
+      // a file that is no longer a manuscript cannot stay the project's active one
+      await write.updateProject(p.path, { manuscripts: list, ...(!on && m.activeManuscript === rel ? { activeManuscript: null } : {}) });
+    }
+  };
+  const vaultHost = () => new VaultHost(peopleHost, vaultWhere(), manuscriptSource);
   manageLike('vault:state', async () => {
     const s = await vaultHost().state();
     return s.available ? { ...s, sync: projectSync?.current() ?? null } : s;
   });
   manageLike('vault:sync', async () => (projectSync ? projectSync.sync() : { state: 'off', lastAt: null, message: null, summary: null }));
   manageLike('vault:call', async (name: string, ...args: unknown[]) => vaultHost().call(String(name), args));
+  manageLike('vault:setManuscript', async (p: string, on: boolean) => vaultHost().setManuscript(String(p), on === true));
   manageLike('vault:history', async (p: string) => vaultHost().history(String(p)));
   manageLike('vault:detail', async (p: string) => vaultHost().detail(String(p)));
   manageLike('vault:open', async () => {
@@ -1304,7 +1324,8 @@ function registerShellIpc(): void {
       keep: async (abs, bytes) => {
         await fsp.mkdir(path.dirname(abs), { recursive: true });
         await fsp.writeFile(abs, bytes);
-      }
+      },
+      designated: async (project) => (await manuscriptSource.projects()).find((p) => p.folder === project)?.manuscripts ?? []
     });
   };
   manageLike('desk:manuscripts', async (folders?: string[]) => (await desk()).manuscripts(Array.isArray(folders) ? folders.map(String) : undefined));

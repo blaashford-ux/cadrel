@@ -45,6 +45,19 @@ describe('choosing a manuscript', () => {
     expect(isManuscript('Characters/Ann.md')).toBe(false);
   });
 
+  it('offers a project’s set manuscripts, and only those, once it has set any; until then the Manuscript folder is', async () => {
+    fs.seed(`${P}/Drafts/Alt Ending.md`, '# Alt\n\nAnother.\n');
+    const set: Record<string, string[]> = { Novel: ['Drafts/Alt Ending.md', 'Manuscript/Book.md'], Other: [] };
+    const designed = new EditingDesk({ fs, root: '/books', editor: () => name, designated: async (p) => set[p] ?? [] });
+    expect((await designed.manuscripts()).map((m) => `${m.project}:${m.file}`).sort()).toEqual(['Novel:Drafts/Alt Ending.md', 'Novel:Manuscript/Book.md', 'Other:Manuscript/Other.md']); // Other has set none: its Manuscript folder
+    set.Novel = ['Drafts/Alt Ending.md'];
+    expect((await designed.manuscripts(['Novel'])).map((m) => m.file)).toEqual(['Drafts/Alt Ending.md']);
+    set.Novel = ['Characters/Ann.md', 'Notes.md'];
+    expect((await designed.manuscripts(['Novel'])).map((m) => m.file).sort()).toEqual(['Characters/Ann.md', 'Notes.md']); // the person's own choice, not a guess
+    const broken = new EditingDesk({ fs, root: '/books', editor: () => name, designated: async () => { throw new Error('no'); } });
+    expect((await broken.manuscripts(['Novel'])).map((m) => m.file)).toEqual(['Manuscript/Book.md']); // unreadable: as before
+  });
+
   it('is filtered by the project’s folders', async () => {
     expect((await desk.manuscripts(['novel'])).map((m) => m.project)).toEqual(['Novel']);
     expect(await desk.manuscripts([])).toEqual([]);

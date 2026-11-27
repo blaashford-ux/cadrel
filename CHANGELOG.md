@@ -10,6 +10,29 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Old notes are given their place the first time their file's chapters are at hand, by whichever app has them (a reader's Cadrel Reader, or the author's Write for every reader's notes), and kept in the notes file without counting as an edit; the copy in the Studio follows through the usual exchange. An old note that cannot be placed with certainty is marked as a guess and pinned; one whose text is in no chapter, or in several with nothing to tell them apart, is left in the Notes panel and drawn nowhere. Apps that do not know about places ignore them and still read the notes.
 - The assistant's `add_notes` writes notes with a place, and `read_chapter` lists only the notes of that chapter.
 
+## Unreleased (Omnibus, and Set as Manuscript)
+
+No server upgrade is needed.
+
+### Set as Manuscript
+- **Right-click a file in Write's tree → Set as Manuscript** (and **Remove from Manuscripts**). Any number of files in a project can be manuscripts: the books, as opposed to notes, outlines and character sheets. This is separate from **Active Manuscript**, which is still the one file your goals follow; the active manuscript counts as a manuscript too. Taking a file out of the manuscripts also clears it as the active one.
+- **It is a setting of the project**, kept in its own metadata, so Write and the Cadrel Files page agree. It follows a renamed or moved file and is forgotten when the file is deleted.
+- A file set as a manuscript shows a small pages mark in Write's tree.
+
+### Manuscripts only, and filtering by project
+- **Write's file tree has a "Manuscripts only" box** under the file filter. It hides everything else and the folders that lead to nothing, and is remembered.
+- **The Files page can be narrowed to one project and to manuscripts only** (both remembered), with a "Showing 3 of 41 files" line, a "Show all files" way out, and a **set as manuscript** mark on each manuscript. **Right-click a file there → Set as Manuscript**, the same setting as Write's menu. Only a Markdown file inside a project can be one, and the menu says so when it is not.
+- **The pages that ask you to pick a manuscript follow it too**: Editing (plan a pass), Canon and continuity checks, and the Editing desk offer a project's set manuscripts, and only those, **once that project has set any**. Until it has, they offer what they did before, so nothing disappears from anyone's list on upgrading.
+
+### Omnibus
+- **Create an omnibus** (the **Omnibus…** button above Write's tree, or right-click a folder) opens a window where you **pick any of the project's manuscripts**, put them in order, and make **one book of all of them** as an EPUB, a print PDF or a Word file. It lists the project's manuscripts (and, if you ask, every Markdown file), each with the title, subtitle and author from its own **Book Details** and how many chapters and words it has, and opens that book's Book Details from the list.
+- **Each book keeps its own Book Details.** Its title and subtitle introduce it on a title page of its own ("Book One: Dragon Rider"), numbered or not as you choose, with its own dedication and epigraph if you want them; chapters its Book Details leave out stay out. Every book's own back matter (About the Author, Acknowledgements…) is left out except the last book's, unless you ask to keep it all.
+- **The omnibus has its own title, subtitle, author, ISBN and cover.** The author comes from the books (with a warning when they differ); no book's ISBN is carried over. The layout, fonts and trim size are the first book's Book Details settings and the front and back matter pages the last book's, so every output and setting works as it does for any book. It is saved beside where the first book's own export goes.
+- **The omnibus is remembered with the project**, so making it again after a change to one of the books is two clicks. A book with unsaved edits is saved first (the omnibus is built from saved files). Books whose chapters start at different heading levels cannot be joined, and the window says so.
+
+### Not in this version
+- Parts nested in the contents (each book's title page is a chapter, so it appears in the contents beside the chapters); a different layout per book; making an omnibus from more than one project; a Set as Manuscript button on Android.
+
 ## Unreleased (Cover Designer)
 
 No server upgrade is needed: a cover is two ordinary vault files and an asset.

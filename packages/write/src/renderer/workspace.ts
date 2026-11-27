@@ -15,7 +15,7 @@ import {
 import type { AppDefaults } from '../shared/appDefaults';
 import { compileFind, replaceAllInText, type FindOptions } from '../shared/find';
 import type { Progress } from '../shared/progress';
-import { chapterIds, isChapterEdited, relativeTo, withChapterEdited, type ProjectMeta } from '../shared/projects';
+import { chapterIds, isChapterEdited, isManuscriptPath, relativeTo, withChapterEdited, withManuscript, type ProjectMeta } from '../shared/projects';
 import { chapterLabel } from './treeRows';
 import { basename, dirname, isInside, joinPath, remapPath } from '../shared/paths';
 import { addRewriteLink, dropRewriteLinksUnder, pairChapter, remapRewriteLinks, removeRewriteLink, rewriteFileName, rewriteLinkOf, type RewriteLink } from '../shared/rewrite';
@@ -332,6 +332,44 @@ export class Workspace {
     } catch (e) {
       this.set({ error: String(e instanceof Error ? e.message : e) });
       return false;
+    }
+  }
+
+  /** Whether `file` is one of the project's manuscripts: set as one, or the active manuscript. */
+  isManuscript(file: string): boolean {
+    const project = this.state.project;
+    return !!project && isManuscriptPath(project.meta, relativeTo(project.path, file));
+  }
+
+  /** Sets a file as a manuscript (a book, as opposed to notes, an outline or a character sheet), or takes it back out. Any number of files can be. */
+  async setManuscript(file: string, on: boolean): Promise<boolean> {
+    const project = this.state.project;
+    if (!project) return false;
+    const rel = relativeTo(project.path, file);
+    try {
+      const current = (await this.api.getProjectMeta(project.path)) ?? project.meta;
+      const patch: { manuscripts: string[]; activeManuscript?: null } = { manuscripts: withManuscript(current.manuscripts, rel, on) };
+      // a file that is no longer a manuscript cannot stay the active one
+      if (!on && current.activeManuscript === rel) patch.activeManuscript = null;
+      const meta = await this.api.updateProject(project.path, patch);
+      this.set({ project: { ...project, meta }, ...(patch.activeManuscript === null ? { progress: null } : {}) });
+      if (patch.activeManuscript === null) await this.refreshProgress();
+      return true;
+    } catch (e) {
+      this.set({ error: String(e instanceof Error ? e.message : e) });
+      return false;
+    }
+  }
+
+  /** Saves the omnibus recipe with the project, so the same omnibus can be made again. */
+  async saveOmnibus(recipe: ProjectMeta['omnibus']): Promise<void> {
+    const project = this.state.project;
+    if (!project) return;
+    try {
+      const meta = await this.api.updateProject(project.path, { omnibus: recipe });
+      this.set({ project: { ...project, meta } });
+    } catch {
+      // not saving a recipe does not stop the omnibus being made
     }
   }
 
@@ -1048,10 +1086,10 @@ export class Workspace {
     if (!project) return;
     const fresh = await this.api.getProjectMeta(project.path).catch(() => null);
     if (!fresh || this.state.project?.path !== project.path) return;
-    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.stage?.category, m.activeManuscript, m.manuscriptGoals, m.goal, m.rewriteLinks]);
+    const pick = (m: ProjectMeta) => JSON.stringify([m.editedChapters, m.stage?.category, m.activeManuscript, m.manuscriptGoals, m.manuscripts, m.omnibus, m.goal, m.rewriteLinks]);
     if (pick(fresh) === pick(project.meta)) return;
-    const { editedChapters, stage, activeManuscript, manuscriptGoals, goal, rewriteLinks } = fresh;
-    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, stage, activeManuscript, manuscriptGoals, goal, rewriteLinks } } });
+    const { editedChapters, stage, activeManuscript, manuscriptGoals, manuscripts, omnibus, goal, rewriteLinks } = fresh;
+    this.set({ project: { ...project, meta: { ...project.meta, editedChapters, stage, activeManuscript, manuscriptGoals, manuscripts, omnibus, goal, rewriteLinks } } });
     if (this.state.rewriteOn && !rewriteLinks.some((l) => l.original === this.state.rewriteOn)) this.set({ rewriteOn: null }); // unlinked on another computer
     if (activeManuscript !== project.meta.activeManuscript) void this.refreshProgress();
   }
@@ -1266,8 +1304,13 @@ export class Workspace {
     const moved = active ? remapPath(active, f, t) : null;
     const current = (await this.api.getProjectMeta(project.path))?.editedChapters ?? project.meta.editedChapters;
     const edited = Object.fromEntries(Object.entries(current).map(([k, v]) => [remapPath(k, f, t), v]));
-    const patch: { activeManuscript?: string | null; editedChapters?: Record<string, string[]>; rewriteLinks?: RewriteLink[] } = {};
+    const patch: { activeManuscript?: string | null; manuscripts?: string[]; omnibus?: ProjectMeta['omnibus']; editedChapters?: Record<string, string[]>; rewriteLinks?: RewriteLink[] } = {};
     if (active && moved !== active) patch.activeManuscript = moved;
+    const ms = (await this.api.getProjectMeta(project.path))?.manuscripts ?? project.meta.manuscripts;
+    const msMoved = ms.map((x) => remapPath(x, f, t));
+    if (msMoved.some((x, i) => x !== ms[i])) patch.manuscripts = msMoved;
+    const om = (await this.api.getProjectMeta(project.path))?.omnibus ?? project.meta.omnibus;
+    if (om && om.files.some((x) => remapPath(x, f, t) !== x)) patch.omnibus = { ...om, files: om.files.map((x) => remapPath(x, f, t)) };
     if (Object.keys(edited).some((k) => !(k in current))) patch.editedChapters = edited;
     const links = (await this.api.getProjectMeta(project.path))?.rewriteLinks ?? project.meta.rewriteLinks;
     const remapped = remapRewriteLinks(links, f, t);
@@ -1305,6 +1348,23 @@ export class Workspace {
     });
   }
 
+  /** A deleted file (or folder) is no longer a manuscript, and is not in the saved omnibus. */
+  private async forgetManuscripts(rel: string): Promise<void> {
+    const project = this.state.project;
+    if (!project) return;
+    try {
+      const current = (await this.api.getProjectMeta(project.path)) ?? project.meta;
+      const inside = (x: string) => x === rel || x.startsWith(`${rel}/`);
+      const patch: { manuscripts?: string[]; omnibus?: ProjectMeta['omnibus'] } = {};
+      if (current.manuscripts.some(inside)) patch.manuscripts = current.manuscripts.filter((x) => !inside(x));
+      if (current.omnibus?.files.some(inside)) patch.omnibus = { ...current.omnibus, files: current.omnibus.files.filter((x) => !inside(x)) };
+      if (!Object.keys(patch).length) return;
+      this.set({ project: { ...project, meta: await this.api.updateProject(project.path, patch) } });
+    } catch {
+      // a name left in the list does no harm: nothing lists a file that is not there
+    }
+  }
+
   async deleteNode(path: string, kind: 'file' | 'folder'): Promise<boolean> {
     const affected = this.state.tabs.filter((t) => isInside(t.file, path));
     const hasUnsaved = affected.some((t) => t.draft !== null);
@@ -1320,6 +1380,7 @@ export class Workspace {
     if (project) {
       const rel = relativeTo(project.path, path);
       await this.patchRewriteLinks((links) => dropRewriteLinksUnder(links, rel));
+      await this.forgetManuscripts(rel);
     }
     this.undoStack = this.undoStack.filter((e) => !isInside(e.file, path));
     this.redoStack = this.redoStack.filter((e) => !isInside(e.file, path));

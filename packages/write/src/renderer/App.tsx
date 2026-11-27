@@ -23,7 +23,7 @@ import { QuickSwitcher } from './QuickSwitcher';
 import { ReferenceWindow } from './ReferenceWindow';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, summarize, writtenOn } from '../shared/progress';
-import { goalFor, relativeTo, withOpened } from '../shared/projects';
+import { goalFor, manuscriptPaths, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
@@ -59,7 +59,8 @@ import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { useRewriteScroll } from './useRewriteScroll';
 import { Tree } from './Tree';
-import { buildRows, chapterKey, chapterLabel, rowsFiles, type Row } from './treeRows';
+import { buildRows, chapterKey, chapterLabel, fileNodes, keepFiles, rowsFiles, type Row } from './treeRows';
+import { OmnibusDialog } from './OmnibusDialog';
 import { useWorkspace } from './useWorkspace';
 import { Workspace } from './workspace';
 import './styles.css';
@@ -92,6 +93,24 @@ export function App() {
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
   const [exportFile, setExportFile] = useState<string | null>(null);
+  /** The omnibus dialog is open. */
+  const [omnibusOpen, setOmnibusOpen] = useState(false);
+  /** The tree shows only the files set as manuscripts. Remembered between sessions. */
+  const [msOnly, setMsOnly] = useState(() => {
+    try {
+      return localStorage.getItem('cadrel.write.manuscriptsOnly') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const chooseMsOnly = (on: boolean) => {
+    setMsOnly(on);
+    try {
+      localStorage.setItem('cadrel.write.manuscriptsOnly', on ? '1' : '0');
+    } catch {
+      // a choice that cannot be remembered still works
+    }
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [find, setFindState] = useState<FindForm>(initialFindForm);
   const [navVersion, setNavVersion] = useState(0);
@@ -394,12 +413,18 @@ export function App() {
       return counts;
     };
   }, [allNotes, s.docs, s.project?.path]);
+  /** With "Manuscripts only" on (and a project open), the tree is cut down to the files set as manuscripts. */
+  const manuscriptSet = useMemo(() => new Set(s.project ? manuscriptPaths(s.project.meta) : []), [s.project]);
+  const shownRoot = useMemo(() => {
+    if (!s.root || !s.project || !msOnly) return s.root;
+    return keepFiles(s.root, (f) => manuscriptSet.has(relativeTo(s.project!.path, f.path)));
+  }, [s.root, s.project, msOnly, manuscriptSet]);
   const rows = useMemo(
     () =>
-      s.root
-        ? buildRows(s.root, s.expanded, s.docs, filter, s.project ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts, s.project?.meta.stage?.category === 'review')
+      shownRoot
+        ? buildRows(shownRoot, s.expanded, s.docs, filter, s.project ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts, s.project?.meta.stage?.category === 'review')
         : [],
-    [s.root, s.expanded, s.docs, filter, s.project, noteCounts]
+    [shownRoot, s.expanded, s.docs, filter, s.project, noteCounts]
   );
   const orphan = useMemo(
     () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
@@ -718,6 +743,7 @@ export function App() {
         { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
         { label: 'New Folder Here…', onClick: () => promptNewFolder(row.path) },
         ...(caps.importDocx ? [{ label: 'Import Word Document…', onClick: () => void ws.importDocx(row.path) }] : []),
+        ...(caps.export && s.project ? [{ label: 'Create Omnibus…', onClick: () => setOmnibusOpen(true) }] : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         ...reveal,
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
@@ -732,8 +758,12 @@ export function App() {
             { label: 'Book Details…', onClick: () => void editBookDetails(row.path) }
           ];
       const active = !!s.project && s.project.meta.activeManuscript === relativeTo(s.project.path, row.path);
+      const isSet = ws.isManuscript(row.path);
       const manuscriptItems: MenuItem[] = s.project
         ? [
+            isSet
+              ? { label: 'Remove from Manuscripts', onClick: () => void ws.setManuscript(row.path, false) }
+              : { label: 'Set as Manuscript', onClick: () => void ws.setManuscript(row.path, true) },
             active
               ? { label: 'Clear Active Manuscript', onClick: () => void ws.setActiveManuscript(null) }
               : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) },
@@ -1203,6 +1233,11 @@ export function App() {
               <Icon name="download" /> Export…
             </button>
           )}
+          {caps.export && s.project && window.cadrelWrite.runOmnibus && (
+            <button onClick={() => setOmnibusOpen(true)} title="Put several manuscripts together as one book and export it" aria-label="Create omnibus">
+              <Icon name="pages" /> Omnibus…
+            </button>
+          )}
           {caps.importDocx && (
             <button
               onClick={() => void ws.importDocx(dirFor(null))}
@@ -1248,10 +1283,15 @@ export function App() {
                 }
               }}
             />
+            {s.project && (
+              <label className="ms-only" title="Show only the files set as manuscripts (right-click a file and choose Set as Manuscript)">
+                <input type="checkbox" checked={msOnly} onChange={(e) => chooseMsOnly(e.target.checked)} /> Manuscripts only
+              </label>
+            )}
             {s.root.children.length === 0 ? (
               <p className="muted pad">This folder is empty. Use “＋ File” or “＋ Folder” to add something.</p>
             ) : rows.length === 0 ? (
-              <p className="muted pad">No files match “{filter}”.</p>
+              <p className="muted pad">{msOnly && s.project && !filter ? 'No files are set as manuscripts yet. Right-click a file and choose “Set as Manuscript”, or turn off Manuscripts only.' : `No files match “${filter}”.`}</p>
             ) : (
               <Tree
                 rows={rows}
@@ -1267,6 +1307,7 @@ export function App() {
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
                 isManuscript={(r) => r.kind === 'file' && !!s.project?.meta.activeManuscript && relativeTo(s.project.path, r.path) === s.project.meta.activeManuscript}
+                isSetManuscript={(r) => r.kind === 'file' && !!s.project && manuscriptSet.has(relativeTo(s.project.path, r.path))}
               />
             )}
           </>
@@ -1611,6 +1652,24 @@ export function App() {
           onEditDetails={(f) => setBookFile(f)}
           detailsVersion={detailsVersion}
           onClose={() => setExportFile(null)}
+        />
+      )}
+      {omnibusOpen && s.project && s.root && (
+        <OmnibusDialog
+          projectPath={s.project.path}
+          projectName={s.project.meta.name}
+          manuscripts={[...manuscriptSet].filter((m) => fileNodes(s.root!).some((f) => relativeTo(s.project!.path, f.path) === m))}
+          otherFiles={fileNodes(s.root).filter((f) => !f.html && /\.(md|markdown)$/i.test(f.name) && !manuscriptSet.has(relativeTo(s.project!.path, f.path))).map((f) => relativeTo(s.project!.path, f.path))}
+          saved={s.project.meta.omnibus}
+          dirtyFiles={dirtyFiles}
+          saveFile={async (f) => {
+            const t = ws.tabForFile(f);
+            return t ? ws.save(t.id) : true;
+          }}
+          onEditDetails={(f) => void editBookDetails(f)}
+          detailsVersion={detailsVersion}
+          onSaveRecipe={(r) => void ws.saveOmnibus(r)}
+          onClose={() => setOmnibusOpen(false)}
         />
       )}
       {bookFile && (

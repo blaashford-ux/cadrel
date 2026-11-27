@@ -42,6 +42,25 @@ export function filterTree(node: TreeNode, query: string): TreeNode | null {
   return children.length > 0 ? { ...node, children } : null;
 }
 
+/**
+ * Keeps the files `keep` accepts and the folders leading to them; a folder left with nothing is dropped. The root is always kept, so an empty
+ * result is an empty tree rather than none. (Used for "Manuscripts only".)
+ */
+export function keepFiles(root: DirNode, keep: (file: Extract<TreeNode, { kind: 'file' }>) => boolean): DirNode {
+  const walk = (node: TreeNode): TreeNode | null => {
+    if (node.kind === 'file') return keep(node) ? node : null;
+    const children = node.children.map(walk).filter((c): c is TreeNode => c !== null);
+    return children.length > 0 ? { ...node, children } : null;
+  };
+  const kept = walk(root);
+  return kept && kept.kind === 'dir' ? kept : { ...root, children: [] };
+}
+
+/** Every file in a tree, in order. */
+export function fileNodes(node: TreeNode): Extract<TreeNode, { kind: 'file' }>[] {
+  return node.kind === 'file' ? [node] : node.children.flatMap(fileNodes);
+}
+
 export const chapterKey = (file: string, i: number) => `${file}#${i}`;
 
 export function chapterLabel(c: { title: string; isPreamble: boolean }): string {

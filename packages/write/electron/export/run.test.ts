@@ -2,7 +2,7 @@ import { strFromU8, unzipSync } from 'fflate';
 import { describe, expect, it } from 'vitest';
 import type { ExportProgress } from '../../src/shared/api';
 import { defaultBookDetails, type BookDetails } from '../../src/shared/export/model';
-import { planExport, runExport, type ExportDeps } from './run';
+import { omnibusBooks, planExport, planOmnibus, runExport, runOmnibus, type ExportDeps } from './run';
 
 const MD = '/proj/Novels/book.md';
 const SRC = '# Chapter 1: One\n\n"Hi," she said.\n\n# Chapter 2: Two\n\nBye.\n';
@@ -299,5 +299,97 @@ describe('runExport fonts', () => {
     deps.buildPdf = async (book) => ((used = book.settings.pdf.font), { bytes: new Uint8Array([37]), pages: 30, gutter: 0.375, warnings: [] });
     await runExport(MD, deps);
     expect(used).toBe('Crimson Pro');
+  });
+});
+
+describe('an omnibus', () => {
+  const ONE = '/proj/Series/One.md';
+  const TWO = '/proj/Series/Two.md';
+  const bookDetails = (title: string, subtitle: string) => {
+    const d = defaultBookDetails({ title, author: 'A. Writer', year: 2031 });
+    d.subtitle = subtitle;
+    d.export.outputs = { epub: true, pdf: false, docx: false };
+    d.export.outputDir = 'Exports';
+    return d;
+  };
+  const world = () => {
+    const files = new Map<string, Uint8Array | string>([
+      [ONE, '# Chapter 1: Waking\n\n"Hi," she said.\n\n# Chapter 2: Rising\n\nShe rose.\n'],
+      [TWO, '# Chapter 1: Burning\n\nIt burned.\n']
+    ]);
+    const details = new Map([[ONE, bookDetails('The Lost King', 'Book One')], [TWO, bookDetails('The Found Queen', 'Book Two')]]);
+    const written: string[] = [];
+    const deps: ExportDeps = {
+      readText: async (p) => {
+        const v = files.get(p);
+        if (typeof v !== 'string') throw new Error('ENOENT ' + p);
+        return v;
+      },
+      readBytes: async () => {
+        throw new Error('none');
+      },
+      writeBytes: async (p, b) => void (files.set(p, b), written.push(p)),
+      mkdirp: async () => undefined,
+      exists: async (p) => files.has(p),
+      loadDetails: async (p) => details.get(p) ?? defaultBookDetails({ title: 'x', author: 'y' }),
+      buildPdf: async () => ({ bytes: new Uint8Array([37, 80, 68, 70]), pages: 10, gutter: 0.375, warnings: [] }),
+      now: () => new Date('2031-05-06T07:08:09Z'),
+      uuid: () => 'abc'
+    };
+    return { deps, files, written, details };
+  };
+  const recipe = { title: 'The Complete Saga', subtitle: 'Books One and Two', author: '', isbn: '', coverImage: '', files: ['Series/One.md', 'Series/Two.md'], outputs: { epub: true, pdf: false, docx: false }, numberBooks: true, bookFront: true, allBackMatter: false };
+
+  it('describes each manuscript from its Book Details, and leaves out any that is not there', async () => {
+    const { deps } = world();
+    const info = await omnibusBooks('/proj', ['Series/One.md', 'Series/Gone.md', 'Series/Two.md'], deps);
+    expect(info.map((b) => [b.path, b.title, b.subtitle, b.author, b.chapters])).toEqual([['Series/One.md', 'The Lost King', 'Book One', 'A. Writer', 2], ['Series/Two.md', 'The Found Queen', 'Book Two', 'A. Writer', 1]]);
+  });
+
+  it('builds one EPUB of both books, with the omnibus’s own title, in the first book’s output folder', async () => {
+    const { deps, files, written } = world();
+    const r = await runOmnibus('/proj', recipe, deps);
+    expect(r.errors).toEqual([]);
+    expect(r.ok).toBe(true);
+    expect(r.outputs.map((o) => o.path)).toEqual(['/proj/Series/Exports/The Complete Saga - Ebook.epub']);
+    expect(written).toEqual(['/proj/Series/Exports/The Complete Saga - Ebook.epub']);
+    const epub = unzipSync(files.get(r.outputs[0]!.path) as Uint8Array);
+    const opf = strFromU8(epub['OEBPS/content.opf']);
+    expect(opf).toContain('The Complete Saga');
+    expect(opf).toContain('Books One and Two');
+    const text = Object.entries(epub).filter(([n]) => /\.x?html$/.test(n)).map(([, b]) => strFromU8(b)).join('\n');
+    for (const t of ['Book One: The Lost King', 'Book Two: The Found Queen', 'Waking', 'Rising', 'Burning']) expect(text).toContain(t);
+    expect(text.indexOf('Book One: The Lost King')).toBeLessThan(text.indexOf('Waking'));
+    expect(text.indexOf('Rising')).toBeLessThan(text.indexOf('Book Two: The Found Queen'));
+  });
+
+  it('plans where it would write, says what is wrong with a recipe in words, and builds nothing for it', async () => {
+    const { deps, written } = world();
+    const plan = await planOmnibus('/proj', recipe, deps);
+    expect(plan.outputs).toEqual([{ kind: 'epub', path: '/proj/Series/Exports/The Complete Saga - Ebook.epub', exists: false }]);
+    expect(plan.errors).toEqual([]);
+    const bad = await planOmnibus('/proj', { ...recipe, title: '', files: ['Series/One.md'] }, deps);
+    expect(bad.errors).toEqual(['An omnibus needs at least two manuscripts. Pick the books to put together.', 'The omnibus needs a title.']);
+    const r = await runOmnibus('/proj', { ...recipe, title: '' }, deps);
+    expect(r).toMatchObject({ ok: false, errors: ['The omnibus needs a title.'], outputs: [] });
+    const missing = await runOmnibus('/proj', { ...recipe, files: ['Series/One.md', 'Series/Gone.md'] }, deps);
+    expect(missing.ok).toBe(false);
+    expect(missing.errors.join(' ')).toContain('Series/Gone.md could not be read');
+    expect(written).toEqual([]);
+  });
+
+  it('carries the omnibus’s cover and each book’s own warnings, and never writes a file called for the composed book', async () => {
+    const { deps, files, written } = world();
+    files.set('C:/art/omni.png', Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]));
+    deps.readBytes = async (p) => {
+      const v = files.get(p);
+      if (!(v instanceof Uint8Array)) throw new Error('ENOENT');
+      return v;
+    };
+    const r = await runOmnibus('/proj', { ...recipe, coverImage: 'C:/art/omni.png' }, deps);
+    expect(r.ok).toBe(true);
+    const epub = unzipSync(files.get(r.outputs[0]!.path) as Uint8Array);
+    expect(Object.keys(epub).some((n) => /cover\.(png|jpg)$/i.test(n))).toBe(true);
+    expect(written.every((p) => !p.includes('.omnibus.md'))).toBe(true);
   });
 });
