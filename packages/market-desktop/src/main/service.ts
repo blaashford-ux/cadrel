@@ -7,7 +7,7 @@ import zlib from 'node:zlib';
 import { execFile } from 'node:child_process';
 import { zipSync, strToU8 } from 'fflate';
 import {
-  ArcticShift, addCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
+  ArcticShift, addCommunitySource, moveCommunitySource, listCommunitySources, removeCommunitySource, syncSubreddit, type CommunitySource, type SyncResult,
   copyLibrary, exportPack, importPack, parserHealth, verifyLibrary, HashingEmbedder, analyzeCovers, contentMetricsOf, getManuscripts, readSampleOcr, readSamplePage, sampleSessions, saveSampleOcr, categoryCsv, categoryReport, getWeights, reportMarkdown, setWeights, getOpportunityWeights, setOpportunityWeights, getSalesCurve, setSalesCurve, rankCategories, type OpportunityWeights, type SalesCurve, type Weights, embedPending, embeddingStatus, type Embedder,
   applyCalibration, analysisReport, monthReport, reportMonths, listPeople, savePerson, deletePerson, splitHistory, setSplit, paymentOwed, bookPayments, type BookPayments, allocatePayment, unallocatePayment, allocateRollup, payoutRollup, recordPayout, deletePayout, listPayouts, rollupCsv, rollupHtml, type Payout, type PaymentOwed, type Rollup, paymentsReport, removePayment, type PaymentsReport, type StatementBasis, detectedAuthors, type DetectedAuthor, royaltyStatement, statementCsv, statementHtml, setFxRate, clearFxRate, setKenpRate, type AnalysisReport, type MonthReport, type Person, type SplitVersion, type Statement, calibrationPreview, clearSalesData, categoryUrl, clearKeywordHistory, listKeywordHistory, recordKeywordSearch, removeKeywordHistory, suggestKeywords, suggestKeywordStrings, getOutlineChoice, setOutlineChoice, listInjectedSuggestions, dismissInjectedSuggestion, type OutlineRef, type OutlineSource, type InjectedSuggestion, type KeywordHistoryRow, type KeywordIdea, type KeywordString, communityInsights, resolveCategory, type CommunityInsights, getOwnBook, listOwnBooks, booksOutsideScope, removeBooksOutsideScope, purgeBook, inScope, type AuthorScope, setOwnBook, type OwnBookRow, getCompletion, setCompletion, setKenpc, importRankFile, importSalesFile, resetCalibration, salesStatus, type CalibrationPreview, type ImportSummary, type SalesStatus,
   SUGGEST_SOURCES, importTrendsCsv, keywordTable, lookupSuggestions, removeTrend, trendsUrl, type KeywordTable, type SuggestSource,
@@ -118,6 +118,8 @@ export interface ServiceOptions {
   mcpBrand?: McpBrand;
   /** Pause between autocomplete requests, in ms; tests set 0. */
   keywordDelayMs?: number;
+  /** Gap between Arctic Shift requests, in ms (default 1200; the archive times out when asked too fast). Tests set 0. */
+  communityDelayMs?: number;
   /** Where the person's outline documents are, for keyword suggestions. Absent where the host has no projects to look in. */
   outlines?: OutlineSource;
 }
@@ -538,6 +540,12 @@ export class AppService {
     return addCommunitySource(lib.db, lib.root, categoryKey, subreddit);
   }
 
+  moveCommunitySource(categoryKey: string, subreddit: string, direction: 'up' | 'down'): CommunitySource[] {
+    if (this.communityJob) throw new Error('a sync is running; wait for it to finish');
+    const lib = this.need();
+    return moveCommunitySource(lib.db, lib.root, categoryKey, subreddit, direction);
+  }
+
   removeCommunitySource(categoryKey: string, subreddit: string): CommunitySource[] {
     if (this.communityJob) throw new Error('a sync is running; wait for it to finish');
     const lib = this.need();
@@ -571,12 +579,13 @@ export class AppService {
         if (abort.signal.aborted) break;
         const r = await syncSubreddit(lib.db, lib.root, sub, {
           // a long wait (the service is busy) is shown as the step, so the screen says why nothing is moving
-          client: new ArcticShift({ fetch: this.opts.fetch, signal: abort.signal, onWait: (m) => { if (this.communityJob) this.communityJob = { ...this.communityJob, step: m }; } }),
+          client: new ArcticShift({ fetch: this.opts.fetch, signal: abort.signal, delayMs: this.opts.communityDelayMs, sleep: this.opts.communityDelayMs === 0 ? async () => {} : undefined, onWait: (m) => { if (this.communityJob) this.communityJob = { ...this.communityJob, step: m }; } }),
           signal: abort.signal,
           onProgress: (p) => { this.communityJob = { categoryKey, subreddit: p.subreddit, subredditIndex: i, subredditCount: subs.length, step: p.step, day: p.day, days: p.days, threads: p.threads, comments: p.comments, requests: p.requests, startedAt: p.startedAt, stopping: abort.signal.aborted }; },
         });
         out.push(r);
-        if (r.cancelled || r.error) break;
+        // a subreddit the service could not serve (it is timing out) must not block the ones after it; only a stop ends the run
+        if (r.cancelled) break;
       }
       return out;
     } finally {

@@ -37,6 +37,7 @@ import { ProjectStages } from './stages';
 import { projectOutlines } from './outlines';
 import { callWorkflow } from './workflowCalls';
 import { Editorial } from './editorial';
+import { EditingDesk } from './editingDesk';
 import { ProjectWork } from './projectWork';
 import { buildPulse } from './pulse';
 import { VaultHost } from './vaultHost';
@@ -634,16 +635,23 @@ const resourcesDir = () => (app.isPackaged ? process.resourcesPath : path.join(h
 
 function restoredBounds(): Partial<Electron.Rectangle> & { width: number; height: number } {
   const w = settings.get().window;
-  const fallback = { width: 1280, height: 820 };
+  const primary = screen.getPrimaryDisplay().workArea;
+  // Never open larger than the screen it lands on (a small laptop, or a saved size from a bigger monitor): a window taller than the
+  // screen has its bottom, and the controls there, out of reach.
+  const fit = (size: { width: number; height: number }, a: Electron.Rectangle) => ({ width: Math.min(size.width, a.width), height: Math.min(size.height, a.height) });
+  const fallback = fit({ width: 1280, height: 820 }, primary);
   if (!w) return fallback;
-  const size = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
-  if (w.x === undefined || w.y === undefined) return size;
+  const wanted = { width: Math.max(800, w.width), height: Math.max(500, w.height) };
+  if (w.x === undefined || w.y === undefined) return fit(wanted, primary);
   // Only reuse the saved position if it still lands on a connected display.
-  const visible = screen.getAllDisplays().some((d) => {
+  const on = screen.getAllDisplays().find((d) => {
     const a = d.workArea;
-    return w.x! < a.x + a.width - 50 && w.x! + size.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
+    return w.x! < a.x + a.width - 50 && w.x! + wanted.width > a.x + 50 && w.y! >= a.y - 10 && w.y! < a.y + a.height - 50;
   });
-  return visible ? { ...size, x: w.x, y: w.y } : size;
+  if (!on) return fit(wanted, primary);
+  const a = on.workArea;
+  const size = fit(wanted, a);
+  return { ...size, x: Math.min(Math.max(w.x, a.x), a.x + a.width - size.width), y: Math.min(Math.max(w.y, a.y), a.y + a.height - size.height) };
 }
 
 function saveWindowState(): void {
@@ -811,8 +819,9 @@ function showPage(next: Page): void {
 function createWindow(): void {
   win = new BrowserWindow({
     ...restoredBounds(),
-    minWidth: 800,
-    minHeight: 500,
+    // the least size never exceeds the screen, or a small display could not fit the window
+    minWidth: Math.min(800, screen.getPrimaryDisplay().workArea.width),
+    minHeight: Math.min(500, screen.getPrimaryDisplay().workArea.height),
     title: DEV_BUILD ? 'Cadrel Dev' : 'Cadrel',
     // Windows: a frameless, transparent window, so the corners can be rounded (Windows itself rounds nothing here) and the window
     // buttons can share the border's colour. The shell page draws the outline and `addControls` the buttons. Elsewhere (development
@@ -1275,6 +1284,59 @@ function registerShellIpc(): void {
   manageLike('launch:publishFigures', async (project?: string) => launch().publishFigures(project ? String(project) : undefined));
   manageLike('launch:window', async (id: string, days: number) => launch().decisionWindow(String(id), Number(days)));
   manageLike('preflight:waive', async (runId: string, seq: number, reason: string) => preflight().waive(String(runId), Number(seq), String(reason ?? '')));
+  /** The Editing desk: the manuscripts of this Studio's Write projects and their notes (the project folders are the truth; nothing is copied). */
+  const desk = async () => {
+    const l = await write.listProjects();
+    if (!l.exists) throw new Error('There is no Write folder to edit in yet. Open Write and make a project first.');
+    return new EditingDesk({
+      fs: nodeFs,
+      root: l.root,
+      editor: authorName,
+      keep: async (abs, bytes) => {
+        await fsp.mkdir(path.dirname(abs), { recursive: true });
+        await fsp.writeFile(abs, bytes);
+      }
+    });
+  };
+  manageLike('desk:manuscripts', async (folders?: string[]) => (await desk()).manuscripts(Array.isArray(folders) ? folders.map(String) : undefined));
+  manageLike('desk:read', async (p: string, f: string) => (await desk()).read(String(p), String(f)));
+  manageLike('desk:addNotes', async (p: string, f: string, notes: never) => (await desk()).addNotes(String(p), String(f), notes));
+  manageLike('desk:setStatus', async (p: string, id: string, status: 'open' | 'resolved' | 'accepted' | 'rejected') => (await desk()).setStatus(String(p), String(id), status));
+  manageLike('desk:tag', async (p: string, id: string, tags: never) => (await desk()).tag(String(p), String(id), tags));
+  manageLike('desk:reply', async (p: string, id: string, body: string) => (await desk()).reply(String(p), String(id), String(body)));
+  manageLike('desk:remove', async (p: string, id: string) => (await desk()).remove(String(p), String(id)));
+  manageLike('desk:upload', async (p: string) => {
+    const r = await dialog.showOpenDialog(win!, { title: 'Choose a Word document', filters: [{ name: 'Word documents', extensions: ['docx'] }], properties: ['openFile'] });
+    if (r.canceled || !r.filePaths[0]) return null;
+    return (await desk()).importDocx(String(p), new Uint8Array(await fsp.readFile(r.filePaths[0])), path.basename(r.filePaths[0]));
+  });
+  manageLike('desk:exportDocx', async (p: string, f: string) => {
+    const made = await (await desk()).exportDocx(String(p), String(f));
+    const r = await dialog.showSaveDialog(win!, { title: 'Save the manuscript with its notes', defaultPath: path.join(app.getPath('documents'), made.name), filters: [{ name: 'Word document', extensions: ['docx'] }] });
+    if (r.canceled || !r.filePath) return null;
+    await fsp.writeFile(r.filePath, made.bytes);
+    return { path: r.filePath, placed: made.placed, skipped: made.skipped };
+  });
+  manageLike('desk:report', async (p: string, f: string) => (await desk()).report(String(p), String(f)));
+  manageLike('desk:saveReport', async (p: string, f: string, patch: never) => (await desk()).saveReport(String(p), String(f), patch));
+  manageLike('desk:attachAnalysis', async (p: string, f: string) => (await desk()).attachAnalysis(String(p), String(f)));
+  manageLike('desk:exportReportPdf', async (p: string, f: string) => {
+    const page = await (await desk()).reportPage(String(p), String(f));
+    const r = await dialog.showSaveDialog(win!, { title: 'Save the Editing Report', defaultPath: path.join(app.getPath('documents'), page.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')), filters: [{ name: 'PDF', extensions: ['pdf'] }] });
+    if (r.canceled || !r.filePath) return null;
+    const tmp = await fsp.mkdtemp(path.join(os.tmpdir(), 'cadrel-editing-report-'));
+    const printer = new BrowserWindow({ show: false, width: 900, height: 1200, webPreferences: { sandbox: true, contextIsolation: true, javascript: false, spellcheck: false } });
+    try {
+      const file = path.join(tmp, 'report.html');
+      await fsp.writeFile(file, page.html, 'utf8');
+      await printer.loadFile(file);
+      await fsp.writeFile(r.filePath, await printer.webContents.printToPDF({ printBackground: true, pageSize: 'Letter', margins: { top: 0.5, bottom: 0.5, left: 0.5, right: 0.5 } }));
+      return r.filePath;
+    } finally {
+      if (!printer.isDestroyed()) printer.destroy();
+      await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+    }
+  });
   manageLike('editing:state', async () => editorial().state());
   manageLike('editing:pass', async (passId: string) => editorial().pass(String(passId)));
   manageLike('editing:call', async (name: string, ...args: unknown[]) => editorial().call(String(name), args));

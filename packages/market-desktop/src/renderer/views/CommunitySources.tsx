@@ -48,11 +48,13 @@ export function CommunitySources({ categoryKey }: { categoryKey: string }) {
     try { await fn(); } catch (e) { setErr((e as Error).message); }
   };
 
-  const start = async () => {
+  /** Sync every subreddit in order, or just `only` (one at a time: nothing else runs until it ends). */
+  const start = async (only?: string) => {
     setResults([]);
-    setJob({ categoryKey, subreddit: sources[0]?.subreddit ?? '', subredditIndex: 0, subredditCount: sources.length, step: 'Starting', day: 1, days: 7, threads: 0, comments: 0, requests: 0, startedAt: Date.now(), stopping: false });
+    const count = only ? 1 : sources.length;
+    setJob({ categoryKey, subreddit: only ?? sources[0]?.subreddit ?? '', subredditIndex: 0, subredditCount: count, step: 'Starting', day: 1, days: 7, threads: 0, comments: 0, requests: 0, startedAt: Date.now(), stopping: false });
     follow();
-    await run(async () => setResults(await api.syncCommunity(categoryKey)));
+    await run(async () => setResults(await api.syncCommunity(categoryKey, only)));
     await load();
   };
   const stop = () => run(async () => { await api.stopCommunity(); setJob((j) => (j ? { ...j, stopping: true } : j)); });
@@ -76,7 +78,7 @@ export function CommunitySources({ categoryKey }: { categoryKey: string }) {
         <button disabled={!name.trim() || running} onClick={() => run(async () => { setSources(await api.addCommunitySource(categoryKey, name)); setName(''); })}>Add</button>
         {running
           ? <button onClick={stop} disabled={job!.stopping}>{job!.stopping ? 'Stopping…' : 'Stop'}</button>
-          : <button className="primary" disabled={sources.length === 0} onClick={start}>{resumable ? 'Resume sync' : 'Sync last 7 days'}</button>}
+          : <button className="primary" disabled={sources.length === 0} onClick={() => void start()}>{resumable ? 'Resume sync' : 'Sync all, in this order'}</button>}
       </div>
       {job && (
         <div aria-label="Sync progress" style={{ marginBottom: 8 }}>
@@ -92,9 +94,9 @@ export function CommunitySources({ categoryKey }: { categoryKey: string }) {
       {err && <div className="err" role="alert">{err}</div>}
       {sources.length > 0 && (
         <table>
-          <thead><tr><th>Subreddit</th><th className="num">Threads</th><th className="num">Comments</th><th>Threads from</th><th>Last synced</th><th /></tr></thead>
+          <thead><tr><th>Subreddit</th><th className="num">Threads</th><th className="num">Comments</th><th>Threads from</th><th>Last synced</th><th>Order</th><th /></tr></thead>
           <tbody>
-            {sources.map((s) => (
+            {sources.map((s, i) => (
               <tr key={s.subreddit} data-subreddit={s.subreddit}>
                 <td>r/{s.subreddit}</td>
                 <td className="num">{n(s.posts)}</td>
@@ -102,6 +104,11 @@ export function CommunitySources({ categoryKey }: { categoryKey: string }) {
                 <td>{s.posts ? `${day(s.from)} to ${day(s.to)}` : '–'}</td>
                 <td>{s.lastSyncedAt ? new Date(s.lastSyncedAt).toLocaleString() : 'never'}{s.resumeFrom ? <span className="muted"> · stopped, resumes from {s.resumeFrom.slice(0, 16).replace('T', ' ')} UTC</span> : ''}</td>
                 <td>
+                  <button className="link" aria-label={`Move r/${s.subreddit} up`} disabled={running || i === 0} onClick={() => void run(async () => setSources(await api.moveCommunitySource(categoryKey, s.subreddit, 'up')))}>↑</button>{' '}
+                  <button className="link" aria-label={`Move r/${s.subreddit} down`} disabled={running || i === sources.length - 1} onClick={() => void run(async () => setSources(await api.moveCommunitySource(categoryKey, s.subreddit, 'down')))}>↓</button>
+                </td>
+                <td>
+                  <button className="link" disabled={running} onClick={() => void start(s.subreddit)}>{s.resumeFrom ? 'Resume' : 'Sync'}</button>{' '}
                   <button className="link" disabled={running} onClick={() => {
                     if (!window.confirm(`Remove r/${s.subreddit} from this category? Its ${n(s.posts)} threads and ${n(s.comments)} comments are deleted from your library unless another category uses it.`)) return;
                     void run(async () => setSources(await api.removeCommunitySource(categoryKey, s.subreddit)));
@@ -122,7 +129,7 @@ export function CommunitySources({ categoryKey }: { categoryKey: string }) {
               ? `Already up to date: all ${n(r.posts)} threads and ${n(r.comments)} comments it found were already stored, so nothing new was added. A sync reads the whole last ${r.days} days each time and only adds what is not stored yet.`
               : `${n(r.newPosts)} new threads and ${n(r.newComments)} new comments (${n(r.posts)} and ${n(r.comments)} seen).`}
           {' '}Skipped {n(r.skipped.removed)} removed/deleted and {n(r.skipped.bots)} bot items{r.dropped ? `; dropped ${n(r.dropped)} stored items that have since been removed` : ''}.
-          {r.cancelled || r.error ? ' Everything read so far is saved; press Resume sync to carry on.' : ''}
+          {r.cancelled || r.error ? ' Everything read so far is saved; press Resume to carry on. The other subreddits were still tried.' : ''}
           {r.truncated ? ' Stopped at the size cap: part of the week is missing.' : ''}
         </div>
       ))}

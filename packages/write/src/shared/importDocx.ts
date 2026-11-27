@@ -5,7 +5,7 @@ import { strFromU8, unzipSync } from 'fflate';
  * tables. Pure (bytes in, text out) so the desktop app and the tests share it.
  */
 
-interface XNode {
+export interface XNode {
   name: string;
   attrs: Record<string, string>;
   children: XNode[];
@@ -19,7 +19,7 @@ const decode = (s: string) =>
   );
 
 /** A minimal XML reader: enough for WordprocessingML (no DTDs, no mixed content that matters). */
-function parseXml(xml: string): XNode {
+export function parseXml(xml: string): XNode {
   const root: XNode = { name: '#root', attrs: {}, children: [], text: '' };
   const stack = [root];
   const re = /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!\[CDATA\[([\s\S]*?)\]\]>|<(\/?)([\w:.-]+)((?:\s+[\w:.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*)\s*(\/?)>|([^<]+)/g;
@@ -43,9 +43,9 @@ function parseXml(xml: string): XNode {
   return root;
 }
 
-const kids = (n: XNode | undefined, name: string) => n?.children.filter((c) => c.name === name) ?? [];
-const kid = (n: XNode | undefined, name: string) => n?.children.find((c) => c.name === name);
-const val = (n: XNode | undefined) => n?.attrs['w:val'];
+export const kids = (n: XNode | undefined, name: string) => n?.children.filter((c) => c.name === name) ?? [];
+export const kid = (n: XNode | undefined, name: string) => n?.children.find((c) => c.name === name);
+export const val = (n: XNode | undefined) => n?.attrs['w:val'];
 
 interface Fmt {
   b: boolean;

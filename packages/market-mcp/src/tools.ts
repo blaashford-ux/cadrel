@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
+import { COMMUNITY_SYNC_TOOLS } from './communityTools.js';
 import { KEYWORD_TOOLS } from './keywordTools.js';
 import {
   METRICS, amazonUrl, analyzeCovers, contentMetricsOf, contentStats, excerpt, getManuscripts, categoryReport, coverStats, marketShape, packagingStats, readerVoice, reportMarkdown, successScores, trend, categoryBooks, cohortStats, embeddingStatus, getBook, listAnnotations, listBooks, listCategories,
-  authorNamesOf, authorCorpus, listAuthors, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type CategoryBook, type Embedder, type Library, type MetricName, type OutlineSource,
+  authorNamesOf, authorCorpus, listAuthors, communityInsights, getCalibration, listOwnBooks, communityThread, communityThreads, listCommunitySources, resolveCategory, searchText, estimateDailySales, estimateSalesRange, findSubCategories, getSalesCurve, opportunityScore, rankCategories, tropeClusters, summarize, type ArcticOptions, type CategoryBook, type Embedder, type Library, type MetricName, type OutlineSource,
 } from '@cadrel/market-library';
 
 export interface ToolContext {
@@ -19,6 +20,8 @@ export interface ToolContext {
   canSuggestKeywords?: () => Promise<boolean>;
   /** Which AI is connected ("Claude"), so what it sends is labelled. */
   client?: () => string | undefined;
+  /** Options for the Arctic Shift client community syncs use (a fake fetch and no pauses, in tests). */
+  arcticShift?: Pick<ArcticOptions, 'fetch' | 'delayMs' | 'sleep' | 'baseUrl'>;
 }
 
 export type ToolResult = { data: unknown } | { error: string } | { image: { base64: string; mimeType: string }; data?: unknown };
@@ -29,6 +32,8 @@ export interface ToolSpec {
   shape: z.ZodRawShape;
   /** Read-only tools can be run without confirmation by well-behaved clients. */
   readOnly: boolean;
+  /** Reaches out to a service on the internet (the default is that it does not). */
+  openWorld?: boolean;
   run: (ctx: ToolContext, args: any) => Promise<ToolResult> | ToolResult;
 }
 
@@ -585,7 +590,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'community_sources',
-    description: 'The subreddits the user linked to a category, with how many threads and comments are stored for each, the period covered and when each was last synced. Community text is added by the user pressing "Sync last 7 days" in the app; it is never fetched live.',
+    description: 'The subreddits the user linked to a category, with how many threads and comments are stored for each, the period covered and when each was last synced. Community text is added by the user pressing "Sync last 7 days" in the app, or by start_community_sync; it is never fetched live by the other tools.',
     shape: { category: categoryArg },
     readOnly: true,
     run: (ctx, a) => {
@@ -762,6 +767,7 @@ export const TOOLS: ToolSpec[] = [
   },
   ...ANALYSIS_TOOLS,
   ...KEYWORD_TOOLS,
+  ...COMMUNITY_SYNC_TOOLS,
 ];
 
 export const SERVER_INSTRUCTIONS = `Cadrel Market is the user's local library of Amazon Kindle market research (amazon.com only). Start with library_status and list_categories. Every result cites an ASIN and a capture date; include them when you report findings, and say when a figure comes from only some of the books (the "known" counts and detail_captured flags show coverage). ${TEXT_FIELD_NOTICE}`;

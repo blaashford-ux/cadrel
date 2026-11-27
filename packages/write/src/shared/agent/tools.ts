@@ -17,6 +17,9 @@ import {
   locateAnchor,
   newReviewFile,
   normalizeCategory,
+  normalizeEditType,
+  normalizeRound,
+  type EditType,
   parseReviewFile,
   serializeReviewFile,
   type ItemStatus,
@@ -223,7 +226,7 @@ export async function listChapters(ctx: AgentContext, project: string, file: str
   const { rel, chapters } = await load(ctx, project, file);
   const ids = chapterIds(chapters);
   const edited = new Set(marksToMap(await readMarks(ctx, await projectDir(ctx, project)))[rel] ?? []);
-  return { file: rel, chapters: chapters.map((c, i) => ({ index: c.index, title: c.title || '(before the first heading)', words: countWords(c.raw), edited: edited.has(ids[i]) })) };
+  return { file: rel, chapters: chapters.map((c, i) => ({ index: c.index, key: c.key, title: c.title || '(before the first heading)', words: countWords(c.raw), edited: edited.has(ids[i]) })) };
 }
 
 // ---- edited marks ----------------------------------------------------------------------------
@@ -309,6 +312,8 @@ export interface NoteView {
   status: ItemStatus;
   reviewer: string;
   category?: string;
+  editType?: EditType;
+  round?: string;
   quote: string;
   body: string;
   replacement?: string;
@@ -333,6 +338,8 @@ const view = (i: ReviewItem, reviewer: string): NoteView => ({
   status: i.status,
   reviewer,
   ...(i.category ? { category: i.category } : {}),
+  ...(i.editType ? { editType: i.editType } : {}),
+  ...(i.round ? { round: i.round } : {}),
   quote: i.anchor.quote,
   body: i.body,
   ...(i.replacement !== undefined ? { replacement: i.replacement } : {}),
@@ -347,6 +354,8 @@ export interface NoteFilter {
   /** Substring of the reviewer's name, e.g. "Line edit" or "Sam". */
   reviewer?: string;
   category?: string;
+  editType?: EditType;
+  round?: string;
 }
 
 async function collect(ctx: AgentContext, project: string, f: NoteFilter): Promise<{ item: ReviewItem; reviewer: string }[]> {
@@ -358,6 +367,8 @@ async function collect(ctx: AgentContext, project: string, f: NoteFilter): Promi
       if (f.status && i.status !== f.status) continue;
       if (f.kind && i.kind !== f.kind) continue;
       if (f.category && i.category !== f.category) continue;
+      if (f.editType && i.editType !== f.editType) continue;
+      if (f.round && i.round?.toLowerCase() !== f.round.toLowerCase()) continue;
       if (f.reviewer && !file.reviewer.name.toLowerCase().includes(f.reviewer.toLowerCase())) continue;
       out.push({ item: i, reviewer: file.reviewer.name });
     }
@@ -449,6 +460,10 @@ export interface NoteInput {
   /** Suggestions: the text that should replace the quote. */
   replacement?: string;
   category?: string;
+  /** developmental, line, copy or proof. Defaults to the skill's own type when the notes come from a known skill. */
+  editType?: string;
+  /** The editing round, e.g. "First read". */
+  round?: string;
   /** Text immediately before / after the quote, to pick one of several matches. */
   before?: string;
   after?: string;
@@ -467,7 +482,7 @@ function occurrences(hay: string, needle: string): number[] {
   return at;
 }
 
-function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: string; name: string }, existing: ReviewItem[]): { item: ReviewItem; chapter: Loaded['chapters'][number]; start: number } {
+function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: string; name: string }, existing: ReviewItem[], origin: 'ai' | 'human' | 'outside' = 'ai'): { item: ReviewItem; chapter: Loaded['chapters'][number]; start: number } {
   const kind = input.kind;
   if (kind !== 'comment' && kind !== 'suggestion') throw new AgentError('kind must be "comment" or "suggestion".');
   const quote = input.quote;
@@ -518,7 +533,9 @@ function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: s
     ...(replacement !== undefined ? { replacement } : {}),
     status: 'open',
     ...(normalizeCategory(input.category) ? { category: normalizeCategory(input.category) } : {}),
-    origin: 'ai',
+    ...(normalizeEditType(input.editType) ? { editType: normalizeEditType(input.editType) } : {}),
+    ...(normalizeRound(input.round) ? { round: normalizeRound(input.round) } : {}),
+    origin,
     author: reviewer.name,
     createdAt: now,
     updatedAt: now,
@@ -542,8 +559,22 @@ async function readFile(ctx: AgentContext, dir: string, id: string): Promise<Rev
 }
 
 /** Adds up to 50 notes. Each is checked on its own: the good ones are saved and the rest come back with the reason. */
-export function addNotes(ctx: AgentContext, project: string, skill: string | undefined, notes: NoteInput[]): Promise<NoteResult[]> {
-  const reviewer = reviewerFor(ctx, skill);
+export function addNotes(ctx: AgentContext, project: string, skill: string | undefined, rawNotes: NoteInput[], round?: string): Promise<NoteResult[]> {
+  // a known skill says what kind of edit its notes are; a note or the call can say more, or something else
+  const skillType = normalizeEditType(skill);
+  const notes = Array.isArray(rawNotes) ? rawNotes.map((n) => ({ ...n, editType: n.editType ?? skillType, round: n.round ?? round })) : rawNotes;
+  return saveNotes(ctx, project, reviewerFor(ctx, skill), 'ai', notes);
+}
+
+/**
+ * The same notes, written by a person: the Editing workspace adds a human editor's comments and suggestions through exactly the code `add_notes`
+ * uses (same quote matching, limits, duplicate check, edited-mark handling), signed with the editor's own review file.
+ */
+export function addNotesAs(ctx: AgentContext, project: string, reviewer: { id: string; name: string }, notes: NoteInput[], round?: string, origin: 'human' | 'outside' = 'human'): Promise<NoteResult[]> {
+  return saveNotes(ctx, project, reviewer, origin, Array.isArray(notes) ? notes.map((n) => ({ ...n, round: n.round ?? round })) : notes);
+}
+
+function saveNotes(ctx: AgentContext, project: string, reviewer: { id: string; name: string }, origin: 'ai' | 'human' | 'outside', notes: NoteInput[]): Promise<NoteResult[]> {
   if (!Array.isArray(notes) || !notes.length) throw new AgentError('notes must be a list with at least one note.');
   if (notes.length > LIMITS.notesPerCall) throw new AgentError(`At most ${LIMITS.notesPerCall} notes per call; send the rest in another call.`);
   return serial(`${ctx.root}/${project}`, async () => {
@@ -560,7 +591,7 @@ export function addNotes(ctx: AgentContext, project: string, skill: string | und
         const { rel } = await manuscriptPath(ctx, project, input.file);
         let l = loaded.get(rel);
         if (!l) loaded.set(rel, (l = await load(ctx, project, rel)));
-        const { item, chapter, start } = build(ctx, l, input, reviewer, [...file.items, ...created]);
+        const { item, chapter, start } = build(ctx, l, input, reviewer, [...file.items, ...created], origin);
         created.push(item);
         touched.set(rel, (touched.get(rel) ?? new Set()).add(chapter.index));
         const result: NoteResult = { ok: true, id: item.id, chapter: chapter.index, chapterTitle: chapter.title, context: chapter.flat.slice(Math.max(0, start - 30), start + item.anchor.quote.length + 30) };

@@ -43,13 +43,15 @@ it.skipIf(!have)('briefs on a book, planning a pass, raising an item from select
   // seed: a Book, and a manuscript in the vault with two versions whose text is really stored
   const host = new PeopleHost();
   await host.open({ file: path.join(dir, 'records.db'), studioId: 'local', owned: true, ownerName: 'Ana Reyes' });
-  await new Studio(path.join(dir, 'studio.json')).createProject({ name: 'Lead Me', kind: 'Book' });
+  const lead = await new Studio(path.join(dir, 'studio.json')).createProject({ name: 'Lead Me', kind: 'Book' });
   const blobs = new DirBlobs(path.join(dir, 'vault-blobs'));
   const [h1, h2] = [await blobs.put(new TextEncoder().encode(V1)), await blobs.put(new TextEncoder().encode(V2))];
   const db = (host as unknown as { db: { run(sql: string, p?: unknown[]): Promise<unknown> } }).db;
   await db.run("INSERT INTO vault_file (id, studio_id, path, current_version) VALUES ('f1', 'local', 'Lead Me/book.md', 2)");
   await db.run("INSERT INTO file_version (file_id, n, hash, size, author, comment, created_at) VALUES ('f1', 1, ?, ?, 'Ana', 'first draft', '2026-11-01T10:00:00.000Z')", [h1, V1.length]);
   await db.run("INSERT INTO file_version (file_id, n, hash, size, author, comment, created_at) VALUES ('f1', 2, ?, ?, 'Ana', 'after the edit', '2026-11-09T10:00:00.000Z')", [h2, V2.length]);
+  // a manuscript is offered for a pass under the book its data card names
+  await db.run("INSERT INTO file_card (file_id, project_id, fields, updated_at, updated_by) VALUES ('f1', ?, '{}', '2026-11-01T10:00:00.000Z', 'Ana')", [(lead as { id: string }).id]);
   await host.close();
 
   const app = await electron.launch({ executablePath: electronBin, args: ['--no-sandbox', PKG], env: { ...process.env, CADREL_TEST: '1', CADREL_USER_DATA: userData, HOME: home, USERPROFILE: home } });
@@ -82,6 +84,7 @@ it.skipIf(!have)('briefs on a book, planning a pass, raising an item from select
 
     // ---- plan a pass over the manuscript, under that brief
     await shell.getByRole('button', { name: 'Editing', exact: true }).click();
+    await shell.getByRole('tab', { name: 'Earlier passes' }).click(); // the new Editing desk opens first; the editorial passes are on their own tab
     await shell.getByRole('button', { name: 'Plan a pass…' }).click();
     const form = shell.getByRole('region', { name: 'Plan a pass' });
     await form.getByLabel('Manuscript').selectOption({ label: 'Lead Me/book.md (version 2)' });

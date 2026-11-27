@@ -1334,6 +1334,46 @@ describe('rewrite mode', () => {
     expect(tabOf(A).chapter).toBe(2);
   });
 
+  it('turns on from the rewrite alone, bringing the original up beside it', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.setRewriteMode(A, false);
+    await ws.closeTab(tabOf(A).id); // only the rewrite is open
+    expect(state().tabs.map((t) => t.file)).toEqual([REWRITE]);
+    expect(await ws.setRewriteMode(REWRITE, true)).toBe(true);
+    expect(state().rewriteOn).toBe('a.md');
+    expect(state().tabs.map((t) => t.file).sort()).toEqual([A, REWRITE].sort());
+    expect(state().activeId).toBe(tabOf(REWRITE).id);
+    expect(state().docs.get(A)!.chapters.length).toBeGreaterThan(1); // the original is the original, never blank
+  });
+
+  it('a blank rewrite keeps both panes on its first chapter: the rewrite sets how far the pair goes', async () => {
+    await ws.openChapter(A, 2);
+    await ws.startRewrite(A, 'blank');
+    expect(tabOf(REWRITE).chapter).toBe(0);
+    expect(tabOf(A).chapter).toBe(0); // the original does not run ahead of the rewrite
+    await ws.openChapter(A, 2); // asking the original for a later chapter
+    expect(tabOf(A).chapter).toBe(0);
+    await ws.followChapter(A, 2);
+    expect(tabOf(A).chapter).toBe(0);
+    expect(state().docs.get(A)!.chapters.length).toBeGreaterThan(2); // it is the rewrite that is short, not the original
+  });
+
+  it('a copy lets the pair go as far as the copy goes', async () => {
+    await ws.startRewrite(A, 'copy');
+    await ws.openChapter(A, 2);
+    expect(tabOf(A).chapter).toBe(2);
+    await ws.followChapter(REWRITE, 2);
+    expect(tabOf(REWRITE).chapter).toBe(2);
+  });
+
+  it('with the mode off, the original opens at any chapter in its own tab to look ahead', async () => {
+    await ws.startRewrite(A, 'blank');
+    await ws.setRewriteMode(A, false);
+    await ws.openChapter(A, 2);
+    expect(tabOf(A).chapter).toBe(2);
+    expect(tabOf(REWRITE).chapter).toBe(0); // the rewrite is not moved
+  });
+
   it('ends the mode when one file of the pair is closed, and leaves the link', async () => {
     await ws.startRewrite(A, 'copy');
     await ws.closeTab(tabOf(A).id);

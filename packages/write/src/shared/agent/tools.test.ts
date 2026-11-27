@@ -94,6 +94,20 @@ describe('adding notes', () => {
     expect(item.anchor).toMatchObject({ v: 2, chapter: 'Two', block: { i: expect.any(Number), off: expect.any(Number), h: expect.any(String) } });
   });
 
+  it('tags notes with the edit type and round: the skill sets the type, a note or the call can say more', async () => {
+    const [a] = await addNotes(ctx, 'Novel', 'line', [note({ quote: 'ran cold' })], ' First   read ');
+    const [b] = await addNotes(ctx, 'Novel', 'Copy edit', [note({ quote: 'apples', editType: 'proof', round: 'Round 2' })], 'First read');
+    const [c] = await addNotes(ctx, 'Novel', undefined, [note({ quote: 'walked slowly', editType: 'nonsense' })]);
+    expect([a, b, c]).toEqual([a, b, c].map(() => expect.objectContaining({ ok: true })));
+    const notes = await getNotes(ctx, 'Novel');
+    const by = (id: string) => notes.find((n) => n.id === (id as string))!;
+    expect(by((a as { id: string }).id)).toMatchObject({ editType: 'line', round: 'First read' });
+    expect(by((b as { id: string }).id)).toMatchObject({ editType: 'proof', round: 'Round 2' });
+    expect(by((c as { id: string }).id).editType).toBeUndefined(); // not a type: left off, never stored as given
+    expect((await getNotes(ctx, 'Novel', { editType: 'line' })).map((n) => n.id)).toEqual([(a as { id: string }).id]);
+    expect((await getNotes(ctx, 'Novel', { round: 'round 2' })).map((n) => n.id)).toEqual([(b as { id: string }).id]);
+  });
+
   it('makes suggestions that apply, and marks the category', async () => {
     const [r] = await addNotes(ctx, 'Novel', 'line', [note({ kind: 'suggestion', quote: 'walked slowly', replacement: 'crept', body: 'Stronger verb', category: ' Word Choice ' })]);
     expect(r.ok).toBe(true);

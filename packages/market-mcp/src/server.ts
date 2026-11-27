@@ -28,7 +28,7 @@ export function registerMarketTools(server: McpServer, base: ToolContext): void 
   for (const t of TOOLS) {
     server.registerTool(
       t.name,
-      { description: t.description, inputSchema: t.shape, annotations: { readOnlyHint: t.readOnly, openWorldHint: false, destructiveHint: false } },
+      { description: t.description, inputSchema: t.shape, annotations: { readOnlyHint: t.readOnly, openWorldHint: !!t.openWorld, destructiveHint: false } },
       async (args: any) => {
         try {
           const r = await t.run(ctx, args);

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  normalizeEditType,
+  normalizeRound,
+  ROUND_MAX,
   applySuggestion,
   locateAnchor,
   makeAnchor,
@@ -97,5 +100,22 @@ describe('files', () => {
     expect(merged.items.map((i) => i.id)).toEqual(['a', 'b'])
     expect(merged.items[0].status).toBe('resolved')
     expect(merged.items[0].replies.map((r) => r.id)).toEqual(['r1', 'r2'])
+  })
+})
+
+describe('edit type and round', () => {
+  it('normalizes an edit type from the names people use, and drops anything else', () => {
+    expect(normalizeEditType('Line edit')).toBe('line')
+    expect(normalizeEditType('copy-editing')).toBe('copy')
+    expect(normalizeEditType(' Developmental ')).toBe('developmental')
+    expect(normalizeEditType('proofreading')).toBe('proof')
+    expect(normalizeEditType('proof')).toBe('proof')
+    expect(normalizeEditType('pacing')).toBeUndefined()
+    expect(normalizeEditType(3)).toBeUndefined()
+  })
+  it('normalizes a round label to one short line', () => {
+    expect(normalizeRound('  First \n read ')).toBe('First read')
+    expect(normalizeRound('   ')).toBeUndefined()
+    expect(normalizeRound('x'.repeat(80))).toHaveLength(ROUND_MAX)
   })
 })
