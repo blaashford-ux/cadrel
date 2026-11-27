@@ -10,6 +10,32 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Old notes are given their place the first time their file's chapters are at hand, by whichever app has them (a reader's Cadrel Reader, or the author's Write for every reader's notes), and kept in the notes file without counting as an edit; the copy in the Studio follows through the usual exchange. An old note that cannot be placed with certainty is marked as a guess and pinned; one whose text is in no chapter, or in several with nothing to tell them apart, is left in the Notes panel and drawn nowhere. Apps that do not know about places ignore them and still read the notes.
 - The assistant's `add_notes` writes notes with a place, and `read_chapter` lists only the notes of that chapter.
 
+## Unreleased (Cover Designer)
+
+No server upgrade is needed: a cover is two ordinary vault files and an asset.
+
+### Art: Create asset
+- **Create asset ▾ on the Art page** opens a short menu: **Cover**, and under it **eBook** and **Paperback**. Each opens the Cover Designer on that kind. More kinds (banners, ads) can be added to the menu later without new screens.
+
+### A cover designer, without the knobs
+- **Freeform, for ebook covers** (1,600 × 2,560, KDP's recommended size). Add a picture (from the project's files, or from your computer into them, so its licence and history stay with it), words, boxes, ovals, lines and rings; select, move, resize, turn, hide, lock, reorder; undo and redo; copy; arrow keys nudge.
+- **Smart layout, with no numbers to type.** Layers **snap** to the cover's middle, thirds, the golden lines, the safe margin, your guides, the paperback's spine, and each other (and to equal gaps), with a line shown while they are on one; hold Alt to move freely. Pictures and symbols keep their proportions; type sizes are chosen from a short scale (Tiny to Title-sized), and dragging a corner of text lands on the scale. **Align**, **space evenly**, **stack** and **match width** are buttons. A **title block** lays out a series line, title, subtitle and author in a ready font pairing (seven, such as Epic fantasy, Thriller, Romance, Literary) as real text you then edit, in one of three places on the cover, using the project's names where it can read them. A **thumbnail strip** shows the cover at 160, 80 and 40 pixels wide, and a dashed **safe margin** can be turned on.
+- **Enhancements that are one switch each:** glow, drop shadow (distance, angle, softness), outline, blur, opacity and blend modes (multiply, screen, overlay, soft light); **Darken behind this text**, one click, a soft band that follows the text until you let it go; for pictures, brightness, contrast, colour strength, warm or cool, dark edges and a tint; solid, linear and radial gradients, with swatches taken from the cover's own picture; **textures on shapes and text**: film grain, paper, brushed metal, foil, stone, cloth and a worn-and-scratched look.
+- **A library of 36 simple pieces** drawn for Cadrel (nothing third-party): dividers and flourishes, frames and corner brackets, ornaments, seals and badges, and symbols (star, heart, moon, sun, crown, leaf, key, sword, dagger, skull, eye, flame, rose, and more), all recoloured by the fill.
+- **Fonts:** seven starter families with their licences (Cinzel, Bebas Neue, Anton, Abril Fatface, Oswald, Montserrat, Great Vibes, plus Marcellus and Bodoni Moda from Write), and the common fonts the computer has. A design opened where a font is missing says so and shows a stand-in.
+
+### Paperback
+- **Import the KDP template** as a PDF, PNG or JPG (a PDF's first page is drawn at 300 dpi). The cover takes the template's size, and the template is laid over it as a faint guide (strength is a slider, and it can be hidden). **You cannot click it and it is never in the saved picture.**
+- **Mark the spine** by dragging two lines; guides appear on its edges, things snap to them, and one button centres the selected layer on the spine.
+- A paperback is saved as the **full wrap** and, once the spine is marked, the **front cover alone**.
+
+### Saving
+- **Two files per cover, in the project's Art folder:** the editable design (`Name.cadrel-cover.json`) and the flattened picture (`Name.png`), each a version of its own vault file. The first save makes the picture an **asset (a draft)** on the Art page, so approval of an exact version, licences, where-used, Preflight's cover check and Launch all work on it as on any cover. The design records which picture it made, by hash. Save again for a new version of both; reopen from **Edit design** on the cover.
+- A picture that is not a PNG at the design's own size is refused, so the picture is always the render of the design it came from. A design whose pictures changed or went missing says so when it is opened.
+
+### Not in this version
+- Offline use; the assistant reading a design; placing guides by dragging from a ruler (the snaps use guides in a design, but there is no screen to make one yet); angular gradients; embedding a font in a design; calculating a template from trim size and page count; kinds other than Cover in the menu; the title block reading the author's pen name from the catalogue.
+
 ## 0.22.0 (Market: community scans from Claude)
 
 ### Market: community scans from Claude

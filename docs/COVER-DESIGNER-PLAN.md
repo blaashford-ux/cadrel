@@ -1,6 +1,6 @@
 # Cover Designer, implementation plan
 
-Status: **planned, not started** (27 November 2026). Planned against 0.22.0. Decisions marked *decided* were taken with the owner on 27 November 2026; the rest are recommendations to confirm before the slice that needs them.
+Status: **built on `dev`, not yet released** (27 November 2026). Planned against 0.22.0. Decisions marked *decided* were taken with the owner on 27 November 2026; the rest were taken as recommended. The manual walk-through is [COVER-DESIGNER-EXIT-TEST.md](COVER-DESIGNER-EXIT-TEST.md) and has no recorded run.
 
 This sits beside the milestones, ahead of M7. It adds to M5's Art page and changes no record that M5 or M6 read.
 
@@ -105,11 +105,25 @@ Each ends with its tests passing and the page usable. They are built on `dev` in
 6. **Paperback.** Template import (PNG, JPG, PDF), the non-interactive overlay with opacity and hide, marking the front, spine and back, the full-wrap export and the front-only crop.
 7. **Joining the rest.** Live size and ratio warnings from the cover rules, Offer as a concept, Edit design from the asset page, the assistant able to read a design's layers (not to change one), the changelog, the plan and an exit test.
 
+## What was built, and where it differs from the plan
+
+All seven slices are built and tested (shell: 490 tests pass, 3 Electron files skipped as before). The new tests are `coverCore.test.ts` (the document, snapping, arranging, title blocks, history, hit-testing; 41), `coverDesign.test.ts` (the main side over a real vault; 13), `coverDesigner.test.tsx` (the screen in jsdom, including the Create asset menu; 23), `coverExit.test.ts` (the exit test; 2), the Create-asset and Edit-design cases in `artPages.test.tsx`, and **`coverExport.test.ts`, which launches a real Chromium** (skipped where none can be started) and draws designs through the app's own SVG, canvas and PNG path. Where the build departs from the plan above:
+
+- **The export spike passed, and became a test.** A design with a gradient-filled, glowing, foil-textured, embedded-font title, a darkening band, a library symbol and a graded picture was drawn in Chromium to a PNG and looked at; `coverExport.test.ts` keeps that as checks (the right size; exact background pixels; the letters drawn; the band present; the embedded font really used; every effect and every texture changing the picture; every library piece drawing pixels; the template **never** in the picture; the front crop the right size; and a real PDF turned into a 2,550 × 3,300 picture at 300 dpi with its drawing in the right place). **Not run in the real Electron app**: there is no Electron in the build sandbox, so the packaged app, the file pickers and the window itself have not been exercised.
+- **Pictures are drawn from short blob addresses on screen and as data addresses only in the export**, so dragging does not re-send megabytes. The page's content-security policy gained `font-src 'self' data:` and `img-src … blob:` for this. Fonts reach the page as data from the main process (`cover:fonts`) and are put inside the exported picture, because a picture drawn from SVG cannot use the page's fonts.
+- **Sizes in effects are fractions of the cover's height** (a glow of 0.008 is 0.8 % of the height), so a design looks the same at any size; sliders show them as small whole numbers.
+- **PDF templates are drawn in the page**, with pdf.js running its worker in the page (no separate worker file), loaded only when a PDF is chosen (two extra files in the build, about 1.7 MB, not loaded otherwise).
+- **A paperback with no template yet** is a blank 3,900 × 2,775 wrap (a 6 × 9 book of about 300 pages at 300 dpi); importing the template resizes the canvas to the template. The template's own bleed and trim are not read: the person marks the spine by eye, and the front-cover crop is from the front line to the right edge.
+- **Title blocks read the project's names, not the catalogue**: the title is the book project's name, the series is the project above it, and the author is typed (it starts as "Author Name"). Reading the pen name from the catalogue needs a Studio-wide permission some roles do not hold.
+- **The library has 36 pieces**, drawn by hand as paths and checked on a contact sheet (the key and the sun were redrawn after the first look). There are **seven textures** and **seven font pairings**.
+- **Not built:** the assistant reading a design's layers; **Offer as a concept from inside the designer** (the saved picture is a project file, so the Briefs tab offers it as a concept as it would any picture); the **live size and ratio warnings** (an ebook canvas is fixed at KDP's recommended size, so there is nothing to warn about yet); a screen to **drag a guide out of a ruler** (the snapping uses a design's guides; none can be made yet); **angular gradients**; offline saving; and the **template's bleed and trim being read** from the PDF.
+- **Two files are written for each save, and a third for a paperback** (`Name-front.png`); the first save makes the picture an asset in `draft`, and it is the Briefs tab's "Choose this concept" (or "Submit") that moves it to review, as for any asset.
+
 ## Exit test
 
 **Exit:** from a book with a cover brief, a person makes an eBook cover from an imported picture, a title and a byline with the title block preset, a darkened band behind the title, a glow and a foil texture on it, one divider from the library; sees it fit the safe zone and read at thumbnail size; saves it and reopens it later to change the title colour; offers it as a concept, chooses it, and approves its version; and Preflight's cover check reads that same file. Then the same person makes a paperback cover with a KDP template laid over it, marks the spine, centres a spine title on it, and exports a full wrap and a front crop, with no trace of the template in either image.
 
-Automated: the document and snapping (many generated layouts against stated invariants: a snapped edge is within the threshold, equal gaps are equal, a scrim stays bound to its text), the design round trip (save, reopen, the same document), the export check (the image's size and format are what the design says and the template is not in it), the Create-asset drop-down and the editor drawn and clicked in jsdom. The exit walkthrough on a real Windows build is manual and has no recorded run.
+Automated, and now run: the document and snapping (many generated layouts against stated invariants: a snapped edge is within the threshold, equal gaps are equal, a scrim stays bound to its text), the design round trip (save, reopen, the same document), the export check (the image's size and format are what the design says and the template is not in it), the Create-asset drop-down and the editor drawn and clicked in jsdom. The exit walkthrough on a real Windows build is manual and has no recorded run.
 
 ## Risks and open points
 

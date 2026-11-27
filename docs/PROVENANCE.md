@@ -74,4 +74,20 @@ Conditions the app keeps: the copyright notice and licence travel with every cop
 | Playfair Display (`playfair-display`) | heading | upstream's two variable fonts, unmodified | "Playfair Display" |
 | Marcellus (`marcellus`) | heading | upstream's single Regular file, unmodified | "Marcellus" |
 
+### The Cover Designer's starter fonts
+
+`packages/shell/assets/cover-fonts/` holds seven display, sans and script families for the Cover Designer, taken from the **@fontsource** npm packages (version 5.3.0, read 27 November 2026), which repackage the families from [github.com/google/fonts](https://github.com/google/fonts) as WOFF2. Only the Latin subset at weights 400 and 700 (400 only where the family has no bold) is kept, byte for byte as published. Each family's folder carries the package's `OFL.txt`, which is the family's own licence file, and the build copies the folder into the app beside Write's fonts. Two more starter fonts, Marcellus and Bodoni Moda, are Write's own (above) and are read from there. Fonts are embedded in the picture a cover is saved as only as rendered pixels, never as font files, so a saved cover does not redistribute them; a design file names the family and nothing more.
+
+| Family (folder) | Weights | Used for | Reserved Font Name |
+|---|---|---|---|
+| Cinzel (`cinzel`) | 400, 700 | fantasy and historical titles | none |
+| Bebas Neue (`bebas-neue`) | 400 | thriller and sci-fi titles | none |
+| Anton (`anton`) | 400 | action titles | none |
+| Abril Fatface (`abril-fatface`) | 400 | romance and drama titles | none |
+| Oswald (`oswald`) | 400, 700 | bylines and taglines | none |
+| Montserrat (`montserrat`) | 400, 700 | series lines and modern titles | none |
+| Great Vibes (`great-vibes`) | 400 | script titles | none |
+
+Not used because it is not under the OFL: Special Elite (Apache 2.0) was looked at and left out so every bundled cover font has one licence.
+
 Static instances are made by `packages/write/scripts/build-fonts.py` (fontTools; weights 400 and 700, other axes pinned). Cutting an instance from a variable font is a modification under the OFL, which is allowed for families without a Reserved Font Name and the reason the four families above that do name one are not cut.

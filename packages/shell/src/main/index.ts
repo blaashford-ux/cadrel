@@ -63,6 +63,7 @@ import { loadLens } from './lens';
 import { artLens } from './art';
 import { Canon } from './canon';
 import { Art } from './art';
+import { CoverDesign } from './coverDesign';
 import { Preflight } from './preflight';
 import { Launch, launchLens } from './launch';
 import type { JoinedStudio } from '@cadrel/write/src/shared/review/studioReader';
@@ -1269,6 +1270,14 @@ function registerShellIpc(): void {
   manageLike('art:brief', async (id: string) => art().brief(String(id)));
   manageLike('art:call', async (name: string, ...args: unknown[]) => art().call(String(name), args));
   manageLike('art:preview', async (fileId: string, version: number) => art().preview(String(fileId), Number(version)));
+  /** The Cover Designer: opened and saved through this Studio's vault, so the cover is a governed asset from its first save. */
+  const cover = () => new CoverDesign(studio, peopleHost, peopleHost.service ? vaultHost() : null, vaultWhere().dir, path.join(here, 'assets'));
+  manageLike('cover:context', async (project?: string) => cover().context(project ? String(project) : undefined));
+  manageLike('cover:open', async (p: string) => cover().open(String(p)));
+  manageLike('cover:image', async (p: string) => cover().image(String(p)));
+  manageLike('cover:import', async (input: Parameters<CoverDesign['importPicture']>[0]) => cover().importPicture(input));
+  manageLike('cover:save', async (input: Parameters<CoverDesign['save']>[0]) => cover().save(input));
+  manageLike('cover:fonts', async (families: string[]) => cover().fonts(Array.isArray(families) ? families.map(String) : []));
   const preflight = () => new Preflight(studio, peopleHost, peopleHost.service ? vaultHost() : null);
   manageLike('preflight:state', async (project?: string) => preflight().state(project ? String(project) : undefined));
   manageLike('preflight:run', async (fileId: string, editionId: string | null) => preflight().run(String(fileId), editionId ? String(editionId) : null));
