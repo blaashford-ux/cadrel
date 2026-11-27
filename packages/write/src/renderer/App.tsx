@@ -1,5 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { flattenMarkdown } from '../shared/agent/flatten';
+import { flattenMarkdown, flattenMarkdownBlocks } from '../shared/agent/flatten';
+import { upgradeAnchor } from '../shared/review/anchorV2';
 import { locateAnchor } from '../shared/review/comments';
 import type { FileLock, MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
@@ -22,7 +23,7 @@ import { QuickSwitcher } from './QuickSwitcher';
 import { ReferenceWindow } from './ReferenceWindow';
 import { WelcomeDialog } from './WelcomeDialog';
 import { localDate, summarize, writtenOn } from '../shared/progress';
-import { goalFor, relativeTo, withOpened } from '../shared/projects';
+import { goalFor, manuscriptPaths, relativeTo, withOpened } from '../shared/projects';
 import { projectNameError, uniqueName, type ProjectSummary, type ProjectsConfig, type RootListing } from '../shared/projects';
 import { RelinkDialog } from './RelinkDialog';
 import { ReportView } from './ReportView';
@@ -30,7 +31,7 @@ import { HtmlView } from './HtmlView';
 import { EditBar } from './EditBar';
 import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
-import type { MarkdownDoc } from '../shared/chapters';
+import { chapterKeys, type MarkdownDoc } from '../shared/chapters';
 import { locateRow } from '../shared/rows';
 import { docRows } from './rowEnv';
 import type { SceneNav } from './sceneNav';
@@ -58,7 +59,8 @@ import { TitleBar } from './TitleBar';
 import { Tabs } from './Tabs';
 import { useRewriteScroll } from './useRewriteScroll';
 import { Tree } from './Tree';
-import { buildRows, chapterKey, chapterLabel, rowsFiles, type Row } from './treeRows';
+import { buildRows, chapterKey, chapterLabel, fileNodes, keepFiles, rowsFiles, type Row } from './treeRows';
+import { OmnibusDialog } from './OmnibusDialog';
 import { useWorkspace } from './useWorkspace';
 import { Workspace } from './workspace';
 import './styles.css';
@@ -91,6 +93,24 @@ export function App() {
   const [bookFile, setBookFile] = useState<string | null>(null);
   const [relink, setRelink] = useState<string | null>(null);
   const [exportFile, setExportFile] = useState<string | null>(null);
+  /** The omnibus dialog is open. */
+  const [omnibusOpen, setOmnibusOpen] = useState(false);
+  /** The tree shows only the files set as manuscripts. Remembered between sessions. */
+  const [msOnly, setMsOnly] = useState(() => {
+    try {
+      return localStorage.getItem('cadrel.write.manuscriptsOnly') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const chooseMsOnly = (on: boolean) => {
+    setMsOnly(on);
+    try {
+      localStorage.setItem('cadrel.write.manuscriptsOnly', on ? '1' : '0');
+    } catch {
+      // a choice that cannot be remembered still works
+    }
+  };
   const [showSettings, setShowSettings] = useState(false);
   const [find, setFindState] = useState<FindForm>(initialFindForm);
   const [navVersion, setNavVersion] = useState(0);
@@ -132,6 +152,9 @@ export function App() {
 
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
+  // The chapters' keys, so a note is looked for in its own chapter and in no other.
+  const activeKeys = useMemo(() => (activeDoc ? chapterKeys(activeDoc).map((k) => k.key) : []), [activeDoc]);
+  const activeChapterKey = activeTab ? activeKeys[activeTab.chapter] : undefined;
 
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
@@ -237,7 +260,8 @@ export function App() {
     reviewFile,
     s.activeId ? navs.current.get(s.activeId)?.review : undefined,
     meHere,
-    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
+    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : '',
+    activeChapterKey
   );
   const reviewRef = useRef(review);
   reviewRef.current = review;
@@ -283,7 +307,7 @@ export function App() {
     const item = review.items.find((i) => i.id === id);
     if (!tab || !doc || !item) return null;
     const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
-    const target = chapterForNote(texts, item.anchor, tab.chapter);
+    const target = chapterForNote(texts, item.anchor, tab.chapter, chapterKeys(doc).map((k) => k.key));
     if (target === null) return 'That text is no longer in the file, so there is nothing to show.';
     if (target === tab.chapter) {
       pendingNote.current = null;
@@ -317,8 +341,37 @@ export function App() {
   const notesInChapter = useMemo(() => {
     if (!showReview || !multiChapter) return null;
     const flat = flattenMarkdown(chapterText);
-    return new Set(review.items.filter((i) => locateAnchor(flat, i.anchor) !== null).map((i) => i.id));
-  }, [showReview, multiChapter, chapterText, review.items]);
+    return new Set(
+      review.items
+        .filter((i) => (i.anchor.v === 2 && i.anchor.chapter !== undefined && activeKeys.includes(i.anchor.chapter) ? i.anchor.chapter === activeChapterKey : locateAnchor(flat, i.anchor) !== null))
+        .map((i) => i.id)
+    );
+  }, [showReview, multiChapter, chapterText, review.items, activeKeys, activeChapterKey]);
+  // Notes written before notes had a place (chapter, paragraph, offset) are given one the first time their file's chapters are at
+  // hand: by whichever app has them, a reader's own or the author's. It is kept with the note, and does not count as editing it.
+  const placeTried = useRef(new Set<string>());
+  const reviewUpgrade = review.upgrade;
+  useEffect(() => placeTried.current.clear(), [s.project?.path]);
+  useEffect(() => {
+    if (!s.project || !review.all.length) return;
+    const byFile = new Map<string, typeof review.all>();
+    for (const i of review.all) if (i.status !== 'deleted' && !placeTried.current.has(i.id)) byFile.set(i.file, [...(byFile.get(i.file) ?? []), i]);
+    const updates: { id: string; anchor: Anchor }[] = [];
+    for (const [path, doc] of s.docs) {
+      const mine = byFile.get(relativeTo(s.project.path, path));
+      if (!mine) continue;
+      const keys = chapterKeys(doc).map((k) => k.key);
+      const need = mine.filter((i) => !(i.anchor.v === 2 && i.anchor.block && i.anchor.chapter !== undefined && keys.includes(i.anchor.chapter)));
+      if (!need.length) continue;
+      const chapters = doc.chapters.map((c, ci) => ({ key: keys[ci]!, ...flattenMarkdownBlocks(c.raw) }));
+      for (const i of need) {
+        placeTried.current.add(i.id);
+        const anchor = upgradeAnchor(chapters, i.anchor);
+        if (anchor) updates.push({ id: i.id, anchor });
+      }
+    }
+    if (updates.length) void reviewUpgrade(updates);
+  }, [review.all, s.docs, s.project?.path, reviewUpgrade]);
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
   // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
@@ -349,9 +402,10 @@ export function App() {
       let counts: number[] | undefined;
       if (mine && doc) {
         const texts = doc.chapters.map((c) => c.raw);
+        const keys = chapterKeys(doc).map((k) => k.key);
         counts = texts.map(() => 0);
         for (const n of mine) {
-          const at = chapterForNote(texts, n.anchor, -1);
+          const at = chapterForNote(texts, n.anchor, -1, keys);
           if (at !== null) counts[at]++;
         }
       }
@@ -359,12 +413,18 @@ export function App() {
       return counts;
     };
   }, [allNotes, s.docs, s.project?.path]);
+  /** With "Manuscripts only" on (and a project open), the tree is cut down to the files set as manuscripts. */
+  const manuscriptSet = useMemo(() => new Set(s.project ? manuscriptPaths(s.project.meta) : []), [s.project]);
+  const shownRoot = useMemo(() => {
+    if (!s.root || !s.project || !msOnly) return s.root;
+    return keepFiles(s.root, (f) => manuscriptSet.has(relativeTo(s.project!.path, f.path)));
+  }, [s.root, s.project, msOnly, manuscriptSet]);
   const rows = useMemo(
     () =>
-      s.root
-        ? buildRows(s.root, s.expanded, s.docs, filter, s.project ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts, s.project?.meta.stage?.category === 'review')
+      shownRoot
+        ? buildRows(shownRoot, s.expanded, s.docs, filter, s.project ? (file) => s.project!.meta.editedChapters[relativeTo(s.project!.path, file)] ?? [] : null, noteCounts, s.project?.meta.stage?.category === 'review')
         : [],
-    [s.root, s.expanded, s.docs, filter, s.project, noteCounts]
+    [shownRoot, s.expanded, s.docs, filter, s.project, noteCounts]
   );
   const orphan = useMemo(
     () => (s.root ? collectOrphans(s.root).find((o) => !ignoredOrphans.has(o)) : undefined),
@@ -683,6 +743,7 @@ export function App() {
         { label: 'New File Here…', onClick: () => promptNewFile(row.path) },
         { label: 'New Folder Here…', onClick: () => promptNewFolder(row.path) },
         ...(caps.importDocx ? [{ label: 'Import Word Document…', onClick: () => void ws.importDocx(row.path) }] : []),
+        ...(caps.export && s.project ? [{ label: 'Create Omnibus…', onClick: () => setOmnibusOpen(true) }] : []),
         { label: 'Rename…', hint: 'F2', onClick: () => promptRename(row) },
         ...reveal,
         { label: 'Delete Folder…', danger: true, hint: 'Del', onClick: () => deleteRow(row) }
@@ -697,8 +758,12 @@ export function App() {
             { label: 'Book Details…', onClick: () => void editBookDetails(row.path) }
           ];
       const active = !!s.project && s.project.meta.activeManuscript === relativeTo(s.project.path, row.path);
+      const isSet = ws.isManuscript(row.path);
       const manuscriptItems: MenuItem[] = s.project
         ? [
+            isSet
+              ? { label: 'Remove from Manuscripts', onClick: () => void ws.setManuscript(row.path, false) }
+              : { label: 'Set as Manuscript', onClick: () => void ws.setManuscript(row.path, true) },
             active
               ? { label: 'Clear Active Manuscript', onClick: () => void ws.setActiveManuscript(null) }
               : { label: 'Active Manuscript', onClick: () => void ws.setActiveManuscript(row.path) },
@@ -1168,6 +1233,11 @@ export function App() {
               <Icon name="download" /> Export…
             </button>
           )}
+          {caps.export && s.project && window.cadrelWrite.runOmnibus && (
+            <button onClick={() => setOmnibusOpen(true)} title="Put several manuscripts together as one book and export it" aria-label="Create omnibus">
+              <Icon name="pages" /> Omnibus…
+            </button>
+          )}
           {caps.importDocx && (
             <button
               onClick={() => void ws.importDocx(dirFor(null))}
@@ -1213,10 +1283,15 @@ export function App() {
                 }
               }}
             />
+            {s.project && (
+              <label className="ms-only" title="Show only the files set as manuscripts (right-click a file and choose Set as Manuscript)">
+                <input type="checkbox" checked={msOnly} onChange={(e) => chooseMsOnly(e.target.checked)} /> Manuscripts only
+              </label>
+            )}
             {s.root.children.length === 0 ? (
               <p className="muted pad">This folder is empty. Use “＋ File” or “＋ Folder” to add something.</p>
             ) : rows.length === 0 ? (
-              <p className="muted pad">No files match “{filter}”.</p>
+              <p className="muted pad">{msOnly && s.project && !filter ? 'No files are set as manuscripts yet. Right-click a file and choose “Set as Manuscript”, or turn off Manuscripts only.' : `No files match “${filter}”.`}</p>
             ) : (
               <Tree
                 rows={rows}
@@ -1232,6 +1307,7 @@ export function App() {
                 onDelete={deleteRow}
                 onMoveChapter={(r, d) => void moveRow(r, d)}
                 isManuscript={(r) => r.kind === 'file' && !!s.project?.meta.activeManuscript && relativeTo(s.project.path, r.path) === s.project.meta.activeManuscript}
+                isSetManuscript={(r) => r.kind === 'file' && !!s.project && manuscriptSet.has(relativeTo(s.project.path, r.path))}
               />
             )}
           </>
@@ -1576,6 +1652,24 @@ export function App() {
           onEditDetails={(f) => setBookFile(f)}
           detailsVersion={detailsVersion}
           onClose={() => setExportFile(null)}
+        />
+      )}
+      {omnibusOpen && s.project && s.root && (
+        <OmnibusDialog
+          projectPath={s.project.path}
+          projectName={s.project.meta.name}
+          manuscripts={[...manuscriptSet].filter((m) => fileNodes(s.root!).some((f) => relativeTo(s.project!.path, f.path) === m))}
+          otherFiles={fileNodes(s.root).filter((f) => !f.html && /\.(md|markdown)$/i.test(f.name) && !manuscriptSet.has(relativeTo(s.project!.path, f.path))).map((f) => relativeTo(s.project!.path, f.path))}
+          saved={s.project.meta.omnibus}
+          dirtyFiles={dirtyFiles}
+          saveFile={async (f) => {
+            const t = ws.tabForFile(f);
+            return t ? ws.save(t.id) : true;
+          }}
+          onEditDetails={(f) => void editBookDetails(f)}
+          detailsVersion={detailsVersion}
+          onSaveRecipe={(r) => void ws.saveOmnibus(r)}
+          onClose={() => setOmnibusOpen(false)}
         />
       )}
       {bookFile && (

@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useScope } from './useScope';
-import type { ArtBriefRow, ArtCandidate, AssetRow, AssetView, BriefView, ConceptRow, FeedbackRow, PreviewView, ArtState, StudioState } from '../shared/api';
+import { CoverDesigner } from './cover/CoverDesigner';
+import { CreateAssetMenu } from './cover/CreateAssetMenu';
+import type { CoverKind } from '../shared/cover/doc';
+import type { CoverContext, CoverDesignRow, ArtBriefRow, ArtCandidate, AssetRow, AssetView, BriefView, ConceptRow, FeedbackRow, PreviewView, ArtState, StudioState } from '../shared/api';
 
 const art = window.cadrel.art;
 type Ready = Extract<ArtState, { available: true }>;
@@ -32,10 +35,17 @@ export function ArtPage({ studio }: Props) {
   const [tab, setTab] = useState<'assets' | 'briefs'>('assets');
   const [open, setOpen] = useState<{ kind: 'asset' | 'brief'; id: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const reload = useCallback(() => art.state(project).then((s) => (setState(s), setError(null)), (e) => setError(message(e))), [project]);
+  /** What the Cover Designer is offered for this project, and the designer itself when it is open. */
+  const [cover, setCover] = useState<CoverContext | null>(null);
+  const [designer, setDesigner] = useState<{ kind: CoverKind; openPath: string | null } | null>(null);
+  const reload = useCallback(() => {
+    void Promise.resolve(window.cadrel.cover?.context(project)).then((c) => setCover(c ?? null), () => setCover(null));
+    return art.state(project).then((s) => (setState(s), setError(null)), (e) => setError(message(e)));
+  }, [project]);
   useEffect(() => {
     setState(null);
     setOpen(null);
+    setDesigner(null);
   }, [project]);
   useEffect(() => {
     if (scope) void reload();
@@ -56,6 +66,21 @@ export function ArtPage({ studio }: Props) {
       return false;
     }
   };
+  const designFor = (assetPath: string): CoverDesignRow | undefined => (cover?.available ? cover.designs.find((d) => d.imagePath === assetPath) : undefined);
+  if (designer && cover?.available) {
+    return (
+      <CoverDesigner
+        projectId={cover.project.id}
+        projectName={cover.project.name}
+        kind={designer.kind}
+        openPath={designer.openPath}
+        fields={cover.fields}
+        pictures={cover.pictures}
+        may={cover.may}
+        onClose={(saved) => { setDesigner(null); if (saved) void reload(); }}
+      />
+    );
+  }
   return (
     <div className="art">
       <div className="row">
@@ -66,7 +91,7 @@ export function ArtPage({ studio }: Props) {
       <p className="muted small">Covers and other art as the Studio keeps them: which version is approved, under what licence, and where it is used. It follows the project you are in. Approving names one exact version; a new version is not approved until someone approves it.</p>
       {error && <div className="banner error" role="alert">{error}</div>}
       {open?.kind === 'asset' ? (
-        <AssetDetail id={open.id} onBack={() => (setOpen(null), void reload())} act={act} />
+        <AssetDetail id={open.id} onBack={() => (setOpen(null), void reload())} act={act} designFor={designFor} onEditDesign={(p) => setDesigner({ kind: 'ebook', openPath: p })} />
       ) : open?.kind === 'brief' ? (
         <BriefDetail id={open.id} onBack={() => (setOpen(null), void reload())} act={act} />
       ) : (
@@ -76,7 +101,7 @@ export function ArtPage({ studio }: Props) {
               <button key={k} type="button" role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{label}</button>
             ))}
           </div>
-          {tab === 'assets' && <AssetsTab s={state} act={act} onOpen={(id) => setOpen({ kind: 'asset', id })} />}
+          {tab === 'assets' && <AssetsTab s={state} act={act} onOpen={(id) => setOpen({ kind: 'asset', id })} canDesign={!!cover?.available && cover.may.write} onCreate={(kind) => setDesigner({ kind, openPath: null })} designFor={designFor} onEditDesign={(p) => setDesigner({ kind: 'ebook', openPath: p })} />}
           {tab === 'briefs' && <BriefsTab s={state} act={act} onOpen={(id) => setOpen({ kind: 'brief', id })} />}
         </>
       )}
@@ -86,7 +111,7 @@ export function ArtPage({ studio }: Props) {
 
 // ---- assets ---------------------------------------------------------------------------------------------------------------------
 
-function AssetsTab({ s, act, onOpen }: { s: Ready; act: (j: () => Promise<unknown>) => Promise<boolean>; onOpen: (id: string) => void }) {
+function AssetsTab({ s, act, onOpen, canDesign, onCreate, designFor, onEditDesign }: { s: Ready; act: (j: () => Promise<unknown>) => Promise<boolean>; onOpen: (id: string) => void; canDesign: boolean; onCreate: (kind: CoverKind) => void; designFor: (assetPath: string) => CoverDesignRow | undefined; onEditDesign: (path: string) => void }) {
   return (
     <>
       {s.licencesDue.length > 0 && (
@@ -99,7 +124,12 @@ function AssetsTab({ s, act, onOpen }: { s: Ready; act: (j: () => Promise<unknow
           </ul>
         </section>
       )}
-      {s.may.write && <AddAsset s={s} act={act} />}
+      {s.may.write && (
+        <div className="row" aria-label="Make an asset">
+          {canDesign && <CreateAssetMenu onCreate={onCreate} />}
+          <AddAsset s={s} act={act} />
+        </div>
+      )}
       {s.assets.length === 0 ? (
         <section className="card"><p className="muted">No assets in {s.project.name} yet.{s.may.write && s.candidates.length > 0 ? ' Add one from the files above.' : ''}</p></section>
       ) : (
@@ -114,6 +144,7 @@ function AssetsTab({ s, act, onOpen }: { s: Ready; act: (j: () => Promise<unknow
                 {a.needUpdate > 0 && <span className="chip warn">{plural(a.needUpdate, 'use')} to update</span>}
                 {a.openFeedback > 0 && <span className="chip">{plural(a.openFeedback, 'open comment')}</span>}
                 {licenceText(a) && <span className={`chip ${a.licenceExpired || (a.licenceDaysLeft ?? 999) <= 60 ? 'warn' : ''}`}>{licenceText(a)}</span>}
+                {designFor(a.path) && <button type="button" className="link" onClick={() => onEditDesign(designFor(a.path)!.path)}>Edit design</button>}
                 <span className="muted small"> {a.projectName !== '' ? `· ${a.projectName}` : ''} · {a.path}</span>
               </li>
             ))}
@@ -141,7 +172,7 @@ function AddAsset({ s, act }: { s: Ready; act: (j: () => Promise<unknown>) => Pr
   );
 }
 
-function AssetDetail({ id, onBack, act }: { id: string; onBack: () => void; act: (j: () => Promise<unknown>) => Promise<boolean> }) {
+function AssetDetail({ id, onBack, act, designFor, onEditDesign }: { id: string; onBack: () => void; act: (j: () => Promise<unknown>) => Promise<boolean>; designFor: (assetPath: string) => CoverDesignRow | undefined; onEditDesign: (path: string) => void }) {
   const [v, setV] = useState<AssetView | null>(null);
   const [shown, setShown] = useState<number | null>(null);
   const [pin, setPin] = useState<Region | null>(null);
@@ -152,10 +183,10 @@ function AssetDetail({ id, onBack, act }: { id: string; onBack: () => void; act:
   const run = async (job: () => Promise<unknown>) => {
     if (await act(job)) await reload();
   };
-  return <AssetBody v={v} onBack={onBack} run={run} shown={shown} setShown={setShown} pin={pin} setPin={setPin} />;
+  return <AssetBody v={v} onBack={onBack} run={run} shown={shown} setShown={setShown} pin={pin} setPin={setPin} design={designFor(v.asset.path)} onEditDesign={onEditDesign} />;
 }
 
-function AssetBody({ v, onBack, run, shown, setShown, pin, setPin }: { v: AssetReady; onBack: () => void; run: (j: () => Promise<unknown>) => Promise<void>; shown: number | null; setShown: (n: number) => void; pin: Region | null; setPin: (r: Region | null) => void }) {
+function AssetBody({ v, onBack, run, shown, setShown, pin, setPin, design, onEditDesign }: { design?: CoverDesignRow; onEditDesign: (path: string) => void; v: AssetReady; onBack: () => void; run: (j: () => Promise<unknown>) => Promise<void>; shown: number | null; setShown: (n: number) => void; pin: Region | null; setPin: (r: Region | null) => void }) {
   const a = v.asset;
   const version = shown ?? v.versions[0]?.n ?? a.latestVersion;
   const standing = a.approved.map((r) => r.version);
@@ -167,6 +198,7 @@ function AssetBody({ v, onBack, run, shown, setShown, pin, setPin }: { v: AssetR
         {licenceText(a) && <span className={`chip ${a.licenceExpired || (a.licenceDaysLeft ?? 999) <= 60 ? 'warn' : ''}`}>{licenceText(a)}</span>}
       </div>
       <p className="muted small">{a.path}</p>
+      {design && v.may.write && <p><button type="button" onClick={() => onEditDesign(design.path)}>Edit design</button> <span className="muted small">Opens the cover's design. Saving makes a new version of this asset; it is not approved until someone approves it.</span></p>}
       <div className="grid-2">
         <section className="card" aria-label="Picture">
           <div className="row"><label className="small">Version <select aria-label="Version" value={version} onChange={(ev) => setShown(Number(ev.target.value))}>{v.versions.map((x) => <option key={x.n} value={x.n}>{x.n}{x.approved ? ' (approved)' : ''}</option>)}</select></label></div>

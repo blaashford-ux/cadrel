@@ -445,3 +445,9 @@ button.stat { background: none; border: 0; padding: 0; cursor: pointer; }
 .desk-bar-row .bv { flex: 0 0 2.5em; text-align: right; }
 .plain li.desk-note { display: block; }
 .desk-chapters .plain li { display: block; }
+
+/* the Files page's right-click menu */
+.ctx-backdrop { position: fixed; inset: 0; z-index: 60; }
+.ctx-menu { position: fixed; margin: 0; padding: 4px; list-style: none; background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow-pop); min-width: 190px; }
+.ctx-menu button { display: block; width: 100%; text-align: left; background: none; padding: 6px 10px; }
+.ctx-menu button:hover:not(:disabled) { background: var(--hover); }

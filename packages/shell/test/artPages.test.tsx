@@ -12,6 +12,7 @@ const scopeOf = (project: string | null, book: string | null = null) => ({ proje
 const bridge = {
   art: { state: vi.fn(), asset: vi.fn(), brief: vi.fn(), call: vi.fn(), preview: vi.fn() },
   preflight: { state: vi.fn(), run: vi.fn(), get: vi.fn(), waive: vi.fn() },
+  cover: { context: vi.fn(), open: vi.fn(), image: vi.fn(), importPicture: vi.fn(), save: vi.fn(), fonts: vi.fn() },
   scope: { get: vi.fn(async () => scopeOf('s')), onChange: (f: (s: unknown) => void) => void scopeListeners.push(f), set: vi.fn(), openMenu: vi.fn() }
 };
 let ArtPage: typeof import('../src/renderer/Art').ArtPage;
@@ -26,7 +27,9 @@ beforeAll(async () => {
   PreflightPage = (await import('../src/renderer/Preflight')).PreflightPage;
 });
 beforeEach(() => {
-  for (const m of [...Object.values(bridge.art), ...Object.values(bridge.preflight)]) m.mockReset();
+  for (const m of [...Object.values(bridge.art), ...Object.values(bridge.preflight), ...Object.values(bridge.cover)]) m.mockReset();
+  bridge.cover.context.mockResolvedValue({ available: false, reason: 'No designer in this test.' });
+  bridge.cover.fonts.mockResolvedValue([]);
   bridge.art.preview.mockResolvedValue({ kind: 'none', reason: 'No picture in this test.' });
   scopeListeners.forEach((f) => f(scopeOf('s')));
   host = document.createElement('div');
@@ -61,6 +64,48 @@ const drawArt = async (s: ArtState) => {
   await act(async () => root.render(<ArtPage studio={null} />));
   await act(async () => undefined);
 };
+
+describe('the Art page and the Cover Designer', () => {
+  const ctx = (o: object = {}) => ({ available: true, project: { id: 's', name: 'Dragon Rider' }, may: { write: true }, pictures: [], designs: [{ fileId: 'd1', path: 'Art/Front.cadrel-cover.json', imagePath: 'Book Four/Art/cover.psd', version: 2, name: 'Front' }], fields: { title: '', series: 'Dragon Rider', author: '' }, ...o });
+  it('has Create asset with Cover under it, and eBook and Paperback under that, and each opens the designer for that kind', async () => {
+    bridge.cover.context.mockResolvedValue(ctx());
+    await drawArt(state());
+    await click(byText(/^Create asset/));
+    expect([...host.querySelectorAll('[role=menuitem]')].map((e) => e.textContent!.trim())).toEqual(['Cover ▸']);
+    await click(byText(/^Cover/));
+    await click(byText('Paperback'));
+    expect(host.querySelector('[aria-label="Cover Designer"]')).toBeTruthy();
+    expect(host.textContent).toContain('Paperback wrap');
+    expect(host.textContent).toContain('Dragon Rider');
+    // back to Art
+    await click(byText(/Back to Art/));
+    expect(host.querySelector('[aria-label="Cover Designer"]')).toBeNull();
+    expect(host.textContent).toContain('Assets (1)');
+  });
+  it('is not offered to a role that may not write, nor when the designer is not available', async () => {
+    bridge.cover.context.mockResolvedValue(ctx({ may: { write: false } }));
+    await drawArt(state());
+    expect(byText(/^Create asset/)).toBeUndefined();
+    await act(async () => root.render(<div />));
+    bridge.cover.context.mockResolvedValue({ available: false, reason: 'No.' });
+    await drawArt(state());
+    expect(byText(/^Create asset/)).toBeUndefined();
+  });
+  it('shows Edit design on a cover that has a design, in the list and on its page, and opens it', async () => {
+    bridge.cover.context.mockResolvedValue(ctx());
+    bridge.cover.open.mockResolvedValue({ text: JSON.stringify({ format: 1, kind: 'ebook', layers: [] }), path: 'Art/Front.cadrel-cover.json', fileId: 'd1', version: 2, assetId: 'a1', pictures: [] });
+    await drawArt(state());
+    await click(byText('Edit design'));
+    await act(async () => undefined);
+    expect(bridge.cover.open).toHaveBeenCalledWith('Art/Front.cadrel-cover.json');
+    expect(host.querySelector('.cv-title')!.textContent).toBe('Front');
+  });
+  it('does not show Edit design on a cover with no design', async () => {
+    bridge.cover.context.mockResolvedValue(ctx({ designs: [] }));
+    await drawArt(state());
+    expect(byText('Edit design')).toBeUndefined();
+  });
+});
 
 describe('the Art page', () => {
   it('shows the assets of the project in view, with the approved version, a newer one that is not approved, and the licence', async () => {

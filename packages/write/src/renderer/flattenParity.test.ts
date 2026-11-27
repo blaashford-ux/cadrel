@@ -3,7 +3,7 @@ import { Editor, defaultValueCtx, parserCtx } from '@milkdown/kit/core';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import { gfm } from '@milkdown/kit/preset/gfm';
 import { describe, expect, it } from 'vitest';
-import { flattenMarkdown } from '../shared/agent/flatten';
+import { flattenMarkdown, flattenMarkdownBlocks } from '../shared/agent/flatten';
 import { alignPlugins } from './alignPlugin';
 import { flatten } from './reviewPlugin';
 
@@ -23,20 +23,31 @@ const SAMPLES: Record<string, string> = {
   preamble: 'Just text before any heading.\n\nMore.\n',
 };
 
-async function viaEditor(md: string): Promise<string> {
+async function flatViaEditor(md: string) {
   const editor = await Editor.make()
     .config((ctx) => ctx.set(defaultValueCtx, md))
     .use(commonmark)
     .use(gfm)
     .use(alignPlugins)
     .create();
-  return flatten(editor.action((ctx) => ctx.get(parserCtx)(md))).text;
+  return flatten(editor.action((ctx) => ctx.get(parserCtx)(md)));
 }
+const viaEditor = async (md: string) => (await flatViaEditor(md)).text;
 
 describe('the AI tools flatten Markdown the way the editor does', () => {
   for (const [name, md] of Object.entries(SAMPLES)) {
     it(name, async () => {
       expect(flattenMarkdown(md)).toBe(await viaEditor(md));
+    });
+  }
+});
+
+// A note's place is the number of its paragraph, so the paragraphs must be numbered and measured the same way in both.
+describe('the paragraphs of a chapter are the editor\'s paragraphs', () => {
+  for (const [name, md] of Object.entries(SAMPLES)) {
+    it(name, async () => {
+      const editor = await flatViaEditor(md);
+      expect(flattenMarkdownBlocks(md).blocks).toEqual(editor.segments.map((s) => ({ offset: s.offset, length: s.length })));
     });
   }
 });

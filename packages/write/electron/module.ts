@@ -7,7 +7,8 @@ import { DraftStore } from './drafts';
 import { readWithStamp, statStamp, writeBytesAtomic, writeFileAtomic } from './files';
 import { sanitizeBookDetails } from '../src/shared/export/model';
 import { makeExportDeps, pdfResources, setAssetsDir } from './export/deps';
-import { planExport, runExport } from './export/run';
+import { omnibusBooks, planExport, planOmnibus, runExport, runOmnibus } from './export/run';
+import { sanitizeOmnibusRecipe } from '../src/shared/export/omnibus';
 import { loadDetails, renameSidecar, saveDetails, setMarked, existingSidecar } from './export/sidecar';
 import { createFile, createFolder, renameNode } from './fsops';
 import { importDocxFiles } from './importDocx';
@@ -556,6 +557,38 @@ function registerIpc(): void {
     exportAbort = new AbortController();
     try {
       const result = await runExport(file, exportDeps(), (prog) => e.sender.send('export:progress', prog), exportAbort.signal);
+      result.outputs.forEach((o) => exportedFiles.add(path.resolve(o.path)));
+      return result;
+    } catch (err) {
+      return { ok: false, errors: [err instanceof Error ? err.message : String(err)], warnings: [], outputs: [] };
+    } finally {
+      exportAbort = null;
+    }
+  });
+  // --- an omnibus: several manuscripts of one project as one book ---
+  /** A project folder inside the root, and the recipe with only manuscripts that are Markdown files in it. */
+  const omnibusArgs = (project: string, raw: unknown) => {
+    const dir = inRoot(project);
+    const recipe = sanitizeOmnibusRecipe(raw, (p) => p !== '' && !p.startsWith('/') && !/^[A-Za-z]:/.test(p) && p.split('/').every((x) => x !== '' && x !== '.' && x !== '..'));
+    if (!recipe) throw new Error('That is not an omnibus.');
+    for (const f of recipe.files) mdPath(path.join(dir, ...f.split('/')));
+    return { dir, recipe };
+  };
+  handle('omnibus:books', (_e, project: string, files: unknown) => {
+    const dir = inRoot(project);
+    const rels = (Array.isArray(files) ? files : []).filter((f): f is string => typeof f === 'string' && f !== '' && !f.startsWith('/') && f.split('/').every((x) => x !== '' && x !== '.' && x !== '..') && /\.(md|markdown)$/i.test(f));
+    return omnibusBooks(dir, rels, exportDeps());
+  });
+  handle('omnibus:plan', (_e, project: string, raw: unknown) => {
+    const { dir, recipe } = omnibusArgs(project, raw);
+    return planOmnibus(dir, recipe, exportDeps());
+  });
+  handle('omnibus:run', async (e, project: string, raw: unknown) => {
+    if (exportAbort) return { ok: false, errors: ['Another export is already running.'], warnings: [], outputs: [] };
+    exportAbort = new AbortController();
+    try {
+      const { dir, recipe } = omnibusArgs(project, raw);
+      const result = await runOmnibus(dir, recipe, exportDeps(), (prog) => e.sender.send('export:progress', prog), exportAbort.signal);
       result.outputs.forEach((o) => exportedFiles.add(path.resolve(o.path)));
       return result;
     } catch (err) {

@@ -89,6 +89,9 @@ const api: WriteApi = {
   pickCoverImage: () => ipcRenderer.invoke('export:pickCover'),
   planExport: (file, unsaved) => ipcRenderer.invoke('export:plan', file, unsaved),
   runExport: (file) => ipcRenderer.invoke('export:run', file),
+  omnibusBooks: (project, files) => ipcRenderer.invoke('omnibus:books', project, files),
+  planOmnibus: (project, recipe) => ipcRenderer.invoke('omnibus:plan', project, recipe),
+  runOmnibus: (project, recipe) => ipcRenderer.invoke('omnibus:run', project, recipe),
   cancelExport: () => ipcRenderer.send('export:cancel'),
   onExportProgress: (cb) => {
     const handler = (_e: unknown, p: ExportProgress) => cb(p);

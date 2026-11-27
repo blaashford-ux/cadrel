@@ -43,6 +43,8 @@ const polyfill = path.join(path.dirname(createRequire(path.join(write, 'package.
 fs.cpSync(path.join(write, 'assets'), path.join(dist, 'assets'), { recursive: true, filter: (src) => !src.includes(`${path.sep}vendor`) });
 // ...but the window and installer carry Cadrel's icon, not Write's.
 fs.copyFileSync(path.join(root, 'build', 'icon.png'), path.join(dist, 'assets', 'icon.png'));
+// the Cover Designer's starter fonts (docs/COVER-DESIGNER-PLAN.md), each family with its licence
+fs.cpSync(path.join(root, 'assets', 'cover-fonts'), path.join(dist, 'assets', 'cover-fonts'), { recursive: true });
 fs.mkdirSync(path.join(dist, 'assets', 'vendor'), { recursive: true });
 fs.copyFileSync(polyfill, path.join(dist, 'assets', 'vendor', 'paged.polyfill.js'));
 

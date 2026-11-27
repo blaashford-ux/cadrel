@@ -1,7 +1,8 @@
 import type { Node as PmNode } from '@milkdown/kit/prose/model';
 import { Plugin, PluginKey, TextSelection, type Transaction } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
-import { locateAnchor, makeAnchor, type Anchor } from '../shared/review/comments';
+import { score, type Anchor } from '../shared/review/comments';
+import { makeAnchorV2, placeAnchor, type Block } from '../shared/review/anchorV2';
 
 /** A note as the editor needs it: where to draw it and how. */
 export interface NoteMark {
@@ -10,23 +11,34 @@ export interface NoteMark {
   kind: 'comment' | 'suggestion';
 }
 
-/** What the open chapter says about each note: found (drawn) or lost (its text was changed away). */
+/**
+ * What the open chapter says about each note: `detached` (not in this chapter, or its place could not be found) and `pinned` (its text
+ * changed, or it could not be told which paragraph, so it is shown at the start of its paragraph).
+ */
 export interface NoteStatus {
   detached: string[];
+  pinned: string[];
 }
 
-/** A note whose text the user edited: its new anchor, or `gone` when all of its text was deleted (it stays at that spot). */
+/**
+ * A note whose place changed: its new anchor, or `gone` when all of its text was deleted (it stays at that spot). `place` is true when
+ * only where it is changed (the text it quotes is as it was), which is kept up to date without counting as the note having been edited.
+ */
 export interface NoteChange {
   id: string;
   anchor: Anchor;
   gone: boolean;
+  place?: boolean;
 }
 
 export interface ReviewApi {
   /** Called (after each edit) with the notes whose highlighted text changed. */
   onChanges(cb: ((changes: NoteChange[]) => void) | null): void;
-  /** Draws these notes and reports which ones can no longer be found in the text. */
-  setNotes(notes: NoteMark[]): NoteStatus;
+  /**
+   * Draws these notes, the ones in the chapter whose key is `chapter`, and reports which ones are not found or are only pinned. A note
+   * belongs to the chapter it was made in: it is never looked for in another. Without a chapter, notes are looked for in the one text.
+   */
+  setNotes(notes: NoteMark[], chapter?: string): NoteStatus;
   /** The current selection as an anchor, or null when nothing is selected. `oneBlock` is false if it crosses paragraphs. */
   selection(): { anchor: Anchor; oneBlock: boolean } | null;
   /**
@@ -83,9 +95,18 @@ export function posToOffset(flat: Flat, pos: number): number | null {
   return s ? s.offset + (pos - s.pos) : null;
 }
 
+interface Pin {
+  /** Document position of the start of the note's paragraph. */
+  pos: number;
+  why: 'changed' | 'ambiguous' | 'approx' | 'gone';
+}
+
 interface State {
   notes: NoteMark[];
   found: Map<string, { from: number; to: number }>;
+  /** Notes kept at the start of their paragraph, because their text changed or they could not be placed exactly. */
+  pinned: Map<string, Pin>;
+  chapter: string | undefined;
   active: string | null;
   decos: DecorationSet;
   /** Notes the last edit changed; reported to the app by the plugin view. */
@@ -94,39 +115,77 @@ interface State {
 
 interface Meta {
   notes?: NoteMark[];
+  chapter?: string | null;
   active?: string | null;
 }
 
 export const reviewKey = new PluginKey<State>('cadrel-review');
 
-function compute(doc: PmNode, notes: NoteMark[], active: string | null): State {
-  const flat = flatten(doc);
-  const found = new Map<string, { from: number; to: number }>();
-  const decos: Decoration[] = [];
-  for (const n of notes) {
-    const at = locateAnchor(flat.text, n.anchor);
-    if (!at) continue;
-    const from = offsetToPos(flat, at.start, 'start');
-    const to = offsetToPos(flat, at.end, 'end');
-    if (from === null || to === null || to <= from) continue;
-    found.set(n.id, { from, to });
-    decos.push(
-      Decoration.inline(from, to, {
-        class: `review-mark review-${n.kind}${n.id === active ? ' review-active' : ''}`,
-        'data-note': n.id
-      })
-    );
-  }
-  return { notes, found, active, decos: DecorationSet.create(doc, decos), changes: [] };
+const blocksOf = (flat: Flat): Block[] => flat.segments.map((s) => ({ offset: s.offset, length: s.length }));
+
+/** The same place, as far as a note's anchor says. */
+const samePlace = (a: Anchor, b: Anchor) =>
+  a.chapter === b.chapter && a.block?.i === b.block?.i && a.block?.off === b.block?.off && a.block?.h === b.block?.h && a.endBlock?.i === b.endBlock?.i && a.endBlock?.off === b.endBlock?.off;
+
+/**
+ * Where a note is in this chapter. A note with a place (v2) is found by it. An old one (v1) is drawn only where it was made,
+ * with the text around it as it was, so it can never be put on another word; `upgradeAnchor` gives it a place when the file's
+ * chapters are at hand.
+ */
+function resolve(flat: Flat, n: NoteMark, chapter: string | undefined): ReturnType<typeof placeAnchor> {
+  const p = placeAnchor(flat.text, blocksOf(flat), n.anchor, chapter);
+  if (p.kind !== 'unplaced') return p;
+  const a = n.anchor;
+  if (a.gone || !a.quote || !flat.text.startsWith(a.quote, a.start) || score(flat.text, a, a.start) !== 2) return p;
+  return { kind: 'at', start: a.start, end: a.start + a.quote.length, how: 'exact' };
 }
 
-function decorate(doc: PmNode, notes: NoteMark[], found: Map<string, { from: number; to: number }>, active: string | null): DecorationSet {
+const noteClass = (n: NoteMark, active: string | null, base: string) => `${base} review-${n.kind}${n.id === active ? ' review-active' : ''}`;
+
+function pinWidget(n: NoteMark, active: string | null, why: Pin['why']): HTMLElement {
+  const el = document.createElement('span');
+  el.className = noteClass(n, active, 'review-pin');
+  el.setAttribute('data-note', n.id);
+  el.setAttribute('contenteditable', 'false');
+  el.title = why === 'gone' ? 'The text this note was about was deleted' : why === 'approx' ? 'This note’s exact place is not certain' : 'The text this note was about has changed';
+  return el;
+}
+
+function decorate(doc: PmNode, notes: NoteMark[], found: Map<string, { from: number; to: number }>, pinned: Map<string, Pin>, active: string | null): DecorationSet {
   const decos: Decoration[] = [];
   for (const n of notes) {
     const r = found.get(n.id);
-    if (r) decos.push(Decoration.inline(r.from, r.to, { class: `review-mark review-${n.kind}${n.id === active ? ' review-active' : ''}`, 'data-note': n.id }));
+    if (r) decos.push(Decoration.inline(r.from, r.to, { class: noteClass(n, active, 'review-mark'), 'data-note': n.id }));
+    const pin = pinned.get(n.id);
+    if (pin && pin.pos <= doc.content.size) decos.push(Decoration.widget(pin.pos, () => pinWidget(n, active, pin.why), { side: -1, key: `pin-${n.id}-${n.id === active ? 'a' : ''}-${pin.why}` }));
   }
   return DecorationSet.create(doc, decos);
+}
+
+function compute(doc: PmNode, notes: NoteMark[], active: string | null, chapter: string | undefined): State {
+  const flat = flatten(doc);
+  const found = new Map<string, { from: number; to: number }>();
+  const pinned = new Map<string, Pin>();
+  const changes: NoteChange[] = [];
+  const blocks = blocksOf(flat);
+  for (const n of notes) {
+    const p = resolve(flat, n, chapter);
+    if (p.kind === 'at') {
+      const from = offsetToPos(flat, p.start, 'start');
+      const to = offsetToPos(flat, p.end, 'end');
+      if (from === null || to === null || to <= from) continue;
+      found.set(n.id, { from, to });
+      // found by a way other than its own place: keep the place up to date, so the next time it is found at once
+      if (p.how !== 'exact') {
+        const anchor = makeAnchorV2(flat.text, blocks, p.start, p.end, chapter);
+        if (anchor.v === 2 && !samePlace(anchor, n.anchor)) changes.push({ id: n.id, anchor: { ...n.anchor, ...anchor, quote: n.anchor.quote }, gone: false, place: true });
+      }
+    } else if (p.kind === 'pinned') {
+      const pos = offsetToPos(flat, p.at, 'start');
+      if (pos !== null) pinned.set(n.id, { pos, why: p.why });
+    }
+  }
+  return { notes, found, pinned, chapter, active, decos: decorate(doc, notes, found, pinned, active), changes };
 }
 
 /** True when a transaction swaps out the whole document (a chapter loaded), rather than editing inside it. */
@@ -140,10 +199,14 @@ function replacesAll(tr: Transaction): boolean {
 /** Follows the notes through an edit, so changing a note's text changes the note rather than losing it. */
 function track(tr: Transaction, prev: State, doc: PmNode): State {
   const flat = flatten(doc);
+  const blocks = blocksOf(flat);
   const found = new Map<string, { from: number; to: number }>();
+  const pinned = new Map<string, Pin>();
   const changes: NoteChange[] = [];
   for (const n of prev.notes) {
     const r = prev.found.get(n.id);
+    const pin = prev.pinned.get(n.id);
+    if (pin) pinned.set(n.id, { ...pin, pos: Math.min(tr.mapping.map(pin.pos, -1), doc.content.size) });
     if (!r) continue;
     const from = tr.mapping.map(r.from, 1);
     const to = tr.mapping.map(r.to, -1);
@@ -151,13 +214,17 @@ function track(tr: Transaction, prev: State, doc: PmNode): State {
       found.set(n.id, { from, to });
       const a = posToOffset(flat, from);
       const b = posToOffset(flat, to);
-      if (a !== null && b !== null && flat.text.slice(a, b) !== n.anchor.quote) changes.push({ id: n.id, anchor: makeAnchor(flat.text, a, b), gone: false });
+      if (a !== null && b !== null) {
+        const anchor = makeAnchorV2(flat.text, blocks, a, b, prev.chapter);
+        if (flat.text.slice(a, b) !== n.anchor.quote) changes.push({ id: n.id, anchor, gone: false });
+        else if (anchor.v === 2 && !samePlace(anchor, n.anchor)) changes.push({ id: n.id, anchor: { ...n.anchor, ...anchor, quote: n.anchor.quote }, gone: false, place: true });
+      }
     } else {
       const at = posToOffset(flat, Math.min(from, doc.content.size));
-      if (at !== null) changes.push({ id: n.id, anchor: makeAnchor(flat.text, at, at), gone: true });
+      if (at !== null) changes.push({ id: n.id, anchor: makeAnchorV2(flat.text, blocks, at, at, prev.chapter), gone: true });
     }
   }
-  return { ...prev, found, decos: decorate(doc, prev.notes, found, prev.active), changes };
+  return { ...prev, found, pinned, decos: decorate(doc, prev.notes, found, pinned, prev.active), changes };
 }
 
 let clickHandler: ((id: string) => void) | null = null;
@@ -166,12 +233,17 @@ let changeHandler: ((changes: NoteChange[]) => void) | null = null;
 export const reviewPlugin = new Plugin<State>({
   key: reviewKey,
   state: {
-    init: () => ({ notes: [], found: new Map(), active: null, decos: DecorationSet.empty, changes: [] }),
+    init: () => ({ notes: [], found: new Map(), pinned: new Map(), chapter: undefined, active: null, decos: DecorationSet.empty, changes: [] }),
     apply(tr, prev, _old, next) {
       const meta = tr.getMeta(reviewKey) as Meta | undefined;
       if (!meta && !tr.docChanged) return prev.changes.length ? { ...prev, changes: [] } : prev;
       if (!meta && !replacesAll(tr)) return track(tr, prev, next.doc);
-      return compute(next.doc, meta?.notes ?? prev.notes, meta && 'active' in meta ? (meta.active ?? null) : prev.active);
+      return compute(
+        next.doc,
+        meta?.notes ?? prev.notes,
+        meta && 'active' in meta ? (meta.active ?? null) : prev.active,
+        meta && 'chapter' in meta ? (meta.chapter ?? undefined) : prev.chapter
+      );
     }
   },
   view: () => ({
@@ -196,12 +268,15 @@ const stateOf = (view: EditorView) => reviewKey.getState(view.state)!;
 /** The review operations for one ProseMirror view. */
 export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
   return {
-    setNotes(notes) {
+    setNotes(notes, chapter) {
       const view = getView();
-      if (!view) return { detached: [] };
-      view.dispatch(view.state.tr.setMeta(reviewKey, { notes }));
-      const { found } = stateOf(view);
-      return { detached: notes.filter((n) => !found.has(n.id)).map((n) => n.id) };
+      if (!view) return { detached: [], pinned: [] };
+      view.dispatch(view.state.tr.setMeta(reviewKey, { notes, chapter: chapter ?? null }));
+      const { found, pinned } = stateOf(view);
+      return {
+        detached: notes.filter((n) => !found.has(n.id) && !pinned.has(n.id)).map((n) => n.id),
+        pinned: notes.filter((n) => pinned.has(n.id)).map((n) => n.id)
+      };
     },
 
     selection() {
@@ -214,7 +289,7 @@ export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
       const b = posToOffset(flat, to);
       if (a === null || b === null || b <= a || !flat.text.slice(a, b).trim()) return null; // nothing but blank space
       return {
-        anchor: makeAnchor(flat.text, a, b),
+        anchor: makeAnchorV2(flat.text, blocksOf(flat), a, b, stateOf(view).chapter),
         oneBlock: !flat.text.slice(a, b).includes('\n')
       };
     },
@@ -238,7 +313,9 @@ export function reviewApiFor(getView: () => EditorView | null): ReviewApi {
     reveal(id, scroll = true) {
       const view = getView();
       if (!view) return false;
-      const hit = stateOf(view).found.get(id);
+      const st = stateOf(view);
+      const pin = st.pinned.get(id);
+      const hit = st.found.get(id) ?? (pin ? { from: pin.pos, to: pin.pos } : undefined);
       view.dispatch(view.state.tr.setMeta(reviewKey, { active: hit ? id : null }));
       if (!hit) return false;
       if (!scroll) return true;

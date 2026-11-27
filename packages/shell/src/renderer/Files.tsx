@@ -19,6 +19,42 @@ const STATUS: Record<Entry['status'], { label: string; hint: string }> = {
   missing: { label: 'Missing from your folder', hint: 'You have it checked out but the file is gone. Undo the check-out to get it back.' }
 };
 
+const NO_PROJECT = '\u0000none';
+function remembered(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function remember(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // a choice that cannot be remembered still works
+  }
+}
+/** Only a Markdown file inside a project can be a manuscript. */
+const canSet = (path: string): boolean => path.includes('/') && /\.(md|markdown)$/i.test(path);
+
+/** The right-click menu of a file: setting it as a manuscript (the same setting as Write's menu). */
+function ManuscriptMenu({ menu, on, can, onChoose, onClose }: { menu: { x: number; y: number; path: string }; on: boolean; can: boolean; onChoose: (on: boolean) => void; onClose: () => void }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', esc);
+    return () => document.removeEventListener('keydown', esc);
+  }, [onClose]);
+  return (
+    <div className="ctx-backdrop" onMouseDown={onClose} onContextMenu={(e) => (e.preventDefault(), onClose())}>
+      <ul className="ctx-menu" role="menu" aria-label={`Menu for ${menu.path}`} style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
+        <li role="none">
+          <button type="button" role="menuitem" disabled={!can} title={can ? '' : 'Only a Markdown file inside a project can be a manuscript.'} onClick={() => onChoose(!on)}>{on ? 'Remove from Manuscripts' : 'Set as Manuscript'}</button>
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 /** The vault's files: what state each is in for you on this computer, and what you can do with it. */
 export function Files() {
   const [s, setS] = useState<VaultState | null>(null);
@@ -26,6 +62,12 @@ export function Files() {
   const [note, setNote] = useState<string | null>(null);
   const [filter, setFilter] = useState('');
   const [open, setOpen] = useState<string | null>(null);
+  /** Narrowing the list: to one project, and to files set as manuscripts. Both are remembered. */
+  const [project, setProjectState] = useState(() => remembered('cadrel.files.project') ?? '');
+  const [onlyMs, setOnlyMsState] = useState(() => remembered('cadrel.files.manuscripts') === '1');
+  const setProject = (v: string) => (setProjectState(v), remember('cadrel.files.project', v));
+  const setOnlyMs = (v: boolean) => (setOnlyMsState(v), remember('cadrel.files.manuscripts', v ? '1' : '0'));
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string } | null>(null);
   const load = useCallback(() => api.state().then((v) => (setS(v), v), (e) => (setError(clean(e)), null)), []);
   useEffect(() => {
     void load();
@@ -53,7 +95,12 @@ export function Files() {
   if (!s.available) return <section className="card"><p className="muted">{s.reason}</p></section>;
   const nameOf = (id: string) => s.people.find((p) => p.id === id)?.name ?? 'someone';
   const q = filter.trim().toLowerCase();
-  const rows = s.entries.filter((e) => !q || e.path.toLowerCase().includes(q));
+  const manuscripts = new Set(s.manuscripts);
+  // a project that is no longer there cannot narrow the list, or the list would look empty for no visible reason
+  const folder = project === NO_PROJECT || s.projects.some((p) => p.folder === project) ? project : '';
+  const inProject = (path: string) => (folder === '' ? true : folder === NO_PROJECT ? !path.includes('/') : path === folder || path.startsWith(`${folder}/`));
+  const rows = s.entries.filter((e) => (!q || e.path.toLowerCase().includes(q)) && inProject(e.path) && (!onlyMs || manuscripts.has(e.path)));
+  const narrowed = folder !== '' || onlyMs || q !== '';
   const mine = s.entries.filter((e) => e.status === 'checked-out-by-me').length;
   const stale = s.entries.filter((e) => e.status === 'out-of-date').length;
 
@@ -72,10 +119,19 @@ export function Files() {
       {note && <div className="banner info" role="status">{note}</div>}
       <div className="row">
         <input aria-label="Search files" placeholder="Search files" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <select aria-label="Project" value={folder} onChange={(e) => setProject(e.target.value)}>
+          <option value="">All projects</option>
+          {s.projects.map((p) => <option key={p.folder} value={p.folder}>{p.name}</option>)}
+          <option value={NO_PROJECT}>Not in a project</option>
+        </select>
+        <label className="small" title="Show only the files set as manuscripts (right-click a file and choose Set as Manuscript)">
+          <input type="checkbox" checked={onlyMs} onChange={(e) => setOnlyMs(e.target.checked)} /> Manuscripts only
+        </label>
         <button type="button" onClick={() => void run(() => api.getLatest(), 'Copies updated where they could be.').then((r) => r.ok && r.value.skipped.length && setNote(`Updated ${r.value.updated.length}. Left alone: ${r.value.skipped.map((k) => `${k.path} (${k.why})`).join(' ')}`))}>
           Get latest{stale ? ` (${stale})` : ''}
         </button>
         <span className="muted small">{mine ? `${mine} checked out by you` : 'Nothing checked out by you'}</span>
+        {narrowed && <span className="muted small" role="status">Showing {rows.length} of {s.entries.length} files</span>}
       </div>
       {s.entries.length === 0 ? (
         <div className="empty"><p><strong>No files yet.</strong></p><p className="muted">Create a project and write in it, or put files in a project’s folder: they are saved to the Studio automatically.</p></div>
@@ -83,10 +139,17 @@ export function Files() {
         <table className="table">
           <thead><tr><th>File</th><th>State</th><th className="num">Version</th><th className="num">Size</th><th /></tr></thead>
           <tbody>
-            {rows.map((e) => <Row key={e.path} e={e} s={s} nameOf={nameOf} run={run} open={open === e.path} onOpen={() => setOpen(open === e.path ? null : e.path)} />)}
+            {rows.map((e) => <Row key={e.path} e={e} s={s} nameOf={nameOf} run={run} manuscript={manuscripts.has(e.path)} onMenu={(x, y) => setMenu({ x, y, path: e.path })} open={open === e.path} onOpen={() => setOpen(open === e.path ? null : e.path)} />)}
           </tbody>
         </table>
       )}
+      {s.entries.length > 0 && rows.length === 0 && (
+        <p className="muted" role="status">
+          {onlyMs && manuscripts.size === 0 ? 'No file is set as a manuscript yet. Right-click a file and choose “Set as Manuscript”, or turn off Manuscripts only.' : 'No files match.'}{' '}
+          <button type="button" className="link" onClick={() => { setFilter(''); setProject(''); setOnlyMs(false); }}>Show all files</button>
+        </p>
+      )}
+      {menu && <ManuscriptMenu menu={menu} on={manuscripts.has(menu.path)} can={canSet(menu.path)} onClose={() => setMenu(null)} onChoose={(on) => { const m = menu; setMenu(null); void run(() => api.setManuscript(m.path, on), on ? `${m.path} is set as a manuscript.` : `${m.path} is no longer a manuscript.`); }} />}
       {s.orphans.length > 0 && (
         <section className="card" aria-labelledby="f-orph">
           <h3 id="f-orph">Copies kept aside</h3>
@@ -124,7 +187,7 @@ function SyncLine({ s, onNow }: { s: Ready; onNow(): void }) {
 
 type Run = <T>(job: () => Promise<T>, ok?: string | ((v: T) => string | null)) => Promise<{ ok: true; value: T } | { ok: false }>;
 
-function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: (id: string) => string; run: Run; open: boolean; onOpen: () => void }) {
+function Row({ e, s, nameOf, run, manuscript, onMenu, open, onOpen }: { e: Entry; s: Ready; nameOf: (id: string) => string; run: Run; manuscript: boolean; onMenu: (x: number, y: number) => void; open: boolean; onOpen: () => void }) {
   const [comment, setComment] = useState('');
   const [mode, setMode] = useState<'in' | 'force' | null>(null);
   const [reason, setReason] = useState('');
@@ -135,8 +198,8 @@ function Row({ e, s, nameOf, run, open, onOpen }: { e: Entry; s: Ready; nameOf: 
   const holder = e.lock ? (e.lock.personId === s.me ? 'you, on another computer' : nameOf(e.lock.personId)) : null;
   return (
     <>
-      <tr data-path={e.path}>
-        <th>{e.fileId ? <button type="button" className="link" aria-expanded={open} onClick={onOpen}>{e.path}</button> : e.path} <span className="chip">{e.kind}</span></th>
+      <tr data-path={e.path} onContextMenu={(ev) => { ev.preventDefault(); onMenu(ev.clientX, ev.clientY); }}>
+        <th>{e.fileId ? <button type="button" className="link" aria-expanded={open} onClick={onOpen}>{e.path}</button> : e.path} <span className="chip">{e.kind}</span>{manuscript && <span className="chip ok" title="Set as a manuscript of its project (Write's Set as Manuscript)"> set as manuscript</span>}</th>
         <td title={st.hint}>
           {st.label}{e.status === 'checked-out-by-other' && holder ? ` by ${holder}` : ''}{e.status === 'checked-out-by-me' && e.modified ? ' · changed' : ''}
           {e.lock && <span className="muted small"> since {e.lock.since.slice(0, 10)}</span>}

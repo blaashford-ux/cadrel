@@ -9,12 +9,12 @@
  * can change. The authoring skills' own files (premise, outline, characters, blurb, trackers) are written by `projectFiles.ts`,
  * which never writes into a manuscript folder at all, whatever the permission.
  */
-import { splitChapters } from '../chapters';
+import { chapterKeys, splitChapters } from '../chapters';
+import { makeAnchorV2 } from '../review/anchorV2';
 import type { FsEntry, FsPort } from '../fsPort';
 import { makeReviews, REVIEW_DIR } from '../backend/reviews';
 import {
   locateAnchor,
-  makeAnchor,
   newReviewFile,
   normalizeCategory,
   normalizeEditType,
@@ -30,7 +30,7 @@ import { applyMap, EDITED_FILE, emptyMarks, marksToMap, sanitizeMarks, type Edit
 import { chapterIds, withChapterEdited } from '../projects';
 import { classify, SHARED_WITH_ME } from '../sync/rules';
 import { countWords } from '../words';
-import { flattenMarkdown } from './flatten';
+import { flattenMarkdownBlocks, type FlatBlock } from './flatten';
 import { NO_AI_ACCESS, type AiAccess } from './access';
 
 /** Skills Cadrel Write ships; anything else a skill calls itself is used as given. */
@@ -159,14 +159,21 @@ async function chapterLevel(ctx: AgentContext, dir: string): Promise<number> {
 
 interface Loaded {
   rel: string;
-  chapters: { index: number; title: string; isPreamble: boolean; raw: string; flat: string }[];
+  chapters: { index: number; key: string; title: string; isPreamble: boolean; raw: string; flat: string; blocks: FlatBlock[] }[];
 }
 
 async function load(ctx: AgentContext, project: string, file: string): Promise<Loaded> {
   const { abs, rel } = await manuscriptPath(ctx, project, file);
   const dir = await projectDir(ctx, project);
   const doc = splitChapters(await ctx.fs.readText(abs), await chapterLevel(ctx, dir));
-  return { rel, chapters: doc.chapters.map((c, index) => ({ index, title: c.title, isPreamble: c.isPreamble, raw: c.raw, flat: flattenMarkdown(c.raw) })) };
+  const keys = chapterKeys(doc);
+  return {
+    rel,
+    chapters: doc.chapters.map((c, index) => {
+      const { text, blocks } = flattenMarkdownBlocks(c.raw);
+      return { index, key: keys[index]!.key, title: c.title, isPreamble: c.isPreamble, raw: c.raw, flat: text, blocks };
+    })
+  };
 }
 
 // ---- reading ---------------------------------------------------------------------------------
@@ -219,7 +226,7 @@ export async function listChapters(ctx: AgentContext, project: string, file: str
   const { rel, chapters } = await load(ctx, project, file);
   const ids = chapterIds(chapters);
   const edited = new Set(marksToMap(await readMarks(ctx, await projectDir(ctx, project)))[rel] ?? []);
-  return { file: rel, chapters: chapters.map((c, i) => ({ index: c.index, title: c.title || '(before the first heading)', words: countWords(c.raw), edited: edited.has(ids[i]) })) };
+  return { file: rel, chapters: chapters.map((c, i) => ({ index: c.index, key: c.key, title: c.title || '(before the first heading)', words: countWords(c.raw), edited: edited.has(ids[i]) })) };
 }
 
 // ---- edited marks ----------------------------------------------------------------------------
@@ -382,7 +389,7 @@ export async function readChapter(ctx: AgentContext, project: string, file: stri
   const l = await load(ctx, project, file);
   const c = pickChapter(l, chapter);
   const words = countWords(c.raw);
-  const notes = (await collect(ctx, project, { file: l.rel })).filter((n) => n.item.status !== 'rejected' && locateAnchor(c.flat, n.item.anchor)).map((n) => view(n.item, n.reviewer));
+  const notes = (await collect(ctx, project, { file: l.rel })).filter((n) => n.item.status !== 'rejected' && (n.item.anchor.v === 2 && n.item.anchor.chapter !== undefined && l.chapters.some((x) => x.key === n.item.anchor.chapter) ? n.item.anchor.chapter === c.key : locateAnchor(c.flat, n.item.anchor))).map((n) => view(n.item, n.reviewer));
   return {
     file: l.rel,
     index: c.index,
@@ -521,7 +528,7 @@ function build(ctx: AgentContext, l: Loaded, input: NoteInput, reviewer: { id: s
     id: ctx.newId?.() ?? uid(),
     kind,
     file: l.rel,
-    anchor: makeAnchor(chapter.flat, start, start + quote.length),
+    anchor: makeAnchorV2(chapter.flat, chapter.blocks, start, start + quote.length, chapter.key),
     body,
     ...(replacement !== undefined ? { replacement } : {}),
     status: 'open',

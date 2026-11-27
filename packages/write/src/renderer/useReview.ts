@@ -53,8 +53,12 @@ export interface ReviewState {
   items: ShownItem[];
   /** The notes on every file of the project, not only the open one (the tree counts them per chapter). */
   all: ShownItem[];
-  /** Notes whose text can't be found in the open chapter. */
+  /** Notes that are not in the open chapter, or whose place can't be found. */
   detached: Set<string>;
+  /** Notes shown at the start of their paragraph, because the text they were about has changed (or their place is not certain). */
+  pinned: Set<string>;
+  /** Gives old notes a place (chapter, paragraph, offset). Does not count as editing them. Resolves when saved. */
+  upgrade(updates: { id: string; anchor: Anchor }[]): Promise<void>;
   /** Saves a note on a selection captured earlier with `selection()`. */
   add(sel: { anchor: Anchor; oneBlock: boolean }, kind: 'comment' | 'suggestion', body: string, replacement?: string, category?: string): void;
   /** Sets or (with an empty topic) clears a note's topic. */
@@ -80,10 +84,13 @@ export function useReview(
   file: string | null,
   review: ReviewApi | undefined,
   me: Identity,
-  chapterKey: string
+  chapterKey: string,
+  /** The open chapter's key (`chapterKeys`), so notes are looked for in their own chapter and no other. */
+  chapter?: string
 ): ReviewState {
   const [files, setFiles] = useState<Map<string, ReviewFile>>(new Map());
   const [detached, setDetached] = useState<Set<string>>(new Set());
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
   const [tick, setTick] = useState(0);
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -151,9 +158,10 @@ export function useReview(
   useEffect(() => {
     if (!review) return;
     const marks: NoteMark[] = items.filter((i) => i.status === 'open').map((i) => ({ id: i.id, anchor: pending.current.get(i.id)?.anchor ?? i.anchor, kind: i.kind }));
-    const { detached: lost } = review.setNotes(marks);
+    const { detached: lost, pinned: kept } = review.setNotes(marks, chapter);
     setDetached(new Set(lost));
-  }, [review, items, chapterKey]);
+    setPinned(new Set(kept));
+  }, [review, items, chapterKey, chapter]);
 
   const write = useCallback(
     async (reviewerId: string, change: (f: ReviewFile) => ReviewFile) => {
@@ -172,6 +180,15 @@ export function useReview(
     [api, project, me.id, me.name]
   );
 
+  const upgrade = useCallback(
+    async (updates: { id: string; anchor: Anchor }[]) => {
+      const byId = new Map(updates.map((u) => [u.id, u.anchor]));
+      const owners = [...filesRef.current].filter(([, f]) => f.items.some((i) => byId.has(i.id)));
+      for (const [owner] of owners) await write(owner, (f) => ({ ...f, items: f.items.map((i) => (byId.has(i.id) ? { ...i, anchor: byId.get(i.id)! } : i)) }));
+    },
+    [write]
+  );
+
   const ownerOf = (id: string) => items.find((i) => i.id === id)?.reviewerId;
   const touch = (i: ReviewItem, patch: Partial<ReviewItem>): ReviewItem => ({ ...i, ...patch, updatedAt: new Date().toISOString() });
   const edit = (id: string, patch: (i: ReviewItem) => ReviewItem) => {
@@ -180,15 +197,28 @@ export function useReview(
     return write(owner, (f) => ({ ...f, items: f.items.map((i) => (i.id === id ? patch(i) : i)) }));
   };
 
-  // Editing a note's text keeps the note on the edited text; deleting all of it resolves the note, which stays at that spot.
+  // Editing a note's text keeps the note on the edited text; deleting all of it resolves the note, which stays at that spot. A change of
+  // only where the note is (its text as it was) is kept without counting as an edit of the note. One save per reviewer's file.
   flushRef.current = () => {
     flushTimer.current = null;
     const batch = [...pending.current.values()];
     pending.current.clear();
+    const byOwner = new Map<string, Map<string, NoteChange>>();
     for (const c of batch) {
-      void edit(c.id, (i) =>
-        touch(i, c.gone ? { anchor: { ...i.anchor, prefix: c.anchor.prefix, suffix: c.anchor.suffix, start: c.anchor.start, gone: true }, status: 'resolved' } : { anchor: c.anchor })
-      );
+      const owner = filesRef.current && [...filesRef.current].find(([, f]) => f.items.some((i) => i.id === c.id))?.[0];
+      if (owner) byOwner.set(owner, (byOwner.get(owner) ?? new Map()).set(c.id, c));
+    }
+    for (const [owner, changes] of byOwner) {
+      void write(owner, (f) => ({
+        ...f,
+        items: f.items.map((i) => {
+          const c = changes.get(i.id);
+          if (!c) return i;
+          if (c.place) return { ...i, anchor: c.anchor };
+          if (c.gone) return touch(i, { anchor: { ...c.anchor, quote: i.anchor.quote, gone: true }, status: 'resolved' });
+          return touch(i, { anchor: c.anchor });
+        })
+      }));
     }
   };
   useEffect(() => {
@@ -211,6 +241,8 @@ export function useReview(
     items,
     all,
     detached,
+    pinned,
+    upgrade,
     selection: () => review?.selection() ?? null,
     add(sel, kind, body, replacement, category) {
       if (!file || (kind === 'suggestion' && !sel.oneBlock)) return;

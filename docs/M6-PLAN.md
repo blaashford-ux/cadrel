@@ -1,6 +1,6 @@
 # M6: Launch and market, implementation plan
 
-Status: **built on `dev` and not yet released** (20 November 2026; server revision 12, database step 24). The decisions below were taken on 20 November 2026 as recommended: ARC is tracked, not sent; market numbers are published to the Studio from a computer with the library; moving the date is a proposal; reader details are kept for managers and erasable; no rating is stored per reader; two releases. Planned against `dev` with M5 built. Scope comes from [PLAN.md](PLAN.md) section M6; roles in [PERMISSIONS.md](PERMISSIONS.md) (the Launch and Market rows); the connected book record in [ARCHITECTURE.md](ARCHITECTURE.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
+Status: **built and released in 0.21.0** (built 20 November 2026; server revision 12, database step 24). The decisions below were taken on 20 November 2026 as recommended: ARC is tracked, not sent; market numbers are published to the Studio from a computer with the library; moving the date is a proposal; reader details are kept for managers and erasable; no rating is stored per reader; two releases. Planned against `dev` with M5 built. Scope comes from [PLAN.md](PLAN.md) section M6; roles in [PERMISSIONS.md](PERMISSIONS.md) (the Launch and Market rows); the connected book record in [ARCHITECTURE.md](ARCHITECTURE.md). Versions are not tied to milestones ([VERSIONING.md](VERSIONING.md)).
 
 **Exit (from PLAN.md):** a release is planned, executed and reviewed from one record.
 

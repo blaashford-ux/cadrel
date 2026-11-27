@@ -11,6 +11,7 @@ import { gfmFromMarkdown } from 'mdast-util-gfm';
 import { gfm } from 'micromark-extension-gfm';
 import { CommentRangeEnd, CommentRangeStart, CommentReference, DeletedTextRun, Document, HeadingLevel, InsertedTextRun, Packer, Paragraph, TextRun, type ParagraphChild } from 'docx';
 import { stripFences } from '../align';
+import { placeAnchor } from './anchorV2';
 import { locateAnchor, type ReviewItem } from './comments';
 
 export interface ReviewChapter {
@@ -95,7 +96,9 @@ export async function buildReviewDocx(input: ReviewDocxInput): Promise<ReviewDoc
     const here: Placed[] = [];
     for (const item of input.notes) {
       if (input.chapterOf.get(item.id) !== ci) continue;
-      const loc = item.anchor.gone ? null : locateAnchor(whole, item.anchor);
+      // a note with a place is found by it; the text search is for old notes, and for a note whose paragraph has changed
+      const byPlace = item.anchor.gone ? null : placeAnchor(whole, flat.map((t, i) => ({ offset: starts[i]!, length: t.length })), item.anchor, undefined);
+      const loc = item.anchor.gone ? null : byPlace?.kind === 'at' ? byPlace : locateAnchor(whole, item.anchor);
       if (!loc) {
         skipped++;
         continue;

@@ -129,3 +129,28 @@ describe('edited dots by stage', () => {
   });
 });
 
+
+
+import { fileNodes, keepFiles } from './treeRows';
+describe('Manuscripts only', () => {
+  const file = (path: string) => ({ kind: 'file' as const, name: path.split('/').pop()!, path });
+  const root = { kind: 'dir' as const, name: 'P', path: 'P', children: [
+    { kind: 'dir' as const, name: 'Manuscripts', path: 'P/Manuscripts', children: [file('P/Manuscripts/One.md'), file('P/Manuscripts/Two.md')] },
+    { kind: 'dir' as const, name: 'Notes', path: 'P/Notes', children: [file('P/Notes/Ideas.md')] },
+    file('P/Readme.md')
+  ] };
+  it('keeps the files that pass and the folders that lead to them, and drops folders left empty', () => {
+    const only = keepFiles(root, (f) => f.name === 'One.md' || f.name === 'Readme.md');
+    expect(fileNodes(only).map((f) => f.name)).toEqual(['One.md', 'Readme.md']);
+    expect(only.children.map((c) => c.name)).toEqual(['Manuscripts', 'Readme.md']); // Notes had nothing
+    const ms = only.children[0];
+    expect(ms && ms.kind === 'dir' ? ms.children.map((c) => c.name) : []).toEqual(['One.md']);
+  });
+  it('is an empty tree, not no tree, when nothing passes, and does not change what it is given', () => {
+    expect(keepFiles(root, () => false)).toMatchObject({ kind: 'dir', name: 'P', children: [] });
+    const before = JSON.stringify(root);
+    keepFiles(root, () => true);
+    expect(JSON.stringify(root)).toBe(before);
+    expect(keepFiles(root, () => true).children).toHaveLength(3);
+  });
+});

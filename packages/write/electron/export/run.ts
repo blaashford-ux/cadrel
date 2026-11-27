@@ -5,8 +5,9 @@ import { buildDocx } from '../../src/shared/export/docx';
 import { buildEpub, verifyEpub, type EpubCover, type EpubFamilyFiles, type EpubFonts } from '../../src/shared/export/epub';
 import { bundledFont, DEFAULT_FONT, headingFamily } from '../../src/shared/export/fonts';
 import type { BookDetails } from '../../src/shared/export/model';
+import { composeOmnibus, describeBook, type OmnibusBook, type OmnibusBookInfo, type OmnibusRecipe } from '../../src/shared/export/omnibus';
 import { outputFileName, resolveOutputDir } from '../../src/shared/export/outputs';
-import { joinPath } from '../../src/shared/paths';
+import { joinParts, joinPath } from '../../src/shared/paths';
 
 /** Everything the orchestrator needs from the outside world, so it can be tested without Electron. */
 export interface ExportDeps {
@@ -174,5 +175,86 @@ export async function runExport(
     }
   }
   result.ok = result.errors.length === 0 && result.outputs.length === wanted.length;
+  return result;
+}
+
+
+// ---- an omnibus: several manuscripts as one book ----------------------------------------------------------------------------------
+
+/** The name the composed book goes by while it is built; never a file that exists. It sits in the project's folder so relative paths resolve there. */
+const OMNIBUS_FILE = '.omnibus.md';
+
+async function readBooks(projectDir: string, files: string[], deps: Pick<ExportDeps, 'readText' | 'loadDetails' | 'chapterLevel'>): Promise<{ books: OmnibusBook[]; errors: string[] }> {
+  const books: OmnibusBook[] = [];
+  const errors: string[] = [];
+  for (const rel of files) {
+    const abs = joinParts(projectDir, ...rel.split('/'));
+    try {
+      books.push({ path: rel, source: await deps.readText(abs), details: await deps.loadDetails(abs), chapterLevel: (await deps.chapterLevel?.(abs)) ?? 1 });
+    } catch (e) {
+      errors.push(`${rel} could not be read (${e instanceof Error ? e.message : e}).`);
+    }
+  }
+  return { books, errors };
+}
+
+/** What the dialog shows for each manuscript: its Book Details (title, subtitle, author) and how much text it has. Files that cannot be read are left out. */
+export async function omnibusBooks(projectDir: string, files: string[], deps: Pick<ExportDeps, 'readText' | 'loadDetails' | 'chapterLevel' | 'exists'>): Promise<OmnibusBookInfo[]> {
+  const out: OmnibusBookInfo[] = [];
+  for (const rel of files) {
+    const abs = joinParts(projectDir, ...rel.split('/'));
+    try {
+      if (!(await deps.exists(abs))) continue;
+      const details = await deps.loadDetails(abs);
+      out.push(describeBook(rel, await deps.readText(abs), details, (await deps.chapterLevel?.(abs)) ?? 1));
+    } catch {
+      // a file that cannot be read is not offered
+    }
+  }
+  return out;
+}
+
+/** The deps with the composed text and details answering for the omnibus's own file name. */
+function omnibusDeps(deps: ExportDeps, file: string, composed: { source: string; details: BookDetails; chapterLevel: number }): ExportDeps {
+  return {
+    ...deps,
+    readText: (p) => (p === file ? Promise.resolve(composed.source) : deps.readText(p)),
+    loadDetails: (p) => (p === file ? Promise.resolve(composed.details) : deps.loadDetails(p)),
+    chapterLevel: (p) => (p === file ? composed.chapterLevel : deps.chapterLevel?.(p) ?? 1)
+  };
+}
+
+/**
+ * Where the omnibus's files would be written: next to where the first book's own export goes (its Book Details' output folder), named after the
+ * omnibus. The output folder is made absolute here, so it does not depend on where the composed book is said to be.
+ */
+async function composeFor(projectDir: string, recipe: OmnibusRecipe, deps: ExportDeps) {
+  const { books, errors } = await readBooks(projectDir, recipe.files, deps);
+  const composed = composeOmnibus(recipe, books);
+  composed.errors.unshift(...errors);
+  if (books[0]) composed.details.export.outputDir = resolveOutputDir(joinParts(projectDir, ...books[0].path.split('/')), books[0].details.export.outputDir);
+  return composed;
+}
+
+export async function planOmnibus(projectDir: string, recipe: OmnibusRecipe, deps: ExportDeps): Promise<ExportPlan & { errors: string[]; warnings: string[] }> {
+  const c = await composeFor(projectDir, recipe, deps);
+  const plan = await planExport(joinPath(projectDir, OMNIBUS_FILE), deps, c.details);
+  return { ...plan, errors: c.errors, warnings: c.warnings };
+}
+
+/** Builds the omnibus's enabled outputs, as one book. */
+export async function runOmnibus(
+  projectDir: string,
+  recipe: OmnibusRecipe,
+  deps: ExportDeps,
+  onProgress: (p: ExportProgress) => void = () => undefined,
+  signal?: AbortSignal
+): Promise<ExportResult> {
+  onProgress({ kind: 'prepare', message: 'Reading the manuscripts…' });
+  const c = await composeFor(projectDir, recipe, deps);
+  if (c.errors.length) return { ok: false, errors: c.errors, warnings: c.warnings, outputs: [] };
+  const file = joinPath(projectDir, OMNIBUS_FILE);
+  const result = await runExport(file, omnibusDeps(deps, file, c), onProgress, signal);
+  result.warnings.unshift(...c.warnings);
   return result;
 }

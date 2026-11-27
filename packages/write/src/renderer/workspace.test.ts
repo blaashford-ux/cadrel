@@ -1045,6 +1045,49 @@ describe('projects in the workspace', () => {
   });
 });
 
+describe('Set as Manuscript', () => {
+  const PROJ = ROOT; // the fake folder is the project
+  it('sets any number of files as manuscripts, takes them back out, and the active manuscript counts as one', async () => {
+    api.addProject(PROJ, { name: 'Saga' });
+    await ws.openPath(PROJ);
+    expect(ws.isManuscript(A)).toBe(false);
+    expect(await ws.setManuscript(A, true)).toBe(true);
+    expect(await ws.setManuscript(B, true)).toBe(true);
+    expect(state().project?.meta.manuscripts).toEqual([relativeTo(PROJ, A), relativeTo(PROJ, B)]);
+    expect(ws.isManuscript(A) && ws.isManuscript(B)).toBe(true);
+    expect(await ws.setManuscript(A, true)).toBe(true); // again: still once
+    expect(state().project?.meta.manuscripts).toEqual([relativeTo(PROJ, B), relativeTo(PROJ, A)]);
+    expect(await ws.setManuscript(B, false)).toBe(true);
+    expect(ws.isManuscript(B)).toBe(false);
+    // the active manuscript is one whether or not it was set, and is not one once it is taken back out
+    await ws.setActiveManuscript(B);
+    expect(ws.isManuscript(B)).toBe(true);
+    expect(await ws.setManuscript(B, false)).toBe(true);
+    expect(state().project?.meta.activeManuscript).toBeNull();
+    expect(ws.isManuscript(B)).toBe(false);
+  });
+
+  it('follows a renamed file and forgets a deleted one, in the manuscripts and in the saved omnibus', async () => {
+    api.addProject(PROJ, { name: 'Saga' });
+    await ws.openPath(PROJ);
+    await ws.setManuscript(A, true);
+    await ws.setManuscript(B, true);
+    await ws.saveOmnibus({ title: 'All', subtitle: '', author: '', isbn: '', coverImage: '', files: [relativeTo(PROJ, A), relativeTo(PROJ, B)], outputs: { epub: true, pdf: false, docx: false }, numberBooks: true, bookFront: true, allBackMatter: false });
+    expect(await ws.renameNode(B, 'Renamed.md')).toBe(true);
+    const renamed = relativeTo(PROJ, dirname(B) + '/Renamed.md');
+    expect(state().project?.meta.manuscripts).toEqual([relativeTo(PROJ, A), renamed]);
+    expect(state().project?.meta.omnibus?.files).toEqual([relativeTo(PROJ, A), renamed]);
+    expect(await ws.deleteNode(A, 'file')).toBe(true);
+    expect(state().project?.meta.manuscripts).toEqual([renamed]);
+    expect(state().project?.meta.omnibus?.files).toEqual([renamed]);
+  });
+
+  it('does nothing without a project', async () => {
+    expect(await ws.setManuscript(A, true)).toBe(false);
+    expect(ws.isManuscript(A)).toBe(false);
+  });
+});
+
 describe('a core-only API (the phone)', () => {
   /** FakeApi with every desktop-only method removed, as the Android app provides it. */
   const phoneApi = (fake: FakeApi): WorkspaceApi => {

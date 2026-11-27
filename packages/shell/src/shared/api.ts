@@ -836,6 +836,10 @@ export type VaultState =
       orphans: { path: string; savedAs: string; removedBy: string; removedAt: string; reason: string; version: number }[];
       /** How the Projects folder and the Studio are keeping in step (files are saved to the Studio automatically). */
       sync: VaultSyncStatus | null;
+      /** The projects whose files are listed, for the project filter: the folder (the first part of every path in it) and the name to show. */
+      projects: { folder: string; name: string }[];
+      /** The paths (from the Projects folder) of the files set as manuscripts in their project, the active manuscript included. */
+      manuscripts: string[];
     };
 /** What the automatic saving of the Projects folder is doing and has done. */
 export interface VaultSyncStatus {
@@ -850,6 +854,8 @@ export interface VaultApi {
   syncNow(): Promise<VaultSyncStatus>;
   /** Puts a file from the working folder into the vault as its first version. */
   add(path: string, comment?: string): Promise<void>;
+  /** Sets a file as a manuscript of its project, or takes it back out (the same setting Write's right-click menu changes). */
+  setManuscript(path: string, on: boolean): Promise<void>;
   /** Takes a file to edit it (nobody else can then). With `keepChanges`, a file that was changed without a check-out is taken as it is. */
   checkOut(path: string, o?: { keepChanges?: boolean }): Promise<void>;
   /** Saves the file as a new version and releases it; nothing changed means it is released with no new version. */
@@ -1339,6 +1345,96 @@ export interface ArtApi {
   preview(fileId: string, version: number): Promise<PreviewView>;
 }
 
+// ---- the Cover Designer (docs/COVER-DESIGNER-PLAN.md) -------------------------------------------------------------------------
+
+export interface CoverPicture {
+  fileId: string;
+  path: string;
+  version: number;
+}
+export interface CoverDesignRow {
+  fileId: string;
+  path: string;
+  /** The flattened picture saved with it: the asset the Art page governs. */
+  imagePath: string;
+  version: number;
+  name: string;
+}
+export type CoverContext =
+  | { available: false; reason: string }
+  | {
+      available: true;
+      project: { id: string; name: string };
+      may: { write: boolean };
+      /** Pictures in this project's files that a design can use. */
+      pictures: CoverPicture[];
+      designs: CoverDesignRow[];
+      /** What a title block is filled from, where it can be read. */
+      fields: { title: string; series: string; author: string };
+    };
+export interface CoverImageData {
+  path: string;
+  mime: string;
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  /** The vault version and hash read, so a design can tell when a picture changed. */
+  version: number;
+  hash: string;
+}
+export interface CoverOpened {
+  text: string;
+  path: string;
+  fileId: string;
+  version: number;
+  assetId: string | null;
+  /** For each picture the design names: here, missing from the vault, or changed since the design was saved. */
+  pictures: { path: string; state: 'ok' | 'missing' | 'changed' }[];
+}
+export interface CoverSaveInput {
+  projectId: string;
+  /** A new design's name (it becomes the file name); ignored when `designPath` is given. */
+  name: string;
+  designPath?: string | null;
+  /** The design, as the text of its file. */
+  design: string;
+  /** The flattened picture (PNG or JPEG), and for a paperback the front cover alone. */
+  image: Uint8Array;
+  front?: Uint8Array | null;
+  comment?: string;
+}
+export interface CoverSaved {
+  assetId: string;
+  designPath: string;
+  imagePath: string;
+  frontPath: string | null;
+  version: number;
+}
+export interface CoverImportInput {
+  projectId: string;
+  name: string;
+  bytes: Uint8Array;
+  role: 'picture' | 'template';
+}
+export interface CoverFontData {
+  family: string;
+  weight: 400 | 700;
+  dataUrl: string;
+}
+export interface CoverApi {
+  /** What the designer is offered for the project in view. */
+  context(project?: string): Promise<CoverContext>;
+  open(path: string): Promise<CoverOpened>;
+  /** One vault picture, to draw. */
+  image(path: string): Promise<CoverImageData>;
+  /** Puts a picture (or a paperback template) into the project's files and returns where it is. */
+  importPicture(input: CoverImportInput): Promise<{ path: string; width: number; height: number; hash: string }>;
+  /** Saves the design and its picture as new versions; the first save makes the cover an asset. */
+  save(input: CoverSaveInput): Promise<CoverSaved>;
+  /** The starter fonts, as data the page can use inside the picture. */
+  fonts(families: string[]): Promise<CoverFontData[]>;
+}
+
 export interface PreflightFileRow {
   fileId: string;
   path: string;
@@ -1606,6 +1702,7 @@ export interface CadrelApi {
   canon: CanonApi;
   continuity: ContinuityApi;
   art: ArtApi;
+  cover: CoverApi;
   preflight: PreflightApi;
   launch: LaunchApi;
   work: WorkApi;

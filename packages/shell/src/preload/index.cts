@@ -63,6 +63,7 @@ const api: CadrelApi = {
     state: () => studioCall('shell:vault:state'),
     syncNow: () => studioCall('shell:vault:sync'),
     add: (path, comment) => studioCall('shell:vault:call', 'add', path, comment),
+    setManuscript: (path, on) => studioCall('shell:vault:setManuscript', path, on),
     checkOut: (path, o) => studioCall('shell:vault:call', 'checkOut', path, o),
     checkIn: (path, comment) => studioCall('shell:vault:call', 'checkIn', path, comment),
     undoCheckOut: (path) => studioCall('shell:vault:call', 'undoCheckOut', path),
@@ -138,6 +139,7 @@ const api: CadrelApi = {
   canon: { state: (series) => studioCall('shell:canon:state', series), call: (name, ...args) => studioCall('shell:canon:call', name, ...args) },
   continuity: { state: (project) => studioCall('shell:continuity:state', project), check: (id) => studioCall('shell:continuity:check', id), call: (name, ...args) => studioCall('shell:continuity:call', name, ...args) },
   art: { state: (project) => studioCall('shell:art:state', project), asset: (id) => studioCall('shell:art:asset', id), brief: (id) => studioCall('shell:art:brief', id), call: (name, ...args) => studioCall('shell:art:call', name, ...args), preview: (fileId, version) => studioCall('shell:art:preview', fileId, version) },
+  cover: { context: (project) => studioCall('shell:cover:context', project), open: (path) => studioCall('shell:cover:open', path), image: (path) => studioCall('shell:cover:image', path), importPicture: (input) => studioCall('shell:cover:import', input), save: (input) => studioCall('shell:cover:save', input), fonts: (families) => studioCall('shell:cover:fonts', families) },
   launch: {
     state: (project) => studioCall('shell:launch:state', project), plan: (id) => studioCall('shell:launch:plan', id), readers: (id) => studioCall('shell:launch:readers', id), brief: (id) => studioCall('shell:launch:brief', id),
     market: (project) => studioCall('shell:launch:market', project), call: (name, ...args) => studioCall('shell:launch:call', name, ...args), deliver: (r, a, v) => studioCall('shell:launch:deliver', r, a, v),

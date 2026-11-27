@@ -2,6 +2,65 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## 0.23.0 (Cover Designer, omnibus, Set as Manuscript, and a notes fix)
+
+### Fix: notes stay where they were made
+
+### Fixed
+- **A beta reader's comment or suggestion no longer turns up on a random word.** A note was remembered as its quote plus a little text round it, and found again by looking for that quote; when the surroundings did not match exactly (any other chapter, which every chapter was asked about), it was put on whichever occurrence of the quote came to hand, so a note on "said" in chapter 1 was drawn on a "said" in chapter 2 and clicking it opened the wrong comment.
+- **A note is now remembered by where it is**: its chapter, its paragraph and the offset in it, with the quote and a hash of the paragraph kept to check that it is still the place. It is looked for only in its own chapter, only in its own paragraph (or the one with the same text within three paragraphs of where it was), and never on another word. When its text has since changed, or it cannot be told which of two identical paragraphs it was in, it is **pinned to the start of its paragraph with a marker**, and the Notes panel says so.
+- Old notes are given their place the first time their file's chapters are at hand, by whichever app has them (a reader's Cadrel Reader, or the author's Write for every reader's notes), and kept in the notes file without counting as an edit; the copy in the Studio follows through the usual exchange. An old note that cannot be placed with certainty is marked as a guess and pinned; one whose text is in no chapter, or in several with nothing to tell them apart, is left in the Notes panel and drawn nowhere. Apps that do not know about places ignore them and still read the notes.
+- The assistant's `add_notes` writes notes with a place, and `read_chapter` lists only the notes of that chapter.
+
+## 0.23.0, also in it (Omnibus, and Set as Manuscript)
+
+No server upgrade is needed.
+
+### Set as Manuscript
+- **Right-click a file in Write's tree → Set as Manuscript** (and **Remove from Manuscripts**). Any number of files in a project can be manuscripts: the books, as opposed to notes, outlines and character sheets. This is separate from **Active Manuscript**, which is still the one file your goals follow; the active manuscript counts as a manuscript too. Taking a file out of the manuscripts also clears it as the active one.
+- **It is a setting of the project**, kept in its own metadata, so Write and the Cadrel Files page agree. It follows a renamed or moved file and is forgotten when the file is deleted.
+- A file set as a manuscript shows a small pages mark in Write's tree.
+
+### Manuscripts only, and filtering by project
+- **Write's file tree has a "Manuscripts only" box** under the file filter. It hides everything else and the folders that lead to nothing, and is remembered.
+- **The Files page can be narrowed to one project and to manuscripts only** (both remembered), with a "Showing 3 of 41 files" line, a "Show all files" way out, and a **set as manuscript** mark on each manuscript. **Right-click a file there → Set as Manuscript**, the same setting as Write's menu. Only a Markdown file inside a project can be one, and the menu says so when it is not.
+- **The pages that ask you to pick a manuscript follow it too**: Editing (plan a pass), Canon and continuity checks, and the Editing desk offer a project's set manuscripts, and only those, **once that project has set any**. Until it has, they offer what they did before, so nothing disappears from anyone's list on upgrading.
+
+### Omnibus
+- **Create an omnibus** (the **Omnibus…** button above Write's tree, or right-click a folder) opens a window where you **pick any of the project's manuscripts**, put them in order, and make **one book of all of them** as an EPUB, a print PDF or a Word file. It lists the project's manuscripts (and, if you ask, every Markdown file), each with the title, subtitle and author from its own **Book Details** and how many chapters and words it has, and opens that book's Book Details from the list.
+- **Each book keeps its own Book Details.** Its title and subtitle introduce it on a title page of its own ("Book One: Dragon Rider"), numbered or not as you choose, with its own dedication and epigraph if you want them; chapters its Book Details leave out stay out. Every book's own back matter (About the Author, Acknowledgements…) is left out except the last book's, unless you ask to keep it all.
+- **The omnibus has its own title, subtitle, author, ISBN and cover.** The author comes from the books (with a warning when they differ); no book's ISBN is carried over. The layout, fonts and trim size are the first book's Book Details settings and the front and back matter pages the last book's, so every output and setting works as it does for any book. It is saved beside where the first book's own export goes.
+- **The omnibus is remembered with the project**, so making it again after a change to one of the books is two clicks. A book with unsaved edits is saved first (the omnibus is built from saved files). Books whose chapters start at different heading levels cannot be joined, and the window says so.
+
+### Not in this version
+- Parts nested in the contents (each book's title page is a chapter, so it appears in the contents beside the chapters); a different layout per book; making an omnibus from more than one project; a Set as Manuscript button on Android.
+
+## 0.23.0, also in it (Cover Designer)
+
+No server upgrade is needed: a cover is two ordinary vault files and an asset.
+
+### Art: Create asset
+- **Create asset ▾ on the Art page** opens a short menu: **Cover**, and under it **eBook** and **Paperback**. Each opens the Cover Designer on that kind. More kinds (banners, ads) can be added to the menu later without new screens.
+
+### A cover designer, without the knobs
+- **Freeform, for ebook covers** (1,600 × 2,560, KDP's recommended size). Add a picture (from the project's files, or from your computer into them, so its licence and history stay with it), words, boxes, ovals, lines and rings; select, move, resize, turn, hide, lock, reorder; undo and redo; copy; arrow keys nudge.
+- **Smart layout, with no numbers to type.** Layers **snap** to the cover's middle, thirds, the golden lines, the safe margin, your guides, the paperback's spine, and each other (and to equal gaps), with a line shown while they are on one; hold Alt to move freely. Pictures and symbols keep their proportions; type sizes are chosen from a short scale (Tiny to Title-sized), and dragging a corner of text lands on the scale. **Align**, **space evenly**, **stack** and **match width** are buttons. A **title block** lays out a series line, title, subtitle and author in a ready font pairing (seven, such as Epic fantasy, Thriller, Romance, Literary) as real text you then edit, in one of three places on the cover, using the project's names where it can read them. A **thumbnail strip** shows the cover at 160, 80 and 40 pixels wide, and a dashed **safe margin** can be turned on.
+- **Enhancements that are one switch each:** glow, drop shadow (distance, angle, softness), outline, blur, opacity and blend modes (multiply, screen, overlay, soft light); **Darken behind this text**, one click, a soft band that follows the text until you let it go; for pictures, brightness, contrast, colour strength, warm or cool, dark edges and a tint; solid, linear and radial gradients, with swatches taken from the cover's own picture; **textures on shapes and text**: film grain, paper, brushed metal, foil, stone, cloth and a worn-and-scratched look.
+- **A library of 36 simple pieces** drawn for Cadrel (nothing third-party): dividers and flourishes, frames and corner brackets, ornaments, seals and badges, and symbols (star, heart, moon, sun, crown, leaf, key, sword, dagger, skull, eye, flame, rose, and more), all recoloured by the fill.
+- **Fonts:** seven starter families with their licences (Cinzel, Bebas Neue, Anton, Abril Fatface, Oswald, Montserrat, Great Vibes, plus Marcellus and Bodoni Moda from Write), and the common fonts the computer has. A design opened where a font is missing says so and shows a stand-in.
+
+### Paperback
+- **Import the KDP template** as a PDF, PNG or JPG (a PDF's first page is drawn at 300 dpi). The cover takes the template's size, and the template is laid over it as a faint guide (strength is a slider, and it can be hidden). **You cannot click it and it is never in the saved picture.**
+- **Mark the spine** by dragging two lines; guides appear on its edges, things snap to them, and one button centres the selected layer on the spine.
+- A paperback is saved as the **full wrap** and, once the spine is marked, the **front cover alone**.
+
+### Saving
+- **Two files per cover, in the project's Art folder:** the editable design (`Name.cadrel-cover.json`) and the flattened picture (`Name.png`), each a version of its own vault file. The first save makes the picture an **asset (a draft)** on the Art page, so approval of an exact version, licences, where-used, Preflight's cover check and Launch all work on it as on any cover. The design records which picture it made, by hash. Save again for a new version of both; reopen from **Edit design** on the cover.
+- A picture that is not a PNG at the design's own size is refused, so the picture is always the render of the design it came from. A design whose pictures changed or went missing says so when it is opened.
+
+### Not in this version
+- Offline use; the assistant reading a design; placing guides by dragging from a ruler (the snaps use guides in a design, but there is no screen to make one yet); angular gradients; embedding a font in a design; calculating a template from trim size and page count; kinds other than Cover in the menu; the title block reading the author's pen name from the catalogue.
+
 ## 0.22.0 (Market: community scans from Claude)
 
 ### Market: community scans from Claude
@@ -34,7 +93,7 @@ Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade
 - **Your assistant** can read what is outstanding, ARC counts, figures and comps, read and draft marketing briefs (a new version a person keeps or reverts) and save a report, with two new skills (Launch Review, Marketing Brief from Comps). It cannot approve a plan, apply a date, change a reader or publish figures.
 - **An optional gate** (off unless an administrator adds it): *Its release plan has no late or blocked required item*.
 
-## Unreleased (M5: art, assets and Preflight)
+## 0.21.0, also in it (M5: art, assets and Preflight)
 
 Server Studios need **server revision 11** (Admin → Studio Manager → Upgrade).
 

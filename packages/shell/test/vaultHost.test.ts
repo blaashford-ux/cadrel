@@ -1,9 +1,9 @@
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PeopleHost } from '../src/main/people';
-import { VAULT_CALL_NAMES, VaultHost, VaultHostError } from '../src/main/vaultHost';
+import { VAULT_CALL_NAMES, VaultHost, VaultHostError, folderOf, type ManuscriptSource } from '../src/main/vaultHost';
 
 let dir: string, host: PeopleHost, v: VaultHost;
 beforeEach(async () => {
@@ -89,5 +89,67 @@ describe('manuscripts and their versions, for editorial passes', () => {
     await v.call('setCard', ['one.md', {}, 'book-a']);
     await v.call('setCard', ['two.md', {}, 'book-b']);
     expect((await v.manuscripts()).map((m) => [m.path, m.projectId])).toEqual([['loose.md', null], ['one.md', 'book-a'], ['two.md', 'book-b']]);
+  });
+});
+
+describe('manuscripts: a setting each project keeps, read by the Files page and the pages that offer a manuscript', () => {
+  let src: ManuscriptSource;
+  let designated: Record<string, string[]>;
+  let mv: VaultHost;
+  const files = ['Saga/Manuscripts/One.md', 'Saga/Manuscripts/Two.md', 'Saga/Notes/Ideas.md', 'Other/Draft.md', 'Saga/cover.png'];
+  beforeEach(async () => {
+    designated = { Saga: ['Manuscripts/One.md', 'Manuscripts/Two.md'], Other: [] };
+    src = {
+      projects: async () => Object.entries(designated).map(([folder, manuscripts]) => ({ folder, name: folder === 'Saga' ? 'The Saga' : folder, manuscripts })),
+      set: vi.fn(async (folder: string, rel: string, on: boolean) => {
+        designated[folder] = on ? [...(designated[folder] ?? []).filter((x) => x !== rel), rel] : (designated[folder] ?? []).filter((x) => x !== rel);
+      })
+    };
+    mv = new VaultHost(host, { dir: path.join(dir, 'Vault'), blobsDir: path.join(dir, 'blobs'), machine: 'pc-a' }, src);
+    await mv.state();
+    for (const f of files) {
+      await fsp.mkdir(path.dirname(path.join(dir, 'Vault', f)), { recursive: true });
+      await fsp.writeFile(path.join(dir, 'Vault', f), f);
+      await mv.call('add', [f]);
+    }
+  });
+
+  it('puts the projects and the set manuscripts, as whole paths, in the Files page’s state', async () => {
+    const st = await mv.state();
+    if (!st.available) throw new Error('x');
+    expect(st.projects).toEqual([{ folder: 'Saga', name: 'The Saga' }, { folder: 'Other', name: 'Other' }]);
+    expect(st.manuscripts).toEqual(['Saga/Manuscripts/One.md', 'Saga/Manuscripts/Two.md']);
+  });
+
+  it('offers only the set manuscripts of a project that has set any, and every text file of one that has not', async () => {
+    expect((await mv.manuscripts()).map((m) => m.path).sort()).toEqual(['Other/Draft.md', 'Saga/Manuscripts/One.md', 'Saga/Manuscripts/Two.md']); // not Notes/Ideas.md, not the picture
+    designated.Saga = [];
+    expect((await mv.manuscripts()).map((m) => m.path).sort()).toEqual(['Other/Draft.md', 'Saga/Manuscripts/One.md', 'Saga/Manuscripts/Two.md', 'Saga/Notes/Ideas.md']); // nothing set: as before
+  });
+
+  it('sets a file as a manuscript, and takes it back out, through the project’s own setting', async () => {
+    await mv.setManuscript('Other/Draft.md', true);
+    expect(src.set).toHaveBeenLastCalledWith('Other', 'Draft.md', true);
+    expect((await mv.manuscripts()).map((m) => m.path)).not.toContain('Saga/Notes/Ideas.md');
+    expect((await mv.manuscripts()).map((m) => m.path)).toContain('Other/Draft.md');
+    await mv.setManuscript('Saga/Manuscripts/Two.md', false);
+    expect(src.set).toHaveBeenLastCalledWith('Saga', 'Manuscripts/Two.md', false);
+    expect((await mv.manuscripts()).map((m) => m.path)).not.toContain('Saga/Manuscripts/Two.md');
+  });
+
+  it('refuses a file that is not in a project, or is not Markdown, and a Studio whose projects cannot be read', async () => {
+    await expect(mv.setManuscript('top.md', true)).rejects.toThrow(/inside a project/);
+    await expect(mv.setManuscript('Saga/cover.png', true)).rejects.toThrow(/Markdown/);
+    await expect(new VaultHost(host, { dir: path.join(dir, 'Vault'), blobsDir: path.join(dir, 'blobs'), machine: 'pc-a' }).setManuscript('Saga/a.md', true)).rejects.toThrow(/inside a project/);
+  });
+
+  it('works as before where the projects cannot be read', async () => {
+    const plain = new VaultHost(host, { dir: path.join(dir, 'Vault'), blobsDir: path.join(dir, 'blobs'), machine: 'pc-a' }, { projects: async () => { throw new Error('no'); }, set: async () => undefined });
+    const st = await plain.state();
+    if (!st.available) throw new Error('x');
+    expect(st).toMatchObject({ projects: [], manuscripts: [] });
+    expect((await plain.manuscripts()).map((m) => m.path)).toContain('Saga/Notes/Ideas.md');
+    expect(folderOf('Saga/a.md')).toBe('Saga');
+    expect(folderOf('a.md')).toBe('');
   });
 });
