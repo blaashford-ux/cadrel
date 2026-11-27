@@ -284,6 +284,7 @@ export function ReviewPanel({ state, me, role, onRename, onClose, onAi, onGoTo, 
               {i.status !== 'open' && <span className="review-status"> · {i.status}</span>}
               {i.anchor.gone && <span className="review-lost"> · text deleted</span>}
               {state.detached.has(i.id) && <span className="review-lost"> · not in this chapter</span>}
+              {state.pinned.has(i.id) && <span className="review-lost"> · {i.anchor.approx ? 'its place is not certain' : 'its text has changed'}: shown at the start of its paragraph</span>}
             </div>
             {topicFor?.id === i.id && (
               <form

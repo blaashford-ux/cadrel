@@ -13,6 +13,19 @@ export interface Anchor {
   start: number
   /** The quoted text was edited away entirely; the note stays at this spot (between `prefix` and `suffix`) and is resolved. */
   gone?: boolean
+  /**
+   * Anchor v2 (see anchorV2.ts): the place the note is at, so it is found by where it is and not by what it says. Notes written
+   * before this have none of these, and are given them the first time their chapter is at hand. Older apps ignore them.
+   */
+  v?: 2
+  /** The chapter the note is in, by its key (`chapterKeys`). */
+  chapter?: string
+  /** The text block (paragraph) the quote starts in: its number in the chapter, the offset in it, and a hash of its text. */
+  block?: { i: number; off: number; h: string }
+  /** Where the quote ends, when it runs on into another block. */
+  endBlock?: { i: number; off: number }
+  /** Placed by a best guess (an old note whose chapter was not certain): shown at the start of its paragraph, never on a word. */
+  approx?: boolean
 }
 
 export interface Reply {
@@ -96,7 +109,8 @@ export function locateAnchor(text: string, a: Anchor): { start: number; end: num
   return best ? { start: best.start, end: best.start + a.quote.length } : null
 }
 
-function score(text: string, a: Anchor, at: number): number {
+/** 0, 1 or 2: how many of the text before and the text after still match around a quote found at `at`. */
+export function score(text: string, a: Anchor, at: number): number {
   const before = text.slice(Math.max(0, at - a.prefix.length), at)
   const after = text.slice(at + a.quote.length, at + a.quote.length + a.suffix.length)
   return (before === a.prefix ? 1 : 0) + (after === a.suffix ? 1 : 0)
@@ -172,9 +186,19 @@ export function mergeReviewFiles(a: ReviewFile, b: ReviewFile): ReviewFile {
     for (const r of [...older.replies, ...newer.replies]) replies.set(r.id, r)
     byId.set(item.id, {
       ...newer,
+      anchor: richerAnchor(newer.anchor, older.anchor),
       replies: [...replies.values()].sort((x, y) => x.createdAt.localeCompare(y.createdAt)),
     })
   }
   const items = [...byId.values()].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id))
   return { ...a, items }
+}
+
+/**
+ * The anchor to keep when two copies of a note disagree. The newer copy's, except that one which was only upgraded to say where
+ * the note is (no change to its text, so no new `updatedAt`) is not lost to a copy that never had the place.
+ */
+function richerAnchor(newer: Anchor, older: Anchor): Anchor {
+  if (newer.v === 2 || older.v !== 2) return newer
+  return older.quote === newer.quote && older.gone === newer.gone ? older : newer
 }

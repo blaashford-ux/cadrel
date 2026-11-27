@@ -27,13 +27,30 @@ function inline(node: Node): string {
  * src/renderer/reviewPlugin.ts, or notes written here would not find their text in the app.
  */
 export function flattenMarkdown(markdown: string): string {
-  const tree = fromMarkdown(stripFences(markdown.replace(/^﻿/, '')), { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }) as unknown as Node;
-  const blocks: string[] = [];
+  return flattenMarkdownBlocks(markdown).text;
+}
+
+/** Where one text block sits in the flat text. */
+export interface FlatBlock {
+  offset: number;
+  length: number;
+}
+
+/** `flattenMarkdown`, with where each text block starts and how long it is (the editor's `flatten(doc).segments`, without an editor). */
+export function flattenMarkdownBlocks(markdown: string): { text: string; blocks: FlatBlock[] } {
+  const tree = fromMarkdown(stripFences(markdown.replace(/^\uFEFF/, '')), { extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()] }) as unknown as Node;
+  const parts: string[] = [];
   const walk = (n: Node) => {
-    if (TEXT_BLOCKS.has(n.type)) blocks.push(inline(n));
-    else if (n.type === 'code') blocks.push(n.value ?? '');
+    if (TEXT_BLOCKS.has(n.type)) parts.push(inline(n));
+    else if (n.type === 'code') parts.push(n.value ?? '');
     else for (const c of n.children ?? []) walk(c);
   };
   walk(tree);
-  return blocks.join('\n');
+  const blocks: FlatBlock[] = [];
+  let offset = 0;
+  for (const p of parts) {
+    blocks.push({ offset, length: p.length });
+    offset += p.length + 1;
+  }
+  return { text: parts.join('\n'), blocks };
 }

@@ -13,7 +13,12 @@ function contextScore(text: string, a: Anchor, at: number): number {
  * match best if several do, and the open chapter on a tie. Chapters are given as Markdown (use the unsaved draft for the
  * open one), and are flattened to the plain text notes are anchored to. Null when no chapter has the quote any more.
  */
-export function chapterForNote(chapters: string[], anchor: Anchor, preferred: number): number | null {
+export function chapterForNote(chapters: string[], anchor: Anchor, preferred: number, keys?: string[]): number | null {
+  // a note with a place is in the chapter it says, whatever the text of the chapters is now
+  if (keys && anchor.v === 2 && anchor.chapter !== undefined) {
+    const at = keys.indexOf(anchor.chapter);
+    if (at !== -1) return at;
+  }
   let best: { index: number; score: number; dist: number } | null = null;
   chapters.forEach((raw, index) => {
     const flat = flattenMarkdown(raw);

@@ -2,6 +2,14 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
+## Unreleased (fix: notes stay where they were made)
+
+### Fixed
+- **A beta reader's comment or suggestion no longer turns up on a random word.** A note was remembered as its quote plus a little text round it, and found again by looking for that quote; when the surroundings did not match exactly (any other chapter, which every chapter was asked about), it was put on whichever occurrence of the quote came to hand, so a note on "said" in chapter 1 was drawn on a "said" in chapter 2 and clicking it opened the wrong comment.
+- **A note is now remembered by where it is**: its chapter, its paragraph and the offset in it, with the quote and a hash of the paragraph kept to check that it is still the place. It is looked for only in its own chapter, only in its own paragraph (or the one with the same text within three paragraphs of where it was), and never on another word. When its text has since changed, or it cannot be told which of two identical paragraphs it was in, it is **pinned to the start of its paragraph with a marker**, and the Notes panel says so.
+- Old notes are given their place the first time their file's chapters are at hand, by whichever app has them (a reader's Cadrel Reader, or the author's Write for every reader's notes), and kept in the notes file without counting as an edit; the copy in the Studio follows through the usual exchange. An old note that cannot be placed with certainty is marked as a guess and pinned; one whose text is in no chapter, or in several with nothing to tell them apart, is left in the Notes panel and drawn nowhere. Apps that do not know about places ignore them and still read the notes.
+- The assistant's `add_notes` writes notes with a place, and `read_chapter` lists only the notes of that chapter.
+
 ## Unreleased (M6: launch and market)
 
 Server Studios need **server revision 12** (Admin → Studio Manager → Upgrade).

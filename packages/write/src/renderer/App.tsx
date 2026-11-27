@@ -1,5 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { flattenMarkdown } from '../shared/agent/flatten';
+import { flattenMarkdown, flattenMarkdownBlocks } from '../shared/agent/flatten';
+import { upgradeAnchor } from '../shared/review/anchorV2';
 import { locateAnchor } from '../shared/review/comments';
 import type { FileLock, MenuAction, SyncStatus } from '../shared/api';
 import { basename, dirname, validateName } from '../shared/paths';
@@ -30,7 +31,7 @@ import { HtmlView } from './HtmlView';
 import { EditBar } from './EditBar';
 import { extractAnalysis } from '../shared/analysis/embed';
 import { SettingsDialog } from './SettingsDialog';
-import type { MarkdownDoc } from '../shared/chapters';
+import { chapterKeys, type MarkdownDoc } from '../shared/chapters';
 import { locateRow } from '../shared/rows';
 import { docRows } from './rowEnv';
 import type { SceneNav } from './sceneNav';
@@ -132,6 +133,9 @@ export function App() {
 
   const activeDoc = activeTab ? s.docs.get(activeTab.file) : undefined;
   const activeChapter = activeDoc?.chapters[activeTab?.chapter ?? 0];
+  // The chapters' keys, so a note is looked for in its own chapter and in no other.
+  const activeKeys = useMemo(() => (activeDoc ? chapterKeys(activeDoc).map((k) => k.key) : []), [activeDoc]);
+  const activeChapterKey = activeTab ? activeKeys[activeTab.chapter] : undefined;
 
   // Comments and suggestions on the open file (stored per reviewer inside the project).
   const [showReview, setShowReview] = useState(false);
@@ -237,7 +241,8 @@ export function App() {
     reviewFile,
     s.activeId ? navs.current.get(s.activeId)?.review : undefined,
     meHere,
-    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : ''
+    activeTab ? `${activeTab.id}@${activeTab.chapter}@${activeTab.reloadKey}@${navVersion}` : '',
+    activeChapterKey
   );
   const reviewRef = useRef(review);
   reviewRef.current = review;
@@ -283,7 +288,7 @@ export function App() {
     const item = review.items.find((i) => i.id === id);
     if (!tab || !doc || !item) return null;
     const texts = doc.chapters.map((c, i) => (i === tab.chapter && tab.draft !== null ? tab.draft : c.raw));
-    const target = chapterForNote(texts, item.anchor, tab.chapter);
+    const target = chapterForNote(texts, item.anchor, tab.chapter, chapterKeys(doc).map((k) => k.key));
     if (target === null) return 'That text is no longer in the file, so there is nothing to show.';
     if (target === tab.chapter) {
       pendingNote.current = null;
@@ -317,8 +322,37 @@ export function App() {
   const notesInChapter = useMemo(() => {
     if (!showReview || !multiChapter) return null;
     const flat = flattenMarkdown(chapterText);
-    return new Set(review.items.filter((i) => locateAnchor(flat, i.anchor) !== null).map((i) => i.id));
-  }, [showReview, multiChapter, chapterText, review.items]);
+    return new Set(
+      review.items
+        .filter((i) => (i.anchor.v === 2 && i.anchor.chapter !== undefined && activeKeys.includes(i.anchor.chapter) ? i.anchor.chapter === activeChapterKey : locateAnchor(flat, i.anchor) !== null))
+        .map((i) => i.id)
+    );
+  }, [showReview, multiChapter, chapterText, review.items, activeKeys, activeChapterKey]);
+  // Notes written before notes had a place (chapter, paragraph, offset) are given one the first time their file's chapters are at
+  // hand: by whichever app has them, a reader's own or the author's. It is kept with the note, and does not count as editing it.
+  const placeTried = useRef(new Set<string>());
+  const reviewUpgrade = review.upgrade;
+  useEffect(() => placeTried.current.clear(), [s.project?.path]);
+  useEffect(() => {
+    if (!s.project || !review.all.length) return;
+    const byFile = new Map<string, typeof review.all>();
+    for (const i of review.all) if (i.status !== 'deleted' && !placeTried.current.has(i.id)) byFile.set(i.file, [...(byFile.get(i.file) ?? []), i]);
+    const updates: { id: string; anchor: Anchor }[] = [];
+    for (const [path, doc] of s.docs) {
+      const mine = byFile.get(relativeTo(s.project.path, path));
+      if (!mine) continue;
+      const keys = chapterKeys(doc).map((k) => k.key);
+      const need = mine.filter((i) => !(i.anchor.v === 2 && i.anchor.block && i.anchor.chapter !== undefined && keys.includes(i.anchor.chapter)));
+      if (!need.length) continue;
+      const chapters = doc.chapters.map((c, ci) => ({ key: keys[ci]!, ...flattenMarkdownBlocks(c.raw) }));
+      for (const i of need) {
+        placeTried.current.add(i.id);
+        const anchor = upgradeAnchor(chapters, i.anchor);
+        if (anchor) updates.push({ id: i.id, anchor });
+      }
+    }
+    if (updates.length) void reviewUpgrade(updates);
+  }, [review.all, s.docs, s.project?.path, reviewUpgrade]);
   const activeKey = activeTab ? chapterKey(activeTab.file, activeTab.chapter) : null;
   useEffect(() => setDrawer(false), [activeKey]);
   // the pane element outlives a chapter change within a tab, so its scroll position would carry over: always start a chapter at the top
@@ -349,9 +383,10 @@ export function App() {
       let counts: number[] | undefined;
       if (mine && doc) {
         const texts = doc.chapters.map((c) => c.raw);
+        const keys = chapterKeys(doc).map((k) => k.key);
         counts = texts.map(() => 0);
         for (const n of mine) {
-          const at = chapterForNote(texts, n.anchor, -1);
+          const at = chapterForNote(texts, n.anchor, -1, keys);
           if (at !== null) counts[at]++;
         }
       }

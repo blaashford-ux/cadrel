@@ -90,6 +90,8 @@ describe('adding notes', () => {
     // The app locates it in the chapter's flattened text.
     const flat = flattenMarkdown(CH2);
     expect(locateAnchor(flat, item.anchor)).toEqual({ start: flat.indexOf('river'), end: flat.indexOf('river') + 5 });
+    // and it says where it is: its chapter (by key), its paragraph and the offset in it
+    expect(item.anchor).toMatchObject({ v: 2, chapter: 'Two', block: { i: expect.any(Number), off: expect.any(Number), h: expect.any(String) } });
   });
 
   it('makes suggestions that apply, and marks the category', async () => {
