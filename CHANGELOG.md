@@ -2,7 +2,9 @@
 
 Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Newest first.
 
-## Unreleased (fix: notes stay where they were made)
+## 0.23.0 (Cover Designer, omnibus, Set as Manuscript, and a notes fix)
+
+### Fix: notes stay where they were made
 
 ### Fixed
 - **A beta reader's comment or suggestion no longer turns up on a random word.** A note was remembered as its quote plus a little text round it, and found again by looking for that quote; when the surroundings did not match exactly (any other chapter, which every chapter was asked about), it was put on whichever occurrence of the quote came to hand, so a note on "said" in chapter 1 was drawn on a "said" in chapter 2 and clicking it opened the wrong comment.
@@ -10,7 +12,7 @@ Versions are `MAJOR.MINOR.FIX`; see [docs/VERSIONING.md](docs/VERSIONING.md). Ne
 - Old notes are given their place the first time their file's chapters are at hand, by whichever app has them (a reader's Cadrel Reader, or the author's Write for every reader's notes), and kept in the notes file without counting as an edit; the copy in the Studio follows through the usual exchange. An old note that cannot be placed with certainty is marked as a guess and pinned; one whose text is in no chapter, or in several with nothing to tell them apart, is left in the Notes panel and drawn nowhere. Apps that do not know about places ignore them and still read the notes.
 - The assistant's `add_notes` writes notes with a place, and `read_chapter` lists only the notes of that chapter.
 
-## Unreleased (Omnibus, and Set as Manuscript)
+## 0.23.0, also in it (Omnibus, and Set as Manuscript)
 
 No server upgrade is needed.
 
@@ -33,7 +35,7 @@ No server upgrade is needed.
 ### Not in this version
 - Parts nested in the contents (each book's title page is a chapter, so it appears in the contents beside the chapters); a different layout per book; making an omnibus from more than one project; a Set as Manuscript button on Android.
 
-## Unreleased (Cover Designer)
+## 0.23.0, also in it (Cover Designer)
 
 No server upgrade is needed: a cover is two ordinary vault files and an asset.
 
